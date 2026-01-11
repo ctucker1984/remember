@@ -60,6 +60,33 @@ if ( isset( $_POST['remember_role_action'] ) && check_admin_referer( 'remember_r
 			Remember_Logger::error( 'Failed to create role' );
 			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to create role.', 'remember' ) . '</p></div>';
 		}
+	} elseif ( 'update_role' === $action && isset( $_POST['role_id'] ) ) {
+		$role_id = absint( $_POST['role_id'] );
+		
+		// Update role details
+		$data = array(
+			'role_name'     => sanitize_text_field( $_POST['role_name'] ),
+			'role_type'     => sanitize_text_field( $_POST['role_type'] ),
+			'is_event_role' => ( 'event' === $_POST['role_type'] ) ? 1 : 0,
+			'description'   => sanitize_textarea_field( $_POST['description'] ),
+		);
+		$update_result = $role_model->update( $role_id, $data );
+		
+		// Update capabilities
+		$capabilities = isset( $_POST['capabilities'] ) && is_array( $_POST['capabilities'] ) 
+			? array_map( 'sanitize_text_field', $_POST['capabilities'] ) 
+			: array();
+		$capabilities_result = $role_model->set_capabilities( $role_id, $capabilities );
+		
+		if ( $update_result !== false && $capabilities_result ) {
+			Remember_Logger::info( 'Role updated', array( 'role_id' => $role_id ) );
+			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Role updated successfully.', 'remember' ) . '</p></div>';
+			// Refresh the role data
+			$editing_role = $role_model->get( $role_id );
+		} else {
+			Remember_Logger::error( 'Failed to update role', array( 'role_id' => $role_id ) );
+			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to update role.', 'remember' ) . '</p></div>';
+		}
 	} elseif ( 'update_capabilities' === $action && isset( $_POST['role_id'] ) ) {
 		$role_id = absint( $_POST['role_id'] );
 		$capabilities = isset( $_POST['capabilities'] ) && is_array( $_POST['capabilities'] ) 
@@ -266,23 +293,37 @@ $editing_role_capabilities = $editing_role ? $role_model->get_capabilities( $edi
 			<p><?php esc_html_e( 'No system roles found.', 'remember' ); ?></p>
 		<?php endif; ?>
 	<?php else : ?>
-		<!-- Edit Capabilities Form -->
+		<!-- Edit Role Form -->
 		<div style="margin: 20px 0; padding: 20px; background: #fff; border: 1px solid #ccd0d4; border-radius: 4px;">
-			<h2><?php echo esc_html( sprintf( __( 'Edit Capabilities: %s', 'remember' ), $editing_role->role_name ) ); ?></h2>
-			<p class="description">
-				<strong><?php esc_html_e( 'Role Type:', 'remember' ); ?></strong> 
-				<?php echo 'event' === $editing_role->role_type ? esc_html__( 'Event Role', 'remember' ) : esc_html__( 'System Role', 'remember' ); ?>
-				<br>
-				<strong><?php esc_html_e( 'Description:', 'remember' ); ?></strong> 
-				<?php echo esc_html( $editing_role->description ); ?>
-			</p>
+			<h2><?php echo esc_html( sprintf( __( 'Edit Role: %s', 'remember' ), $editing_role->role_name ) ); ?></h2>
 			
 			<form method="post" action="">
 				<?php wp_nonce_field( 'remember_role_action', 'remember_role_nonce' ); ?>
-				<input type="hidden" name="remember_role_action" value="update_capabilities">
+				<input type="hidden" name="remember_role_action" value="update_role">
 				<input type="hidden" name="role_id" value="<?php echo esc_attr( $editing_role_id ); ?>">
 				
 				<table class="form-table">
+					<tr>
+						<th><label for="role_name"><?php esc_html_e( 'Role Name', 'remember' ); ?> <span class="description">(required)</span></label></th>
+						<td><input type="text" id="role_name" name="role_name" class="regular-text" value="<?php echo esc_attr( $editing_role->role_name ); ?>" required></td>
+					</tr>
+					<tr>
+						<th><label for="role_type"><?php esc_html_e( 'Role Type', 'remember' ); ?></label></th>
+						<td>
+							<select id="role_type" name="role_type" class="regular-text">
+								<option value="event" <?php selected( $editing_role->role_type, 'event' ); ?>><?php esc_html_e( 'Event Role', 'remember' ); ?></option>
+								<option value="system" <?php selected( $editing_role->role_type, 'system' ); ?>><?php esc_html_e( 'System Role', 'remember' ); ?></option>
+							</select>
+							<p class="description">
+								<strong><?php esc_html_e( 'Event Roles:', 'remember' ); ?></strong> <?php esc_html_e( 'Roles that members can be assigned to for specific events (e.g., "Guard", "Inmate"). Members can have multiple event roles and can play different roles at different events.', 'remember' ); ?><br>
+								<strong><?php esc_html_e( 'System Roles:', 'remember' ); ?></strong> <?php esc_html_e( 'Administrative roles for managing the system (e.g., "System Administrator", "Vetting Team Member"). System roles grant capabilities to manage the plugin.', 'remember' ); ?>
+							</p>
+						</td>
+					</tr>
+					<tr>
+						<th><label for="description"><?php esc_html_e( 'Description', 'remember' ); ?></label></th>
+						<td><textarea id="description" name="description" class="large-text" rows="3"><?php echo esc_textarea( $editing_role->description ? $editing_role->description : '' ); ?></textarea></td>
+					</tr>
 					<tr>
 						<th><label><?php esc_html_e( 'Capabilities', 'remember' ); ?></label></th>
 						<td>
@@ -300,7 +341,7 @@ $editing_role_capabilities = $editing_role ? $role_model->get_capabilities( $edi
 				</table>
 				
 				<p class="submit">
-					<input type="submit" class="button button-primary" value="<?php esc_attr_e( 'Update Capabilities', 'remember' ); ?>">
+					<input type="submit" class="button button-primary" value="<?php esc_attr_e( 'Update Role', 'remember' ); ?>">
 					<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-roles' ) ); ?>" class="button"><?php esc_html_e( 'Cancel', 'remember' ); ?></a>
 				</p>
 			</form>

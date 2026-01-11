@@ -115,4 +115,61 @@ class Remember_Event extends Remember_Base_Model {
 			)
 		);
 	}
+
+	/**
+	 * Get event roles for an event.
+	 *
+	 * @param int $event_id Event ID.
+	 * @return array Array of event role objects with role information.
+	 */
+	public function get_event_roles( $event_id ) {
+		global $wpdb;
+		return $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT er.*, r.role_name 
+				FROM {$wpdb->prefix}remember_event_roles er 
+				JOIN {$wpdb->prefix}remember_roles r ON er.role_id = r.role_id 
+				WHERE er.event_id = %d 
+				ORDER BY r.role_name ASC",
+				$event_id
+			)
+		);
+	}
+
+	/**
+	 * Set event roles for an event (replaces existing).
+	 *
+	 * @param int   $event_id Event ID.
+	 * @param array $role_ids Array of role IDs to assign to the event.
+	 * @return bool True on success, false on failure.
+	 */
+	public function set_event_roles( $event_id, $role_ids ) {
+		global $wpdb;
+		$table_name = $wpdb->prefix . 'remember_event_roles';
+		
+		// Delete existing event roles
+		$wpdb->delete( $table_name, array( 'event_id' => $event_id ), array( '%d' ) );
+		
+		// Insert new event roles
+		if ( ! empty( $role_ids ) ) {
+			foreach ( $role_ids as $role_id ) {
+				$role_id = absint( $role_id );
+				if ( $role_id > 0 ) {
+					$wpdb->insert(
+						$table_name,
+						array(
+							'event_id'    => $event_id,
+							'role_id'     => $role_id,
+							'cost'        => 0.00,
+							'is_active'   => 1,
+							'created_at'  => current_time( 'mysql' ),
+						),
+						array( '%d', '%d', '%f', '%d', '%s' )
+					);
+				}
+			}
+		}
+		
+		return true;
+	}
 }

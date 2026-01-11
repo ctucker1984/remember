@@ -14,11 +14,18 @@ if ( ! defined( 'WPINC' ) ) {
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-logger.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-event.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-location.php';
+require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-application.php';
+require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-role.php';
 
 Remember_Logger::debug( 'Events page loaded' );
 
 $event_model = new Remember_Event();
 $location_model = new Remember_Location();
+$application_model = new Remember_Application();
+$role_model = new Remember_Role();
+
+// Get all available event roles for the forms
+$event_roles = $role_model->get_event_roles();
 
 // Handle form submissions
 if ( isset( $_POST['remember_event_action'] ) && check_admin_referer( 'remember_event_action', 'remember_event_nonce' ) ) {
@@ -37,6 +44,11 @@ if ( isset( $_POST['remember_event_action'] ) && check_admin_referer( 'remember_
 		);
 		$event_id = $event_model->create( $data );
 		if ( $event_id ) {
+			// Handle event roles
+			if ( isset( $_POST['event_roles'] ) && is_array( $_POST['event_roles'] ) ) {
+				$role_ids = array_map( 'absint', $_POST['event_roles'] );
+				$event_model->set_event_roles( $event_id, $role_ids );
+			}
 			Remember_Logger::info( 'Event created', array( 'event_id' => $event_id ) );
 			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Event created successfully.', 'remember' ) . '</p></div>';
 		} else {
@@ -56,6 +68,14 @@ if ( isset( $_POST['remember_event_action'] ) && check_admin_referer( 'remember_
 		);
 		$result = $event_model->update( $event_id, $data );
 		if ( $result !== false ) {
+			// Handle event roles
+			if ( isset( $_POST['event_roles'] ) && is_array( $_POST['event_roles'] ) ) {
+				$role_ids = array_map( 'absint', $_POST['event_roles'] );
+				$event_model->set_event_roles( $event_id, $role_ids );
+			} else {
+				// If no roles selected, clear all event roles
+				$event_model->set_event_roles( $event_id, array() );
+			}
 			Remember_Logger::info( 'Event updated', array( 'event_id' => $event_id ) );
 			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Event updated successfully.', 'remember' ) . '</p></div>';
 		} else {
@@ -79,9 +99,21 @@ if ( isset( $_POST['remember_event_action'] ) && check_admin_referer( 'remember_
 $events = $event_model->get_all();
 $locations = $location_model->get_active();
 
-// Check if editing
+// Check if viewing detail or editing
+$viewing_event = null;
 $editing_event = null;
-if ( isset( $_GET['edit'] ) ) {
+if ( isset( $_GET['view'] ) ) {
+	$view_id = absint( $_GET['view'] );
+	$viewing_event = $event_model->get( $view_id );
+	if ( $viewing_event ) {
+		// Get applications for this event
+		$event_applications = $application_model->get_by_event( $view_id );
+		// Get location if exists
+		if ( $viewing_event->location_id ) {
+			$viewing_location = $location_model->get( $viewing_event->location_id );
+		}
+	}
+} elseif ( isset( $_GET['edit'] ) ) {
 	$edit_id = absint( $_GET['edit'] );
 	$editing_event = $event_model->get( $edit_id );
 }
@@ -90,75 +122,20 @@ if ( isset( $_GET['edit'] ) ) {
 <div class="wrap remember-events">
 	<h1 class="wp-heading-inline"><?php echo esc_html( get_admin_page_title() ); ?></h1>
 	
-	<?php if ( ! $editing_event ) : ?>
+	<?php if ( ! $viewing_event && ! $editing_event ) : ?>
 		<button type="button" class="page-title-action" onclick="document.getElementById('remember-add-event').style.display='block'; this.style.display='none';"><?php esc_html_e( 'Add New', 'remember' ); ?></button>
+	<?php elseif ( $viewing_event ) : ?>
+		<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-events&edit=' . $viewing_event->event_id ) ); ?>" class="page-title-action"><?php esc_html_e( 'Edit', 'remember' ); ?></a>
+		<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-events' ) ); ?>" class="page-title-action"><?php esc_html_e( 'Back to List', 'remember' ); ?></a>
 	<?php else : ?>
 		<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-events' ) ); ?>" class="page-title-action"><?php esc_html_e( 'Cancel', 'remember' ); ?></a>
 	<?php endif; ?>
 	
 	<hr class="wp-header-end">
 
-	<?php if ( ! $editing_event ) : ?>
-		<!-- Add Form -->
-		<div id="remember-add-event" style="display:none; margin: 20px 0; padding: 20px; background: #fff; border: 1px solid #ccd0d4; border-radius: 4px;">
-			<h2><?php esc_html_e( 'Add New Event', 'remember' ); ?></h2>
-			<form method="post" action="">
-				<?php wp_nonce_field( 'remember_event_action', 'remember_event_nonce' ); ?>
-				<input type="hidden" name="remember_event_action" value="add">
-				
-				<table class="form-table">
-					<tr>
-						<th><label for="event_name"><?php esc_html_e( 'Event Name', 'remember' ); ?> <span class="description">(required)</span></label></th>
-						<td><input type="text" id="event_name" name="event_name" class="regular-text" required></td>
-					</tr>
-					<tr>
-						<th><label for="event_description"><?php esc_html_e( 'Description', 'remember' ); ?></label></th>
-						<td><textarea id="event_description" name="event_description" class="large-text" rows="5"></textarea></td>
-					</tr>
-					<tr>
-						<th><label for="location_id"><?php esc_html_e( 'Location', 'remember' ); ?></label></th>
-						<td>
-							<select id="location_id" name="location_id" class="regular-text">
-								<option value=""><?php esc_html_e( '-- Select Location --', 'remember' ); ?></option>
-								<?php foreach ( $locations as $location ) : ?>
-									<option value="<?php echo esc_attr( $location->location_id ); ?>"><?php echo esc_html( $location->location_name ); ?></option>
-								<?php endforeach; ?>
-							</select>
-						</td>
-					</tr>
-					<tr>
-						<th><label for="start_date"><?php esc_html_e( 'Start Date', 'remember' ); ?> <span class="description">(required)</span></label></th>
-						<td><input type="date" id="start_date" name="start_date" class="regular-text" required></td>
-					</tr>
-					<tr>
-						<th><label for="end_date"><?php esc_html_e( 'End Date', 'remember' ); ?> <span class="description">(required)</span></label></th>
-						<td><input type="date" id="end_date" name="end_date" class="regular-text" required></td>
-					</tr>
-					<tr>
-						<th><label for="is_private"><?php esc_html_e( 'Private Event', 'remember' ); ?></label></th>
-						<td><label><input type="checkbox" id="is_private" name="is_private" value="1"> <?php esc_html_e( 'This is a private event (invite only)', 'remember' ); ?></label></td>
-					</tr>
-					<tr>
-						<th><label for="status"><?php esc_html_e( 'Status', 'remember' ); ?></label></th>
-						<td>
-							<select id="status" name="status" class="regular-text">
-								<option value="draft"><?php esc_html_e( 'Draft', 'remember' ); ?></option>
-								<option value="open"><?php esc_html_e( 'Open', 'remember' ); ?></option>
-								<option value="closed"><?php esc_html_e( 'Closed', 'remember' ); ?></option>
-								<option value="completed"><?php esc_html_e( 'Completed', 'remember' ); ?></option>
-								<option value="cancelled"><?php esc_html_e( 'Cancelled', 'remember' ); ?></option>
-							</select>
-						</td>
-					</tr>
-				</table>
-				
-				<p class="submit">
-					<input type="submit" class="button button-primary" value="<?php esc_attr_e( 'Add Event', 'remember' ); ?>">
-					<button type="button" class="button" onclick="document.getElementById('remember-add-event').style.display='none'; document.querySelector('.page-title-action').style.display='inline-block';"><?php esc_html_e( 'Cancel', 'remember' ); ?></button>
-				</p>
-			</form>
-		</div>
-	<?php else : ?>
+	<?php if ( $viewing_event ) : ?>
+		<?php include 'event-detail.php'; ?>
+	<?php elseif ( $editing_event ) : ?>
 		<!-- Edit Form -->
 		<div style="margin: 20px 0; padding: 20px; background: #fff; border: 1px solid #ccd0d4; border-radius: 4px;">
 			<h2><?php esc_html_e( 'Edit Event', 'remember' ); ?></h2>
@@ -211,6 +188,24 @@ if ( isset( $_GET['edit'] ) ) {
 							</select>
 						</td>
 					</tr>
+					<tr>
+						<th><label><?php esc_html_e( 'Event Roles', 'remember' ); ?></label></th>
+						<td>
+							<p class="description"><?php esc_html_e( 'Select the roles that are available for this event. Members can apply for these roles when submitting applications.', 'remember' ); ?></p>
+							<fieldset style="border: 1px solid #ccd0d4; padding: 10px; margin-top: 10px;">
+								<?php if ( ! empty( $event_roles ) ) : ?>
+									<?php foreach ( $event_roles as $role ) : ?>
+										<label style="display: block; margin: 5px 0;">
+											<input type="checkbox" name="event_roles[]" value="<?php echo esc_attr( $role->role_id ); ?>" <?php checked( isset( $editing_event_role_ids ) && in_array( $role->role_id, $editing_event_role_ids ) ); ?>>
+											<?php echo esc_html( $role->role_name ); ?>
+										</label>
+									<?php endforeach; ?>
+								<?php else : ?>
+									<p class="description"><?php esc_html_e( 'No event roles available. Create event roles in the Roles section first.', 'remember' ); ?></p>
+								<?php endif; ?>
+							</fieldset>
+						</td>
+					</tr>
 				</table>
 				
 				<p class="submit">
@@ -218,10 +213,87 @@ if ( isset( $_GET['edit'] ) ) {
 				</p>
 			</form>
 		</div>
-	<?php endif; ?>
+	<?php else : ?>
+		<!-- Add Form -->
+		<div id="remember-add-event" style="display:none; margin: 20px 0; padding: 20px; background: #fff; border: 1px solid #ccd0d4; border-radius: 4px;">
+			<h2><?php esc_html_e( 'Add New Event', 'remember' ); ?></h2>
+			<form method="post" action="">
+				<?php wp_nonce_field( 'remember_event_action', 'remember_event_nonce' ); ?>
+				<input type="hidden" name="remember_event_action" value="add">
+				
+				<table class="form-table">
+					<tr>
+						<th><label for="event_name"><?php esc_html_e( 'Event Name', 'remember' ); ?> <span class="description">(required)</span></label></th>
+						<td><input type="text" id="event_name" name="event_name" class="regular-text" required></td>
+					</tr>
+					<tr>
+						<th><label for="event_description"><?php esc_html_e( 'Description', 'remember' ); ?></label></th>
+						<td><textarea id="event_description" name="event_description" class="large-text" rows="5"></textarea></td>
+					</tr>
+					<tr>
+						<th><label for="location_id"><?php esc_html_e( 'Location', 'remember' ); ?></label></th>
+						<td>
+							<select id="location_id" name="location_id" class="regular-text">
+								<option value=""><?php esc_html_e( '-- Select Location --', 'remember' ); ?></option>
+								<?php foreach ( $locations as $location ) : ?>
+									<option value="<?php echo esc_attr( $location->location_id ); ?>"><?php echo esc_html( $location->location_name ); ?></option>
+								<?php endforeach; ?>
+							</select>
+						</td>
+					</tr>
+					<tr>
+						<th><label for="start_date"><?php esc_html_e( 'Start Date', 'remember' ); ?> <span class="description">(required)</span></label></th>
+						<td><input type="date" id="start_date" name="start_date" class="regular-text" required></td>
+					</tr>
+					<tr>
+						<th><label for="end_date"><?php esc_html_e( 'End Date', 'remember' ); ?> <span class="description">(required)</span></label></th>
+						<td><input type="date" id="end_date" name="end_date" class="regular-text" required></td>
+					</tr>
+					<tr>
+						<th><label for="is_private"><?php esc_html_e( 'Private Event', 'remember' ); ?></label></th>
+						<td><label><input type="checkbox" id="is_private" name="is_private" value="1"> <?php esc_html_e( 'This is a private event (invite only)', 'remember' ); ?></label></td>
+					</tr>
+					<tr>
+						<th><label for="status"><?php esc_html_e( 'Status', 'remember' ); ?></label></th>
+						<td>
+							<select id="status" name="status" class="regular-text">
+								<option value="draft"><?php esc_html_e( 'Draft', 'remember' ); ?></option>
+								<option value="open"><?php esc_html_e( 'Open', 'remember' ); ?></option>
+								<option value="closed"><?php esc_html_e( 'Closed', 'remember' ); ?></option>
+								<option value="completed"><?php esc_html_e( 'Completed', 'remember' ); ?></option>
+								<option value="cancelled"><?php esc_html_e( 'Cancelled', 'remember' ); ?></option>
+							</select>
+						</td>
+					</tr>
+					<tr>
+						<th><label><?php esc_html_e( 'Event Roles', 'remember' ); ?></label></th>
+						<td>
+							<p class="description"><?php esc_html_e( 'Select the roles that are available for this event. Members can apply for these roles when submitting applications.', 'remember' ); ?></p>
+							<fieldset style="border: 1px solid #ccd0d4; padding: 10px; margin-top: 10px;">
+								<?php if ( ! empty( $event_roles ) ) : ?>
+									<?php foreach ( $event_roles as $role ) : ?>
+										<label style="display: block; margin: 5px 0;">
+											<input type="checkbox" name="event_roles[]" value="<?php echo esc_attr( $role->role_id ); ?>">
+											<?php echo esc_html( $role->role_name ); ?>
+										</label>
+									<?php endforeach; ?>
+								<?php else : ?>
+									<p class="description"><?php esc_html_e( 'No event roles available. Create event roles in the Roles section first.', 'remember' ); ?></p>
+								<?php endif; ?>
+							</fieldset>
+						</td>
+					</tr>
+				</table>
+				
+				<p class="submit">
+					<input type="submit" class="button button-primary" value="<?php esc_attr_e( 'Add Event', 'remember' ); ?>">
+					<button type="button" class="button" onclick="document.getElementById('remember-add-event').style.display='none'; document.querySelector('.page-title-action').style.display='inline-block';"><?php esc_html_e( 'Cancel', 'remember' ); ?></button>
+				</p>
+			</form>
+		</div>
 
-	<!-- Events List -->
-	<?php if ( ! empty( $events ) ) : ?>
+		<!-- Events List -->
+		<?php if ( ! empty( $events ) ) : ?>
 		<table class="wp-list-table widefat fixed striped">
 			<thead>
 				<tr>
@@ -273,6 +345,7 @@ if ( isset( $_GET['edit'] ) ) {
 							<?php endif; ?>
 						</td>
 						<td class="column-actions">
+							<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-events&view=' . $event->event_id ) ); ?>"><?php esc_html_e( 'View', 'remember' ); ?></a> |
 							<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-events&edit=' . $event->event_id ) ); ?>"><?php esc_html_e( 'Edit', 'remember' ); ?></a> |
 							<a href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin.php?page=remember-events&delete=' . $event->event_id ), 'remember_event_action', 'remember_event_nonce' ) ); ?>" onclick="return confirm('<?php esc_attr_e( 'Are you sure you want to delete this event?', 'remember' ); ?>');"><?php esc_html_e( 'Delete', 'remember' ); ?></a>
 						</td>
@@ -280,7 +353,8 @@ if ( isset( $_GET['edit'] ) ) {
 				<?php endforeach; ?>
 			</tbody>
 		</table>
-	<?php else : ?>
-		<p><?php esc_html_e( 'No events found. Add your first event above.', 'remember' ); ?></p>
+		<?php else : ?>
+			<p><?php esc_html_e( 'No events found. Add your first event above.', 'remember' ); ?></p>
+		<?php endif; ?>
 	<?php endif; ?>
 </div>

@@ -30,6 +30,7 @@ class Remember_Capabilities {
 		// CRUD capabilities for each module
 		$modules = array(
 			'members'     => __( 'Members', 'remember' ),
+			'attendees'   => __( 'Attendees', 'remember' ),
 			'events'      => __( 'Events', 'remember' ),
 			'applications' => __( 'Applications', 'remember' ),
 			'vetting'     => __( 'Vetting', 'remember' ),

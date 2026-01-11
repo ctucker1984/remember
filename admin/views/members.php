@@ -263,8 +263,23 @@ if ( $filter_role > 0 ) {
 	$role_name = $role ? $role->role_name : '';
 }
 
+// Check capabilities - if user has attendees access but not full members access, show only attendees
+$current_user_id = get_current_user_id();
+$has_members_access = current_user_can( 'remember_read_members' );
+$has_attendees_access = current_user_can( 'remember_read_attendees' );
+$is_attendees_only = $has_attendees_access && ! $has_members_access;
+
 // Get members
-if ( $filter_role > 0 ) {
+if ( $is_attendees_only ) {
+	// User can only see attendees (members with accepted applications for events they're working on)
+	$members = $member_model->get_attendees_for_guard( $current_user_id );
+	// Apply status filter if provided
+	if ( ! empty( $filter_status ) && ! empty( $members ) ) {
+		$members = array_filter( $members, function( $member ) use ( $filter_status ) {
+			return $member->status === $filter_status;
+		} );
+	}
+} elseif ( $filter_role > 0 ) {
 	$members = $member_model->get_by_role( $filter_role );
 } elseif ( ! empty( $filter_status ) ) {
 	$members = $member_model->get_by_status( $filter_status );
@@ -485,27 +500,54 @@ if ( $view_member_id > 0 ) {
 		</form>
 	</div>
 
-	<!-- Filters -->
-	<div class="remember-filters" style="margin: 20px 0; padding: 15px; background: #fff; border: 1px solid #ccd0d4; border-radius: 4px;">
-		<form method="get" action="">
-			<input type="hidden" name="page" value="remember-members">
-			
-			<label for="filter_status"><?php esc_html_e( 'Filter by Status:', 'remember' ); ?></label>
-			<select id="filter_status" name="filter_status" style="margin-right: 20px;">
-				<option value=""><?php esc_html_e( 'All Statuses', 'remember' ); ?></option>
-				<?php foreach ( $status_labels as $status => $label ) : ?>
-					<option value="<?php echo esc_attr( $status ); ?>" <?php selected( $filter_status, $status ); ?>>
-						<?php echo esc_html( $label ); ?>
-					</option>
-				<?php endforeach; ?>
-			</select>
+	<?php if ( ! $is_attendees_only ) : ?>
+		<!-- Filters -->
+		<div class="remember-filters" style="margin: 20px 0; padding: 15px; background: #fff; border: 1px solid #ccd0d4; border-radius: 4px;">
+			<form method="get" action="">
+				<input type="hidden" name="page" value="remember-members">
+				
+				<label for="filter_status"><?php esc_html_e( 'Filter by Status:', 'remember' ); ?></label>
+				<select id="filter_status" name="filter_status" style="margin-right: 20px;">
+					<option value=""><?php esc_html_e( 'All Statuses', 'remember' ); ?></option>
+					<?php foreach ( $status_labels as $status => $label ) : ?>
+						<option value="<?php echo esc_attr( $status ); ?>" <?php selected( $filter_status, $status ); ?>>
+							<?php echo esc_html( $label ); ?>
+						</option>
+					<?php endforeach; ?>
+				</select>
 
-			<input type="submit" class="button" value="<?php esc_attr_e( 'Filter', 'remember' ); ?>">
-			<?php if ( ! empty( $filter_status ) ) : ?>
-				<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-members' ) ); ?>" class="button"><?php esc_html_e( 'Clear Filters', 'remember' ); ?></a>
-			<?php endif; ?>
-		</form>
-	</div>
+				<?php
+				// Get roles for filter (only if user has full members access)
+				if ( $has_members_access ) {
+					require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-role.php';
+					$role_model = new Remember_Role();
+					$all_roles = $role_model->get_all();
+				?>
+					<label for="filter_role"><?php esc_html_e( 'Filter by Role:', 'remember' ); ?></label>
+					<select id="filter_role" name="filter_role" style="margin-right: 20px;">
+						<option value="0"><?php esc_html_e( 'All Roles', 'remember' ); ?></option>
+						<?php foreach ( $all_roles as $role ) : ?>
+							<option value="<?php echo esc_attr( $role->role_id ); ?>" <?php selected( $filter_role, $role->role_id ); ?>>
+								<?php echo esc_html( $role->role_name ); ?>
+							</option>
+						<?php endforeach; ?>
+					</select>
+				<?php } ?>
+
+				<input type="submit" class="button" value="<?php esc_attr_e( 'Filter', 'remember' ); ?>">
+				<?php if ( ! empty( $filter_status ) || $filter_role > 0 ) : ?>
+					<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-members' ) ); ?>" class="button"><?php esc_html_e( 'Clear Filters', 'remember' ); ?></a>
+				<?php endif; ?>
+			</form>
+		</div>
+	<?php else : ?>
+		<div class="notice notice-info" style="margin: 20px 0;">
+			<p>
+				<strong><?php esc_html_e( 'Attendees View', 'remember' ); ?></strong><br>
+				<?php esc_html_e( 'You are viewing attendees (members with accepted applications) for events you are working on.', 'remember' ); ?>
+			</p>
+		</div>
+	<?php endif; ?>
 
 	<!-- Members List -->
 	<?php if ( ! empty( $members ) ) : ?>

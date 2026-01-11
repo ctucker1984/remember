@@ -68,6 +68,11 @@ class Remember_Admin {
 		$screen = get_current_screen();
 		if ( $screen && strpos( $screen->id, 'remember' ) !== false ) {
 			wp_enqueue_script( $this->plugin_name, plugin_dir_url( __FILE__ ) . '../assets/js/admin.js', array( 'jquery' ), $this->version, false );
+			// Localize script for AJAX
+			wp_localize_script( $this->plugin_name, 'rememberAjax', array(
+				'ajaxurl' => admin_url( 'admin-ajax.php' ),
+				'nonce'   => wp_create_nonce( 'remember_ajax_nonce' ),
+			) );
 		}
 	}
 
@@ -101,12 +106,18 @@ class Remember_Admin {
 			array( $this, 'display_dashboard_page' )
 		);
 
-		// Members
+		// Members (accessible with either members or attendees capability)
+		// Check at menu registration time which capability the user has
+		// The members page will handle filtering based on actual capabilities
+		$members_cap = 'remember_read_members'; // Default to full access
+		if ( ! current_user_can( 'remember_read_members' ) && current_user_can( 'remember_read_attendees' ) ) {
+			$members_cap = 'remember_read_attendees';
+		}
 		add_submenu_page(
 			'remember',
 			__( 'Members', 'remember' ),
 			__( 'Members', 'remember' ),
-			'remember_read_members',
+			$members_cap,
 			'remember-members',
 			array( $this, 'display_members_page' )
 		);
@@ -275,5 +286,35 @@ class Remember_Admin {
 	 */
 	public function display_settings_page() {
 		include_once 'views/settings.php';
+	}
+
+	/**
+	 * AJAX handler to get event roles for an event.
+	 *
+	 * @since    1.0.0
+	 */
+	public function ajax_get_event_roles() {
+		check_ajax_referer( 'remember_get_event_roles', 'nonce' );
+		
+		$event_id = isset( $_POST['event_id'] ) ? absint( $_POST['event_id'] ) : 0;
+		
+		if ( $event_id <= 0 ) {
+			wp_send_json_error( array( 'message' => __( 'Invalid event ID.', 'remember' ) ) );
+		}
+		
+		require_once plugin_dir_path( __FILE__ ) . '../includes/models/class-event.php';
+		$event_model = new Remember_Event();
+		$event_roles = $event_model->get_event_roles( $event_id );
+		
+		// Format for response
+		$formatted_roles = array();
+		foreach ( $event_roles as $event_role ) {
+			$formatted_roles[] = array(
+				'event_role_id' => $event_role->event_role_id,
+				'role_name'     => $event_role->role_name,
+			);
+		}
+		
+		wp_send_json_success( $formatted_roles );
 	}
 }

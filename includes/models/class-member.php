@@ -129,6 +129,53 @@ class Remember_Member extends Remember_Base_Model {
 	}
 
 	/**
+	 * Get attendees (members with accepted applications) for events where the current user is working.
+	 * A user is "working" on an event if they have an accepted application for that event.
+	 *
+	 * @param int $guard_member_id The member ID of the guard/user viewing attendees.
+	 * @return array Array of member objects.
+	 */
+	public function get_attendees_for_guard( $guard_member_id ) {
+		global $wpdb;
+		
+		// Get all events where this guard/user has an accepted application (they're working on these events)
+		$guard_event_ids = $wpdb->get_col( $wpdb->prepare(
+			"SELECT DISTINCT event_id 
+			FROM {$wpdb->prefix}remember_event_applications 
+			WHERE member_id = %d AND status = 'accepted'",
+			$guard_member_id
+		) );
+		
+		if ( empty( $guard_event_ids ) ) {
+			return array();
+		}
+		
+		// Get all member IDs who have accepted applications for those events (these are the attendees)
+		$attendee_member_ids = $wpdb->get_col(
+			"SELECT DISTINCT member_id 
+			FROM {$wpdb->prefix}remember_event_applications 
+			WHERE event_id IN (" . implode( ',', array_map( 'absint', $guard_event_ids ) ) . ") 
+			AND status = 'accepted' 
+			AND member_id != " . absint( $guard_member_id )
+		);
+		
+		if ( empty( $attendee_member_ids ) ) {
+			return array();
+		}
+		
+		// Get the member records
+		$placeholders = implode( ',', array_fill( 0, count( $attendee_member_ids ), '%d' ) );
+		$query = $wpdb->prepare(
+			"SELECT * FROM {$this->get_table()} 
+			WHERE member_id IN ($placeholders) 
+			ORDER BY member_id ASC",
+			$attendee_member_ids
+		);
+		
+		return $wpdb->get_results( $query );
+	}
+
+	/**
 	 * Get all records with WHERE conditions.
 	 *
 	 * @param array $args Query arguments.

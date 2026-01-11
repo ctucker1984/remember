@@ -179,3 +179,70 @@
 	border-bottom: 1px solid #eee;
 	padding-bottom: 10px;
 }
+
+/* Event Detail Grid Layout */
+.remember-event-detail-grid {
+	display: grid;
+	grid-template-columns: 1fr;
+	gap: 20px;
+	margin-bottom: 20px;
+}
+
+.remember-event-detail-section {
+	background: #fff;
+	border: 1px solid #ccd0d4;
+	border-radius: 4px;
+	padding: 15px;
+}
+
+.remember-event-detail-section h3 {
+	margin-top: 0;
+	margin-bottom: 15px;
+	font-size: 16px;
+	border-bottom: 1px solid #eee;
+	padding-bottom: 10px;
+}
+
+/* Application Detail Grid Layout */
+.remember-application-detail-grid {
+	display: grid;
+	grid-template-columns: repeat(2, 1fr);
+	gap: 15px;
+	margin-bottom: 15px;
+}
+
+.remember-application-detail-section {
+	background: #fff;
+	border: 1px solid #ccd0d4;
+	border-radius: 4px;
+	padding: 15px;
+}
+
+.remember-application-detail-section h3 {
+	margin-top: 0;
+	margin-bottom: 12px;
+	font-size: 14px;
+	font-weight: 600;
+	padding-bottom: 8px;
+	border-bottom: 1px solid #e5e5e5;
+}
+
+.remember-application-detail-section .form-table {
+	margin: 0;
+}
+
+.remember-application-detail-section .form-table th {
+	width: 140px;
+	padding: 8px 0;
+	font-weight: 500;
+}
+
+.remember-application-detail-section .form-table td {
+	padding: 8px 0;
+}
+
+@media (max-width: 1200px) {
+	.remember-application-detail-grid {
+		grid-template-columns: 1fr;
+	}
+}
