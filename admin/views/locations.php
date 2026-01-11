@@ -13,12 +13,14 @@ if ( ! defined( 'WPINC' ) ) {
 
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-logger.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-location.php';
+require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-event.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-countries.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-image-uploader.php';
 
 Remember_Logger::debug( 'Locations page loaded' );
 
 $location_model = new Remember_Location();
+$event_model = new Remember_Event();
 
 // Get max image dimensions from settings
 $options = get_option( 'remember_options', array() );
@@ -141,9 +143,17 @@ if ( ! empty( $filter_city ) ) {
 $cities = $location_model->get_cities();
 $states = $location_model->get_states();
 
-// Check if editing
+// Check if viewing detail or editing
+$viewing_location = null;
 $editing_location = null;
-if ( isset( $_GET['edit'] ) ) {
+if ( isset( $_GET['view'] ) ) {
+	$view_id = absint( $_GET['view'] );
+	$viewing_location = $location_model->get( $view_id );
+	if ( $viewing_location ) {
+		// Get historical events for this location
+		$location_events = $event_model->get_historical_by_location( $view_id );
+	}
+} elseif ( isset( $_GET['edit'] ) ) {
 	$edit_id = absint( $_GET['edit'] );
 	$editing_location = $location_model->get( $edit_id );
 }
@@ -177,15 +187,83 @@ function remember_format_address( $location ) {
 <div class="wrap remember-locations">
 	<h1 class="wp-heading-inline"><?php echo esc_html( get_admin_page_title() ); ?></h1>
 	
-	<?php if ( ! $editing_location ) : ?>
+	<?php if ( ! $viewing_location && ! $editing_location ) : ?>
 		<button type="button" class="page-title-action" onclick="document.getElementById('remember-add-location').style.display='block'; this.style.display='none';"><?php esc_html_e( 'Add New', 'remember' ); ?></button>
+	<?php elseif ( $viewing_location ) : ?>
+		<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-locations&edit=' . $viewing_location->location_id ) ); ?>" class="page-title-action"><?php esc_html_e( 'Edit', 'remember' ); ?></a>
+		<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-locations' ) ); ?>" class="page-title-action"><?php esc_html_e( 'Back to List', 'remember' ); ?></a>
 	<?php else : ?>
 		<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-locations' ) ); ?>" class="page-title-action"><?php esc_html_e( 'Cancel', 'remember' ); ?></a>
 	<?php endif; ?>
 	
 	<hr class="wp-header-end">
 
-	<?php if ( ! $editing_location ) : ?>
+	<?php if ( $viewing_location ) : ?>
+		<?php include 'location-detail.php'; ?>
+	<?php elseif ( $editing_location ) : ?>
+		<!-- Edit Form -->
+		<div style="margin: 20px 0; padding: 20px; background: #fff; border: 1px solid #ccd0d4; border-radius: 4px;">
+			<h2><?php esc_html_e( 'Edit Location', 'remember' ); ?></h2>
+			<form method="post" action="" enctype="multipart/form-data">
+				<?php wp_nonce_field( 'remember_location_action', 'remember_location_nonce' ); ?>
+				<input type="hidden" name="remember_location_action" value="edit">
+				<input type="hidden" name="location_id" value="<?php echo esc_attr( $editing_location->location_id ); ?>">
+				
+				<table class="form-table">
+					<tr>
+						<th><label for="location_name"><?php esc_html_e( 'Location Name', 'remember' ); ?> <span class="description">(required)</span></label></th>
+						<td><input type="text" id="location_name" name="location_name" class="regular-text" value="<?php echo esc_attr( $editing_location->location_name ); ?>" required></td>
+					</tr>
+					<tr>
+						<th><label for="logo_file"><?php esc_html_e( 'Logo', 'remember' ); ?></label></th>
+						<td>
+							<?php if ( ! empty( $editing_location->logo_url ) ) : ?>
+								<p>
+									<img src="<?php echo esc_url( $editing_location->logo_url ); ?>" alt="<?php echo esc_attr( $editing_location->location_name ); ?>" style="max-width: 150px; height: auto; border: 1px solid #ddd; padding: 5px;">
+								</p>
+								<label><input type="checkbox" name="delete_logo" value="1"> <?php esc_html_e( 'Delete current logo', 'remember' ); ?></label>
+								<p class="description"><?php esc_html_e( 'Upload a new logo to replace the current one.', 'remember' ); ?></p>
+							<?php endif; ?>
+							<input type="file" id="logo_file" name="logo_file" accept="image/*">
+							<p class="description"><?php echo esc_html( sprintf( __( 'Square image, max %dpx. WordPress will resize if needed.', 'remember' ), $max_image_size ) ); ?></p>
+						</td>
+					</tr>
+					<tr>
+						<th><label for="address_street"><?php esc_html_e( 'Street Address', 'remember' ); ?></label></th>
+						<td><input type="text" id="address_street" name="address_street" class="regular-text" value="<?php echo esc_attr( $editing_location->address_street ); ?>"></td>
+					</tr>
+					<tr>
+						<th><label for="address_city"><?php esc_html_e( 'City', 'remember' ); ?></label></th>
+						<td><input type="text" id="address_city" name="address_city" class="regular-text" value="<?php echo esc_attr( $editing_location->address_city ); ?>"></td>
+					</tr>
+					<tr>
+						<th><label for="address_state"><?php esc_html_e( 'State/Province', 'remember' ); ?></label></th>
+						<td><input type="text" id="address_state" name="address_state" class="regular-text" value="<?php echo esc_attr( $editing_location->address_state ); ?>"></td>
+					</tr>
+					<tr>
+						<th><label for="address_postal"><?php esc_html_e( 'Postal/Zip Code', 'remember' ); ?></label></th>
+						<td><input type="text" id="address_postal" name="address_postal" class="regular-text" value="<?php echo esc_attr( $editing_location->address_postal ); ?>"></td>
+					</tr>
+					<tr>
+						<th><label for="address_country"><?php esc_html_e( 'Country', 'remember' ); ?></label></th>
+						<td><?php echo Remember_Countries::dropdown( 'address_country', ! empty( $editing_location->address_country ) ? $editing_location->address_country : 'US' ); ?></td>
+					</tr>
+					<tr>
+						<th><label for="details"><?php esc_html_e( 'Details', 'remember' ); ?></label></th>
+						<td><textarea id="details" name="details" class="large-text" rows="5"><?php echo esc_textarea( $editing_location->details ); ?></textarea></td>
+					</tr>
+					<tr>
+						<th><label for="is_active"><?php esc_html_e( 'Active', 'remember' ); ?></label></th>
+						<td><label><input type="checkbox" id="is_active" name="is_active" value="1" <?php checked( $editing_location->is_active, 1 ); ?>> <?php esc_html_e( 'Location is active', 'remember' ); ?></label></td>
+					</tr>
+				</table>
+				
+				<p class="submit">
+					<input type="submit" class="button button-primary" value="<?php esc_attr_e( 'Update Location', 'remember' ); ?>">
+				</p>
+			</form>
+		</div>
+	<?php else : ?>
 		<!-- Filters -->
 		<div class="remember-filters" style="margin: 20px 0; padding: 15px; background: #fff; border: 1px solid #ccd0d4; border-radius: 4px;">
 			<form method="get" action="">
@@ -273,73 +351,9 @@ function remember_format_address( $location ) {
 				</p>
 			</form>
 		</div>
-	<?php else : ?>
-		<!-- Edit Form -->
-		<div style="margin: 20px 0; padding: 20px; background: #fff; border: 1px solid #ccd0d4; border-radius: 4px;">
-			<h2><?php esc_html_e( 'Edit Location', 'remember' ); ?></h2>
-			<form method="post" action="" enctype="multipart/form-data">
-				<?php wp_nonce_field( 'remember_location_action', 'remember_location_nonce' ); ?>
-				<input type="hidden" name="remember_location_action" value="edit">
-				<input type="hidden" name="location_id" value="<?php echo esc_attr( $editing_location->location_id ); ?>">
-				
-				<table class="form-table">
-					<tr>
-						<th><label for="location_name"><?php esc_html_e( 'Location Name', 'remember' ); ?> <span class="description">(required)</span></label></th>
-						<td><input type="text" id="location_name" name="location_name" class="regular-text" value="<?php echo esc_attr( $editing_location->location_name ); ?>" required></td>
-					</tr>
-					<tr>
-						<th><label for="logo_file"><?php esc_html_e( 'Logo', 'remember' ); ?></label></th>
-						<td>
-							<?php if ( ! empty( $editing_location->logo_url ) ) : ?>
-								<p>
-									<img src="<?php echo esc_url( $editing_location->logo_url ); ?>" alt="<?php echo esc_attr( $editing_location->location_name ); ?>" style="max-width: 150px; height: auto; border: 1px solid #ddd; padding: 5px;">
-								</p>
-								<label><input type="checkbox" name="delete_logo" value="1"> <?php esc_html_e( 'Delete current logo', 'remember' ); ?></label>
-								<p class="description"><?php esc_html_e( 'Upload a new logo to replace the current one.', 'remember' ); ?></p>
-							<?php endif; ?>
-							<input type="file" id="logo_file" name="logo_file" accept="image/*">
-							<p class="description"><?php echo esc_html( sprintf( __( 'Square image, max %dpx. WordPress will resize if needed.', 'remember' ), $max_image_size ) ); ?></p>
-						</td>
-					</tr>
-					<tr>
-						<th><label for="address_street"><?php esc_html_e( 'Street Address', 'remember' ); ?></label></th>
-						<td><input type="text" id="address_street" name="address_street" class="regular-text" value="<?php echo esc_attr( $editing_location->address_street ); ?>"></td>
-					</tr>
-					<tr>
-						<th><label for="address_city"><?php esc_html_e( 'City', 'remember' ); ?></label></th>
-						<td><input type="text" id="address_city" name="address_city" class="regular-text" value="<?php echo esc_attr( $editing_location->address_city ); ?>"></td>
-					</tr>
-					<tr>
-						<th><label for="address_state"><?php esc_html_e( 'State/Province', 'remember' ); ?></label></th>
-						<td><input type="text" id="address_state" name="address_state" class="regular-text" value="<?php echo esc_attr( $editing_location->address_state ); ?>"></td>
-					</tr>
-					<tr>
-						<th><label for="address_postal"><?php esc_html_e( 'Postal/Zip Code', 'remember' ); ?></label></th>
-						<td><input type="text" id="address_postal" name="address_postal" class="regular-text" value="<?php echo esc_attr( $editing_location->address_postal ); ?>"></td>
-					</tr>
-					<tr>
-						<th><label for="address_country"><?php esc_html_e( 'Country', 'remember' ); ?></label></th>
-						<td><?php echo Remember_Countries::dropdown( 'address_country', ! empty( $editing_location->address_country ) ? $editing_location->address_country : 'US' ); ?></td>
-					</tr>
-					<tr>
-						<th><label for="details"><?php esc_html_e( 'Details', 'remember' ); ?></label></th>
-						<td><textarea id="details" name="details" class="large-text" rows="5"><?php echo esc_textarea( $editing_location->details ); ?></textarea></td>
-					</tr>
-					<tr>
-						<th><label for="is_active"><?php esc_html_e( 'Active', 'remember' ); ?></label></th>
-						<td><label><input type="checkbox" id="is_active" name="is_active" value="1" <?php checked( $editing_location->is_active, 1 ); ?>> <?php esc_html_e( 'Location is active', 'remember' ); ?></label></td>
-					</tr>
-				</table>
-				
-				<p class="submit">
-					<input type="submit" class="button button-primary" value="<?php esc_attr_e( 'Update Location', 'remember' ); ?>">
-				</p>
-			</form>
-		</div>
-	<?php endif; ?>
 
-	<!-- Locations List -->
-	<?php if ( ! empty( $locations ) ) : ?>
+		<!-- Locations List -->
+		<?php if ( ! empty( $locations ) ) : ?>
 		<table class="wp-list-table widefat fixed striped">
 			<thead>
 				<tr>
@@ -370,6 +384,7 @@ function remember_format_address( $location ) {
 							<?php endif; ?>
 						</td>
 						<td class="column-actions">
+							<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-locations&view=' . $location->location_id ) ); ?>"><?php esc_html_e( 'View', 'remember' ); ?></a> |
 							<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-locations&edit=' . $location->location_id ) ); ?>"><?php esc_html_e( 'Edit', 'remember' ); ?></a> |
 							<a href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin.php?page=remember-locations&delete=' . $location->location_id ), 'remember_location_action', 'remember_location_nonce' ) ); ?>" onclick="return confirm('<?php esc_attr_e( 'Are you sure you want to delete this location?', 'remember' ); ?>');"><?php esc_html_e( 'Delete', 'remember' ); ?></a>
 						</td>
@@ -377,7 +392,8 @@ function remember_format_address( $location ) {
 				<?php endforeach; ?>
 			</tbody>
 		</table>
-	<?php else : ?>
-		<p><?php esc_html_e( 'No locations found. Add your first location above.', 'remember' ); ?></p>
+		<?php else : ?>
+			<p><?php esc_html_e( 'No locations found. Add your first location above.', 'remember' ); ?></p>
+		<?php endif; ?>
 	<?php endif; ?>
 </div>

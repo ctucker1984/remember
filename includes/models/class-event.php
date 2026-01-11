@@ -95,4 +95,24 @@ class Remember_Event extends Remember_Base_Model {
 			"SELECT * FROM {$this->get_table()} WHERE start_date >= CURDATE() AND status IN ('open', 'draft') ORDER BY start_date ASC"
 		);
 	}
+
+	/**
+	 * Get historical events by location (past events, sorted reverse chronological).
+	 *
+	 * @param int $location_id Location ID.
+	 * @return array
+	 */
+	public function get_historical_by_location( $location_id ) {
+		global $wpdb;
+		return $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT * FROM {$this->get_table()} 
+				WHERE location_id = %d 
+				AND end_date < CURDATE() 
+				AND status IN ('completed', 'closed', 'cancelled')
+				ORDER BY end_date DESC, start_date DESC",
+				$location_id
+			)
+		);
+	}
 }
