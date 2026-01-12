@@ -49,7 +49,29 @@ if ( isset( $_POST['remember_vetting_action'] ) && check_admin_referer( 'remembe
 				}
 			}
 		} elseif ( 'schedule' === $action ) {
-			$scheduled_at = isset( $_POST['scheduled_at'] ) ? sanitize_text_field( $_POST['scheduled_at'] ) : '';
+			// Handle both old datetime-local format and new separate fields
+			$scheduled_at = '';
+			if ( isset( $_POST['scheduled_at'] ) && ! empty( $_POST['scheduled_at'] ) ) {
+				// Old format (datetime-local)
+				$scheduled_at = sanitize_text_field( $_POST['scheduled_at'] );
+			} elseif ( isset( $_POST['scheduled_date'] ) && ! empty( $_POST['scheduled_date'] ) ) {
+				// New format (separate date, hour, minute, ampm)
+				$date = sanitize_text_field( $_POST['scheduled_date'] );
+				$hour = isset( $_POST['scheduled_hour'] ) ? absint( $_POST['scheduled_hour'] ) : 12;
+				$minute = isset( $_POST['scheduled_minute'] ) ? absint( $_POST['scheduled_minute'] ) : 0;
+				$ampm = isset( $_POST['scheduled_ampm'] ) ? sanitize_text_field( $_POST['scheduled_ampm'] ) : 'AM';
+				
+				// Convert 12-hour to 24-hour format
+				if ( 'PM' === $ampm && $hour < 12 ) {
+					$hour += 12;
+				} elseif ( 'AM' === $ampm && $hour === 12 ) {
+					$hour = 0;
+				}
+				
+				// Format as MySQL datetime (in organization timezone)
+				$scheduled_at = sprintf( '%s %02d:%02d:00', $date, $hour, $minute );
+			}
+			
 			if ( ! empty( $scheduled_at ) ) {
 				$result = $vetting_model->schedule( $vetting_id, $scheduled_at );
 				if ( $result !== false ) {
@@ -70,16 +92,35 @@ if ( isset( $_POST['remember_vetting_action'] ) && check_admin_referer( 'remembe
 			if ( in_array( $decision, array( 'accepted', 'rejected' ), true ) ) {
 				$result = $vetting_model->complete( $vetting_id, $decision );
 				if ( $result !== false ) {
-					// Update member status based on decision
+					// Update member status based on most recent completed vetting case
 					$vetting = $vetting_model->get( $vetting_id );
 					if ( $vetting ) {
 						$member_model = new Remember_Member();
-						if ( 'accepted' === $decision ) {
-							$member_model->update_status( $vetting->member_id, 'vetted' );
-							// Trigger hook to sync member to QuickBooks
-							do_action( 'remember_member_vetted', $vetting->member_id );
-						} elseif ( 'rejected' === $decision ) {
-							$member_model->update_status( $vetting->member_id, 'rejected' );
+						
+						// Get all completed vetting cases for this member, ordered by decision_date DESC
+						global $wpdb;
+						$completed_cases = $wpdb->get_results( $wpdb->prepare(
+							"SELECT * FROM {$wpdb->prefix}remember_vetting 
+							WHERE member_id = %d 
+							AND status = 'completed' 
+							AND decision IN ('accepted', 'rejected')
+							ORDER BY decision_date DESC 
+							LIMIT 1",
+							$vetting->member_id
+						) );
+						
+						// Update member status based on the most recent completed case
+						if ( ! empty( $completed_cases ) ) {
+							$latest_decision = $completed_cases[0]->decision;
+							if ( 'accepted' === $latest_decision ) {
+								$member_model->update_status( $vetting->member_id, 'vetted' );
+								// Trigger hook to sync member to QuickBooks (only if this is the latest decision)
+								if ( $completed_cases[0]->vetting_id == $vetting_id ) {
+									do_action( 'remember_member_vetted', $vetting->member_id );
+								}
+							} elseif ( 'rejected' === $latest_decision ) {
+								$member_model->update_status( $vetting->member_id, 'rejected' );
+							}
 						}
 					}
 					
@@ -158,47 +199,40 @@ if ( isset( $_POST['remember_vetting_action'] ) && check_admin_referer( 'remembe
 		$primary_vetter_id = isset( $_POST['primary_vetter_id'] ) ? absint( $_POST['primary_vetter_id'] ) : 0;
 		
 		if ( $member_id > 0 ) {
-			require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-vetting-workflow.php';
-			
-			// Check if vetting already exists
-			$existing = $vetting_model->get_by_member( $member_id );
-			if ( $existing ) {
-				echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html__( 'This member already has a vetting case.', 'remember' ) . ' <a href="' . esc_url( admin_url( 'admin.php?page=remember-vetting&view=' . $existing->vetting_id ) ) . '">' . esc_html__( 'View case', 'remember' ) . '</a></p></div>';
-			} else {
-				// Create vetting case
-				$vetting_id = $vetting_model->create( $member_id, $primary_vetter_id, 'pending' );
-				if ( $vetting_id ) {
-					// Update member status if needed
-					$member = $member_model->get( $member_id );
-					if ( $member && in_array( $member->status, array( 'pending_vetting', 'unvetted' ), true ) ) {
-						$member_model->update_status( $member_id, 'in_vetting' );
-					}
-					
-					// Add system note for case creation
-					$current_user = wp_get_current_user();
-					$system_note = sprintf( 
-						__( 'SYSTEM: Vetting case created by %s', 'remember' ),
-						$current_user->display_name
-					);
-					if ( $primary_vetter_id > 0 ) {
-						$vetter_user = get_user_by( 'ID', $primary_vetter_id );
-						if ( $vetter_user ) {
-							$system_note .= sprintf( __( ' with primary vetter %s', 'remember' ), $vetter_user->display_name );
-						}
-					}
-					$vetting_model->add_note( $vetting_id, get_current_user_id(), $system_note, true );
-					
-					Remember_Logger::info( 'Vetting case created manually', array( 'member_id' => $member_id, 'vetting_id' => $vetting_id ) );
-					echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Vetting case created successfully.', 'remember' ) . ' <a href="' . esc_url( admin_url( 'admin.php?page=remember-vetting&view=' . $vetting_id ) ) . '">' . esc_html__( 'View case', 'remember' ) . '</a></p></div>';
-				} else {
-					$db_error = $vetting_model->get_last_error();
-					Remember_Logger::error( 'Failed to create vetting case', array( 'member_id' => $member_id, 'db_error' => $db_error ) );
-					$error_message = __( 'Failed to create vetting case.', 'remember' );
-					if ( ! empty( $db_error ) ) {
-						$error_message .= ' ' . sprintf( __( 'Database error: %s', 'remember' ), esc_html( $db_error ) );
-					}
-					echo '<div class="notice notice-error is-dismissible"><p>' . $error_message . '</p></div>';
+			// Create vetting case (multiple cases allowed per member)
+			$vetting_id = $vetting_model->create( $member_id, $primary_vetter_id, 'pending' );
+			if ( $vetting_id ) {
+				// Update member status to in_vetting when a new case is created
+				// This allows re-vetting of previously vetted or rejected members
+				$member = $member_model->get( $member_id );
+				if ( $member ) {
+					$member_model->update_status( $member_id, 'in_vetting' );
 				}
+				
+				// Add system note for case creation
+				$current_user = wp_get_current_user();
+				$system_note = sprintf( 
+					__( 'SYSTEM: Vetting case created by %s', 'remember' ),
+					$current_user->display_name
+				);
+				if ( $primary_vetter_id > 0 ) {
+					$vetter_user = get_user_by( 'ID', $primary_vetter_id );
+					if ( $vetter_user ) {
+						$system_note .= sprintf( __( ' with primary vetter %s', 'remember' ), $vetter_user->display_name );
+					}
+				}
+				$vetting_model->add_note( $vetting_id, get_current_user_id(), $system_note, true );
+				
+				Remember_Logger::info( 'Vetting case created manually', array( 'member_id' => $member_id, 'vetting_id' => $vetting_id ) );
+				echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Vetting case created successfully.', 'remember' ) . ' <a href="' . esc_url( admin_url( 'admin.php?page=remember-vetting&view=' . $vetting_id ) ) . '">' . esc_html__( 'View case', 'remember' ) . '</a></p></div>';
+			} else {
+				$db_error = $vetting_model->get_last_error();
+				Remember_Logger::error( 'Failed to create vetting case', array( 'member_id' => $member_id, 'db_error' => $db_error ) );
+				$error_message = __( 'Failed to create vetting case.', 'remember' );
+				if ( ! empty( $db_error ) ) {
+					$error_message .= ' ' . sprintf( __( 'Database error: %s', 'remember' ), esc_html( $db_error ) );
+				}
+				echo '<div class="notice notice-error is-dismissible"><p>' . $error_message . '</p></div>';
 			}
 		} else {
 			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Please select a member.', 'remember' ) . '</p></div>';
@@ -309,17 +343,13 @@ $decision_labels = array(
 							foreach ( $all_members as $m ) :
 								$user = get_user_by( 'ID', $m->member_id );
 								if ( ! $user ) continue;
-								
-								// Check if member already has a non-completed vetting case
-								$existing_vetting = $vetting_model->get_by_member( $m->member_id );
-								if ( $existing_vetting && 'completed' !== $existing_vetting->status ) continue;
 							?>
 								<option value="<?php echo esc_attr( $m->member_id ); ?>" <?php selected( $pre_selected_member_id, $m->member_id ); ?>>
 									<?php echo esc_html( $user->display_name . ' (' . $user->user_email . ')' ); ?>
 								</option>
 							<?php endforeach; ?>
 						</select>
-						<p class="description"><?php esc_html_e( 'Select a member. Members with active (non-completed) vetting cases are not shown.', 'remember' ); ?></p>
+						<p class="description"><?php esc_html_e( 'Select a member. Multiple vetting cases can be created for the same member.', 'remember' ); ?></p>
 					</td>
 				</tr>
 				<tr>

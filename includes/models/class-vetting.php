@@ -116,7 +116,7 @@ class Remember_Vetting extends Remember_Base_Model {
 	}
 
 	/**
-	 * Get vetting by member.
+	 * Get vetting by member (most recent case).
 	 *
 	 * @param int $member_id Member ID.
 	 * @return object|null
@@ -125,10 +125,20 @@ class Remember_Vetting extends Remember_Base_Model {
 		global $wpdb;
 		return $wpdb->get_row(
 			$wpdb->prepare(
-				"SELECT * FROM {$this->get_table()} WHERE member_id = %d",
+				"SELECT * FROM {$this->get_table()} WHERE member_id = %d ORDER BY created_at DESC LIMIT 1",
 				$member_id
 			)
 		);
+	}
+
+	/**
+	 * Get most recent vetting case for a member.
+	 *
+	 * @param int $member_id Member ID.
+	 * @return object|null
+	 */
+	public function get_latest_by_member( $member_id ) {
+		return $this->get_by_member( $member_id );
 	}
 
 	/**
@@ -186,6 +196,18 @@ class Remember_Vetting extends Remember_Base_Model {
 	 */
 	public function get_pending() {
 		return $this->get_by_status( 'pending' );
+	}
+
+	/**
+	 * Get all open (non-completed) vetting records.
+	 *
+	 * @return array
+	 */
+	public function get_open() {
+		global $wpdb;
+		return $wpdb->get_results(
+			"SELECT * FROM {$this->get_table()} WHERE status != 'completed' ORDER BY created_at DESC"
+		);
 	}
 
 	/**

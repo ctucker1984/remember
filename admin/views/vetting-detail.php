@@ -55,8 +55,11 @@ if ( ! defined( 'WPINC' ) ) {
 							<span><strong><?php esc_html_e( 'Vetter:', 'remember' ); ?></strong> <?php echo esc_html( $viewing_vetter->display_name ); ?></span>
 						<?php endif; ?>
 						<span><strong><?php esc_html_e( 'Created:', 'remember' ); ?></strong> <?php echo esc_html( date_i18n( get_option( 'date_format' ), strtotime( $viewing_vetting->created_at ) ) ); ?></span>
-						<?php if ( $viewing_vetting->scheduled_at ) : ?>
-							<span><strong><?php esc_html_e( 'Scheduled:', 'remember' ); ?></strong> <?php echo esc_html( date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), strtotime( $viewing_vetting->scheduled_at ) ) ); ?></span>
+						<?php if ( $viewing_vetting->scheduled_at ) : 
+							require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-timezone.php';
+							$scheduled_display = Remember_Timezone::format_with_your_time( $viewing_vetting->scheduled_at, get_current_user_id(), true );
+						?>
+							<span><strong><?php esc_html_e( 'Scheduled:', 'remember' ); ?></strong> <?php echo esc_html( $scheduled_display ); ?></span>
 						<?php endif; ?>
 						<?php if ( 'completed' === $viewing_vetting->status ) : ?>
 							<span>
@@ -118,27 +121,83 @@ if ( ! defined( 'WPINC' ) ) {
 						<?php wp_nonce_field( 'remember_vetting_action', 'remember_vetting_nonce' ); ?>
 						<input type="hidden" name="remember_vetting_action" value="assign">
 						<input type="hidden" name="vetting_id" value="<?php echo esc_attr( $viewing_vetting_id ); ?>">
-						<select name="primary_vetter_id" style="margin-right: 5px; min-width: 150px;" required>
-							<option value=""><?php esc_html_e( '-- Assign Vetter --', 'remember' ); ?></option>
-							<?php foreach ( $vetters as $v ) : ?>
-								<option value="<?php echo esc_attr( $v->ID ); ?>" <?php selected( $viewing_vetting->primary_vetter_id, $v->ID ); ?>>
-									<?php echo esc_html( $v->display_name ); ?>
-								</option>
-							<?php endforeach; ?>
-						</select>
-						<input type="submit" class="button button-small" value="<?php esc_attr_e( 'Assign', 'remember' ); ?>">
+						<div style="display: flex; align-items: flex-start; gap: 5px;">
+							<select name="primary_vetter_id" style="height: 30px; min-width: 150px; box-sizing: border-box;" required>
+								<option value=""><?php esc_html_e( '-- Assign Vetter --', 'remember' ); ?></option>
+								<?php foreach ( $vetters as $v ) : ?>
+									<option value="<?php echo esc_attr( $v->ID ); ?>" <?php selected( $viewing_vetting->primary_vetter_id, $v->ID ); ?>>
+										<?php echo esc_html( $v->display_name ); ?>
+									</option>
+								<?php endforeach; ?>
+							</select>
+							<input type="submit" class="button button-small" value="<?php esc_attr_e( 'Assign', 'remember' ); ?>" style="height: 30px; box-sizing: border-box;">
+						</div>
 					</form>
 				</div>
 			<?php endif; ?>
 			
-			<?php if ( 'pending' === $viewing_vetting->status || 'scheduled' === $viewing_vetting->status ) : ?>
+			<?php if ( 'pending' === $viewing_vetting->status || 'scheduled' === $viewing_vetting->status ) : 
+				require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-timezone.php';
+				$org_tz_name = Remember_Timezone::get_organization_timezone_name();
+				$current_user_id = get_current_user_id();
+				$user_tz = Remember_Timezone::get_user_timezone( $current_user_id );
+				$offset_hours = Remember_Timezone::get_timezone_offset_hours( $current_user_id );
+				$example_msg = Remember_Timezone::get_example_conversion( $current_user_id );
+			?>
 				<div style="flex: 0 0 auto;">
 					<form method="post" action="" style="display: inline-block;">
 						<?php wp_nonce_field( 'remember_vetting_action', 'remember_vetting_nonce' ); ?>
 						<input type="hidden" name="remember_vetting_action" value="schedule">
 						<input type="hidden" name="vetting_id" value="<?php echo esc_attr( $viewing_vetting_id ); ?>">
-						<input type="datetime-local" name="scheduled_at" value="<?php echo $viewing_vetting->scheduled_at ? esc_attr( date( 'Y-m-d\TH:i', strtotime( $viewing_vetting->scheduled_at ) ) ) : ''; ?>" style="margin-right: 5px;" required>
-						<input type="submit" class="button button-small" value="<?php esc_attr_e( 'Schedule', 'remember' ); ?>">
+						<div style="display: flex; align-items: flex-start; gap: 5px; flex-wrap: wrap;">
+							<input type="date" name="scheduled_date" value="<?php echo $viewing_vetting->scheduled_at ? esc_attr( date( 'Y-m-d', strtotime( $viewing_vetting->scheduled_at ) ) ) : ''; ?>" style="height: 30px; box-sizing: border-box;" required>
+							<select name="scheduled_hour" style="height: 30px; width: 60px; box-sizing: border-box;" required>
+								<?php for ( $h = 1; $h <= 12; $h++ ) : 
+									$selected_hour = $viewing_vetting->scheduled_at ? (int) date( 'g', strtotime( $viewing_vetting->scheduled_at ) ) : '';
+									$display_hour = $h;
+								?>
+									<option value="<?php echo esc_attr( $h ); ?>" <?php selected( $selected_hour, $h ); ?>>
+										<?php echo esc_html( $display_hour ); ?>
+									</option>
+								<?php endfor; ?>
+							</select>
+							<select name="scheduled_minute" style="height: 30px; width: 60px; box-sizing: border-box;" required>
+								<?php 
+								$selected_minute = $viewing_vetting->scheduled_at ? (int) date( 'i', strtotime( $viewing_vetting->scheduled_at ) ) : 0;
+								$minute_options = array( 0, 15, 30, 45 );
+								foreach ( $minute_options as $min ) : 
+								?>
+									<option value="<?php echo esc_attr( $min ); ?>" <?php selected( $selected_minute, $min ); ?>>
+										<?php echo esc_html( str_pad( $min, 2, '0', STR_PAD_LEFT ) ); ?>
+									</option>
+								<?php endforeach; ?>
+							</select>
+							<select name="scheduled_ampm" style="height: 30px; width: 60px; box-sizing: border-box;" required>
+								<?php 
+								$selected_ampm = $viewing_vetting->scheduled_at ? date( 'A', strtotime( $viewing_vetting->scheduled_at ) ) : 'AM';
+								?>
+								<option value="AM" <?php selected( $selected_ampm, 'AM' ); ?>>AM</option>
+								<option value="PM" <?php selected( $selected_ampm, 'PM' ); ?>>PM</option>
+							</select>
+							<input type="submit" class="button button-small" value="<?php esc_attr_e( 'Schedule', 'remember' ); ?>" style="height: 30px; box-sizing: border-box;">
+						</div>
+						<div style="margin-top: 8px; font-size: 12px; color: #646970; line-height: 1.4;">
+							<p style="margin: 0 0 4px 0;">
+								<strong><?php esc_html_e( 'System timezone:', 'remember' ); ?></strong> <?php echo esc_html( $org_tz_name ); ?>
+								<?php if ( abs( $offset_hours ) >= 0.01 ) : ?>
+									<?php 
+									$offset_sign = $offset_hours > 0 ? '+' : '';
+									$offset_display = sprintf( '%s%.1f', $offset_sign, $offset_hours );
+									?>
+									<span style="margin-left: 8px;">
+										(<?php printf( esc_html__( 'Your timezone is %s hours', 'remember' ), esc_html( $offset_display ) ); ?>)
+									</span>
+								<?php endif; ?>
+							</p>
+							<p style="margin: 0; font-style: italic;">
+								<?php echo esc_html( $example_msg ); ?>
+							</p>
+						</div>
 					</form>
 				</div>
 			<?php endif; ?>
@@ -149,12 +208,14 @@ if ( ! defined( 'WPINC' ) ) {
 						<?php wp_nonce_field( 'remember_vetting_action', 'remember_vetting_nonce' ); ?>
 						<input type="hidden" name="remember_vetting_action" value="complete">
 						<input type="hidden" name="vetting_id" value="<?php echo esc_attr( $viewing_vetting_id ); ?>">
-						<select name="decision" style="margin-right: 5px; min-width: 120px;" required>
-							<option value=""><?php esc_html_e( '-- Decision --', 'remember' ); ?></option>
-							<option value="accepted"><?php esc_html_e( 'Accepted', 'remember' ); ?></option>
-							<option value="rejected"><?php esc_html_e( 'Rejected', 'remember' ); ?></option>
-						</select>
-						<input type="submit" class="button button-small button-primary" value="<?php esc_attr_e( 'Complete', 'remember' ); ?>" onclick="return confirm('<?php esc_attr_e( 'Are you sure you want to complete this vetting case?', 'remember' ); ?>');">
+						<div style="display: flex; align-items: flex-start; gap: 5px;">
+							<select name="decision" style="height: 30px; min-width: 120px; box-sizing: border-box;" required>
+								<option value=""><?php esc_html_e( '-- Decision --', 'remember' ); ?></option>
+								<option value="accepted"><?php esc_html_e( 'Accepted', 'remember' ); ?></option>
+								<option value="rejected"><?php esc_html_e( 'Rejected', 'remember' ); ?></option>
+							</select>
+							<input type="submit" class="button button-small button-primary" value="<?php esc_attr_e( 'Complete', 'remember' ); ?>" onclick="return confirm('<?php esc_attr_e( 'Are you sure you want to complete this vetting case?', 'remember' ); ?>');" style="height: 30px; box-sizing: border-box;">
+						</div>
 					</form>
 				</div>
 			<?php endif; ?>

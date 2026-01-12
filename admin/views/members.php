@@ -208,7 +208,18 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 			}
 		}
 		
-		// Collect profile data
+		// Save timezone to WP user meta (not member_profiles)
+		if ( isset( $_POST['timezone_string'] ) ) {
+			$timezone_string = sanitize_text_field( $_POST['timezone_string'] );
+			if ( ! empty( $timezone_string ) ) {
+				update_user_meta( $member_id, 'timezone_string', $timezone_string );
+			} else {
+				// Default if empty
+				update_user_meta( $member_id, 'timezone_string', 'America/Los_Angeles' );
+			}
+		}
+		
+		// Collect profile data (timezone is NOT stored here, it's in WP user meta)
 		$profile_data = array(
 			'legal_first_name' => isset( $_POST['legal_first_name'] ) ? sanitize_text_field( $_POST['legal_first_name'] ) : '',
 			'legal_last_name' => isset( $_POST['legal_last_name'] ) ? sanitize_text_field( $_POST['legal_last_name'] ) : '',
@@ -218,7 +229,6 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 			'address_postal' => isset( $_POST['address_postal'] ) ? sanitize_text_field( $_POST['address_postal'] ) : '',
 			'address_country' => isset( $_POST['address_country'] ) ? sanitize_text_field( $_POST['address_country'] ) : '',
 			'cell_phone' => isset( $_POST['cell_phone'] ) ? sanitize_text_field( $_POST['cell_phone'] ) : '',
-			'timezone' => isset( $_POST['timezone'] ) ? sanitize_text_field( $_POST['timezone'] ) : '',
 			'im_handle' => isset( $_POST['im_handle'] ) ? sanitize_text_field( $_POST['im_handle'] ) : '',
 			'im_type' => isset( $_POST['im_type'] ) ? sanitize_text_field( $_POST['im_type'] ) : 'telegram',
 			'interests' => isset( $_POST['interests'] ) ? sanitize_textarea_field( $_POST['interests'] ) : '',

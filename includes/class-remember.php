@@ -143,6 +143,7 @@ class Remember {
 		$this->loader->add_action( 'admin_enqueue_scripts', $plugin_admin, 'enqueue_scripts' );
 		$this->loader->add_action( 'wp_ajax_remember_get_event_roles', $plugin_admin, 'ajax_get_event_roles' );
 		$this->loader->add_action( 'admin_menu', $plugin_admin, 'add_admin_menu' );
+		$this->loader->add_action( 'wp_dashboard_setup', $plugin_admin, 'register_dashboard_widget' );
 		
 		// QuickBooks sync hooks
 		$this->loader->add_action( 'remember_member_vetted', $this, 'sync_vetted_member_to_qb' );
@@ -151,6 +152,15 @@ class Remember {
 		// Setup wizard redirect and form processing
 		$this->loader->add_action( 'admin_init', $plugin_admin, 'maybe_show_setup_wizard' );
 		$this->loader->add_action( 'admin_init', $plugin_admin, 'process_setup_wizard' );
+
+		// Clean up member records when WordPress user is deleted
+		$this->loader->add_action( 'delete_user', $this, 'cleanup_member_on_user_delete' );
+		
+		// Add timezone field to WordPress user profile
+		$this->loader->add_action( 'show_user_profile', $plugin_admin, 'add_timezone_field_to_profile' );
+		$this->loader->add_action( 'edit_user_profile', $plugin_admin, 'add_timezone_field_to_profile' );
+		$this->loader->add_action( 'personal_options_update', $plugin_admin, 'save_timezone_field' );
+		$this->loader->add_action( 'edit_user_profile_update', $plugin_admin, 'save_timezone_field' );
 	}
 
 	/**
@@ -252,6 +262,27 @@ class Remember {
 			
 			require_once plugin_dir_path( __FILE__ ) . 'integrations/class-remember-quickbooks-sync.php';
 			Remember_QuickBooks_Sync::sync_all_payments();
+		}
+	}
+
+	/**
+	 * Clean up member record when WordPress user is deleted.
+	 *
+	 * @param int $user_id The ID of the user being deleted.
+	 * @param int|null $reassign The ID of the user to reassign posts to, or null.
+	 * @param WP_User $user The user object being deleted.
+	 */
+	public function cleanup_member_on_user_delete( $user_id, $reassign = null, $user = null ) {
+		require_once plugin_dir_path( __FILE__ ) . 'models/class-member.php';
+		$member_model = new Remember_Member();
+		
+		// Delete the member record if it exists
+		$member = $member_model->get( $user_id );
+		if ( $member ) {
+			$member_model->delete( $user_id );
+			
+			require_once plugin_dir_path( __FILE__ ) . 'utilities/class-remember-logger.php';
+			Remember_Logger::debug( 'Deleted member record on user deletion', array( 'user_id' => $user_id ) );
 		}
 	}
 

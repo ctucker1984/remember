@@ -506,4 +506,113 @@ class Remember_Admin {
 		
 		wp_send_json_success( $formatted_roles );
 	}
+
+	/**
+	 * Register dashboard widget.
+	 *
+	 * @since    1.0.0
+	 */
+	public function register_dashboard_widget() {
+		// Only show to users with at least read_events capability
+		if ( ! current_user_can( 'remember_read_events' ) ) {
+			return;
+		}
+
+		wp_add_dashboard_widget(
+			'remember_dashboard_widget',
+			__( 'reMember Overview', 'remember' ),
+			array( $this, 'render_dashboard_widget' )
+		);
+	}
+
+	/**
+	 * Render dashboard widget content.
+	 *
+	 * @since    1.0.0
+	 */
+	public function render_dashboard_widget() {
+		// Load models
+		require_once plugin_dir_path( __FILE__ ) . '../includes/models/class-member.php';
+		require_once plugin_dir_path( __FILE__ ) . '../includes/models/class-event.php';
+		require_once plugin_dir_path( __FILE__ ) . '../includes/models/class-application.php';
+		require_once plugin_dir_path( __FILE__ ) . '../includes/models/class-vetting.php';
+
+		$member_model      = new Remember_Member();
+		$event_model       = new Remember_Event();
+		$application_model = new Remember_Application();
+		$vetting_model     = new Remember_Vetting();
+
+		// Get statistics (only count valid members with existing WordPress users)
+		$all_members = $member_model->get_all_valid();
+		$total_members = count( $all_members );
+
+		$pending_vetting = $member_model->get_by_status( 'pending_vetting' );
+		$in_vetting = $member_model->get_by_status( 'in_vetting' );
+		$vetted = $member_model->get_by_status( 'vetted' );
+
+		$pending_vetting_count = count( $pending_vetting );
+		$in_vetting_count = count( $in_vetting );
+		$vetted_count = count( $vetted );
+
+		$open_events = $event_model->get_open();
+		$upcoming_events = $event_model->get_upcoming();
+
+		$pending_applications = $application_model->get_by_status( 'pending' );
+		$pending_applications_count = count( $pending_applications );
+
+		$open_vetting_records = $vetting_model->get_open();
+		$open_vetting_records_count = count( $open_vetting_records );
+
+		// Include widget view
+		include plugin_dir_path( __FILE__ ) . 'views/dashboard-widget.php';
+	}
+
+	/**
+	 * Add timezone field to WordPress user profile.
+	 *
+	 * @param WP_User $user User object.
+	 */
+	public function add_timezone_field_to_profile( $user ) {
+		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-timezone.php';
+		
+		$selected_timezone = get_user_meta( $user->ID, 'timezone_string', true );
+		if ( empty( $selected_timezone ) ) {
+			$selected_timezone = 'America/Los_Angeles'; // Default
+			// Auto-assign default timezone
+			update_user_meta( $user->ID, 'timezone_string', $selected_timezone );
+		}
+		?>
+		<h2><?php esc_html_e( 'reMember Settings', 'remember' ); ?></h2>
+		<table class="form-table">
+			<tr>
+				<th><label for="timezone_string"><?php esc_html_e( 'Time Zone', 'remember' ); ?> <span class="description"><?php esc_html_e( '(required)', 'remember' ); ?></span></label></th>
+				<td>
+					<?php echo Remember_Timezone::dropdown( $selected_timezone, 'timezone_string', 'timezone_string', true ); ?>
+					<p class="description"><?php esc_html_e( 'Your timezone is used to display scheduled times in your local time.', 'remember' ); ?></p>
+				</td>
+			</tr>
+		</table>
+		<?php
+	}
+
+	/**
+	 * Save timezone field from WordPress user profile.
+	 *
+	 * @param int $user_id User ID.
+	 */
+	public function save_timezone_field( $user_id ) {
+		if ( ! current_user_can( 'edit_user', $user_id ) ) {
+			return;
+		}
+		
+		if ( isset( $_POST['timezone_string'] ) ) {
+			$timezone_string = sanitize_text_field( $_POST['timezone_string'] );
+			if ( ! empty( $timezone_string ) ) {
+				update_user_meta( $user_id, 'timezone_string', $timezone_string );
+			} else {
+				// Default if empty
+				update_user_meta( $user_id, 'timezone_string', 'America/Los_Angeles' );
+			}
+		}
+	}
 }

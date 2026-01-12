@@ -89,12 +89,7 @@ class Remember_Vetting_Workflow {
 		require_once plugin_dir_path( __FILE__ ) . '../models/class-vetting.php';
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
 		
-		// Check if vetting already exists
 		$vetting_model = new Remember_Vetting();
-		$existing = $vetting_model->get_by_member( $member_id );
-		if ( $existing ) {
-			return $existing->vetting_id; // Already has a vetting case
-		}
 		
 		// Get default vetter (first user with vetting capability, or current user, or 0 if none)
 		$vetters = get_users( array(
@@ -116,15 +111,13 @@ class Remember_Vetting_Workflow {
 		$vetting_id = $vetting_model->create( $member_id, $primary_vetter_id, 'pending' );
 		
 		if ( $vetting_id ) {
-			// Update member status to in_vetting
+			// Update member status to in_vetting when a new case is created
+			// This allows re-vetting of previously vetted or rejected members
 			require_once plugin_dir_path( __FILE__ ) . '../models/class-member.php';
 			$member_model = new Remember_Member();
 			$member = $member_model->get( $member_id );
 			if ( $member ) {
-				// Update status if member is pending_vetting or unvetted
-				if ( in_array( $member->status, array( 'pending_vetting', 'unvetted' ), true ) ) {
-					$member_model->update_status( $member_id, 'in_vetting' );
-				}
+				$member_model->update_status( $member_id, 'in_vetting' );
 			}
 			
 			// Add system note for automatic case creation

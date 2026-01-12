@@ -30,7 +30,7 @@ class Remember_Database_Updater {
 		
 		// Check current schema version
 		$current_version = get_option( 'remember_db_version', '0.0.0' );
-		$target_version = '1.2.0'; // Version that adds privacy fields
+		$target_version = '1.3.0'; // Version that removes unique constraint on vetting.member_id
 		
 		// Update to 1.1.0 (unvetted status)
 		if ( version_compare( $current_version, '1.1.0', '<' ) ) {
@@ -113,6 +113,66 @@ class Remember_Database_Updater {
 			// Update version
 			update_option( 'remember_db_version', '1.2.0' );
 			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.2.0' ) );
+		}
+		
+		// Update to 1.3.0 (remove unique constraint on vetting.member_id to allow multiple cases)
+		if ( version_compare( $current_version, '1.3.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => $current_version, 'to' => '1.3.0' ) );
+			
+			$vetting_table = $wpdb->prefix . 'remember_vetting';
+			
+			// Check if unique key exists
+			$indexes = $wpdb->get_results( "SHOW INDEX FROM {$vetting_table} WHERE Key_name = 'member_id' AND Non_unique = 0" );
+			
+			if ( ! empty( $indexes ) ) {
+				// Drop the unique key
+				$result = $wpdb->query( "ALTER TABLE {$vetting_table} DROP INDEX member_id" );
+				
+				if ( $result !== false ) {
+					// Add back as a regular index (non-unique)
+					$result2 = $wpdb->query( "ALTER TABLE {$vetting_table} ADD INDEX member_id (member_id)" );
+					
+					if ( $result2 !== false ) {
+						Remember_Logger::info( 'Removed unique constraint on vetting.member_id, allowing multiple cases per member' );
+					} else {
+						Remember_Logger::error( 'Failed to add regular index on member_id', array( 'error' => $wpdb->last_error ) );
+					}
+				} else {
+					Remember_Logger::error( 'Failed to drop unique key on member_id', array( 'error' => $wpdb->last_error ) );
+				}
+			}
+			
+			// Update version
+			update_option( 'remember_db_version', '1.3.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.3.0' ) );
+		}
+		
+		// Update to 1.4.0 (auto-assign default timezone to existing users)
+		if ( version_compare( $current_version, '1.4.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => $current_version, 'to' => '1.4.0' ) );
+			
+			// Get all users without timezone_string meta
+			$users_without_timezone = $wpdb->get_col(
+				"SELECT u.ID FROM {$wpdb->users} u
+				LEFT JOIN {$wpdb->usermeta} um ON u.ID = um.user_id AND um.meta_key = 'timezone_string'
+				WHERE um.meta_value IS NULL"
+			);
+			
+			$default_timezone = 'America/Los_Angeles';
+			$updated_count = 0;
+			
+			foreach ( $users_without_timezone as $user_id ) {
+				update_user_meta( $user_id, 'timezone_string', $default_timezone );
+				$updated_count++;
+			}
+			
+			if ( $updated_count > 0 ) {
+				Remember_Logger::info( "Assigned default timezone to {$updated_count} users" );
+			}
+			
+			// Update version
+			update_option( 'remember_db_version', '1.4.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.4.0' ) );
 		}
 	}
 }

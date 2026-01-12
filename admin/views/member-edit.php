@@ -51,8 +51,16 @@ $selected_allergy_ids = $wpdb->get_col( $wpdb->prepare(
 	$view_member_id
 ) );
 
-// Get timezones
-$timezones = timezone_identifiers_list();
+// Load timezone utility
+require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-timezone.php';
+
+// Get timezone from WP user meta (not from member_profiles)
+$selected_timezone = get_user_meta( $view_user->ID, 'timezone_string', true );
+if ( empty( $selected_timezone ) ) {
+	$selected_timezone = 'America/Los_Angeles'; // Default
+	// Auto-assign default timezone
+	update_user_meta( $view_user->ID, 'timezone_string', $selected_timezone );
+}
 
 // Load countries helper
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-countries.php';
@@ -214,19 +222,10 @@ $max_image_size = isset( $options['photo_max_dimensions'] ) ? absint( $options['
 			</td>
 		</tr>
 		<tr>
-			<th><label for="timezone"><?php esc_html_e( 'Time Zone', 'remember' ); ?></label></th>
+			<th><label for="timezone_string"><?php esc_html_e( 'Time Zone', 'remember' ); ?> <span class="description"><?php esc_html_e( '(required)', 'remember' ); ?></span></label></th>
 			<td>
-				<select id="timezone" name="timezone" class="regular-text">
-					<option value=""><?php esc_html_e( '-- Select Time Zone --', 'remember' ); ?></option>
-					<?php 
-					$selected_timezone = $view_profile && $view_profile->timezone ? $view_profile->timezone : '';
-					foreach ( $timezones as $timezone ) : 
-					?>
-						<option value="<?php echo esc_attr( $timezone ); ?>" <?php selected( $selected_timezone, $timezone ); ?>>
-							<?php echo esc_html( str_replace( '_', ' ', $timezone ) ); ?>
-						</option>
-					<?php endforeach; ?>
-				</select>
+				<?php echo Remember_Timezone::dropdown( $selected_timezone, 'timezone_string', 'timezone_string', true ); ?>
+				<p class="description"><?php esc_html_e( 'Your timezone is used to display scheduled times in your local time.', 'remember' ); ?></p>
 			</td>
 		</tr>
 		<tr>

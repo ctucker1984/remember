@@ -618,7 +618,7 @@ class Remember_Database {
 			created_at DATETIME NOT NULL,
 			updated_at DATETIME NOT NULL,
 			PRIMARY KEY (vetting_id),
-			UNIQUE KEY member_id (member_id),
+			KEY member_id (member_id),
 			KEY primary_vetter_id (primary_vetter_id),
 			KEY status (status)
 		) $charset_collate;";

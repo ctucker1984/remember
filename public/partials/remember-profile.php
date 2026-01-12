@@ -43,7 +43,6 @@ if ( isset( $_POST['remember_profile_action'] ) && check_admin_referer( 'remembe
 		'address_postal'              => isset( $_POST['address_postal'] ) ? sanitize_text_field( $_POST['address_postal'] ) : '',
 		'address_country'             => isset( $_POST['address_country'] ) ? sanitize_text_field( $_POST['address_country'] ) : 'US',
 		'cell_phone'                  => isset( $_POST['cell_phone'] ) ? sanitize_text_field( $_POST['cell_phone'] ) : '',
-		'timezone'                    => isset( $_POST['timezone'] ) ? sanitize_text_field( $_POST['timezone'] ) : '',
 		'im_handle'                   => isset( $_POST['im_handle'] ) ? sanitize_text_field( $_POST['im_handle'] ) : '',
 		'im_type'                     => isset( $_POST['im_type'] ) ? sanitize_text_field( $_POST['im_type'] ) : 'telegram',
 		'interests'                   => isset( $_POST['interests'] ) ? sanitize_textarea_field( $_POST['interests'] ) : '',
@@ -78,14 +77,33 @@ if ( isset( $_POST['remember_profile_action'] ) && check_admin_referer( 'remembe
 	if ( ! empty( $profile_data['legal_last_name'] ) ) {
 		update_user_meta( $user->ID, 'last_name', $profile_data['legal_last_name'] );
 	}
+	
+	// Save timezone to WP user meta (not member_profiles)
+	if ( isset( $_POST['timezone_string'] ) ) {
+		$timezone_string = sanitize_text_field( $_POST['timezone_string'] );
+		if ( ! empty( $timezone_string ) ) {
+			update_user_meta( $user->ID, 'timezone_string', $timezone_string );
+		} else {
+			// Default if empty
+			update_user_meta( $user->ID, 'timezone_string', 'America/Los_Angeles' );
+		}
+	}
 
 	// Redirect to view mode
 	wp_safe_redirect( remove_query_arg( 'edit' ) );
 	exit;
 }
 
-// Get timezones
-$timezones = timezone_identifiers_list();
+// Load timezone utility
+require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-timezone.php';
+
+// Get timezone from WP user meta (not from member_profiles)
+$selected_timezone = get_user_meta( $user->ID, 'timezone_string', true );
+if ( empty( $selected_timezone ) ) {
+	$selected_timezone = 'America/Los_Angeles'; // Default
+	// Auto-assign default timezone
+	update_user_meta( $user->ID, 'timezone_string', $selected_timezone );
+}
 ?>
 
 <div class="remember-profile">
@@ -154,18 +172,12 @@ $timezones = timezone_identifiers_list();
 			</div>
 
 			<div class="remember-form-group">
-				<label for="timezone" class="remember-form-label"><?php esc_html_e( 'Time Zone', 'remember' ); ?></label>
-				<select id="timezone" name="timezone" class="remember-form-control">
-					<option value=""><?php esc_html_e( '-- Select Time Zone --', 'remember' ); ?></option>
-					<?php 
-					$selected_timezone = $profile && $profile->timezone ? $profile->timezone : '';
-					foreach ( $timezones as $timezone ) : 
-					?>
-						<option value="<?php echo esc_attr( $timezone ); ?>" <?php selected( $selected_timezone, $timezone ); ?>>
-							<?php echo esc_html( str_replace( '_', ' ', $timezone ) ); ?>
-						</option>
-					<?php endforeach; ?>
-				</select>
+				<label for="timezone_string" class="remember-form-label">
+					<?php esc_html_e( 'Time Zone', 'remember' ); ?>
+					<span class="remember-required">*</span>
+				</label>
+				<?php echo Remember_Timezone::dropdown( $selected_timezone, 'timezone_string', 'timezone_string', true ); ?>
+				<p class="description"><?php esc_html_e( 'Your timezone is used to display scheduled times in your local time.', 'remember' ); ?></p>
 			</div>
 
 			<div class="remember-form-group">

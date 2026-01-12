@@ -196,6 +196,38 @@ class Remember_Member extends Remember_Base_Model {
 	}
 
 	/**
+	 * Get all valid members (those with existing WordPress users).
+	 * Filters out orphaned records where the WordPress user no longer exists.
+	 *
+	 * @param array $args Query arguments.
+	 * @return array
+	 */
+	public function get_all_valid( $args = array() ) {
+		global $wpdb;
+		
+		$defaults = array(
+			'limit'   => -1,
+			'offset'  => 0,
+			'orderby' => $this->primary_key,
+			'order'   => 'ASC',
+		);
+		$args = wp_parse_args( $args, $defaults );
+
+		$query = "SELECT m.* FROM {$this->get_table()} m 
+			INNER JOIN {$wpdb->prefix}users u ON m.member_id = u.ID";
+
+		if ( ! empty( $args['orderby'] ) ) {
+			$query .= " ORDER BY m.{$args['orderby']} {$args['order']}";
+		}
+
+		if ( $args['limit'] > 0 ) {
+			$query .= $wpdb->prepare( " LIMIT %d OFFSET %d", $args['limit'], $args['offset'] );
+		}
+
+		return $wpdb->get_results( $query );
+	}
+
+	/**
 	 * Get all records with WHERE conditions.
 	 *
 	 * @param array $args Query arguments.
