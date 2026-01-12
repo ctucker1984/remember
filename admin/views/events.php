@@ -294,18 +294,18 @@ if ( isset( $_GET['view'] ) ) {
 
 		<!-- Events List -->
 		<?php if ( ! empty( $events ) ) : ?>
-		<table class="wp-list-table widefat fixed striped">
-			<thead>
-				<tr>
+	<table class="wp-list-table widefat fixed striped">
+		<thead>
+			<tr>
 					<th class="column-name"><?php esc_html_e( 'Event Name', 'remember' ); ?></th>
 					<th class="column-location"><?php esc_html_e( 'Location', 'remember' ); ?></th>
 					<th class="column-dates"><?php esc_html_e( 'Dates', 'remember' ); ?></th>
 					<th class="column-status"><?php esc_html_e( 'Status', 'remember' ); ?></th>
 					<th class="column-type"><?php esc_html_e( 'Type', 'remember' ); ?></th>
 					<th class="column-actions"><?php esc_html_e( 'Actions', 'remember' ); ?></th>
-				</tr>
-			</thead>
-			<tbody>
+			</tr>
+		</thead>
+		<tbody>
 				<?php foreach ( $events as $event ) : 
 					$location = $event->location_id ? $location_model->get( $event->location_id ) : null;
 					$status_labels = array(
@@ -351,8 +351,8 @@ if ( isset( $_GET['view'] ) ) {
 						</td>
 					</tr>
 				<?php endforeach; ?>
-			</tbody>
-		</table>
+		</tbody>
+	</table>
 		<?php else : ?>
 			<p><?php esc_html_e( 'No events found. Add your first event above.', 'remember' ); ?></p>
 		<?php endif; ?>

@@ -312,6 +312,77 @@ $max_image_size = isset( $options['photo_max_dimensions'] ) ? absint( $options['
 		</table>
 	<?php endif; ?>
 	
+	<!-- Member Roles (only if user has update_members capability) -->
+	<?php if ( current_user_can( 'remember_update_members' ) ) : 
+		require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-role.php';
+		$role_model = new Remember_Role();
+		$all_roles = $role_model->get_all();
+		
+		// Get current member roles
+		global $wpdb;
+		$current_role_ids = $wpdb->get_col( $wpdb->prepare(
+			"SELECT role_id FROM {$wpdb->prefix}remember_member_roles WHERE member_id = %d",
+			$view_member_id
+		) );
+	?>
+		<h3><?php esc_html_e( 'Member Roles', 'remember' ); ?></h3>
+		<table class="form-table">
+			<tr>
+				<th><?php esc_html_e( 'Assigned Roles', 'remember' ); ?></th>
+				<td>
+					<p class="description"><?php esc_html_e( 'Select the roles this member should have. Members with roles receive the capabilities associated with those roles.', 'remember' ); ?></p>
+					<fieldset style="max-height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 3px; margin-top: 10px;">
+						<?php if ( ! empty( $all_roles ) ) : ?>
+							<?php 
+							// Group roles by type
+							$event_roles = array();
+							$system_roles = array();
+							foreach ( $all_roles as $role ) {
+								if ( $role->role_type === 'event' || $role->is_event_role ) {
+									$event_roles[] = $role;
+								} else {
+									$system_roles[] = $role;
+								}
+							}
+							?>
+							<?php if ( ! empty( $system_roles ) ) : ?>
+								<h4 style="margin: 0 0 10px 0; font-size: 14px; font-weight: bold;"><?php esc_html_e( 'System Roles', 'remember' ); ?></h4>
+								<?php foreach ( $system_roles as $role ) : ?>
+									<label style="display: block; margin: 5px 0;">
+										<input type="checkbox" name="member_roles[]" value="<?php echo esc_attr( $role->role_id ); ?>" <?php checked( in_array( $role->role_id, $current_role_ids ) ); ?>>
+										<?php echo esc_html( $role->role_name ); ?>
+										<?php if ( ! empty( $role->description ) ) : ?>
+											<span class="description" style="margin-left: 5px;">- <?php echo esc_html( $role->description ); ?></span>
+										<?php endif; ?>
+									</label>
+								<?php endforeach; ?>
+							<?php endif; ?>
+							
+							<?php if ( ! empty( $event_roles ) ) : ?>
+								<?php if ( ! empty( $system_roles ) ) : ?>
+									<h4 style="margin: 15px 0 10px 0; font-size: 14px; font-weight: bold;"><?php esc_html_e( 'Event Roles', 'remember' ); ?></h4>
+								<?php else : ?>
+									<h4 style="margin: 0 0 10px 0; font-size: 14px; font-weight: bold;"><?php esc_html_e( 'Event Roles', 'remember' ); ?></h4>
+								<?php endif; ?>
+								<?php foreach ( $event_roles as $role ) : ?>
+									<label style="display: block; margin: 5px 0;">
+										<input type="checkbox" name="member_roles[]" value="<?php echo esc_attr( $role->role_id ); ?>" <?php checked( in_array( $role->role_id, $current_role_ids ) ); ?>>
+										<?php echo esc_html( $role->role_name ); ?>
+										<?php if ( ! empty( $role->description ) ) : ?>
+											<span class="description" style="margin-left: 5px;">- <?php echo esc_html( $role->description ); ?></span>
+										<?php endif; ?>
+									</label>
+								<?php endforeach; ?>
+							<?php endif; ?>
+						<?php else : ?>
+							<p class="description"><?php esc_html_e( 'No roles available. Create roles in the Roles section first.', 'remember' ); ?></p>
+						<?php endif; ?>
+					</fieldset>
+				</td>
+			</tr>
+		</table>
+	<?php endif; ?>
+	
 	<p class="submit">
 		<input type="submit" class="button button-primary" value="<?php esc_attr_e( 'Save Profile', 'remember' ); ?>">
 		<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-members&view=' . $view_member_id ) ); ?>" class="button"><?php esc_html_e( 'Cancel', 'remember' ); ?></a>

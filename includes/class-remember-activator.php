@@ -44,6 +44,11 @@ class Remember_Activator {
 		require_once plugin_dir_path( __FILE__ ) . 'database/class-remember-database.php';
 		$database = new Remember_Database();
 		$database->create_tables();
+		
+		// Update database schema if needed
+		Remember_Logger::debug( 'Updating database schema if needed' );
+		require_once plugin_dir_path( __FILE__ ) . 'database/class-remember-database-updater.php';
+		Remember_Database_Updater::update_schema();
 
 		// Seed initial data
 		Remember_Logger::debug( 'Seeding initial data' );
@@ -153,6 +158,7 @@ class Remember_Activator {
 			'photo_max_size'      => 2097152, // 2MB in bytes
 			'photo_max_dimensions' => 800,
 			'qb_sync_interval'    => 3600, // 1 hour in seconds
+			'vetting_workflow'    => 'on_join', // Default: vet on member join
 		);
 		update_option( 'remember_options', $default_options );
 

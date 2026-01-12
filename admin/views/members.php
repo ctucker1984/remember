@@ -18,6 +18,7 @@ require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-payment.
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-application.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-event.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-image-uploader.php';
+require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-vetting-workflow.php';
 
 Remember_Logger::debug( 'Members page loaded' );
 
@@ -70,14 +71,68 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 						'display_name' => trim( $first_name . ' ' . $last_name ),
 					) );
 					
+					// Determine initial status based on vetting workflow
+					$vetting_workflow = Remember_Vetting_Workflow::get_workflow();
+					if ( 'first_application' === $vetting_workflow ) {
+						// If vetting is on first application, member starts as unvetted but can apply
+						$status = 'unvetted'; // New status for members waiting for first application
+					} else {
+						// Default: vetting on join, so status is pending_vetting
+						$status = isset( $_POST['status'] ) ? sanitize_text_field( $_POST['status'] ) : 'pending_vetting';
+					}
+					
 					// Create member record
+					global $wpdb;
 					$member_record_id = $member_model->create( $user_id, $status );
 					if ( $member_record_id ) {
+						// Create vetting case if workflow is "on_join"
+						if ( Remember_Vetting_Workflow::should_vet_on_join() ) {
+							$vetting_result = Remember_Vetting_Workflow::create_vetting_case( $user_id );
+							if ( ! $vetting_result ) {
+								Remember_Logger::warning( 'Member created but vetting case creation failed', array( 'member_id' => $user_id ) );
+							}
+						}
+						
 						Remember_Logger::info( 'Member created', array( 'member_id' => $user_id, 'status' => $status ) );
 						echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Member created successfully.', 'remember' ) . '</p></div>';
 					} else {
-						Remember_Logger::error( 'Failed to create member record', array( 'user_id' => $user_id ) );
-						echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Member created but record creation failed.', 'remember' ) . '</p></div>';
+						// Get database error immediately after failed insert
+						$db_error = $wpdb->last_error;
+						$db_query = $wpdb->last_query;
+						
+						Remember_Logger::error( 'Failed to create member record in wp_remember_members table', array( 
+							'user_id' => $user_id,
+							'status' => $status,
+							'db_error' => $db_error,
+							'db_query' => $db_query,
+						) );
+						
+						// Build clear error message
+						$error_message = sprintf( 
+							__( 'The WordPress user was created successfully, but the member record in the database could not be created. The member record stores the member status (%s) and other plugin-specific data.', 'remember' ),
+							esc_html( $status )
+						);
+						
+						if ( ! empty( $db_error ) ) {
+							$error_message .= ' ' . sprintf( __( '<strong>Database Error:</strong> %s', 'remember' ), esc_html( $db_error ) );
+						} else {
+							$error_message .= ' ' . __( '<strong>Note:</strong> No specific database error was reported. This may indicate a database constraint violation (e.g., duplicate entry) or a missing database table.', 'remember' );
+						}
+						
+						// Check if table exists
+						$table_name = $wpdb->prefix . 'remember_members';
+						$table_exists = $wpdb->get_var( $wpdb->prepare( "SHOW TABLES LIKE %s", $table_name ) ) === $table_name;
+						if ( ! $table_exists ) {
+							$error_message .= ' ' . sprintf( __( '<strong>Critical:</strong> The database table %s does not exist. Please deactivate and reactivate the plugin to create the required database tables.', 'remember' ), esc_html( $table_name ) );
+						}
+						
+						// Check if user already has a member record
+						$existing_member = $member_model->get( $user_id );
+						if ( $existing_member ) {
+							$error_message .= ' ' . sprintf( __( '<strong>Note:</strong> A member record already exists for this user (ID: %d).', 'remember' ), $user_id );
+						}
+						
+						echo '<div class="notice notice-error is-dismissible"><p>' . $error_message . '</p></div>';
 					}
 				}
 			}
@@ -238,6 +293,48 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 				}
 			}
 			
+			// Handle role assignment (only if user has update_members capability)
+			if ( current_user_can( 'remember_update_members' ) ) {
+				$selected_role_ids = isset( $_POST['member_roles'] ) ? array_map( 'absint', $_POST['member_roles'] ) : array();
+				
+				// Get current roles
+				$current_role_ids = $wpdb->get_col( $wpdb->prepare(
+					"SELECT role_id FROM {$wpdb->prefix}remember_member_roles WHERE member_id = %d",
+					$member_id
+				) );
+				
+				// Remove roles that are no longer selected
+				$roles_to_remove = array_diff( $current_role_ids, $selected_role_ids );
+				if ( ! empty( $roles_to_remove ) ) {
+					$placeholders = implode( ',', array_fill( 0, count( $roles_to_remove ), '%d' ) );
+					$wpdb->query( $wpdb->prepare(
+						"DELETE FROM {$wpdb->prefix}remember_member_roles 
+						WHERE member_id = %d AND role_id IN ($placeholders)",
+						array_merge( array( $member_id ), $roles_to_remove )
+					) );
+				}
+				
+				// Add new roles
+				$roles_to_add = array_diff( $selected_role_ids, $current_role_ids );
+				if ( ! empty( $roles_to_add ) ) {
+					foreach ( $roles_to_add as $role_id ) {
+						$wpdb->insert(
+							$wpdb->prefix . 'remember_member_roles',
+							array(
+								'member_id'   => $member_id,
+								'role_id'     => $role_id,
+								'approved_at' => current_time( 'mysql' ),
+								'approved_by' => get_current_user_id(),
+								'created_at'  => current_time( 'mysql' ),
+							),
+							array( '%d', '%d', '%s', '%d', '%s' )
+						);
+					}
+				}
+				
+				Remember_Logger::info( 'Member roles updated', array( 'member_id' => $member_id, 'roles' => $selected_role_ids ) );
+			}
+			
 			Remember_Logger::info( 'Member profile updated', array( 'member_id' => $member_id ) );
 			// Set success flag and clear edit mode (no redirect to avoid headers already sent)
 			$profile_update_success = true;
@@ -290,6 +387,7 @@ if ( $is_attendees_only ) {
 // Status labels and colors
 $status_labels = array(
 	'pending_vetting' => __( 'Pending Vetting', 'remember' ),
+	'unvetted'        => __( 'Unvetted', 'remember' ),
 	'in_vetting'      => __( 'In Vetting', 'remember' ),
 	'vetted'          => __( 'Vetted', 'remember' ),
 	'rejected'        => __( 'Rejected', 'remember' ),
@@ -297,6 +395,7 @@ $status_labels = array(
 );
 $status_colors = array(
 	'pending_vetting' => '#f0b849',
+	'unvetted'        => '#72777c',
 	'in_vetting'      => '#00a0d2',
 	'vetted'          => '#46b450',
 	'rejected'        => '#dc3232',
@@ -377,6 +476,33 @@ if ( $view_member_id > 0 ) {
 	
 	// Get applications for context
 	$view_applications = $application_model->get_by_member( $view_member_id );
+	
+	// Get all vetting cases for this member
+	$view_vetting_cases = $vetting_model->get_all_by_member( $view_member_id );
+	
+	// Update member status based on last completed vetting case
+	if ( ! empty( $view_vetting_cases ) ) {
+		// Find the most recent completed case
+		$last_completed = null;
+		foreach ( $view_vetting_cases as $case ) {
+			if ( 'completed' === $case->status && ! empty( $case->decision ) && 'pending' !== $case->decision ) {
+				if ( ! $last_completed || strtotime( $case->decision_date ) > strtotime( $last_completed->decision_date ) ) {
+					$last_completed = $case;
+				}
+			}
+		}
+		
+		// Update member status if we have a completed case
+		if ( $last_completed ) {
+			if ( 'accepted' === $last_completed->decision && 'vetted' !== $view_member->status ) {
+				$member_model->update_status( $view_member_id, 'vetted' );
+				$view_member = $member_model->get( $view_member_id ); // Refresh member data
+			} elseif ( 'rejected' === $last_completed->decision && 'rejected' !== $view_member->status ) {
+				$member_model->update_status( $view_member_id, 'rejected' );
+				$view_member = $member_model->get( $view_member_id ); // Refresh member data
+			}
+		}
+	}
 	
 	// Calculate running balance for billing register
 	$running_balance = 0;
@@ -555,7 +681,7 @@ if ( $view_member_id > 0 ) {
 			<thead>
 				<tr>
 					<th class="column-name"><?php esc_html_e( 'Name', 'remember' ); ?></th>
-					<th class="column-email"><?php esc_html_e( 'Email', 'remember' ); ?></th>
+					<th class="column-email"><?php esc_html_e( 'Contact', 'remember' ); ?></th>
 					<th class="column-status"><?php esc_html_e( 'Status', 'remember' ); ?></th>
 					<th class="column-joined"><?php esc_html_e( 'Joined', 'remember' ); ?></th>
 					<th class="column-actions"><?php esc_html_e( 'Actions', 'remember' ); ?></th>
@@ -563,7 +689,7 @@ if ( $view_member_id > 0 ) {
 			</thead>
 			<tbody>
 				<?php foreach ( $members as $member ) : 
-					$user = get_user_by( 'ID', $member->member_id );
+						$user = get_user_by( 'ID', $member->member_id );
 					if ( ! $user ) {
 						continue; // Skip if user doesn't exist
 					}
@@ -577,61 +703,43 @@ if ( $view_member_id > 0 ) {
 					
 					// Get vetting info
 					$vetting = $vetting_model->get_by_member( $member->member_id );
-				?>
-					<tr>
+						?>
+						<tr>
 						<td class="column-name">
-							<strong><?php echo esc_html( $user->display_name ); ?></strong>
+							<strong><a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-members&view=' . $member->member_id ) ); ?>"><?php echo esc_html( $user->display_name ); ?></a></strong>
 							<?php if ( $profile ) : ?>
 								<br><span class="description"><?php echo esc_html( $profile->legal_first_name . ' ' . $profile->legal_last_name ); ?></span>
 							<?php endif; ?>
 						</td>
 						<td class="column-email">
-							<?php echo esc_html( $user->user_email ); ?>
+							<?php if ( ! empty( $user->user_email ) ) : ?>
+								<span class="dashicons dashicons-email-alt" style="font-size: 14px; vertical-align: middle; color: #666; margin-right: 4px;"></span>
+								<a href="mailto:<?php echo esc_attr( $user->user_email ); ?>" style="text-decoration: none;"><?php echo esc_html( $user->user_email ); ?></a>
+							<?php endif; ?>
 							<?php if ( $profile && $profile->cell_phone ) : ?>
-								<br><span class="description"><?php echo esc_html( $profile->cell_phone ); ?></span>
+								<br>
+								<span class="dashicons dashicons-phone" style="font-size: 14px; vertical-align: middle; color: #666; margin-right: 4px;"></span>
+								<a href="tel:<?php echo esc_attr( preg_replace( '/[^0-9+]/', '', $profile->cell_phone ) ); ?>" style="text-decoration: none;"><?php echo esc_html( $profile->cell_phone ); ?></a>
 							<?php endif; ?>
 						</td>
 						<td class="column-status">
 							<span style="color: <?php echo esc_attr( $status_colors[ $member->status ] ); ?>; font-weight: bold;">
 								<?php echo esc_html( $status_labels[ $member->status ] ); ?>
-							</span>
-						</td>
+								</span>
+							</td>
 						<td class="column-joined">
 							<?php echo esc_html( date_i18n( get_option( 'date_format' ), strtotime( $member->created_at ) ) ); ?>
 						</td>
 						<td class="column-actions">
 							<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-members&view=' . $member->member_id ) ); ?>"><?php esc_html_e( 'View Profile', 'remember' ); ?></a>
-							<?php if ( $vetting ) : ?>
-								| <a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-vetting&filter_status=all' ) ); ?>"><?php esc_html_e( 'Vetting', 'remember' ); ?></a>
+							<?php 
+							// Only show vetting link if there's a non-completed case
+							if ( $vetting && 'completed' !== $vetting->status ) : ?>
+								| <a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-vetting&view=' . $vetting->vetting_id ) ); ?>"><?php esc_html_e( 'In Vetting', 'remember' ); ?></a>
 							<?php endif; ?>
-							<br>
-							<button type="button" class="button button-small" onclick="document.getElementById('member-status-<?php echo esc_attr( $member->member_id ); ?>').style.display='block';"><?php esc_html_e( 'Change Status', 'remember' ); ?></button>
 						</td>
 					</tr>
-					
-					<!-- Status Update Form (hidden by default) -->
-					<tr id="member-status-<?php echo esc_attr( $member->member_id ); ?>" style="display:none; background: #f9f9f9;">
-						<td colspan="5" style="padding: 20px;">
-							<form method="post" action="">
-								<?php wp_nonce_field( 'remember_member_action', 'remember_member_nonce' ); ?>
-								<input type="hidden" name="remember_member_action" value="update_status">
-								<input type="hidden" name="member_id" value="<?php echo esc_attr( $member->member_id ); ?>">
-								
-								<label for="status-<?php echo esc_attr( $member->member_id ); ?>"><?php esc_html_e( 'New Status:', 'remember' ); ?></label>
-								<select id="status-<?php echo esc_attr( $member->member_id ); ?>" name="status" required>
-									<?php foreach ( $status_labels as $status => $label ) : ?>
-										<option value="<?php echo esc_attr( $status ); ?>" <?php selected( $member->status, $status ); ?>>
-											<?php echo esc_html( $label ); ?>
-										</option>
-									<?php endforeach; ?>
-								</select>
-								
-								<input type="submit" class="button button-primary" value="<?php esc_attr_e( 'Update Status', 'remember' ); ?>">
-								<button type="button" class="button" onclick="document.getElementById('member-status-<?php echo esc_attr( $member->member_id ); ?>').style.display='none';"><?php esc_html_e( 'Cancel', 'remember' ); ?></button>
-							</form>
-						</td>
-					</tr>
-				<?php endforeach; ?>
+					<?php endforeach; ?>
 			</tbody>
 		</table>
 		

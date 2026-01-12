@@ -121,7 +121,28 @@ abstract class Remember_Base_Model {
 		if ( $result ) {
 			return $this->wpdb->insert_id;
 		}
+		// Store error for retrieval (capture immediately before any other DB operations)
+		$this->last_error = $this->wpdb->last_error;
+		$this->last_query = $this->wpdb->last_query;
 		return false;
+	}
+
+	/**
+	 * Get last database error.
+	 *
+	 * @return string
+	 */
+	public function get_last_error() {
+		return isset( $this->last_error ) ? $this->last_error : '';
+	}
+
+	/**
+	 * Get last database query.
+	 *
+	 * @return string
+	 */
+	public function get_last_query() {
+		return isset( $this->last_query ) ? $this->last_query : '';
 	}
 
 	/**

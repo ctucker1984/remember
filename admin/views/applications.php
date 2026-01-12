@@ -16,6 +16,7 @@ require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-applicat
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-event.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-member.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-payment.php';
+require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-vetting-workflow.php';
 
 Remember_Logger::debug( 'Applications page loaded' );
 
@@ -47,8 +48,16 @@ if ( isset( $_POST['remember_application_action'] ) && check_admin_referer( 'rem
 					'event_role_id' => $event_role_id,
 					'status'       => $status,
 				);
+				// Check if this is first application and vetting workflow requires vetting on first application
+				$is_first = Remember_Vetting_Workflow::is_first_application( $member_id );
+				
 				$new_application_id = $application_model->create( $data );
 				if ( $new_application_id ) {
+					// Create vetting case if this is first application and workflow is "first_application"
+					if ( $is_first && Remember_Vetting_Workflow::should_vet_on_first_application() ) {
+						Remember_Vetting_Workflow::create_vetting_case( $member_id );
+					}
+					
 					Remember_Logger::info( 'Application created', array( 'application_id' => $new_application_id ) );
 					echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Application created successfully.', 'remember' ) . '</p></div>';
 				} else {

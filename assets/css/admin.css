@@ -246,3 +246,18 @@
 		grid-template-columns: 1fr;
 	}
 }
+
+/* Responsive table actions for Members and Vetting */
+@media (max-width: 782px) {
+	.wp-list-table tr[id^="member-status-"] td form,
+	.wp-list-table tr[id^="vetting-actions-"] td > div {
+		flex-direction: column;
+		grid-template-columns: 1fr !important;
+	}
+	
+	.wp-list-table tr[id^="member-status-"] td form select,
+	.wp-list-table tr[id^="vetting-actions-"] td select,
+	.wp-list-table tr[id^="vetting-actions-"] td input[type="datetime-local"] {
+		width: 100%;
+	}
+}

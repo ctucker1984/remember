@@ -164,7 +164,20 @@ class Remember {
 	 * @since    1.0.0
 	 */
 	public function run() {
+		// Run database updates on admin init
+		$this->loader->add_action( 'admin_init', $this, 'maybe_update_database' );
+		
 		$this->loader->run();
+	}
+
+	/**
+	 * Check and update database schema if needed.
+	 */
+	public function maybe_update_database() {
+		if ( is_admin() && current_user_can( 'manage_options' ) ) {
+			require_once plugin_dir_path( __FILE__ ) . 'database/class-remember-database-updater.php';
+			Remember_Database_Updater::update_schema();
+		}
 	}
 
 	/**

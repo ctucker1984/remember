@@ -88,7 +88,7 @@ class Remember_Database {
 
 		$sql = "CREATE TABLE $table_name (
 			member_id BIGINT(20) UNSIGNED NOT NULL,
-			status ENUM('pending_vetting', 'in_vetting', 'vetted', 'rejected', 'inactive') DEFAULT 'pending_vetting',
+			status ENUM('pending_vetting', 'unvetted', 'in_vetting', 'vetted', 'rejected', 'inactive') DEFAULT 'pending_vetting',
 			photo_url VARCHAR(255) DEFAULT NULL,
 			created_at DATETIME NOT NULL,
 			updated_at DATETIME NOT NULL,
@@ -604,7 +604,7 @@ class Remember_Database {
 		$sql = "CREATE TABLE $table_name (
 			vetting_id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
 			member_id BIGINT(20) UNSIGNED NOT NULL,
-			primary_vetter_id BIGINT(20) UNSIGNED NOT NULL,
+			primary_vetter_id BIGINT(20) UNSIGNED DEFAULT NULL,
 			status ENUM('pending', 'scheduled', 'in_progress', 'completed') DEFAULT 'pending',
 			scheduled_at DATETIME DEFAULT NULL,
 			completed_at DATETIME DEFAULT NULL,

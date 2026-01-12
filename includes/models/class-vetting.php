@@ -39,19 +39,24 @@ class Remember_Vetting extends Remember_Base_Model {
 	 * Create a new vetting record.
 	 *
 	 * @param int    $member_id         Member ID.
-	 * @param int    $primary_vetter_id Primary vetter user ID.
+	 * @param int    $primary_vetter_id Primary vetter user ID (optional, can be 0).
 	 * @param string $status            Vetting status.
 	 * @return int|false Vetting ID or false on error.
 	 */
-	public function create( $member_id, $primary_vetter_id, $status = 'pending' ) {
+	public function create( $member_id, $primary_vetter_id = 0, $status = 'pending' ) {
 		$data = array(
 			'member_id'         => $member_id,
-			'primary_vetter_id' => $primary_vetter_id,
 			'status'            => $status,
 			'decision'          => 'pending',
 			'created_at'        => current_time( 'mysql' ),
 			'updated_at'        => current_time( 'mysql' ),
 		);
+		
+		// Only add primary_vetter_id if provided
+		if ( $primary_vetter_id > 0 ) {
+			$data['primary_vetter_id'] = $primary_vetter_id;
+		}
+		
 		return $this->insert( $data );
 	}
 
@@ -127,6 +132,22 @@ class Remember_Vetting extends Remember_Base_Model {
 	}
 
 	/**
+	 * Get all vetting cases for a member.
+	 *
+	 * @param int $member_id Member ID.
+	 * @return array
+	 */
+	public function get_all_by_member( $member_id ) {
+		global $wpdb;
+		return $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT * FROM {$this->get_table()} WHERE member_id = %d ORDER BY created_at DESC",
+				$member_id
+			)
+		);
+	}
+
+	/**
 	 * Get vetting records by status.
 	 *
 	 * @param string $status Vetting status.
@@ -165,5 +186,103 @@ class Remember_Vetting extends Remember_Base_Model {
 	 */
 	public function get_pending() {
 		return $this->get_by_status( 'pending' );
+	}
+
+	/**
+	 * Add a note to a vetting case.
+	 *
+	 * @param int    $vetting_id   Vetting ID.
+	 * @param int    $member_id    User ID who created the note.
+	 * @param string $note_content Note content.
+	 * @param bool   $is_admin_only Whether note is admin-only.
+	 * @return int|false Note ID or false on error.
+	 */
+	public function add_note( $vetting_id, $member_id, $note_content, $is_admin_only = false ) {
+		global $wpdb;
+		$table_name = $wpdb->prefix . 'remember_vetting_notes';
+		
+		return $wpdb->insert(
+			$table_name,
+			array(
+				'vetting_id'    => $vetting_id,
+				'member_id'     => $member_id,
+				'note_content'  => sanitize_textarea_field( $note_content ),
+				'is_admin_only' => $is_admin_only ? 1 : 0,
+				'created_at'    => current_time( 'mysql' ),
+			),
+			array( '%d', '%d', '%s', '%d', '%s' )
+		) ? $wpdb->insert_id : false;
+	}
+
+	/**
+	 * Get notes for a vetting case.
+	 *
+	 * @param int $vetting_id Vetting ID.
+	 * @return array
+	 */
+	public function get_notes( $vetting_id ) {
+		global $wpdb;
+		$table_name = $wpdb->prefix . 'remember_vetting_notes';
+		
+		return $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT * FROM $table_name WHERE vetting_id = %d ORDER BY created_at DESC",
+				$vetting_id
+			)
+		);
+	}
+
+	/**
+	 * Get collaborators for a vetting case.
+	 *
+	 * @param int $vetting_id Vetting ID.
+	 * @return array
+	 */
+	public function get_collaborators( $vetting_id ) {
+		global $wpdb;
+		$table_name = $wpdb->prefix . 'remember_vetting_collaborators';
+		
+		return $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT * FROM $table_name WHERE vetting_id = %d ORDER BY invited_at ASC",
+				$vetting_id
+			)
+		);
+	}
+
+	/**
+	 * Add a collaborator to a vetting case.
+	 *
+	 * @param int $vetting_id  Vetting ID.
+	 * @param int $member_id   Collaborator user ID.
+	 * @param int $invited_by  User ID who invited the collaborator.
+	 * @return int|false Collaborator ID or false on error.
+	 */
+	public function add_collaborator( $vetting_id, $member_id, $invited_by ) {
+		global $wpdb;
+		$table_name = $wpdb->prefix . 'remember_vetting_collaborators';
+		
+		// Check if already exists
+		$exists = $wpdb->get_var( $wpdb->prepare(
+			"SELECT COUNT(*) FROM $table_name WHERE vetting_id = %d AND member_id = %d",
+			$vetting_id,
+			$member_id
+		) );
+		
+		if ( $exists > 0 ) {
+			return false; // Already exists
+		}
+		
+		return $wpdb->insert(
+			$table_name,
+			array(
+				'vetting_id'  => $vetting_id,
+				'member_id'   => $member_id,
+				'invited_by'  => $invited_by,
+				'invited_at'  => current_time( 'mysql' ),
+				'status'      => 'pending',
+			),
+			array( '%d', '%d', '%d', '%s', '%s' )
+		) ? $wpdb->insert_id : false;
 	}
 }

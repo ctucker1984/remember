@@ -37,7 +37,16 @@ $is_editing = isset( $_GET['edit'] ) && $_GET['edit'] === '1';
 						</span>
 					</h2>
 					<p style="margin: 5px 0; color: #666;">
-						<strong><?php esc_html_e( 'Email:', 'remember' ); ?></strong> <?php echo esc_html( $view_user->user_email ); ?>
+						<?php if ( ! empty( $view_user->user_email ) ) : ?>
+							<span class="dashicons dashicons-email-alt" style="font-size: 14px; vertical-align: middle; color: #666; margin-right: 4px;"></span>
+							<a href="mailto:<?php echo esc_attr( $view_user->user_email ); ?>" style="text-decoration: none; color: #666;"><?php echo esc_html( $view_user->user_email ); ?></a>
+						<?php endif; ?>
+						<?php if ( $view_profile && ! empty( $view_profile->cell_phone ) ) : ?>
+							<span style="margin-left: 12px;">
+								<span class="dashicons dashicons-phone" style="font-size: 14px; vertical-align: middle; color: #666; margin-right: 4px;"></span>
+								<a href="tel:<?php echo esc_attr( preg_replace( '/[^0-9+]/', '', $view_profile->cell_phone ) ); ?>" style="text-decoration: none; color: #666;"><?php echo esc_html( $view_profile->cell_phone ); ?></a>
+							</span>
+						<?php endif; ?>
 					</p>
 					<?php if ( ! empty( $view_roles ) ) : ?>
 						<div style="margin-top: 8px; display: flex; flex-wrap: wrap; gap: 8px;">
@@ -55,9 +64,11 @@ $is_editing = isset( $_GET['edit'] ) && $_GET['edit'] === '1';
 			</div>
 			<div>
 				<?php if ( ! $is_editing ) : ?>
-					<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-members&view=' . $view_member_id . '&edit=1' ) ); ?>" class="button button-primary">
-						<?php esc_html_e( 'Edit Profile', 'remember' ); ?>
-					</a>
+					<?php if ( current_user_can( 'remember_update_members' ) ) : ?>
+						<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-members&view=' . $view_member_id . '&edit=1' ) ); ?>" class="button button-primary">
+							<?php esc_html_e( 'Edit Profile', 'remember' ); ?>
+						</a>
+					<?php endif; ?>
 				<?php else : ?>
 					<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-members&view=' . $view_member_id ) ); ?>" class="button">
 						<?php esc_html_e( 'Cancel', 'remember' ); ?>
@@ -237,6 +248,92 @@ $is_editing = isset( $_GET['edit'] ) && $_GET['edit'] === '1';
 				<?php endif; ?>
 			</div>
 		</div>
+
+		<!-- Vetting Cases (Full Width) -->
+		<?php if ( isset( $view_vetting_cases ) ) : ?>
+			<div class="remember-member-detail-section" style="position: relative; margin-bottom: 15px;">
+				<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+					<h3 style="margin: 0;"><?php esc_html_e( 'Vetting Cases', 'remember' ); ?></h3>
+					<?php if ( current_user_can( 'remember_create_vetting' ) ) : ?>
+						<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-vetting&member_id=' . $view_member_id ) ); ?>" class="button button-small">
+							<?php esc_html_e( 'Create Vetting Case', 'remember' ); ?>
+						</a>
+					<?php endif; ?>
+				</div>
+				<?php if ( ! empty( $view_vetting_cases ) ) : ?>
+					<table class="wp-list-table widefat fixed striped" style="margin-top: 10px;">
+						<thead>
+							<tr>
+								<th style="width: 120px;"><?php esc_html_e( 'Case Start', 'remember' ); ?></th>
+								<th style="width: 100px;"><?php esc_html_e( 'Status', 'remember' ); ?></th>
+								<th style="width: 120px;"><?php esc_html_e( 'Decision', 'remember' ); ?></th>
+								<th style="width: 120px;"><?php esc_html_e( 'Decision Date', 'remember' ); ?></th>
+								<th><?php esc_html_e( 'Decider', 'remember' ); ?></th>
+								<th style="width: 100px;"><?php esc_html_e( 'Actions', 'remember' ); ?></th>
+							</tr>
+						</thead>
+						<tbody>
+							<?php 
+							$vetting_status_labels = array(
+								'pending'     => __( 'Pending', 'remember' ),
+								'scheduled'   => __( 'Scheduled', 'remember' ),
+								'in_progress' => __( 'In Progress', 'remember' ),
+								'completed'   => __( 'Completed', 'remember' ),
+							);
+							$vetting_status_colors = array(
+								'pending'     => '#f0b849',
+								'scheduled'   => '#00a0d2',
+								'in_progress' => '#2271b1',
+								'completed'   => '#46b450',
+							);
+							$vetting_decision_labels = array(
+								'pending'  => __( 'Pending', 'remember' ),
+								'accepted' => __( 'Accepted', 'remember' ),
+								'rejected' => __( 'Rejected', 'remember' ),
+							);
+							foreach ( $view_vetting_cases as $case ) : 
+								$decider = ! empty( $case->primary_vetter_id ) ? get_user_by( 'ID', $case->primary_vetter_id ) : null;
+							?>
+								<tr>
+									<td><?php echo esc_html( date_i18n( get_option( 'date_format' ), strtotime( $case->created_at ) ) ); ?></td>
+									<td>
+										<span style="color: <?php echo esc_attr( $vetting_status_colors[ $case->status ] ); ?>; font-weight: bold;">
+											<?php echo esc_html( $vetting_status_labels[ $case->status ] ); ?>
+										</span>
+									</td>
+									<td>
+										<?php if ( 'completed' === $case->status && ! empty( $case->decision ) && 'pending' !== $case->decision ) : ?>
+											<span style="color: <?php echo 'accepted' === $case->decision ? '#46b450' : '#dc3232'; ?>; font-weight: bold;">
+												<?php echo esc_html( $vetting_decision_labels[ $case->decision ] ); ?>
+											</span>
+										<?php else : ?>
+											<span class="description">—</span>
+										<?php endif; ?>
+									</td>
+									<td>
+										<?php if ( ! empty( $case->decision_date ) ) : ?>
+											<?php echo esc_html( date_i18n( get_option( 'date_format' ), strtotime( $case->decision_date ) ) ); ?>
+										<?php else : ?>
+											<span class="description">—</span>
+										<?php endif; ?>
+									</td>
+									<td>
+										<?php echo $decider ? esc_html( $decider->display_name ) : '<span class="description">—</span>'; ?>
+									</td>
+									<td>
+										<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-vetting&view=' . $case->vetting_id ) ); ?>" class="button button-small">
+											<?php esc_html_e( 'View', 'remember' ); ?>
+										</a>
+									</td>
+								</tr>
+							<?php endforeach; ?>
+						</tbody>
+					</table>
+				<?php else : ?>
+					<p class="description"><?php esc_html_e( 'No vetting cases found.', 'remember' ); ?></p>
+				<?php endif; ?>
+			</div>
+		<?php endif; ?>
 
 		<!-- Billing Register (Full Width) -->
 		<div class="remember-member-detail-section">

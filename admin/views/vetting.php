@@ -14,6 +14,8 @@ if ( ! defined( 'WPINC' ) ) {
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-logger.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-vetting.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-member.php';
+require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-application.php';
+require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-event.php';
 
 Remember_Logger::debug( 'Vetting page loaded' );
 
@@ -29,11 +31,19 @@ if ( isset( $_POST['remember_vetting_action'] ) && check_admin_referer( 'remembe
 		if ( 'assign' === $action ) {
 			$vetter_id = isset( $_POST['primary_vetter_id'] ) ? absint( $_POST['primary_vetter_id'] ) : 0;
 			if ( $vetter_id > 0 ) {
+				$vetter_user = get_user_by( 'ID', $vetter_id );
 				$result = $vetting_model->update( $vetting_id, array(
 					'primary_vetter_id' => $vetter_id,
 					'updated_at' => current_time( 'mysql' ),
 				) );
 				if ( $result !== false ) {
+					// Add system note
+					$system_note = sprintf( 
+						__( 'SYSTEM: Primary vetter assigned to %s', 'remember' ),
+						$vetter_user ? $vetter_user->display_name : __( 'Unknown', 'remember' )
+					);
+					$vetting_model->add_note( $vetting_id, get_current_user_id(), $system_note, true );
+					
 					Remember_Logger::info( 'Vetter assigned', array( 'vetting_id' => $vetting_id, 'vetter_id' => $vetter_id ) );
 					echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Vetter assigned successfully.', 'remember' ) . '</p></div>';
 				}
@@ -43,6 +53,14 @@ if ( isset( $_POST['remember_vetting_action'] ) && check_admin_referer( 'remembe
 			if ( ! empty( $scheduled_at ) ) {
 				$result = $vetting_model->schedule( $vetting_id, $scheduled_at );
 				if ( $result !== false ) {
+					// Add system note
+					$formatted_date = date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), strtotime( $scheduled_at ) );
+					$system_note = sprintf( 
+						__( 'SYSTEM: Vetting scheduled for %s', 'remember' ),
+						$formatted_date
+					);
+					$vetting_model->add_note( $vetting_id, get_current_user_id(), $system_note, true );
+					
 					Remember_Logger::info( 'Vetting scheduled', array( 'vetting_id' => $vetting_id, 'scheduled_at' => $scheduled_at ) );
 					echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Vetting scheduled successfully.', 'remember' ) . '</p></div>';
 				}
@@ -52,28 +70,183 @@ if ( isset( $_POST['remember_vetting_action'] ) && check_admin_referer( 'remembe
 			if ( in_array( $decision, array( 'accepted', 'rejected' ), true ) ) {
 				$result = $vetting_model->complete( $vetting_id, $decision );
 				if ( $result !== false ) {
+					// Update member status based on decision
+					$vetting = $vetting_model->get( $vetting_id );
+					if ( $vetting ) {
+						$member_model = new Remember_Member();
+						if ( 'accepted' === $decision ) {
+							$member_model->update_status( $vetting->member_id, 'vetted' );
+						} elseif ( 'rejected' === $decision ) {
+							$member_model->update_status( $vetting->member_id, 'rejected' );
+						}
+					}
+					
+					// Add system note
+					$decision_label = 'accepted' === $decision ? __( 'Accepted', 'remember' ) : __( 'Rejected', 'remember' );
+					$system_note = sprintf( 
+						__( 'SYSTEM: Vetting case completed with decision: %s', 'remember' ),
+						$decision_label
+					);
+					$vetting_model->add_note( $vetting_id, get_current_user_id(), $system_note, true );
+					
 					Remember_Logger::info( 'Vetting completed', array( 'vetting_id' => $vetting_id, 'decision' => $decision ) );
 					echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Vetting decision recorded successfully.', 'remember' ) . '</p></div>';
 				}
 			}
+		} elseif ( 'add_note' === $action ) {
+			$note_content = isset( $_POST['note_content'] ) ? sanitize_textarea_field( $_POST['note_content'] ) : '';
+			$is_admin_only = isset( $_POST['is_admin_only'] ) ? 1 : 0;
+			if ( ! empty( $note_content ) ) {
+				$note_id = $vetting_model->add_note( $vetting_id, get_current_user_id(), $note_content, $is_admin_only );
+				if ( $note_id ) {
+					Remember_Logger::info( 'Vetting note added', array( 'vetting_id' => $vetting_id, 'note_id' => $note_id ) );
+					echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Note added successfully.', 'remember' ) . '</p></div>';
+				}
+			}
+		} elseif ( 'add_collaborator' === $action ) {
+			$collaborator_id = isset( $_POST['collaborator_id'] ) ? absint( $_POST['collaborator_id'] ) : 0;
+			if ( $collaborator_id > 0 ) {
+				$collab_user = get_user_by( 'ID', $collaborator_id );
+				$collab_id = $vetting_model->add_collaborator( $vetting_id, $collaborator_id, get_current_user_id() );
+				if ( $collab_id ) {
+					// Add system note
+					$system_note = sprintf( 
+						__( 'SYSTEM: Collaborator %s added to case', 'remember' ),
+						$collab_user ? $collab_user->display_name : __( 'Unknown', 'remember' )
+					);
+					$vetting_model->add_note( $vetting_id, get_current_user_id(), $system_note, true );
+					
+					Remember_Logger::info( 'Collaborator added', array( 'vetting_id' => $vetting_id, 'collaborator_id' => $collaborator_id ) );
+					echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Collaborator added successfully.', 'remember' ) . '</p></div>';
+				}
+			}
+		} elseif ( 'update_status' === $action ) {
+			$new_status = isset( $_POST['status'] ) ? sanitize_text_field( $_POST['status'] ) : '';
+			if ( ! empty( $new_status ) ) {
+				// Get current status for comparison
+				$current_vetting = $vetting_model->get( $vetting_id );
+				$old_status = $current_vetting ? $current_vetting->status : '';
+				
+				$result = $vetting_model->update_status( $vetting_id, $new_status );
+				if ( $result !== false && $old_status !== $new_status ) {
+					// Add system note
+					$status_labels = array(
+						'pending'     => __( 'Pending', 'remember' ),
+						'scheduled'   => __( 'Scheduled', 'remember' ),
+						'in_progress' => __( 'In Progress', 'remember' ),
+						'completed'   => __( 'Completed', 'remember' ),
+					);
+					$old_label = isset( $status_labels[ $old_status ] ) ? $status_labels[ $old_status ] : $old_status;
+					$new_label = isset( $status_labels[ $new_status ] ) ? $status_labels[ $new_status ] : $new_status;
+					$system_note = sprintf( 
+						__( 'SYSTEM: Case status changed from %s to %s', 'remember' ),
+						$old_label,
+						$new_label
+					);
+					$vetting_model->add_note( $vetting_id, get_current_user_id(), $system_note, true );
+					
+					Remember_Logger::info( 'Vetting status updated', array( 'vetting_id' => $vetting_id, 'status' => $new_status ) );
+					echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Status updated successfully.', 'remember' ) . '</p></div>';
+				}
+			}
+		}
+	} elseif ( 'create_vetting' === $action ) {
+		// Create new vetting case
+		$member_id = isset( $_POST['member_id'] ) ? absint( $_POST['member_id'] ) : 0;
+		$primary_vetter_id = isset( $_POST['primary_vetter_id'] ) ? absint( $_POST['primary_vetter_id'] ) : 0;
+		
+		if ( $member_id > 0 ) {
+			require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-vetting-workflow.php';
+			
+			// Check if vetting already exists
+			$existing = $vetting_model->get_by_member( $member_id );
+			if ( $existing ) {
+				echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html__( 'This member already has a vetting case.', 'remember' ) . ' <a href="' . esc_url( admin_url( 'admin.php?page=remember-vetting&view=' . $existing->vetting_id ) ) . '">' . esc_html__( 'View case', 'remember' ) . '</a></p></div>';
+			} else {
+				// Create vetting case
+				$vetting_id = $vetting_model->create( $member_id, $primary_vetter_id, 'pending' );
+				if ( $vetting_id ) {
+					// Update member status if needed
+					$member = $member_model->get( $member_id );
+					if ( $member && in_array( $member->status, array( 'pending_vetting', 'unvetted' ), true ) ) {
+						$member_model->update_status( $member_id, 'in_vetting' );
+					}
+					
+					// Add system note for case creation
+					$current_user = wp_get_current_user();
+					$system_note = sprintf( 
+						__( 'SYSTEM: Vetting case created by %s', 'remember' ),
+						$current_user->display_name
+					);
+					if ( $primary_vetter_id > 0 ) {
+						$vetter_user = get_user_by( 'ID', $primary_vetter_id );
+						if ( $vetter_user ) {
+							$system_note .= sprintf( __( ' with primary vetter %s', 'remember' ), $vetter_user->display_name );
+						}
+					}
+					$vetting_model->add_note( $vetting_id, get_current_user_id(), $system_note, true );
+					
+					Remember_Logger::info( 'Vetting case created manually', array( 'member_id' => $member_id, 'vetting_id' => $vetting_id ) );
+					echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Vetting case created successfully.', 'remember' ) . ' <a href="' . esc_url( admin_url( 'admin.php?page=remember-vetting&view=' . $vetting_id ) ) . '">' . esc_html__( 'View case', 'remember' ) . '</a></p></div>';
+				} else {
+					$db_error = $vetting_model->get_last_error();
+					Remember_Logger::error( 'Failed to create vetting case', array( 'member_id' => $member_id, 'db_error' => $db_error ) );
+					$error_message = __( 'Failed to create vetting case.', 'remember' );
+					if ( ! empty( $db_error ) ) {
+						$error_message .= ' ' . sprintf( __( 'Database error: %s', 'remember' ), esc_html( $db_error ) );
+					}
+					echo '<div class="notice notice-error is-dismissible"><p>' . $error_message . '</p></div>';
+				}
+			}
+		} else {
+			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Please select a member.', 'remember' ) . '</p></div>';
 		}
 	}
 }
 
-// Get filter parameters
-$filter_status = isset( $_GET['filter_status'] ) ? sanitize_text_field( $_GET['filter_status'] ) : 'pending';
+// Check if viewing a specific vetting case
+$viewing_vetting_id = isset( $_GET['view'] ) ? absint( $_GET['view'] ) : 0;
+$viewing_vetting = $viewing_vetting_id > 0 ? $vetting_model->get( $viewing_vetting_id ) : null;
 
-// Get vetting records
-if ( ! empty( $filter_status ) && 'all' !== $filter_status ) {
-	$vetting_records = $vetting_model->get_by_status( $filter_status );
-} else {
-	$vetting_records = $vetting_model->get_all();
+// Get filter parameters (only if not viewing a case)
+$filter_status = isset( $_GET['filter_status'] ) ? sanitize_text_field( $_GET['filter_status'] ) : 'all';
+
+// Get vetting records (only if not viewing a case)
+if ( ! $viewing_vetting ) {
+	if ( ! empty( $filter_status ) && 'all' !== $filter_status ) {
+		$vetting_records = $vetting_model->get_by_status( $filter_status );
+	} else {
+		$vetting_records = $vetting_model->get_all();
+	}
 }
 
 // Get users with vetting capability for assign dropdown
 $vetters = get_users( array(
-	'capability__in' => array( 'remember_vet_applicants' ),
+	'capability__in' => array( 'remember_create_vetting', 'remember_update_vetting' ),
 ) );
+
+// If viewing a case, get related data
+if ( $viewing_vetting ) {
+	$viewing_member = $member_model->get( $viewing_vetting->member_id );
+	$viewing_user = $viewing_member ? get_user_by( 'ID', $viewing_vetting->member_id ) : null;
+	$viewing_vetter = ! empty( $viewing_vetting->primary_vetter_id ) ? get_user_by( 'ID', $viewing_vetting->primary_vetter_id ) : null;
+	$viewing_notes = $vetting_model->get_notes( $viewing_vetting_id );
+	$viewing_collaborators = $vetting_model->get_collaborators( $viewing_vetting_id );
+	
+	// Get member profile for phone number
+	global $wpdb;
+	$viewing_profile = $wpdb->get_row( $wpdb->prepare(
+		"SELECT * FROM {$wpdb->prefix}remember_member_profiles WHERE member_id = %d",
+		$viewing_vetting->member_id
+	) );
+	
+	// Get member's applications
+	$application_model = new Remember_Application();
+	$viewing_applications = $application_model->get_by_member( $viewing_vetting->member_id );
+	
+	// Get events for applications
+	$event_model = new Remember_Event();
+}
 
 // Status labels and colors
 $status_labels = array(
@@ -97,7 +270,82 @@ $decision_labels = array(
 
 <div class="wrap remember-vetting">
 	<h1 class="wp-heading-inline"><?php echo esc_html( get_admin_page_title() ); ?></h1>
+	<?php 
+	// Check if we should pre-show the create form
+	$pre_selected_member_id = isset( $_GET['member_id'] ) ? absint( $_GET['member_id'] ) : 0;
+	$show_create_form = $pre_selected_member_id > 0 || ( isset( $_GET['action'] ) && 'create' === $_GET['action'] );
+	?>
+	
+	<?php if ( $viewing_vetting ) : ?>
+		<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-vetting' ) ); ?>" class="page-title-action"><?php esc_html_e( 'Back to Vetting Queue', 'remember' ); ?></a>
+	<?php else : ?>
+		<?php if ( ! $show_create_form ) : ?>
+			<button type="button" class="page-title-action" onclick="document.getElementById('remember-create-vetting').style.display='block'; this.style.display='none';"><?php esc_html_e( 'Create Vetting Case', 'remember' ); ?></button>
+		<?php endif; ?>
+	<?php endif; ?>
 	<hr class="wp-header-end">
+
+	<?php if ( $viewing_vetting ) : ?>
+		<?php include 'vetting-detail.php'; ?>
+	<?php else : ?>
+	<!-- Create Vetting Case Form -->
+	<div id="remember-create-vetting" style="<?php echo $show_create_form ? 'display:block;' : 'display:none;'; ?> margin: 20px 0; padding: 20px; background: #fff; border: 1px solid #ccd0d4; border-radius: 4px;">
+		<h2><?php esc_html_e( 'Create New Vetting Case', 'remember' ); ?></h2>
+		<form method="post" action="">
+			<?php wp_nonce_field( 'remember_vetting_action', 'remember_vetting_nonce' ); ?>
+			<input type="hidden" name="remember_vetting_action" value="create_vetting">
+			
+			<table class="form-table">
+				<tr>
+					<th><label for="member_id"><?php esc_html_e( 'Member', 'remember' ); ?> <span class="description">(required)</span></label></th>
+					<td>
+						<select id="member_id" name="member_id" class="regular-text" required>
+							<option value=""><?php esc_html_e( '-- Select Member --', 'remember' ); ?></option>
+							<?php
+							// Get all members
+							$all_members = $member_model->get_all();
+							foreach ( $all_members as $m ) :
+								$user = get_user_by( 'ID', $m->member_id );
+								if ( ! $user ) continue;
+								
+								// Check if member already has a non-completed vetting case
+								$existing_vetting = $vetting_model->get_by_member( $m->member_id );
+								if ( $existing_vetting && 'completed' !== $existing_vetting->status ) continue;
+							?>
+								<option value="<?php echo esc_attr( $m->member_id ); ?>" <?php selected( $pre_selected_member_id, $m->member_id ); ?>>
+									<?php echo esc_html( $user->display_name . ' (' . $user->user_email . ')' ); ?>
+								</option>
+							<?php endforeach; ?>
+						</select>
+						<p class="description"><?php esc_html_e( 'Select a member. Members with active (non-completed) vetting cases are not shown.', 'remember' ); ?></p>
+					</td>
+				</tr>
+				<tr>
+					<th><label for="primary_vetter_id"><?php esc_html_e( 'Primary Vetter', 'remember' ); ?></label></th>
+					<td>
+						<select id="primary_vetter_id" name="primary_vetter_id" class="regular-text">
+							<option value="0"><?php esc_html_e( '-- Assign Later --', 'remember' ); ?></option>
+							<?php foreach ( $vetters as $v ) : ?>
+								<option value="<?php echo esc_attr( $v->ID ); ?>">
+									<?php echo esc_html( $v->display_name ); ?>
+								</option>
+							<?php endforeach; ?>
+						</select>
+						<p class="description"><?php esc_html_e( 'You can assign a vetter now or later.', 'remember' ); ?></p>
+					</td>
+				</tr>
+			</table>
+			
+			<p class="submit">
+				<input type="submit" class="button button-primary" value="<?php esc_attr_e( 'Create Vetting Case', 'remember' ); ?>">
+				<?php if ( $pre_selected_member_id > 0 ) : ?>
+					<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-members&view=' . $pre_selected_member_id ) ); ?>" class="button"><?php esc_html_e( 'Cancel', 'remember' ); ?></a>
+				<?php else : ?>
+					<button type="button" class="button" onclick="document.getElementById('remember-create-vetting').style.display='none'; document.querySelector('.page-title-action').style.display='inline-block';"><?php esc_html_e( 'Cancel', 'remember' ); ?></button>
+				<?php endif; ?>
+			</p>
+		</form>
+	</div>
 
 	<!-- Filters -->
 	<div class="remember-filters" style="margin: 20px 0; padding: 15px; background: #fff; border: 1px solid #ccd0d4; border-radius: 4px;">
@@ -143,7 +391,7 @@ $decision_labels = array(
 					<tr>
 						<td class="column-member">
 							<?php if ( $user ) : ?>
-								<strong><?php echo esc_html( $user->display_name ); ?></strong><br>
+								<strong><a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-members&view=' . $vetting->member_id ) ); ?>"><?php echo esc_html( $user->display_name ); ?></a></strong><br>
 								<span class="description"><?php echo esc_html( $user->user_email ); ?></span>
 							<?php else : ?>
 								<span class="description"><?php esc_html_e( 'Member not found', 'remember' ); ?></span>
@@ -151,7 +399,16 @@ $decision_labels = array(
 						</td>
 						<td class="column-vetter">
 							<?php if ( $vetter ) : ?>
-								<?php echo esc_html( $vetter->display_name ); ?>
+								<?php 
+								// Check if vetter is also a member
+								$vetter_member = $member_model->get( $vetting->primary_vetter_id );
+								if ( $vetter_member ) :
+									// Link to member profile
+								?>
+									<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-members&view=' . $vetting->primary_vetter_id ) ); ?>"><?php echo esc_html( $vetter->display_name ); ?></a>
+								<?php else : ?>
+									<?php echo esc_html( $vetter->display_name ); ?>
+								<?php endif; ?>
 							<?php else : ?>
 								<span class="description">—</span>
 							<?php endif; ?>
@@ -178,77 +435,7 @@ $decision_labels = array(
 							<?php endif; ?>
 						</td>
 						<td class="column-actions">
-							<button type="button" class="button button-small" onclick="document.getElementById('vetting-actions-<?php echo esc_attr( $vetting->vetting_id ); ?>').style.display='block';"><?php esc_html_e( 'Manage', 'remember' ); ?></button>
-						</td>
-					</tr>
-					
-					<!-- Actions Form (hidden by default) -->
-					<tr id="vetting-actions-<?php echo esc_attr( $vetting->vetting_id ); ?>" style="display:none; background: #f9f9f9;">
-						<td colspan="6" style="padding: 20px;">
-							<h3><?php esc_html_e( 'Manage Vetting', 'remember' ); ?></h3>
-							
-							<!-- Assign Vetter -->
-							<?php if ( empty( $vetting->primary_vetter_id ) || 'pending' === $vetting->status ) : ?>
-								<div style="margin-bottom: 20px; padding: 15px; background: #fff; border: 1px solid #ccd0d4; border-radius: 4px;">
-									<h4><?php esc_html_e( 'Assign Vetter', 'remember' ); ?></h4>
-									<form method="post" action="" style="display: inline-block;">
-										<?php wp_nonce_field( 'remember_vetting_action', 'remember_vetting_nonce' ); ?>
-										<input type="hidden" name="remember_vetting_action" value="assign">
-										<input type="hidden" name="vetting_id" value="<?php echo esc_attr( $vetting->vetting_id ); ?>">
-										
-										<select name="primary_vetter_id" required>
-											<option value=""><?php esc_html_e( '-- Select Vetter --', 'remember' ); ?></option>
-											<?php foreach ( $vetters as $v ) : ?>
-												<option value="<?php echo esc_attr( $v->ID ); ?>" <?php selected( $vetting->primary_vetter_id, $v->ID ); ?>>
-													<?php echo esc_html( $v->display_name ); ?>
-												</option>
-											<?php endforeach; ?>
-										</select>
-										
-										<input type="submit" class="button" value="<?php esc_attr_e( 'Assign', 'remember' ); ?>">
-									</form>
-								</div>
-							<?php endif; ?>
-							
-							<!-- Schedule Vetting -->
-							<?php if ( 'pending' === $vetting->status || 'scheduled' === $vetting->status ) : ?>
-								<div style="margin-bottom: 20px; padding: 15px; background: #fff; border: 1px solid #ccd0d4; border-radius: 4px;">
-									<h4><?php esc_html_e( 'Schedule Vetting', 'remember' ); ?></h4>
-									<form method="post" action="" style="display: inline-block;">
-										<?php wp_nonce_field( 'remember_vetting_action', 'remember_vetting_nonce' ); ?>
-										<input type="hidden" name="remember_vetting_action" value="schedule">
-										<input type="hidden" name="vetting_id" value="<?php echo esc_attr( $vetting->vetting_id ); ?>">
-										
-										<input type="datetime-local" name="scheduled_at" value="<?php echo $vetting->scheduled_at ? esc_attr( date( 'Y-m-d\TH:i', strtotime( $vetting->scheduled_at ) ) ) : ''; ?>" required>
-										
-										<input type="submit" class="button" value="<?php esc_attr_e( 'Schedule', 'remember' ); ?>">
-									</form>
-								</div>
-							<?php endif; ?>
-							
-							<!-- Complete Vetting -->
-							<?php if ( 'pending' === $vetting->status || 'scheduled' === $vetting->status || 'in_progress' === $vetting->status ) : ?>
-								<div style="margin-bottom: 20px; padding: 15px; background: #fff; border: 1px solid #ccd0d4; border-radius: 4px;">
-									<h4><?php esc_html_e( 'Complete Vetting', 'remember' ); ?></h4>
-									<form method="post" action="" style="display: inline-block;">
-										<?php wp_nonce_field( 'remember_vetting_action', 'remember_vetting_nonce' ); ?>
-										<input type="hidden" name="remember_vetting_action" value="complete">
-										<input type="hidden" name="vetting_id" value="<?php echo esc_attr( $vetting->vetting_id ); ?>">
-										
-										<select name="decision" required>
-											<option value=""><?php esc_html_e( '-- Select Decision --', 'remember' ); ?></option>
-											<option value="accepted"><?php esc_html_e( 'Accepted', 'remember' ); ?></option>
-											<option value="rejected"><?php esc_html_e( 'Rejected', 'remember' ); ?></option>
-										</select>
-										
-										<input type="submit" class="button button-primary" value="<?php esc_attr_e( 'Complete', 'remember' ); ?>" onclick="return confirm('<?php esc_attr_e( 'Are you sure you want to complete this vetting?', 'remember' ); ?>');">
-									</form>
-								</div>
-							<?php endif; ?>
-							
-							<p>
-								<button type="button" class="button" onclick="document.getElementById('vetting-actions-<?php echo esc_attr( $vetting->vetting_id ); ?>').style.display='none';"><?php esc_html_e( 'Close', 'remember' ); ?></button>
-							</p>
+							<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-vetting&view=' . $vetting->vetting_id ) ); ?>" class="button button-small"><?php esc_html_e( 'View Case', 'remember' ); ?></a>
 						</td>
 					</tr>
 				<?php endforeach; ?>
@@ -260,5 +447,6 @@ $decision_labels = array(
 		</p>
 	<?php else : ?>
 		<p><?php esc_html_e( 'No vetting records found.', 'remember' ); ?></p>
+	<?php endif; ?>
 	<?php endif; ?>
 </div>

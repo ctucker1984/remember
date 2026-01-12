@@ -35,6 +35,11 @@ if ( isset( $_POST['remember_settings_action'] ) && check_admin_referer( 'rememb
 			$options['qb_sync_interval'] = absint( $_POST['qb_sync_interval'] ) * 3600; // Convert hours to seconds
 		}
 		
+		// Update vetting workflow
+		if ( isset( $_POST['vetting_workflow'] ) ) {
+			$options['vetting_workflow'] = sanitize_text_field( $_POST['vetting_workflow'] );
+		}
+		
 		update_option( 'remember_options', $options );
 		Remember_Logger::info( 'Settings updated' );
 		echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Settings saved successfully.', 'remember' ) . '</p></div>';
@@ -77,6 +82,24 @@ $plugin_version = get_option( 'remember_version', REMEMBER_VERSION );
 					<td>
 						<input type="number" id="photo_max_dimensions" name="photo_max_dimensions" value="<?php echo esc_attr( isset( $options['photo_max_dimensions'] ) ? $options['photo_max_dimensions'] : 800 ); ?>" min="100" max="2000" class="small-text">
 						<span class="description"><?php esc_html_e( 'px (Maximum width/height for profile photos)', 'remember' ); ?></span>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row">
+						<label for="vetting_workflow"><?php esc_html_e( 'Vetting Workflow', 'remember' ); ?></label>
+					</th>
+					<td>
+						<select id="vetting_workflow" name="vetting_workflow" class="regular-text">
+							<option value="on_join" <?php selected( isset( $options['vetting_workflow'] ) ? $options['vetting_workflow'] : 'on_join', 'on_join' ); ?>>
+								<?php esc_html_e( 'On Member Join (Default)', 'remember' ); ?>
+							</option>
+							<option value="first_application" <?php selected( isset( $options['vetting_workflow'] ) ? $options['vetting_workflow'] : 'on_join', 'first_application' ); ?>>
+								<?php esc_html_e( 'On First Event Application', 'remember' ); ?>
+							</option>
+						</select>
+						<p class="description">
+							<?php esc_html_e( 'When should vetting be triggered? "On Member Join" creates a vetting case immediately when a member is created. "On First Event Application" delays vetting until the member applies for their first event.', 'remember' ); ?>
+						</p>
 					</td>
 				</tr>
 				<tr>
