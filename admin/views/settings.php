@@ -170,6 +170,15 @@ if ( isset( $_POST['remember_settings_action'] ) && check_admin_referer( 'rememb
 			$options['vetting_workflow'] = sanitize_text_field( $_POST['vetting_workflow'] );
 		}
 		
+		// Update log level
+		if ( isset( $_POST['log_level'] ) ) {
+			$log_level = sanitize_text_field( $_POST['log_level'] );
+			$valid_levels = array( 'NONE', 'ERROR', 'WARNING', 'INFO', 'DEBUG' );
+			if ( in_array( $log_level, $valid_levels, true ) ) {
+				$options['log_level'] = $log_level;
+			}
+		}
+		
 		update_option( 'remember_options', $options );
 		Remember_Logger::info( 'Settings updated' );
 		echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Settings saved successfully.', 'remember' ) . '</p></div>';
@@ -364,6 +373,7 @@ $social_platforms = $wpdb->get_results(
 			<a href="#social-media" class="nav-tab"><?php esc_html_e( 'Social Media', 'remember' ); ?></a>
 			<a href="#quickbooks" class="nav-tab"><?php esc_html_e( 'QuickBooks', 'remember' ); ?></a>
 			<a href="#notifications" class="nav-tab"><?php esc_html_e( 'Notifications', 'remember' ); ?></a>
+			<a href="#logging" class="nav-tab"><?php esc_html_e( 'Logging', 'remember' ); ?></a>
 		</h2>
 
 		<!-- General Settings -->
@@ -1075,6 +1085,68 @@ $social_platforms = $wpdb->get_results(
 				
 				<?php submit_button( __( 'Save Notification Settings', 'remember' ) ); ?>
 			</form>
+		</div>
+
+		<!-- Logging Settings -->
+		<div id="logging" class="remember-settings-tab" style="display: none;">
+			<h3><?php esc_html_e( 'Logging Settings', 'remember' ); ?></h3>
+			<p class="description">
+				<?php esc_html_e( 'Configure logging for the reMember plugin. Logs are written to the WordPress debug log file.', 'remember' ); ?>
+			</p>
+			
+			<?php
+			$current_log_level = isset( $options['log_level'] ) ? $options['log_level'] : 'ERROR';
+			$log_file_path = WP_CONTENT_DIR . '/debug.log';
+			$log_file_exists = file_exists( $log_file_path );
+			$log_file_size = $log_file_exists ? size_format( filesize( $log_file_path ) ) : '0 B';
+			$wp_debug_log_enabled = defined( 'WP_DEBUG_LOG' ) && WP_DEBUG_LOG;
+			?>
+			
+			<table class="form-table">
+				<tr>
+					<th scope="row">
+						<label for="log_level"><?php esc_html_e( 'Log Level', 'remember' ); ?></label>
+					</th>
+					<td>
+						<select id="log_level" name="log_level">
+							<option value="NONE" <?php selected( $current_log_level, 'NONE' ); ?>><?php esc_html_e( 'None (disable logging)', 'remember' ); ?></option>
+							<option value="ERROR" <?php selected( $current_log_level, 'ERROR' ); ?>><?php esc_html_e( 'Error only', 'remember' ); ?></option>
+							<option value="WARNING" <?php selected( $current_log_level, 'WARNING' ); ?>><?php esc_html_e( 'Warning and above', 'remember' ); ?></option>
+							<option value="INFO" <?php selected( $current_log_level, 'INFO' ); ?>><?php esc_html_e( 'Info and above', 'remember' ); ?></option>
+							<option value="DEBUG" <?php selected( $current_log_level, 'DEBUG' ); ?>><?php esc_html_e( 'Debug (all messages)', 'remember' ); ?></option>
+						</select>
+						<p class="description">
+							<?php esc_html_e( 'Select the minimum log level to record. Lower levels include higher levels (e.g., WARNING includes ERROR).', 'remember' ); ?>
+						</p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"><?php esc_html_e( 'Log File Information', 'remember' ); ?></th>
+					<td>
+						<p>
+							<strong><?php esc_html_e( 'Log File Path:', 'remember' ); ?></strong><br>
+							<code><?php echo esc_html( $log_file_path ); ?></code>
+						</p>
+						<p>
+							<strong><?php esc_html_e( 'Status:', 'remember' ); ?></strong><br>
+							<?php if ( $log_file_exists ) : ?>
+								<span style="color: green;"><?php esc_html_e( 'File exists', 'remember' ); ?></span> (<?php echo esc_html( $log_file_size ); ?>)
+							<?php else : ?>
+								<span style="color: orange;"><?php esc_html_e( 'File does not exist yet', 'remember' ); ?></span>
+							<?php endif; ?>
+						</p>
+						<?php if ( ! $wp_debug_log_enabled ) : ?>
+							<p style="color: red;">
+								<strong><?php esc_html_e( 'Warning:', 'remember' ); ?></strong> 
+								<?php esc_html_e( 'WP_DEBUG_LOG is not enabled in wp-config.php. Logging will not work until this is enabled.', 'remember' ); ?>
+							</p>
+						<?php endif; ?>
+						<p class="description">
+							<?php esc_html_e( 'Logs are written to the WordPress debug log file. Make sure WP_DEBUG_LOG is enabled in your wp-config.php file.', 'remember' ); ?>
+						</p>
+					</td>
+				</tr>
+			</table>
 		</div>
 
 		<?php submit_button(); ?>

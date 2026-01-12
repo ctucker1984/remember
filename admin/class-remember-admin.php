@@ -533,11 +533,17 @@ class Remember_Admin {
 	 * @since    1.0.0
 	 */
 	public function ajax_get_event_roles() {
+		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-logger.php';
+		
+		Remember_Logger::debug( 'ajax_get_event_roles: Starting', array( 'POST' => $_POST ) );
+		
 		check_ajax_referer( 'remember_get_event_roles', 'nonce' );
 		
 		$event_id = isset( $_POST['event_id'] ) ? absint( $_POST['event_id'] ) : 0;
+		Remember_Logger::debug( 'ajax_get_event_roles: Event ID', array( 'event_id' => $event_id ) );
 		
 		if ( $event_id <= 0 ) {
+			Remember_Logger::error( 'ajax_get_event_roles: Invalid event ID' );
 			wp_send_json_error( array( 'message' => __( 'Invalid event ID.', 'remember' ) ) );
 		}
 		
@@ -552,14 +558,52 @@ class Remember_Admin {
 		// Check if show_in_frontend column exists
 		$columns = $wpdb->get_col( "SHOW COLUMNS FROM {$wpdb->prefix}remember_roles" );
 		$has_show_in_frontend = in_array( 'show_in_frontend', $columns, true );
+		Remember_Logger::debug( 'ajax_get_event_roles: Column check', array( 
+			'has_show_in_frontend' => $has_show_in_frontend,
+			'columns' => $columns 
+		) );
 		
-		// Check if user is an admin (has any reMember admin capability)
-		// For front-end users, they should NOT have these capabilities
-		$is_admin = current_user_can( 'remember_read_events' ) || current_user_can( 'remember_create_applications' ) || current_user_can( 'remember_update_applications' );
+		// Check if this is a request from the admin area (not front-end)
+		// The HTTP_REFERER will tell us where the request came from
+		$referer = isset( $_SERVER['HTTP_REFERER'] ) ? $_SERVER['HTTP_REFERER'] : '';
+		$is_from_admin = ( strpos( $referer, '/wp-admin/' ) !== false );
+		
+		// Check if user can manage applications (create/update)
+		$can_create_apps = current_user_can( 'remember_create_applications' );
+		$can_update_apps = current_user_can( 'remember_update_applications' );
+		
+		// For front-end application forms, NEVER treat anyone as admin
+		// Only treat as admin if the request came from the admin area AND they can manage applications
+		// OR if they're a full WordPress administrator
+		$is_wordpress_admin = current_user_can( 'manage_options' );
+		$is_admin = ( ( $can_create_apps || $can_update_apps ) && $is_from_admin ) || $is_wordpress_admin;
+		
+		Remember_Logger::debug( 'ajax_get_event_roles: Admin check', array( 
+			'is_admin' => $is_admin,
+			'can_create_applications' => $can_create_apps,
+			'can_update_applications' => $can_update_apps,
+			'is_from_admin' => $is_from_admin,
+			'is_wordpress_admin' => $is_wordpress_admin,
+			'referer' => $referer,
+			'user_id' => get_current_user_id(),
+			'is_logged_in' => is_user_logged_in()
+		) );
 		
 		if ( $is_admin ) {
 			// Admin users get all roles
+			Remember_Logger::debug( 'ajax_get_event_roles: Admin path - getting all roles' );
 			$event_roles = $event_model->get_event_roles( $event_id );
+			Remember_Logger::debug( 'ajax_get_event_roles: Admin results', array( 
+				'count' => count( $event_roles ),
+				'roles' => array_map( function( $r ) { 
+					return array( 
+						'event_role_id' => $r->event_role_id, 
+						'role_id' => $r->role_id,
+						'role_name' => $r->role_name,
+						'show_in_frontend' => isset( $r->show_in_frontend ) ? $r->show_in_frontend : 'not set'
+					); 
+				}, $event_roles )
+			) );
 		} else {
 			// For non-admin users, filter at the SQL level:
 			// 1. Only roles the member has assigned (join with member_roles)
@@ -567,43 +611,83 @@ class Remember_Admin {
 			// 3. Only event roles (role_type = 'event')
 			if ( is_user_logged_in() ) {
 				$member_id = get_current_user_id();
+				Remember_Logger::debug( 'ajax_get_event_roles: Non-admin logged in user', array( 'member_id' => $member_id ) );
+				
+				// Get member's assigned event role IDs for logging
+				$member_event_role_ids = $member_model->get_member_event_role_ids( $member_id );
+				Remember_Logger::debug( 'ajax_get_event_roles: Member event role IDs', array( 
+					'member_id' => $member_id,
+					'role_ids' => $member_event_role_ids 
+				) );
 				
 				if ( $has_show_in_frontend ) {
 					// Filter by member roles AND show_in_frontend
-					$event_roles = $wpdb->get_results(
-						$wpdb->prepare(
-							"SELECT DISTINCT er.*, r.role_name, r.show_in_frontend 
-							FROM {$wpdb->prefix}remember_event_roles er 
-							JOIN {$wpdb->prefix}remember_roles r ON er.role_id = r.role_id 
-							JOIN {$wpdb->prefix}remember_member_roles mr ON r.role_id = mr.role_id 
-							WHERE er.event_id = %d 
-							AND mr.member_id = %d 
-							AND r.role_type = 'event'
-							AND COALESCE(r.show_in_frontend, 1) != 0
-							ORDER BY r.role_name ASC",
-							$event_id,
-							$member_id
-						)
+					$query = $wpdb->prepare(
+						"SELECT DISTINCT er.*, r.role_name, r.show_in_frontend 
+						FROM {$wpdb->prefix}remember_event_roles er 
+						JOIN {$wpdb->prefix}remember_roles r ON er.role_id = r.role_id 
+						JOIN {$wpdb->prefix}remember_member_roles mr ON r.role_id = mr.role_id 
+						WHERE er.event_id = %d 
+						AND mr.member_id = %d 
+						AND r.role_type = 'event'
+						AND COALESCE(r.show_in_frontend, 1) != 0
+						ORDER BY r.role_name ASC",
+						$event_id,
+						$member_id
 					);
+					Remember_Logger::debug( 'ajax_get_event_roles: Executing SQL with show_in_frontend filter', array( 
+						'query' => $query,
+						'event_id' => $event_id,
+						'member_id' => $member_id
+					) );
+					$event_roles = $wpdb->get_results( $query );
+					Remember_Logger::debug( 'ajax_get_event_roles: Query results', array( 
+						'count' => count( $event_roles ),
+						'roles' => array_map( function( $r ) { 
+							return array( 
+								'event_role_id' => $r->event_role_id, 
+								'role_id' => $r->role_id,
+								'role_name' => $r->role_name,
+								'show_in_frontend' => isset( $r->show_in_frontend ) ? $r->show_in_frontend : 'not set'
+							); 
+						}, $event_roles ),
+						'wpdb_last_error' => $wpdb->last_error
+					) );
 				} else {
 					// Column doesn't exist yet - filter by member roles only
-					$event_roles = $wpdb->get_results(
-						$wpdb->prepare(
-							"SELECT DISTINCT er.*, r.role_name 
-							FROM {$wpdb->prefix}remember_event_roles er 
-							JOIN {$wpdb->prefix}remember_roles r ON er.role_id = r.role_id 
-							JOIN {$wpdb->prefix}remember_member_roles mr ON r.role_id = mr.role_id 
-							WHERE er.event_id = %d 
-							AND mr.member_id = %d 
-							AND r.role_type = 'event'
-							ORDER BY r.role_name ASC",
-							$event_id,
-							$member_id
-						)
+					$query = $wpdb->prepare(
+						"SELECT DISTINCT er.*, r.role_name 
+						FROM {$wpdb->prefix}remember_event_roles er 
+						JOIN {$wpdb->prefix}remember_roles r ON er.role_id = r.role_id 
+						JOIN {$wpdb->prefix}remember_member_roles mr ON r.role_id = mr.role_id 
+						WHERE er.event_id = %d 
+						AND mr.member_id = %d 
+						AND r.role_type = 'event'
+						ORDER BY r.role_name ASC",
+						$event_id,
+						$member_id
 					);
+					Remember_Logger::debug( 'ajax_get_event_roles: Executing SQL without show_in_frontend filter', array( 
+						'query' => $query,
+						'event_id' => $event_id,
+						'member_id' => $member_id
+					) );
+					$event_roles = $wpdb->get_results( $query );
+					Remember_Logger::debug( 'ajax_get_event_roles: Query results', array( 
+						'count' => count( $event_roles ),
+						'roles' => array_map( function( $r ) { 
+							return array( 
+								'event_role_id' => $r->event_role_id, 
+								'role_id' => $r->role_id,
+								'role_name' => $r->role_name
+							); 
+						}, $event_roles ),
+						'wpdb_last_error' => $wpdb->last_error
+					) );
 				}
 			} else {
 				// Not logged in - return empty (can't apply without being logged in)
+				Remember_Logger::debug( 'ajax_get_event_roles: User not logged in, returning empty' );
 				$event_roles = array();
 			}
 		}
@@ -616,6 +700,11 @@ class Remember_Admin {
 				'role_name'     => $event_role->role_name,
 			);
 		}
+		
+		Remember_Logger::debug( 'ajax_get_event_roles: Final formatted response', array( 
+			'count' => count( $formatted_roles ),
+			'roles' => $formatted_roles
+		) );
 		
 		wp_send_json_success( $formatted_roles );
 	}
