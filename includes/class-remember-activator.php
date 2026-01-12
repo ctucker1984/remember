@@ -162,6 +162,12 @@ class Remember_Activator {
 		);
 		update_option( 'remember_options', $default_options );
 
+		// Schedule QuickBooks sync cron job
+		if ( ! wp_next_scheduled( 'remember_qb_sync' ) ) {
+			wp_schedule_event( time(), 'hourly', 'remember_qb_sync' );
+			Remember_Logger::debug( 'Scheduled QuickBooks sync cron job' );
+		}
+
 		// Flush rewrite rules
 		flush_rewrite_rules();
 

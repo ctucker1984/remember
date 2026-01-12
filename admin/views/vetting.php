@@ -76,6 +76,8 @@ if ( isset( $_POST['remember_vetting_action'] ) && check_admin_referer( 'remembe
 						$member_model = new Remember_Member();
 						if ( 'accepted' === $decision ) {
 							$member_model->update_status( $vetting->member_id, 'vetted' );
+							// Trigger hook to sync member to QuickBooks
+							do_action( 'remember_member_vetted', $vetting->member_id );
 						} elseif ( 'rejected' === $decision ) {
 							$member_model->update_status( $vetting->member_id, 'rejected' );
 						}

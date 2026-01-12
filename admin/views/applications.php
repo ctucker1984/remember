@@ -73,7 +73,25 @@ if ( isset( $_POST['remember_application_action'] ) && check_admin_referer( 'rem
 			$result = $application_model->update_status( $application_id, 'accepted', get_current_user_id() );
 			if ( $result !== false ) {
 				Remember_Logger::info( 'Application accepted', array( 'application_id' => $application_id ) );
-				echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Application accepted successfully.', 'remember' ) . '</p></div>';
+				
+				// Create QuickBooks invoice if connected
+				require_once plugin_dir_path( __FILE__ ) . '../../includes/integrations/class-remember-quickbooks-oauth.php';
+				$qb_settings = Remember_QuickBooks_OAuth::get_settings();
+				if ( $qb_settings && ! empty( $qb_settings['access_token'] ) && ! empty( $qb_settings['realm_id'] ) ) {
+					require_once plugin_dir_path( __FILE__ ) . '../../includes/integrations/class-remember-quickbooks-sync.php';
+					$invoice_result = Remember_QuickBooks_Sync::create_invoice_for_application( $application_id );
+					if ( is_wp_error( $invoice_result ) ) {
+						Remember_Logger::warning( 'Failed to create QuickBooks invoice for accepted application', array(
+							'application_id' => $application_id,
+							'error'          => $invoice_result->get_error_message(),
+						) );
+						echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html__( 'Application accepted, but QuickBooks invoice creation failed: ', 'remember' ) . esc_html( $invoice_result->get_error_message() ) . '</p></div>';
+					} else {
+						echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Application accepted and QuickBooks invoice created successfully.', 'remember' ) . '</p></div>';
+					}
+				} else {
+					echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Application accepted successfully.', 'remember' ) . '</p></div>';
+				}
 			} else {
 				Remember_Logger::error( 'Failed to accept application', array( 'application_id' => $application_id ) );
 				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to accept application.', 'remember' ) . '</p></div>';

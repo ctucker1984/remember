@@ -143,6 +143,10 @@ class Remember {
 		$this->loader->add_action( 'admin_enqueue_scripts', $plugin_admin, 'enqueue_scripts' );
 		$this->loader->add_action( 'wp_ajax_remember_get_event_roles', $plugin_admin, 'ajax_get_event_roles' );
 		$this->loader->add_action( 'admin_menu', $plugin_admin, 'add_admin_menu' );
+		
+		// QuickBooks sync hooks
+		$this->loader->add_action( 'remember_member_vetted', $this, 'sync_vetted_member_to_qb' );
+		$this->loader->add_action( 'remember_qb_sync', $this, 'sync_qb_payments' );
 	}
 
 	/**
@@ -167,6 +171,9 @@ class Remember {
 		// Run database updates on admin init
 		$this->loader->add_action( 'admin_init', $this, 'maybe_update_database' );
 		
+		// Schedule QuickBooks sync cron job
+		$this->loader->add_action( 'admin_init', $this, 'maybe_schedule_qb_sync' );
+		
 		$this->loader->run();
 	}
 
@@ -177,6 +184,64 @@ class Remember {
 		if ( is_admin() && current_user_can( 'manage_options' ) ) {
 			require_once plugin_dir_path( __FILE__ ) . 'database/class-remember-database-updater.php';
 			Remember_Database_Updater::update_schema();
+		}
+	}
+
+	/**
+	 * Sync vetted member to QuickBooks customer.
+	 *
+	 * @param int $member_id Member ID.
+	 */
+	public function sync_vetted_member_to_qb( $member_id ) {
+		require_once plugin_dir_path( __FILE__ ) . 'integrations/class-remember-quickbooks-oauth.php';
+		$qb_settings = Remember_QuickBooks_OAuth::get_settings();
+		
+		if ( $qb_settings && ! empty( $qb_settings['access_token'] ) && ! empty( $qb_settings['realm_id'] ) ) {
+			require_once plugin_dir_path( __FILE__ ) . 'integrations/class-remember-quickbooks-sync.php';
+			Remember_QuickBooks_Sync::sync_member_to_customer( $member_id );
+		}
+	}
+
+	/**
+	 * Schedule QuickBooks sync cron job if needed.
+	 */
+	public function maybe_schedule_qb_sync() {
+		if ( ! wp_next_scheduled( 'remember_qb_sync' ) ) {
+			$options = get_option( 'remember_options', array() );
+			$interval = isset( $options['qb_sync_interval'] ) ? absint( $options['qb_sync_interval'] ) : 3600; // Default 1 hour
+			
+			// Schedule recurring event
+			wp_schedule_event( time(), 'hourly', 'remember_qb_sync' );
+			
+			// Note: WordPress doesn't support custom intervals easily, so we'll use hourly
+			// and check the interval in the sync function itself
+		}
+	}
+
+	/**
+	 * Sync QuickBooks payments via cron.
+	 */
+	public function sync_qb_payments() {
+		require_once plugin_dir_path( __FILE__ ) . 'integrations/class-remember-quickbooks-oauth.php';
+		$qb_settings = Remember_QuickBooks_OAuth::get_settings();
+		
+		if ( $qb_settings && ! empty( $qb_settings['access_token'] ) && ! empty( $qb_settings['realm_id'] ) ) {
+			// Check if enough time has passed since last sync
+			global $wpdb;
+			$last_sync = $wpdb->get_var( "SELECT last_sync_at FROM {$wpdb->prefix}remember_payment_processors WHERE processor_type = 'quickbooks' AND is_active = 1 LIMIT 1" );
+			
+			$options = get_option( 'remember_options', array() );
+			$interval = isset( $options['qb_sync_interval'] ) ? absint( $options['qb_sync_interval'] ) : 3600;
+			
+			if ( $last_sync ) {
+				$time_since_sync = time() - strtotime( $last_sync );
+				if ( $time_since_sync < $interval ) {
+					return; // Not enough time has passed
+				}
+			}
+			
+			require_once plugin_dir_path( __FILE__ ) . 'integrations/class-remember-quickbooks-sync.php';
+			Remember_QuickBooks_Sync::sync_all_payments();
 		}
 	}
 
