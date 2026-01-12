@@ -176,6 +176,26 @@ class Remember_Member extends Remember_Base_Model {
 	}
 
 	/**
+	 * Get event roles assigned to this member.
+	 *
+	 * @param int $member_id Member ID.
+	 * @return array Array of role IDs.
+	 */
+	public function get_member_event_role_ids( $member_id ) {
+		global $wpdb;
+		return $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT mr.role_id 
+				FROM {$wpdb->prefix}remember_member_roles mr 
+				INNER JOIN {$wpdb->prefix}remember_roles r ON mr.role_id = r.role_id 
+				WHERE mr.member_id = %d 
+				AND r.role_type = 'event'",
+				$member_id
+			)
+		);
+	}
+
+	/**
 	 * Get all records with WHERE conditions.
 	 *
 	 * @param array $args Query arguments.

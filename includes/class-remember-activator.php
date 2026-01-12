@@ -171,6 +171,9 @@ class Remember_Activator {
 		// Flush rewrite rules
 		flush_rewrite_rules();
 
+		// Set flag to show setup wizard
+		set_transient( 'remember_show_setup_wizard', true, 3600 ); // Show for 1 hour
+
 		Remember_Logger::info( 'Plugin activation completed successfully' );
 	}
 }

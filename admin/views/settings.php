@@ -18,6 +18,14 @@ require_once plugin_dir_path( __FILE__ ) . '../../includes/integrations/class-re
 
 Remember_Logger::debug( 'Settings page loaded' );
 
+// Show success message if pages were just set up
+if ( isset( $_GET['pages_setup'] ) ) {
+	$message = urldecode( sanitize_text_field( $_GET['pages_setup'] ) );
+	if ( ! empty( $message ) ) {
+		echo '<div class="notice notice-success is-dismissible"><p>' . esc_html( $message ) . '</p></div>';
+	}
+}
+
 $notification_model = new Remember_Notification_Setting();
 
 // Handle QuickBooks OAuth callback
@@ -208,6 +216,7 @@ $plugin_version = get_option( 'remember_version', REMEMBER_VERSION );
 		
 		<h2 class="nav-tab-wrapper">
 			<a href="#general" class="nav-tab nav-tab-active"><?php esc_html_e( 'General', 'remember' ); ?></a>
+			<a href="#shortcodes" class="nav-tab" id="shortcodes-tab-link"><?php esc_html_e( 'Shortcodes', 'remember' ); ?></a>
 			<a href="#quickbooks" class="nav-tab"><?php esc_html_e( 'QuickBooks', 'remember' ); ?></a>
 			<a href="#notifications" class="nav-tab"><?php esc_html_e( 'Notifications', 'remember' ); ?></a>
 		</h2>
@@ -260,6 +269,164 @@ $plugin_version = get_option( 'remember_version', REMEMBER_VERSION );
 					</td>
 				</tr>
 			</table>
+		</div>
+
+		<!-- Shortcodes Documentation -->
+		<div id="shortcodes" class="remember-settings-tab" style="display: none;">
+			<?php require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-page-creator.php'; ?>
+			<?php $default_pages = Remember_Page_Creator::get_default_pages(); ?>
+			<?php $created_pages = Remember_Page_Creator::get_created_pages(); ?>
+
+			<h2><?php esc_html_e( 'Shortcode Documentation', 'remember' ); ?></h2>
+			<p class="description">
+				<?php esc_html_e( 'reMember provides shortcodes that you can add to any page or post. These shortcodes display member-facing content and forms.', 'remember' ); ?>
+			</p>
+			<p class="description">
+				<?php esc_html_e( 'For Full Site Editing (FSE) themes, you can also use the block patterns available in the "reMember" category.', 'remember' ); ?>
+			</p>
+
+			<div style="margin-top: 30px;">
+				<?php foreach ( $default_pages as $key => $page_data ) : 
+					$is_created = isset( $created_pages[ $key ] );
+					$page_id = $is_created ? $created_pages[ $key ] : 0;
+				?>
+					<div style="background: #fff; border: 1px solid #ccd0d4; border-radius: 4px; padding: 20px; margin-bottom: 20px;">
+						<h3 style="margin-top: 0; display: flex; align-items: center; justify-content: space-between;">
+							<span><?php echo esc_html( $page_data['title'] ); ?></span>
+							<?php if ( $is_created ) : ?>
+								<span style="font-size: 0.875em; font-weight: normal; color: #46b450;">
+									✓ <?php esc_html_e( 'Page created', 'remember' ); ?>
+									<a href="<?php echo esc_url( get_edit_post_link( $page_id ) ); ?>" target="_blank" style="margin-left: 10px;">
+										<?php esc_html_e( 'Edit', 'remember' ); ?>
+									</a>
+									<a href="<?php echo esc_url( get_permalink( $page_id ) ); ?>" target="_blank" style="margin-left: 10px;">
+										<?php esc_html_e( 'View', 'remember' ); ?>
+									</a>
+								</span>
+							<?php endif; ?>
+						</h3>
+						
+						<p style="color: #646970; margin: 10px 0;">
+							<?php echo esc_html( $page_data['description'] ); ?>
+						</p>
+
+						<div style="background: #f6f7f7; border: 1px solid #ddd; border-radius: 3px; padding: 15px; margin: 15px 0;">
+							<strong style="display: block; margin-bottom: 8px;"><?php esc_html_e( 'Shortcode:', 'remember' ); ?></strong>
+							<code style="display: block; padding: 10px; background: #fff; border: 1px solid #ddd; border-radius: 3px; font-size: 14px; word-break: break-all;">
+								<?php echo esc_html( $page_data['shortcode'] ); ?>
+							</code>
+							<button type="button" class="button button-small remember-copy-shortcode" data-shortcode="<?php echo esc_attr( $page_data['shortcode'] ); ?>" style="margin-top: 8px;">
+								<?php esc_html_e( 'Copy to Clipboard', 'remember' ); ?>
+							</button>
+						</div>
+
+						<?php if ( 'remember_dashboard' === $page_data['shortcode'] ) : ?>
+							<div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #ddd;">
+								<h4 style="margin-top: 0;"><?php esc_html_e( 'Features:', 'remember' ); ?></h4>
+								<ul style="margin: 0; padding-left: 20px;">
+									<li><?php esc_html_e( 'Member status and profile summary', 'remember' ); ?></li>
+									<li><?php esc_html_e( 'List of accepted events with links to event directories', 'remember' ); ?></li>
+									<li><?php esc_html_e( 'Recent applications with status badges', 'remember' ); ?></li>
+									<li><?php esc_html_e( 'Quick links to browse events and edit profile', 'remember' ); ?></li>
+								</ul>
+							</div>
+						<?php elseif ( 'remember_events' === $page_data['shortcode'] ) : ?>
+							<div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #ddd;">
+								<h4 style="margin-top: 0;"><?php esc_html_e( 'Attributes:', 'remember' ); ?></h4>
+								<ul style="margin: 0; padding-left: 20px;">
+									<li><code>status="open"</code> - <?php esc_html_e( 'Show only open events (default)', 'remember' ); ?></li>
+									<li><code>status="all"</code> - <?php esc_html_e( 'Show all events regardless of status', 'remember' ); ?></li>
+									<li><code>status="upcoming"</code> - <?php esc_html_e( 'Show only upcoming events', 'remember' ); ?></li>
+									<li><code>limit="5"</code> - <?php esc_html_e( 'Limit the number of events displayed', 'remember' ); ?></li>
+								</ul>
+								<p style="margin-top: 10px;"><strong><?php esc_html_e( 'Example:', 'remember' ); ?></strong> <code>[remember_events status="upcoming" limit="10"]</code></p>
+							</div>
+						<?php elseif ( 'remember_apply' === $page_data['shortcode'] ) : ?>
+							<div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #ddd;">
+								<h4 style="margin-top: 0;"><?php esc_html_e( 'Attributes:', 'remember' ); ?></h4>
+								<ul style="margin: 0; padding-left: 20px;">
+									<li><code>event_id="123"</code> - <?php esc_html_e( 'Pre-select a specific event (optional)', 'remember' ); ?></li>
+								</ul>
+								<p style="margin-top: 10px;"><strong><?php esc_html_e( 'Example:', 'remember' ); ?></strong> <code>[remember_apply event_id="5"]</code></p>
+								<p style="margin-top: 10px;"><strong><?php esc_html_e( 'Note:', 'remember' ); ?></strong> <?php esc_html_e( 'If no event_id is provided, users can select an event from a dropdown. The form will automatically load available roles for the selected event.', 'remember' ); ?></p>
+							</div>
+						<?php elseif ( 'remember_profile' === $page_data['shortcode'] ) : ?>
+							<div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #ddd;">
+								<h4 style="margin-top: 0;"><?php esc_html_e( 'Features:', 'remember' ); ?></h4>
+								<ul style="margin: 0; padding-left: 20px;">
+									<li><?php esc_html_e( 'View and edit profile information', 'remember' ); ?></li>
+									<li><?php esc_html_e( 'Manage privacy settings for event sharing', 'remember' ); ?></li>
+									<li><?php esc_html_e( 'Supports ?edit=1 URL parameter to show edit mode', 'remember' ); ?></li>
+								</ul>
+							</div>
+						<?php endif; ?>
+					</div>
+				<?php endforeach; ?>
+
+				<!-- Event Detail Shortcode -->
+				<div style="background: #fff; border: 1px solid #ccd0d4; border-radius: 4px; padding: 20px; margin-bottom: 20px;">
+					<h3 style="margin-top: 0;"><?php esc_html_e( 'Event Detail', 'remember' ); ?></h3>
+					<p style="color: #646970; margin: 10px 0;">
+						<?php esc_html_e( 'Display detailed information about an event, including dates, location, status, and the attendee directory (for accepted members).', 'remember' ); ?>
+					</p>
+
+					<div style="background: #f6f7f7; border: 1px solid #ddd; border-radius: 3px; padding: 15px; margin: 15px 0;">
+						<strong style="display: block; margin-bottom: 8px;"><?php esc_html_e( 'Shortcode:', 'remember' ); ?></strong>
+						<code style="display: block; padding: 10px; background: #fff; border: 1px solid #ddd; border-radius: 3px; font-size: 14px; word-break: break-all;">
+							[remember_event_detail]
+						</code>
+						<button type="button" class="button button-small remember-copy-shortcode" data-shortcode="[remember_event_detail]" style="margin-top: 8px;">
+							<?php esc_html_e( 'Copy to Clipboard', 'remember' ); ?>
+						</button>
+					</div>
+
+					<div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #ddd;">
+						<h4 style="margin-top: 0;"><?php esc_html_e( 'Attributes:', 'remember' ); ?></h4>
+						<ul style="margin: 0; padding-left: 20px;">
+							<li><code>event_id="123"</code> - <?php esc_html_e( 'Optional: The ID of the event. If not provided, uses ?event=ID from URL.', 'remember' ); ?></li>
+						</ul>
+						<p style="margin-top: 10px;"><strong><?php esc_html_e( 'Note:', 'remember' ); ?></strong> <?php esc_html_e( 'The attendee directory is only visible to members who are accepted to the event. Contact information is displayed only if members have enabled sharing in their privacy settings.', 'remember' ); ?></p>
+					</div>
+				</div>
+
+				<!-- Event Directory Shortcode -->
+				<div style="background: #fff; border: 1px solid #ccd0d4; border-radius: 4px; padding: 20px; margin-bottom: 20px;">
+					<h3 style="margin-top: 0;"><?php esc_html_e( 'Event Member Directory', 'remember' ); ?></h3>
+					<p style="color: #646970; margin: 10px 0;">
+						<?php esc_html_e( 'Display a directory of members accepted to a specific event. Only shows contact information that members have chosen to share via privacy settings. This is typically embedded within the Event Detail page.', 'remember' ); ?>
+					</p>
+
+					<div style="background: #f6f7f7; border: 1px solid #ddd; border-radius: 3px; padding: 15px; margin: 15px 0;">
+						<strong style="display: block; margin-bottom: 8px;"><?php esc_html_e( 'Shortcode:', 'remember' ); ?></strong>
+						<code style="display: block; padding: 10px; background: #fff; border: 1px solid #ddd; border-radius: 3px; font-size: 14px; word-break: break-all;">
+							[remember_event_directory event_id="123"]
+						</code>
+						<button type="button" class="button button-small remember-copy-shortcode" data-shortcode="[remember_event_directory event_id=&quot;123&quot;]" style="margin-top: 8px;">
+							<?php esc_html_e( 'Copy to Clipboard', 'remember' ); ?>
+						</button>
+					</div>
+
+					<div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #ddd;">
+						<h4 style="margin-top: 0;"><?php esc_html_e( 'Attributes:', 'remember' ); ?></h4>
+						<ul style="margin: 0; padding-left: 20px;">
+							<li><code>event_id="123"</code> - <?php esc_html_e( 'Required: The ID of the event to show members for', 'remember' ); ?></li>
+						</ul>
+						<p style="margin-top: 10px;"><strong><?php esc_html_e( 'Note:', 'remember' ); ?></strong> <?php esc_html_e( 'Only members who are accepted to the event can view the directory. Contact information is displayed only if members have enabled sharing for that type of information in their privacy settings.', 'remember' ); ?></p>
+					</div>
+				</div>
+
+				<div style="background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; padding: 15px; margin-top: 30px;">
+					<h3 style="margin-top: 0;"><?php esc_html_e( 'Page Creation', 'remember' ); ?></h3>
+					<p>
+						<?php esc_html_e( 'You can automatically create pages with these shortcodes using the setup wizard.', 'remember' ); ?>
+					</p>
+					<p>
+						<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-setup' ) ); ?>" class="button button-primary">
+							<?php esc_html_e( 'Open Setup Wizard', 'remember' ); ?>
+						</a>
+					</p>
+				</div>
+			</div>
 		</div>
 
 		<!-- QuickBooks Settings -->

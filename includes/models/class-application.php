@@ -132,4 +132,22 @@ class Remember_Application extends Remember_Base_Model {
 			)
 		);
 	}
+
+	/**
+	 * Get application by event and member (any role).
+	 *
+	 * @param int $event_id  Event ID.
+	 * @param int $member_id Member ID.
+	 * @return object|null
+	 */
+	public function get_by_event_and_member( $event_id, $member_id ) {
+		global $wpdb;
+		return $wpdb->get_row(
+			$wpdb->prepare(
+				"SELECT * FROM {$this->get_table()} WHERE event_id = %d AND member_id = %d ORDER BY applied_at DESC LIMIT 1",
+				$event_id,
+				$member_id
+			)
+		);
+	}
 }

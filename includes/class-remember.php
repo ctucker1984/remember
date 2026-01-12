@@ -147,6 +147,10 @@ class Remember {
 		// QuickBooks sync hooks
 		$this->loader->add_action( 'remember_member_vetted', $this, 'sync_vetted_member_to_qb' );
 		$this->loader->add_action( 'remember_qb_sync', $this, 'sync_qb_payments' );
+
+		// Setup wizard redirect and form processing
+		$this->loader->add_action( 'admin_init', $plugin_admin, 'maybe_show_setup_wizard' );
+		$this->loader->add_action( 'admin_init', $plugin_admin, 'process_setup_wizard' );
 	}
 
 	/**
@@ -160,6 +164,12 @@ class Remember {
 		$plugin_public = new Remember_Public( $this->get_plugin_name(), $this->get_version() );
 		$this->loader->add_action( 'wp_enqueue_scripts', $plugin_public, 'enqueue_styles' );
 		$this->loader->add_action( 'wp_enqueue_scripts', $plugin_public, 'enqueue_scripts' );
+		$this->loader->add_action( 'init', $plugin_public, 'register_shortcodes' );
+
+		// Register FSE block patterns
+		require_once plugin_dir_path( __FILE__ ) . 'class-remember-fse.php';
+		$this->loader->add_action( 'init', 'Remember_FSE', 'register_block_pattern_category' );
+		$this->loader->add_action( 'init', 'Remember_FSE', 'register_block_patterns' );
 	}
 
 	/**

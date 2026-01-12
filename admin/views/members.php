@@ -152,6 +152,27 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 	} elseif ( $member_id > 0 && 'update_profile' === $action ) {
 		global $wpdb;
 		
+		// Update WordPress user display_name and nickname if provided
+		if ( isset( $_POST['display_name'] ) || isset( $_POST['nickname'] ) ) {
+			$user_update_data = array( 'ID' => $member_id );
+			
+			if ( isset( $_POST['display_name'] ) ) {
+				$user_update_data['display_name'] = sanitize_text_field( $_POST['display_name'] );
+			}
+			
+			$update_result = wp_update_user( $user_update_data );
+			
+			if ( ! is_wp_error( $update_result ) ) {
+				// Update nickname in user meta
+				if ( isset( $_POST['nickname'] ) ) {
+					update_user_meta( $member_id, 'nickname', sanitize_text_field( $_POST['nickname'] ) );
+				}
+				Remember_Logger::info( 'WordPress user updated', array( 'user_id' => $member_id ) );
+			} else {
+				Remember_Logger::error( 'Failed to update WordPress user', array( 'user_id' => $member_id, 'error' => $update_result->get_error_message() ) );
+			}
+		}
+		
 		// Get max image dimensions from settings
 		$options = get_option( 'remember_options', array() );
 		$max_image_size = isset( $options['photo_max_dimensions'] ) ? absint( $options['photo_max_dimensions'] ) : 800;

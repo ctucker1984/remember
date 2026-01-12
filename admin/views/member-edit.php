@@ -89,6 +89,62 @@ $max_image_size = isset( $options['photo_max_dimensions'] ) ? absint( $options['
 		</tr>
 	</table>
 	
+	<!-- WordPress User Information -->
+	<h3><?php esc_html_e( 'WordPress User Information', 'remember' ); ?></h3>
+	<table class="form-table">
+		<tr>
+			<th><label for="nickname"><?php esc_html_e( 'Nickname', 'remember' ); ?> <span class="description"><?php esc_html_e( '(required)', 'remember' ); ?></span></label></th>
+			<td>
+				<input type="text" id="nickname" name="nickname" class="regular-text" value="<?php echo esc_attr( get_user_meta( $view_user->ID, 'nickname', true ) ); ?>" required>
+			</td>
+		</tr>
+		<tr>
+			<th><label for="display_name"><?php esc_html_e( 'Display name publicly as', 'remember' ); ?></label></th>
+			<td>
+				<?php
+				// Get first and last name from WordPress user meta (not legal names)
+				$wp_first_name = get_user_meta( $view_user->ID, 'first_name', true );
+				$wp_last_name = get_user_meta( $view_user->ID, 'last_name', true );
+				$nickname = get_user_meta( $view_user->ID, 'nickname', true );
+				
+				// Generate display name options like WordPress does
+				$public_display = array();
+				if ( ! empty( $nickname ) ) {
+					$public_display['display_nickname'] = $nickname;
+				}
+				$public_display['display_username'] = $view_user->user_login;
+				
+				if ( ! empty( $wp_first_name ) ) {
+					$public_display['display_firstname'] = $wp_first_name;
+				}
+				
+				if ( ! empty( $wp_last_name ) ) {
+					$public_display['display_lastname'] = $wp_last_name;
+				}
+				
+				if ( ! empty( $wp_first_name ) && ! empty( $wp_last_name ) ) {
+					$public_display['display_firstlast'] = $wp_first_name . ' ' . $wp_last_name;
+					$public_display['display_lastfirst'] = $wp_last_name . ' ' . $wp_first_name;
+				}
+				
+				// Add current display name if not already in the list
+				if ( ! in_array( $view_user->display_name, $public_display, true ) ) {
+					$public_display = array( 'display_displayname' => $view_user->display_name ) + $public_display;
+				}
+				
+				// Clean up the array
+				$public_display = array_map( 'trim', $public_display );
+				$public_display = array_unique( $public_display );
+				?>
+				<select name="display_name" id="display_name">
+					<?php foreach ( $public_display as $id => $item ) : ?>
+						<option <?php selected( $view_user->display_name, $item ); ?>><?php echo esc_html( $item ); ?></option>
+					<?php endforeach; ?>
+				</select>
+			</td>
+		</tr>
+	</table>
+	
 	<!-- Profile Information -->
 	<h3><?php esc_html_e( 'Profile Information', 'remember' ); ?></h3>
 	<table class="form-table">

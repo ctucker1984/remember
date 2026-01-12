@@ -1,4 +1,419 @@
 /**
- * All of the CSS for your public-facing functionality should be
- * included in this file.
+ * Public-facing CSS for reMember plugin
+ * Compatible with both FSE and classic themes
  */
+
+/* Reset and Base Styles */
+.remember-dashboard,
+.remember-events-list,
+.remember-apply-form,
+.remember-profile,
+.remember-event-directory {
+	margin: 1.5em 0;
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+}
+
+/* Notice Styles */
+.remember-notice {
+	padding: 12px 16px;
+	margin: 1em 0;
+	border-left: 4px solid;
+	border-radius: 2px;
+	background: #fff;
+}
+
+.remember-notice p {
+	margin: 0;
+}
+
+.remember-notice.remember-success {
+	border-color: #46b450;
+	background-color: #ecf7ed;
+}
+
+.remember-notice.remember-error {
+	border-color: #dc3232;
+	background-color: #fcf0f1;
+}
+
+.remember-notice.remember-info {
+	border-color: #2271b1;
+	background-color: #e5f5fa;
+}
+
+.remember-notice.remember-warning {
+	border-color: #dba617;
+	background-color: #fcf9e8;
+}
+
+/* Dashboard Styles */
+.remember-dashboard-header {
+	margin-bottom: 2em;
+	padding-bottom: 1em;
+	border-bottom: 1px solid #ddd;
+}
+
+.remember-dashboard-header h2 {
+	margin: 0 0 0.5em 0;
+	font-size: 1.75em;
+	font-weight: 600;
+}
+
+.remember-member-status {
+	display: inline-block;
+	padding: 4px 12px;
+	border-radius: 3px;
+	font-size: 0.875em;
+	font-weight: 600;
+	background-color: rgba(0, 0, 0, 0.05);
+}
+
+.remember-dashboard-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+	gap: 1.5em;
+	margin-top: 1.5em;
+}
+
+.remember-dashboard-card {
+	padding: 1.5em;
+	background: #fff;
+	border: 1px solid #ddd;
+	border-radius: 4px;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.remember-dashboard-card h3 {
+	margin: 0 0 1em 0;
+	font-size: 1.25em;
+	font-weight: 600;
+	border-bottom: 2px solid #2271b1;
+	padding-bottom: 0.5em;
+}
+
+.remember-dashboard-card p {
+	margin: 0.75em 0;
+}
+
+.remember-description {
+	color: #666;
+	font-size: 0.9375em;
+}
+
+/* Event List Styles */
+.remember-events-list {
+	display: grid;
+	gap: 1.5em;
+}
+
+.remember-event-card {
+	padding: 1.5em;
+	background: #fff;
+	border: 1px solid #ddd;
+	border-radius: 4px;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+	transition: box-shadow 0.2s ease;
+}
+
+.remember-event-card:hover {
+	box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+.remember-event-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: flex-start;
+	margin-bottom: 1em;
+	gap: 1em;
+}
+
+.remember-event-title {
+	margin: 0;
+	font-size: 1.5em;
+	font-weight: 600;
+	display: flex;
+	align-items: center;
+	gap: 0.5em;
+	flex-wrap: wrap;
+}
+
+.remember-event-badge {
+	padding: 2px 8px;
+	border-radius: 3px;
+	font-size: 0.75em;
+	font-weight: 600;
+	text-transform: uppercase;
+}
+
+.remember-event-private {
+	background-color: #f0f0f1;
+	color: #50575e;
+}
+
+.remember-event-status {
+	font-size: 0.875em;
+	font-weight: 600;
+	padding: 4px 10px;
+	border-radius: 3px;
+	white-space: nowrap;
+}
+
+.remember-event-content {
+	margin-bottom: 1em;
+}
+
+.remember-event-description {
+	margin-bottom: 1em;
+	color: #50575e;
+	line-height: 1.6;
+}
+
+.remember-event-meta {
+	margin: 1em 0;
+	padding: 1em;
+	background-color: #f6f7f7;
+	border-radius: 3px;
+}
+
+.remember-event-meta p {
+	margin: 0.5em 0;
+}
+
+.remember-event-footer {
+	margin-top: 1em;
+	padding-top: 1em;
+	border-top: 1px solid #ddd;
+}
+
+/* Form Styles */
+.remember-form-group {
+	margin-bottom: 1.5em;
+}
+
+.remember-form-label {
+	display: block;
+	margin-bottom: 0.5em;
+	font-weight: 600;
+	color: #1d2327;
+}
+
+.remember-required {
+	color: #dc3232;
+}
+
+.remember-form-control {
+	width: 100%;
+	max-width: 400px;
+	padding: 8px 12px;
+	border: 1px solid #8c8f94;
+	border-radius: 4px;
+	font-size: 1em;
+	line-height: 1.5;
+}
+
+.remember-form-control:focus {
+	border-color: #2271b1;
+	outline: 2px solid transparent;
+	box-shadow: 0 0 0 1px #2271b1;
+}
+
+.remember-form-control:disabled {
+	background-color: #f0f0f1;
+	cursor: not-allowed;
+}
+
+.remember-form-help {
+	margin-top: 0.5em;
+	color: #646970;
+	font-size: 0.875em;
+}
+
+/* Button Styles */
+.remember-button {
+	display: inline-block;
+	padding: 8px 16px;
+	margin-right: 0.5em;
+	border: 1px solid;
+	border-radius: 3px;
+	text-decoration: none;
+	font-size: 0.9375em;
+	font-weight: 400;
+	cursor: pointer;
+	transition: all 0.2s ease;
+}
+
+.remember-button-primary {
+	background-color: #2271b1;
+	border-color: #2271b1;
+	color: #fff;
+}
+
+.remember-button-primary:hover,
+.remember-button-primary:focus {
+	background-color: #135e96;
+	border-color: #135e96;
+	color: #fff;
+}
+
+.remember-button-secondary {
+	background-color: #f6f7f7;
+	border-color: #dcdcde;
+	color: #2c3338;
+}
+
+.remember-button-secondary:hover,
+.remember-button-secondary:focus {
+	background-color: #f0f0f1;
+	border-color: #8c8f94;
+	color: #2c3338;
+}
+
+/* Application List Styles */
+.remember-application-list,
+.remember-event-list {
+	list-style: none;
+	padding: 0;
+	margin: 0;
+}
+
+.remember-application-list li,
+.remember-event-list li {
+	padding: 0.75em 0;
+	border-bottom: 1px solid #ddd;
+}
+
+.remember-application-list li:last-child,
+.remember-event-list li:last-child {
+	border-bottom: none;
+}
+
+.remember-status-badge {
+	display: inline-block;
+	padding: 3px 8px;
+	border-radius: 3px;
+	font-size: 0.8125em;
+	font-weight: 600;
+}
+
+.remember-status-pending {
+	background-color: #f0f6fc;
+	color: #0969da;
+}
+
+.remember-status-accepted {
+	background-color: #dafbe1;
+	color: #1a7f37;
+}
+
+.remember-status-declined {
+	background-color: #ffebe9;
+	color: #cf222e;
+}
+
+.remember-status-waitlisted {
+	background-color: #fff8c5;
+	color: #9a6700;
+}
+
+/* Event Directory Styles */
+.remember-member-directory {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+	gap: 1.5em;
+	margin-top: 1.5em;
+}
+
+.remember-member-card {
+	padding: 1.5em;
+	background: #fff;
+	border: 1px solid #ddd;
+	border-radius: 4px;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.remember-member-card-header {
+	display: flex;
+	align-items: center;
+	gap: 1em;
+	margin-bottom: 1em;
+}
+
+.remember-member-avatar {
+	flex-shrink: 0;
+}
+
+.remember-member-avatar img,
+.remember-member-avatar .remember-avatar {
+	width: 80px;
+	height: 80px;
+	border-radius: 50%;
+	object-fit: cover;
+}
+
+.remember-member-name-role {
+	flex: 1;
+}
+
+.remember-member-card h4 {
+	margin: 0 0 0.25em 0;
+	font-size: 1.125em;
+	font-weight: 600;
+}
+
+.remember-member-card .remember-member-role {
+	margin: 0;
+	font-size: 0.875em;
+	color: #646970;
+}
+
+.remember-member-card p {
+	margin: 0.5em 0;
+	font-size: 0.9375em;
+}
+
+.remember-member-card .remember-member-info {
+	margin-top: 0.75em;
+	padding-top: 0.75em;
+	border-top: 1px solid #ddd;
+}
+
+.remember-member-card .remember-member-info p {
+	color: #646970;
+	font-size: 0.875em;
+}
+
+/* Responsive Design */
+@media (max-width: 782px) {
+	.remember-dashboard-grid {
+		grid-template-columns: 1fr;
+	}
+
+	.remember-event-header {
+		flex-direction: column;
+		align-items: flex-start;
+	}
+
+	.remember-member-directory {
+		grid-template-columns: 1fr;
+	}
+
+	.remember-form-control {
+		max-width: 100%;
+	}
+}
+
+/* FSE Theme Compatibility */
+.wp-block-group .remember-dashboard,
+.wp-block-group .remember-events-list,
+.wp-block-group .remember-apply-form {
+	max-width: 100%;
+}
+
+/* Print Styles */
+@media print {
+	.remember-button,
+	.remember-event-footer,
+	.remember-form-group {
+		display: none;
+	}
+}

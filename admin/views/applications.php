@@ -150,6 +150,7 @@ if ( isset( $_GET['view'] ) ) {
 		$viewing_user = $viewing_member ? get_user_by( 'ID', $viewing_application->member_id ) : null;
 		
 		// Get event role info
+		global $wpdb;
 		$viewing_event_role = $wpdb->get_row( $wpdb->prepare(
 			"SELECT er.*, r.role_name FROM {$wpdb->prefix}remember_event_roles er 
 			JOIN {$wpdb->prefix}remember_roles r ON er.role_id = r.role_id 

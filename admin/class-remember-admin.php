@@ -202,6 +202,17 @@ class Remember_Admin {
 			array( $this, 'display_import_export_page' )
 		);
 
+		// Setup Wizard (hidden page, only shown when needed)
+		// Use 'remember' as parent to avoid null issues, but it won't show in menu
+		add_submenu_page(
+			'remember',
+			__( 'reMember Setup', 'remember' ),
+			'', // Empty menu title makes it hidden
+			'remember_access_settings',
+			'remember-setup',
+			array( $this, 'display_setup_wizard' )
+		);
+
 		Remember_Logger::debug( 'Admin menu registered' );
 	}
 
@@ -309,6 +320,139 @@ class Remember_Admin {
 	}
 
 	/**
+	 * Process setup wizard form submission.
+	 * Called on admin_init to process before any output.
+	 *
+	 * @since    1.0.0
+	 */
+	public function process_setup_wizard() {
+		// Only process if we're on the setup wizard page
+		if ( ! isset( $_GET['page'] ) || 'remember-setup' !== $_GET['page'] ) {
+			return;
+		}
+
+		// Only process POST requests
+		if ( ! isset( $_POST['remember_setup_action'] ) ) {
+			return;
+		}
+
+		if ( ! check_admin_referer( 'remember_setup_wizard', 'remember_setup_nonce' ) ) {
+			return;
+		}
+
+		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-page-creator.php';
+		
+		$action = sanitize_text_field( $_POST['remember_setup_action'] );
+		
+		if ( 'setup_pages' === $action ) {
+			$default_pages = Remember_Page_Creator::get_default_pages();
+			$pages_created = 0;
+			$pages_linked = 0;
+			
+			foreach ( $default_pages as $key => $page_data ) {
+				$selection = isset( $_POST[ 'page_' . $key ] ) ? sanitize_text_field( $_POST[ 'page_' . $key ] ) : 'skip';
+				
+				if ( 'create' === $selection ) {
+					// Create new page
+					$created = Remember_Page_Creator::create_pages( array( $key ) );
+					if ( ! empty( $created ) ) {
+						$pages_created++;
+					}
+				} elseif ( 'skip' !== $selection && is_numeric( $selection ) ) {
+					// Link to existing page - add shortcode if not already present
+					$page_id = absint( $selection );
+					$page = get_post( $page_id );
+					
+					if ( $page && 'page' === $page->post_type ) {
+						// Store the mapping
+						$created_pages = Remember_Page_Creator::get_created_pages();
+						$created_pages[ $key ] = $page_id;
+						update_option( 'remember_created_pages', $created_pages );
+						
+						// Add shortcode to page if not already present
+						if ( strpos( $page->post_content, $page_data['shortcode'] ) === false ) {
+							$new_content = $page->post_content . "\n\n" . $page_data['shortcode'];
+							wp_update_post( array(
+								'ID' => $page_id,
+								'post_content' => $new_content,
+							) );
+						}
+						$pages_linked++;
+					}
+				}
+			}
+			
+			// Clear the setup wizard transient
+			delete_transient( 'remember_show_setup_wizard' );
+			
+			// Redirect to settings page with success message
+			$message = '';
+			if ( $pages_created > 0 && $pages_linked > 0 ) {
+				$message = sprintf(
+					__( 'Successfully created %d page(s) and linked %d page(s).', 'remember' ),
+					$pages_created,
+					$pages_linked
+				);
+			} elseif ( $pages_created > 0 ) {
+				$message = sprintf(
+					_n( 'Successfully created %d page.', 'Successfully created %d pages.', $pages_created, 'remember' ),
+					$pages_created
+				);
+			} elseif ( $pages_linked > 0 ) {
+				$message = sprintf(
+					_n( 'Successfully linked %d page.', 'Successfully linked %d pages.', $pages_linked, 'remember' ),
+					$pages_linked
+				);
+			}
+			
+			if ( $message ) {
+				wp_safe_redirect( add_query_arg( 'pages_setup', urlencode( $message ), admin_url( 'admin.php?page=remember-settings' ) ) );
+			} else {
+				wp_safe_redirect( admin_url( 'admin.php?page=remember-settings' ) );
+			}
+			exit;
+		} elseif ( 'skip' === $action ) {
+			// Clear the setup wizard transient
+			delete_transient( 'remember_show_setup_wizard' );
+			wp_safe_redirect( admin_url( 'admin.php?page=remember-settings' ) );
+			exit;
+		}
+	}
+
+	/**
+	 * Render the setup wizard page.
+	 *
+	 * @since    1.0.0
+	 */
+	public function display_setup_wizard() {
+		include_once 'views/setup-wizard.php';
+	}
+
+	/**
+	 * Check if setup wizard should be shown and redirect.
+	 *
+	 * @since    1.0.0
+	 */
+	public function maybe_show_setup_wizard() {
+		// Only show to admins
+		if ( ! current_user_can( 'remember_access_settings' ) ) {
+			return;
+		}
+
+		// Check if we should show the setup wizard
+		if ( get_transient( 'remember_show_setup_wizard' ) ) {
+			// Don't redirect if already on setup page
+			if ( isset( $_GET['page'] ) && 'remember-setup' === $_GET['page'] ) {
+				return;
+			}
+
+			// Redirect to setup wizard
+			wp_safe_redirect( admin_url( 'admin.php?page=remember-setup' ) );
+			exit;
+		}
+	}
+
+	/**
 	 * AJAX handler to get event roles for an event.
 	 *
 	 * @since    1.0.0
@@ -323,8 +467,33 @@ class Remember_Admin {
 		}
 		
 		require_once plugin_dir_path( __FILE__ ) . '../includes/models/class-event.php';
+		require_once plugin_dir_path( __FILE__ ) . '../includes/models/class-member.php';
+		
 		$event_model = new Remember_Event();
+		$member_model = new Remember_Member();
+		
+		// Get all event roles for this event
 		$event_roles = $event_model->get_event_roles( $event_id );
+		
+		// If user is logged in, filter to only roles they're assigned
+		if ( is_user_logged_in() ) {
+			$member_id = get_current_user_id();
+			$member_event_role_ids = $member_model->get_member_event_role_ids( $member_id );
+			
+			// Filter event roles to only those the member has
+			if ( ! empty( $member_event_role_ids ) ) {
+				$filtered_roles = array();
+				foreach ( $event_roles as $event_role ) {
+					if ( in_array( absint( $event_role->role_id ), array_map( 'absint', $member_event_role_ids ), true ) ) {
+						$filtered_roles[] = $event_role;
+					}
+				}
+				$event_roles = $filtered_roles;
+			} else {
+				// Member has no event roles assigned, so they can't apply
+				$event_roles = array();
+			}
+		}
 		
 		// Format for response
 		$formatted_roles = array();
