@@ -205,6 +205,11 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 			'emergency_contact_last' => isset( $_POST['emergency_contact_last'] ) ? sanitize_text_field( $_POST['emergency_contact_last'] ) : '',
 			'emergency_contact_phone' => isset( $_POST['emergency_contact_phone'] ) ? sanitize_text_field( $_POST['emergency_contact_phone'] ) : '',
 			'emergency_contact_relationship' => isset( $_POST['emergency_contact_relationship'] ) ? sanitize_text_field( $_POST['emergency_contact_relationship'] ) : '',
+			'share_email_with_events' => isset( $_POST['share_email_with_events'] ) ? 1 : 0,
+			'share_phone_with_events' => isset( $_POST['share_phone_with_events'] ) ? 1 : 0,
+			'share_location_with_events' => isset( $_POST['share_location_with_events'] ) ? 1 : 0,
+			'share_im_with_events' => isset( $_POST['share_im_with_events'] ) ? 1 : 0,
+			'share_interests_with_events' => isset( $_POST['share_interests_with_events'] ) ? 1 : 0,
 			'updated_at' => current_time( 'mysql' ),
 		);
 		

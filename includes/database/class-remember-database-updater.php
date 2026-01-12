@@ -30,9 +30,10 @@ class Remember_Database_Updater {
 		
 		// Check current schema version
 		$current_version = get_option( 'remember_db_version', '0.0.0' );
-		$target_version = '1.1.0'; // Version that adds 'unvetted' status
+		$target_version = '1.2.0'; // Version that adds privacy fields
 		
-		if ( version_compare( $current_version, $target_version, '<' ) ) {
+		// Update to 1.1.0 (unvetted status)
+		if ( version_compare( $current_version, '1.1.0', '<' ) ) {
 			Remember_Logger::info( 'Updating database schema', array( 'from' => $current_version, 'to' => $target_version ) );
 			
 			// Update members table to include 'unvetted' status
@@ -69,8 +70,49 @@ class Remember_Database_Updater {
 			}
 			
 			// Update version
-			update_option( 'remember_db_version', $target_version );
-			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => $target_version ) );
+			update_option( 'remember_db_version', '1.1.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.1.0' ) );
+		}
+		
+		// Update to 1.2.0 (privacy fields)
+		if ( version_compare( $current_version, '1.2.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => $current_version, 'to' => '1.2.0' ) );
+			
+			// Add privacy fields to member_profiles table
+			$profiles_table = $wpdb->prefix . 'remember_member_profiles';
+			
+			// Check if columns already exist
+			$columns = $wpdb->get_col( "SHOW COLUMNS FROM {$profiles_table}" );
+			
+			$privacy_fields = array(
+				'share_email_with_events'      => "TINYINT(1) DEFAULT 0",
+				'share_phone_with_events'      => "TINYINT(1) DEFAULT 0",
+				'share_location_with_events'   => "TINYINT(1) DEFAULT 0",
+				'share_im_with_events'         => "TINYINT(1) DEFAULT 0",
+				'share_interests_with_events'  => "TINYINT(1) DEFAULT 0",
+			);
+			
+			$previous_field = 'emergency_contact_relationship';
+			foreach ( $privacy_fields as $field_name => $field_type ) {
+				if ( ! in_array( $field_name, $columns, true ) ) {
+					// Escape field names for SQL
+					$field_name_safe = esc_sql( $field_name );
+					$previous_field_safe = esc_sql( $previous_field );
+					
+					$result = $wpdb->query( "ALTER TABLE {$profiles_table} ADD COLUMN `{$field_name_safe}` {$field_type} AFTER `{$previous_field_safe}`" );
+					
+					if ( $result !== false ) {
+						Remember_Logger::info( "Added {$field_name} column to member_profiles table" );
+					} else {
+						Remember_Logger::error( "Failed to add {$field_name} column", array( 'error' => $wpdb->last_error ) );
+					}
+				}
+				$previous_field = $field_name;
+			}
+			
+			// Update version
+			update_option( 'remember_db_version', '1.2.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.2.0' ) );
 		}
 	}
 }

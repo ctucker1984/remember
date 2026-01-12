@@ -383,6 +383,88 @@ $max_image_size = isset( $options['photo_max_dimensions'] ) ? absint( $options['
 		</table>
 	<?php endif; ?>
 	
+	<!-- Privacy Settings: Share with Event Members -->
+	<h3><?php esc_html_e( 'Privacy Settings', 'remember' ); ?></h3>
+	<p class="description"><?php esc_html_e( 'Control what contact information is shared with other members when you are accepted into an event. These settings apply globally to all events.', 'remember' ); ?></p>
+	<table class="form-table">
+		<tr>
+			<th scope="row"><?php esc_html_e( 'Share with Event Members', 'remember' ); ?></th>
+			<td>
+				<fieldset>
+					<p>
+						<label class="remember-toggle-switch">
+							<input type="checkbox" 
+								   name="share_email_with_events" 
+								   value="1" 
+								   <?php checked( $view_profile && isset( $view_profile->share_email_with_events ) ? $view_profile->share_email_with_events : 0, 1 ); ?>>
+							<span class="remember-toggle-slider"></span>
+						</label>
+						<label for="share_email_with_events" style="margin-left: 10px; cursor: pointer;">
+							<strong><?php esc_html_e( 'Email Address', 'remember' ); ?></strong>
+							<span class="description" style="margin-left: 5px;"><?php esc_html_e( 'Share your email address with other members in events you\'re accepted to.', 'remember' ); ?></span>
+						</label>
+					</p>
+					
+					<p>
+						<label class="remember-toggle-switch">
+							<input type="checkbox" 
+								   name="share_phone_with_events" 
+								   value="1" 
+								   <?php checked( $view_profile && isset( $view_profile->share_phone_with_events ) ? $view_profile->share_phone_with_events : 0, 1 ); ?>>
+							<span class="remember-toggle-slider"></span>
+						</label>
+						<label for="share_phone_with_events" style="margin-left: 10px; cursor: pointer;">
+							<strong><?php esc_html_e( 'Phone Number', 'remember' ); ?></strong>
+							<span class="description" style="margin-left: 5px;"><?php esc_html_e( 'Share your cell phone number with other members in events you\'re accepted to.', 'remember' ); ?></span>
+						</label>
+					</p>
+					
+					<p>
+						<label class="remember-toggle-switch">
+							<input type="checkbox" 
+								   name="share_location_with_events" 
+								   value="1" 
+								   <?php checked( $view_profile && isset( $view_profile->share_location_with_events ) ? $view_profile->share_location_with_events : 0, 1 ); ?>>
+							<span class="remember-toggle-slider"></span>
+						</label>
+						<label for="share_location_with_events" style="margin-left: 10px; cursor: pointer;">
+							<strong><?php esc_html_e( 'City, State, Country', 'remember' ); ?></strong>
+							<span class="description" style="margin-left: 5px;"><?php esc_html_e( 'Share your city, state, and country with other members in events you\'re accepted to.', 'remember' ); ?></span>
+						</label>
+					</p>
+					
+					<p>
+						<label class="remember-toggle-switch">
+							<input type="checkbox" 
+								   name="share_im_with_events" 
+								   value="1" 
+								   <?php checked( $view_profile && isset( $view_profile->share_im_with_events ) ? $view_profile->share_im_with_events : 0, 1 ); ?>>
+							<span class="remember-toggle-slider"></span>
+						</label>
+						<label for="share_im_with_events" style="margin-left: 10px; cursor: pointer;">
+							<strong><?php esc_html_e( 'Instant Messenger', 'remember' ); ?></strong>
+							<span class="description" style="margin-left: 5px;"><?php esc_html_e( 'Share your IM handle and type with other members in events you\'re accepted to.', 'remember' ); ?></span>
+						</label>
+					</p>
+					
+					<p>
+						<label class="remember-toggle-switch">
+							<input type="checkbox" 
+								   name="share_interests_with_events" 
+								   value="1" 
+								   <?php checked( $view_profile && isset( $view_profile->share_interests_with_events ) ? $view_profile->share_interests_with_events : 0, 1 ); ?>>
+							<span class="remember-toggle-slider"></span>
+						</label>
+						<label for="share_interests_with_events" style="margin-left: 10px; cursor: pointer;">
+							<strong><?php esc_html_e( 'Interests', 'remember' ); ?></strong>
+							<span class="description" style="margin-left: 5px;"><?php esc_html_e( 'Share your interests with other members in events you\'re accepted to.', 'remember' ); ?></span>
+						</label>
+					</p>
+				</fieldset>
+			</td>
+		</tr>
+	</table>
+	
 	<p class="submit">
 		<input type="submit" class="button button-primary" value="<?php esc_attr_e( 'Save Profile', 'remember' ); ?>">
 		<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-members&view=' . $view_member_id ) ); ?>" class="button"><?php esc_html_e( 'Cancel', 'remember' ); ?></a>
