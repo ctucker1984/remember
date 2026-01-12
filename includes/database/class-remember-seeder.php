@@ -201,18 +201,32 @@ class Remember_Seeder {
 	private function seed_social_media_platforms() {
 		$table_name = $this->prefix . 'social_media_platforms';
 		
-		// Check if X/Twitter exists
-		$twitter = $this->wpdb->get_var( $this->wpdb->prepare( "SELECT platform_id FROM $table_name WHERE platform_name = %s", 'X (Twitter)' ) );
-		if ( ! $twitter ) {
-			$this->wpdb->insert(
-				$table_name,
-				array(
-					'platform_name' => 'X (Twitter)',
-					'is_active'     => 1,
-					'sort_order'    => 0,
-					'created_at'    => current_time( 'mysql' ),
-				)
-			);
+		$platforms = array(
+			'Facebook',
+			'Instagram',
+			'X (Twitter)',
+			'LinkedIn',
+			'YouTube',
+			'TikTok',
+			'Snapchat',
+			'Discord',
+			'Reddit',
+			'Threads',
+		);
+
+		foreach ( $platforms as $index => $platform_name ) {
+			$existing = $this->wpdb->get_var( $this->wpdb->prepare( "SELECT platform_id FROM $table_name WHERE platform_name = %s", $platform_name ) );
+			if ( ! $existing ) {
+				$this->wpdb->insert(
+					$table_name,
+					array(
+						'platform_name' => $platform_name,
+						'is_active'     => 1,
+						'sort_order'    => $index,
+						'created_at'    => current_time( 'mysql' ),
+					)
+				);
+			}
 		}
 	}
 

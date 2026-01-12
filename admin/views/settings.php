@@ -190,6 +190,144 @@ if ( isset( $_POST['remember_settings_action'] ) && check_admin_referer( 'rememb
 			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Notification settings saved successfully.', 'remember' ) . '</p></div>';
 		}
 	}
+	
+	// Handle social media platform management
+	if ( 'add_social_platform' === $action ) {
+		global $wpdb;
+		$platform_name = isset( $_POST['new_platform_name'] ) ? sanitize_text_field( wp_unslash( $_POST['new_platform_name'] ) ) : '';
+		if ( ! empty( $platform_name ) ) {
+			$existing = $wpdb->get_var( $wpdb->prepare(
+				"SELECT platform_id FROM {$wpdb->prefix}remember_social_media_platforms WHERE platform_name = %s",
+				$platform_name
+			) );
+			if ( ! $existing ) {
+				$wpdb->insert(
+					$wpdb->prefix . 'remember_social_media_platforms',
+					array(
+						'platform_name' => $platform_name,
+						'is_active'     => 1,
+						'sort_order'    => 999,
+						'created_at'    => current_time( 'mysql' ),
+					)
+				);
+				echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Social media platform added successfully.', 'remember' ) . '</p></div>';
+			} else {
+				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Platform already exists.', 'remember' ) . '</p></div>';
+			}
+		}
+	}
+	
+	if ( 'update_social_platforms' === $action ) {
+		global $wpdb;
+		if ( isset( $_POST['platforms'] ) && is_array( $_POST['platforms'] ) ) {
+			$updated_count = 0;
+			$error_count = 0;
+			$skipped_count = 0;
+			
+			// First, verify all platform IDs exist
+			$all_platform_ids = array_keys( $_POST['platforms'] );
+			$all_platform_ids = array_map( 'absint', $all_platform_ids );
+			$all_platform_ids = array_filter( $all_platform_ids );
+			
+			if ( ! empty( $all_platform_ids ) ) {
+				$placeholders = implode( ',', array_fill( 0, count( $all_platform_ids ), '%d' ) );
+				$existing_platforms = $wpdb->get_col( $wpdb->prepare(
+					"SELECT platform_id FROM {$wpdb->prefix}remember_social_media_platforms WHERE platform_id IN ($placeholders)",
+					$all_platform_ids
+				) );
+				$existing_platform_ids = array_map( 'absint', $existing_platforms );
+			} else {
+				$existing_platform_ids = array();
+			}
+			
+			foreach ( $_POST['platforms'] as $platform_id => $platform_data ) {
+				$platform_id = absint( $platform_id );
+				if ( $platform_id <= 0 ) {
+					$skipped_count++;
+					continue; // Skip invalid platform IDs
+				}
+				
+				// Verify platform exists
+				if ( ! in_array( $platform_id, $existing_platform_ids, true ) ) {
+					$skipped_count++;
+					Remember_Logger::warning( 'Attempted to update non-existent social media platform', array( 'platform_id' => $platform_id ) );
+					continue;
+				}
+				
+				// Validate and sanitize data
+				$platform_name = isset( $platform_data['name'] ) ? sanitize_text_field( wp_unslash( $platform_data['name'] ) ) : '';
+				if ( empty( $platform_name ) ) {
+					$error_count++;
+					Remember_Logger::warning( 'Skipped update for platform with empty name', array( 'platform_id' => $platform_id ) );
+					continue; // Skip if name is empty
+				}
+				
+				$is_active = isset( $platform_data['is_active'] ) ? 1 : 0;
+				$sort_order = isset( $platform_data['sort_order'] ) && $platform_data['sort_order'] !== '' 
+					? absint( $platform_data['sort_order'] ) 
+					: 0;
+				
+				$result = $wpdb->update(
+					$wpdb->prefix . 'remember_social_media_platforms',
+					array(
+						'platform_name' => $platform_name,
+						'is_active'     => $is_active,
+						'sort_order'    => $sort_order,
+					),
+					array( 'platform_id' => $platform_id ),
+					array( '%s', '%d', '%d' ),
+					array( '%d' )
+				);
+				
+				if ( false === $result ) {
+					$error_count++;
+					Remember_Logger::error( 'Failed to update social media platform', array(
+						'platform_id' => $platform_id,
+						'platform_name' => $platform_name,
+						'sort_order' => $sort_order,
+						'db_error' => $wpdb->last_error,
+						'db_query' => $wpdb->last_query,
+					) );
+				} elseif ( $result >= 0 ) {
+					// $result can be 0 if no rows changed, or > 0 if rows were updated
+					$updated_count++;
+				}
+			}
+			
+			$message_parts = array();
+			if ( $updated_count > 0 ) {
+				$message_parts[] = sprintf( esc_html__( '%d platform(s) updated', 'remember' ), $updated_count );
+			}
+			if ( $error_count > 0 ) {
+				$message_parts[] = sprintf( esc_html__( '%d update(s) failed', 'remember' ), $error_count );
+			}
+			if ( $skipped_count > 0 ) {
+				$message_parts[] = sprintf( esc_html__( '%d platform(s) skipped', 'remember' ), $skipped_count );
+			}
+			
+			if ( $error_count > 0 || $skipped_count > 0 ) {
+				echo '<div class="notice notice-warning is-dismissible"><p>' . 
+					implode( ', ', $message_parts ) . 
+					'. ' . esc_html__( 'Please check the error log for details.', 'remember' ) . 
+					'</p></div>';
+			} elseif ( $updated_count > 0 ) {
+				echo '<div class="notice notice-success is-dismissible"><p>' . 
+					esc_html__( 'Social media platforms updated successfully.', 'remember' ) . 
+					'</p></div>';
+			}
+		}
+	}
+	
+	if ( 'delete_social_platform' === $action && isset( $_POST['platform_id'] ) ) {
+		global $wpdb;
+		$platform_id = absint( $_POST['platform_id'] );
+		$wpdb->delete(
+			$wpdb->prefix . 'remember_social_media_platforms',
+			array( 'platform_id' => $platform_id ),
+			array( '%d' )
+		);
+		echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Social media platform deleted successfully.', 'remember' ) . '</p></div>';
+	}
 }
 
 // Get all notification settings
@@ -205,6 +343,12 @@ foreach ( $all_notifications as $notification ) {
 
 $options = get_option( 'remember_options', array() );
 $plugin_version = get_option( 'remember_version', REMEMBER_VERSION );
+
+// Get social media platforms
+global $wpdb;
+$social_platforms = $wpdb->get_results(
+	"SELECT * FROM {$wpdb->prefix}remember_social_media_platforms ORDER BY sort_order ASC, platform_name ASC"
+);
 ?>
 
 <div class="wrap remember-settings">
@@ -217,6 +361,7 @@ $plugin_version = get_option( 'remember_version', REMEMBER_VERSION );
 		<h2 class="nav-tab-wrapper">
 			<a href="#general" class="nav-tab nav-tab-active"><?php esc_html_e( 'General', 'remember' ); ?></a>
 			<a href="#shortcodes" class="nav-tab" id="shortcodes-tab-link"><?php esc_html_e( 'Shortcodes', 'remember' ); ?></a>
+			<a href="#social-media" class="nav-tab"><?php esc_html_e( 'Social Media', 'remember' ); ?></a>
 			<a href="#quickbooks" class="nav-tab"><?php esc_html_e( 'QuickBooks', 'remember' ); ?></a>
 			<a href="#notifications" class="nav-tab"><?php esc_html_e( 'Notifications', 'remember' ); ?></a>
 		</h2>
@@ -427,6 +572,81 @@ $plugin_version = get_option( 'remember_version', REMEMBER_VERSION );
 					</p>
 				</div>
 			</div>
+		</div>
+
+		<!-- Social Media Platforms -->
+		<div id="social-media" class="remember-settings-tab" style="display: none;">
+			<h2><?php esc_html_e( 'Social Media Platforms', 'remember' ); ?></h2>
+			<p class="description"><?php esc_html_e( 'Manage social media platforms that members can link to their profiles.', 'remember' ); ?></p>
+			
+			<form method="post" action="" style="margin-bottom: 30px; padding: 20px; background: #fff; border: 1px solid #ccd0d4; border-radius: 4px;">
+				<?php wp_nonce_field( 'remember_settings_action', 'remember_settings_nonce' ); ?>
+				<input type="hidden" name="remember_settings_action" value="add_social_platform">
+				<h3><?php esc_html_e( 'Add New Platform', 'remember' ); ?></h3>
+				<table class="form-table">
+					<tr>
+						<th><label for="new_platform_name"><?php esc_html_e( 'Platform Name', 'remember' ); ?></label></th>
+						<td>
+							<input type="text" id="new_platform_name" name="new_platform_name" class="regular-text" required>
+							<p class="description"><?php esc_html_e( 'Enter the name of the social media platform (e.g., "Mastodon", "Bluesky").', 'remember' ); ?></p>
+						</td>
+					</tr>
+				</table>
+				<p class="submit">
+					<input type="submit" class="button button-primary" value="<?php esc_attr_e( 'Add Platform', 'remember' ); ?>">
+				</p>
+			</form>
+			
+			<form method="post" action="" style="padding: 20px; background: #fff; border: 1px solid #ccd0d4; border-radius: 4px;">
+				<?php wp_nonce_field( 'remember_settings_action', 'remember_settings_nonce' ); ?>
+				<input type="hidden" name="remember_settings_action" value="update_social_platforms">
+				<h3><?php esc_html_e( 'Manage Platforms', 'remember' ); ?></h3>
+				<?php if ( ! empty( $social_platforms ) ) : ?>
+					<table class="wp-list-table widefat fixed striped">
+						<thead>
+							<tr>
+								<th style="width: 40%;"><?php esc_html_e( 'Platform Name', 'remember' ); ?></th>
+								<th style="width: 15%;"><?php esc_html_e( 'Sort Order', 'remember' ); ?></th>
+								<th style="width: 15%;"><?php esc_html_e( 'Active', 'remember' ); ?></th>
+								<th style="width: 30%;"><?php esc_html_e( 'Actions', 'remember' ); ?></th>
+							</tr>
+						</thead>
+						<tbody>
+							<?php foreach ( $social_platforms as $platform ) : ?>
+								<tr>
+									<td>
+										<input type="text" name="platforms[<?php echo esc_attr( $platform->platform_id ); ?>][name]" 
+											value="<?php echo esc_attr( $platform->platform_name ); ?>" class="regular-text" required>
+									</td>
+									<td>
+										<input type="number" name="platforms[<?php echo esc_attr( $platform->platform_id ); ?>][sort_order]" 
+											value="<?php echo esc_attr( $platform->sort_order ); ?>" class="small-text" min="0">
+									</td>
+									<td>
+										<label>
+											<input type="checkbox" name="platforms[<?php echo esc_attr( $platform->platform_id ); ?>][is_active]" 
+												value="1" <?php checked( $platform->is_active, 1 ); ?>>
+											<?php esc_html_e( 'Active', 'remember' ); ?>
+										</label>
+									</td>
+									<td>
+										<button type="button" class="button button-small remember-delete-platform" 
+											data-platform-id="<?php echo esc_attr( $platform->platform_id ); ?>"
+											data-platform-name="<?php echo esc_attr( $platform->platform_name ); ?>">
+											<?php esc_html_e( 'Delete', 'remember' ); ?>
+										</button>
+									</td>
+								</tr>
+							<?php endforeach; ?>
+						</tbody>
+					</table>
+					<p class="submit">
+						<input type="submit" class="button button-primary" value="<?php esc_attr_e( 'Save Changes', 'remember' ); ?>">
+					</p>
+				<?php else : ?>
+					<p><?php esc_html_e( 'No social media platforms configured.', 'remember' ); ?></p>
+				<?php endif; ?>
+			</form>
 		</div>
 
 		<!-- QuickBooks Settings -->
@@ -860,3 +1080,46 @@ $plugin_version = get_option( 'remember_version', REMEMBER_VERSION );
 		<?php submit_button(); ?>
 	</form>
 </div>
+
+<script type="text/javascript">
+jQuery(document).ready(function($) {
+	// Handle delete platform button clicks
+	$('.remember-delete-platform').on('click', function(e) {
+		e.preventDefault();
+		var $button = $(this);
+		var platformId = $button.data('platform-id');
+		var platformName = $button.data('platform-name');
+		
+		if (!confirm('<?php echo esc_js( __( 'Are you sure you want to delete the platform "%s"?', 'remember' ) ); ?>'.replace('%s', platformName))) {
+			return;
+		}
+		
+		// Create a form and submit it
+		var $form = $('<form>', {
+			method: 'post',
+			action: ''
+		});
+		
+		$form.append($('<input>', {
+			type: 'hidden',
+			name: 'remember_settings_action',
+			value: 'delete_social_platform'
+		}));
+		
+		$form.append($('<input>', {
+			type: 'hidden',
+			name: 'platform_id',
+			value: platformId
+		}));
+		
+		$form.append($('<input>', {
+			type: 'hidden',
+			name: 'remember_settings_nonce',
+			value: '<?php echo esc_js( wp_create_nonce( 'remember_settings_action' ) ); ?>'
+		}));
+		
+		$('body').append($form);
+		$form.submit();
+	});
+});
+</script>

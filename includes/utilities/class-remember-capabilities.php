@@ -54,6 +54,56 @@ class Remember_Capabilities {
 	}
 
 	/**
+	 * Sync role capabilities to WordPress user capabilities.
+	 * Grants all capabilities from assigned reMember roles to the WordPress user.
+	 *
+	 * @param int $user_id WordPress user ID.
+	 * @return bool True on success, false on failure.
+	 */
+	public static function sync_user_capabilities_from_roles( $user_id ) {
+		global $wpdb;
+		$user = get_userdata( $user_id );
+		if ( ! $user ) {
+			return false;
+		}
+		
+		// Get all reMember capabilities
+		$all_capabilities = self::get_all_capabilities();
+		$all_cap_keys = array_keys( $all_capabilities );
+		
+		// Remove all reMember capabilities first
+		foreach ( $all_cap_keys as $cap ) {
+			$user->remove_cap( $cap );
+		}
+		
+		// Get all roles assigned to this member
+		$role_ids = $wpdb->get_col( $wpdb->prepare(
+			"SELECT role_id FROM {$wpdb->prefix}remember_member_roles WHERE member_id = %d",
+			$user_id
+		) );
+		
+		if ( empty( $role_ids ) ) {
+			return true; // No roles assigned, capabilities already removed
+		}
+		
+		// Get all capabilities from assigned roles
+		$placeholders = implode( ',', array_fill( 0, count( $role_ids ), '%d' ) );
+		$capabilities = $wpdb->get_col( $wpdb->prepare(
+			"SELECT DISTINCT capability FROM {$wpdb->prefix}remember_role_capabilities WHERE role_id IN ($placeholders)",
+			$role_ids
+		) );
+		
+		// Grant capabilities to user
+		foreach ( $capabilities as $capability ) {
+			if ( in_array( $capability, $all_cap_keys, true ) ) {
+				$user->add_cap( $capability );
+			}
+		}
+		
+		return true;
+	}
+
+	/**
 	 * Get capability label.
 	 *
 	 * @param string $capability Capability name.

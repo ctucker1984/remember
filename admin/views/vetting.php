@@ -29,6 +29,10 @@ if ( isset( $_POST['remember_vetting_action'] ) && check_admin_referer( 'remembe
 	
 	if ( $vetting_id > 0 ) {
 		if ( 'assign' === $action ) {
+			// Check capability
+			if ( ! current_user_can( 'remember_update_vetting' ) ) {
+				wp_die( __( 'You do not have sufficient permissions to perform this action.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+			}
 			$vetter_id = isset( $_POST['primary_vetter_id'] ) ? absint( $_POST['primary_vetter_id'] ) : 0;
 			if ( $vetter_id > 0 ) {
 				$vetter_user = get_user_by( 'ID', $vetter_id );
@@ -49,6 +53,10 @@ if ( isset( $_POST['remember_vetting_action'] ) && check_admin_referer( 'remembe
 				}
 			}
 		} elseif ( 'schedule' === $action ) {
+			// Check capability
+			if ( ! current_user_can( 'remember_update_vetting' ) ) {
+				wp_die( __( 'You do not have sufficient permissions to perform this action.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+			}
 			// Handle both old datetime-local format and new separate fields
 			$scheduled_at = '';
 			if ( isset( $_POST['scheduled_at'] ) && ! empty( $_POST['scheduled_at'] ) ) {
@@ -88,6 +96,10 @@ if ( isset( $_POST['remember_vetting_action'] ) && check_admin_referer( 'remembe
 				}
 			}
 		} elseif ( 'complete' === $action ) {
+			// Check capability
+			if ( ! current_user_can( 'remember_update_vetting' ) ) {
+				wp_die( __( 'You do not have sufficient permissions to perform this action.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+			}
 			$decision = isset( $_POST['decision'] ) ? sanitize_text_field( $_POST['decision'] ) : '';
 			if ( in_array( $decision, array( 'accepted', 'rejected' ), true ) ) {
 				$result = $vetting_model->complete( $vetting_id, $decision );
@@ -137,6 +149,10 @@ if ( isset( $_POST['remember_vetting_action'] ) && check_admin_referer( 'remembe
 				}
 			}
 		} elseif ( 'add_note' === $action ) {
+			// Check capability
+			if ( ! current_user_can( 'remember_update_vetting' ) ) {
+				wp_die( __( 'You do not have sufficient permissions to perform this action.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+			}
 			$note_content = isset( $_POST['note_content'] ) ? sanitize_textarea_field( $_POST['note_content'] ) : '';
 			$is_admin_only = isset( $_POST['is_admin_only'] ) ? 1 : 0;
 			if ( ! empty( $note_content ) ) {
@@ -147,6 +163,10 @@ if ( isset( $_POST['remember_vetting_action'] ) && check_admin_referer( 'remembe
 				}
 			}
 		} elseif ( 'add_collaborator' === $action ) {
+			// Check capability
+			if ( ! current_user_can( 'remember_update_vetting' ) ) {
+				wp_die( __( 'You do not have sufficient permissions to perform this action.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+			}
 			$collaborator_id = isset( $_POST['collaborator_id'] ) ? absint( $_POST['collaborator_id'] ) : 0;
 			if ( $collaborator_id > 0 ) {
 				$collab_user = get_user_by( 'ID', $collaborator_id );
@@ -164,6 +184,10 @@ if ( isset( $_POST['remember_vetting_action'] ) && check_admin_referer( 'remembe
 				}
 			}
 		} elseif ( 'update_status' === $action ) {
+			// Check capability
+			if ( ! current_user_can( 'remember_update_vetting' ) ) {
+				wp_die( __( 'You do not have sufficient permissions to perform this action.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+			}
 			$new_status = isset( $_POST['status'] ) ? sanitize_text_field( $_POST['status'] ) : '';
 			if ( ! empty( $new_status ) ) {
 				// Get current status for comparison
@@ -194,6 +218,11 @@ if ( isset( $_POST['remember_vetting_action'] ) && check_admin_referer( 'remembe
 			}
 		}
 	} elseif ( 'create_vetting' === $action ) {
+		// Check capability
+		if ( ! current_user_can( 'remember_create_vetting' ) ) {
+			wp_die( __( 'You do not have sufficient permissions to perform this action.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+		}
+		
 		// Create new vetting case
 		$member_id = isset( $_POST['member_id'] ) ? absint( $_POST['member_id'] ) : 0;
 		$primary_vetter_id = isset( $_POST['primary_vetter_id'] ) ? absint( $_POST['primary_vetter_id'] ) : 0;
@@ -252,7 +281,11 @@ if ( ! $viewing_vetting ) {
 	if ( ! empty( $filter_status ) && 'all' !== $filter_status ) {
 		$vetting_records = $vetting_model->get_by_status( $filter_status );
 	} else {
-		$vetting_records = $vetting_model->get_all();
+		// Get all records ordered by created_at DESC (newest first)
+		$vetting_records = $vetting_model->get_all( array(
+			'orderby' => 'created_at',
+			'order'   => 'DESC',
+		) );
 	}
 }
 
@@ -315,7 +348,7 @@ $decision_labels = array(
 	<?php if ( $viewing_vetting ) : ?>
 		<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-vetting' ) ); ?>" class="page-title-action"><?php esc_html_e( 'Back to Vetting Queue', 'remember' ); ?></a>
 	<?php else : ?>
-		<?php if ( ! $show_create_form ) : ?>
+		<?php if ( ! $show_create_form && current_user_can( 'remember_create_vetting' ) ) : ?>
 			<button type="button" class="page-title-action" onclick="document.getElementById('remember-create-vetting').style.display='block'; this.style.display='none';"><?php esc_html_e( 'Create Vetting Case', 'remember' ); ?></button>
 		<?php endif; ?>
 	<?php endif; ?>
@@ -406,6 +439,7 @@ $decision_labels = array(
 		<table class="wp-list-table widefat fixed striped">
 			<thead>
 				<tr>
+					<th class="column-case" style="width: 80px;"><?php esc_html_e( 'Case', 'remember' ); ?></th>
 					<th class="column-member"><?php esc_html_e( 'Member', 'remember' ); ?></th>
 					<th class="column-vetter"><?php esc_html_e( 'Primary Vetter', 'remember' ); ?></th>
 					<th class="column-status"><?php esc_html_e( 'Status', 'remember' ); ?></th>
@@ -421,6 +455,11 @@ $decision_labels = array(
 					$vetter = get_user_by( 'ID', $vetting->primary_vetter_id );
 				?>
 					<tr>
+						<td class="column-case">
+							<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-vetting&view=' . $vetting->vetting_id ) ); ?>">
+								<strong>#<?php echo esc_html( $vetting->vetting_id ); ?></strong>
+							</a>
+						</td>
 						<td class="column-member">
 							<?php if ( $user ) : ?>
 								<strong><a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-members&view=' . $vetting->member_id ) ); ?>"><?php echo esc_html( $user->display_name ); ?></a></strong><br>

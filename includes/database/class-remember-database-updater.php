@@ -30,7 +30,7 @@ class Remember_Database_Updater {
 		
 		// Check current schema version
 		$current_version = get_option( 'remember_db_version', '0.0.0' );
-		$target_version = '1.3.0'; // Version that removes unique constraint on vetting.member_id
+		$target_version = '1.5.0'; // Version that adds show_in_frontend to roles
 		
 		// Update to 1.1.0 (unvetted status)
 		if ( version_compare( $current_version, '1.1.0', '<' ) ) {
@@ -173,6 +173,53 @@ class Remember_Database_Updater {
 			// Update version
 			update_option( 'remember_db_version', '1.4.0' );
 			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.4.0' ) );
+		}
+		
+		// Update to 1.5.0 (add show_in_frontend field to roles table)
+		if ( version_compare( $current_version, '1.5.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => $current_version, 'to' => '1.5.0' ) );
+			
+			$roles_table = $wpdb->prefix . 'remember_roles';
+			
+			// Check if column already exists
+			$columns = $wpdb->get_col( "SHOW COLUMNS FROM {$roles_table}" );
+			
+			if ( ! in_array( 'show_in_frontend', $columns, true ) ) {
+				// Add show_in_frontend column with default value of 1 (true)
+				$result = $wpdb->query( "ALTER TABLE {$roles_table} ADD COLUMN show_in_frontend BOOLEAN DEFAULT 1 AFTER is_event_role" );
+				
+				if ( $result !== false ) {
+					Remember_Logger::info( 'Added show_in_frontend column to roles table' );
+				} else {
+					Remember_Logger::error( 'Failed to add show_in_frontend column', array( 'error' => $wpdb->last_error ) );
+				}
+			}
+			
+			// Set Event Administrator role to not show in frontend (always do this, even if column already existed)
+			$event_admin_role_id = $wpdb->get_var( $wpdb->prepare(
+				"SELECT role_id FROM {$roles_table} WHERE role_name = %s",
+				'Event Administrator'
+			) );
+			
+			if ( $event_admin_role_id ) {
+				$update_result = $wpdb->update(
+					$roles_table,
+					array( 'show_in_frontend' => 0 ),
+					array( 'role_id' => $event_admin_role_id ),
+					array( '%d' ),
+					array( '%d' )
+				);
+				
+				if ( $update_result !== false ) {
+					Remember_Logger::info( 'Set Event Administrator role to not show in frontend' );
+				} else {
+					Remember_Logger::error( 'Failed to update Event Administrator role', array( 'error' => $wpdb->last_error ) );
+				}
+			}
+			
+			// Update version
+			update_option( 'remember_db_version', '1.5.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.5.0' ) );
 		}
 	}
 }

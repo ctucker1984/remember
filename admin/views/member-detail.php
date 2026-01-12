@@ -15,6 +15,9 @@ if ( ! defined( 'WPINC' ) ) {
 // Also: $view_social_media, $view_dietary_restrictions, $view_medical_accommodations, $view_allergies
 // Check if editing
 $is_editing = isset( $_GET['edit'] ) && $_GET['edit'] === '1';
+if ( $is_editing && ! current_user_can( 'remember_update_members' ) ) {
+	wp_die( __( 'You do not have sufficient permissions to edit members.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+}
 ?>
 
 <div class="remember-member-detail" style="margin: 20px 0;">

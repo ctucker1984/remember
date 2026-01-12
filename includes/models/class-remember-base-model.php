@@ -114,11 +114,15 @@ abstract class Remember_Base_Model {
 	 * Insert a new record.
 	 *
 	 * @param array $data Data to insert.
-	 * @return int|false The number of rows inserted, or false on error.
+	 * @return int|false The ID of the inserted record, or false on error.
 	 */
 	public function insert( $data ) {
 		$result = $this->wpdb->insert( $this->get_table(), $data );
 		if ( $result ) {
+			// If primary key was provided in data, return it; otherwise return insert_id
+			if ( isset( $data[ $this->primary_key ] ) ) {
+				return $data[ $this->primary_key ];
+			}
 			return $this->wpdb->insert_id;
 		}
 		// Store error for retrieval (capture immediately before any other DB operations)

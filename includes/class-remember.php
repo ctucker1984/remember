@@ -161,6 +161,15 @@ class Remember {
 		$this->loader->add_action( 'edit_user_profile', $plugin_admin, 'add_timezone_field_to_profile' );
 		$this->loader->add_action( 'personal_options_update', $plugin_admin, 'save_timezone_field' );
 		$this->loader->add_action( 'edit_user_profile_update', $plugin_admin, 'save_timezone_field' );
+		
+		// Redirect non-admin users to member dashboard after login
+		$this->loader->add_filter( 'login_redirect', $this, 'redirect_non_admin_to_dashboard', 10, 3 );
+		
+		// Sync role capabilities on user login (run early)
+		$this->loader->add_action( 'wp_login', $this, 'sync_user_capabilities_on_login', 5, 2 );
+		
+		// Also redirect on admin_init as fallback (after capabilities are synced)
+		$this->loader->add_action( 'admin_init', $this, 'maybe_redirect_to_remember_dashboard' );
 	}
 
 	/**
@@ -284,6 +293,138 @@ class Remember {
 			require_once plugin_dir_path( __FILE__ ) . 'utilities/class-remember-logger.php';
 			Remember_Logger::debug( 'Deleted member record on user deletion', array( 'user_id' => $user_id ) );
 		}
+	}
+
+	/**
+	 * Redirect non-admin users to member dashboard after login.
+	 *
+	 * @param string  $redirect_to URL to redirect to.
+	 * @param string  $request     The requested redirect destination.
+	 * @param WP_User $user        WP_User object.
+	 * @return string Redirect URL.
+	 */
+	public function redirect_non_admin_to_dashboard( $redirect_to, $request, $user ) {
+		// Don't redirect if there's an error or if user is admin
+		if ( is_wp_error( $user ) || ! $user ) {
+			return $redirect_to;
+		}
+		
+		// Sync capabilities first (in case they weren't synced yet)
+		require_once plugin_dir_path( __FILE__ ) . 'utilities/class-remember-capabilities.php';
+		Remember_Capabilities::sync_user_capabilities_from_roles( $user->ID );
+		
+		// Refresh user object to get updated capabilities
+		$user = get_userdata( $user->ID );
+		if ( ! $user ) {
+			return $redirect_to;
+		}
+		
+		// Check if user has any reMember admin capabilities
+		$all_caps = Remember_Capabilities::get_all_capabilities();
+		$has_remember_admin_cap = false;
+		foreach ( array_keys( $all_caps ) as $cap ) {
+			if ( user_can( $user, $cap ) ) {
+				$has_remember_admin_cap = true;
+				break;
+			}
+		}
+		
+		// If user has reMember admin capabilities, redirect to reMember admin dashboard
+		if ( $has_remember_admin_cap ) {
+			return admin_url( 'admin.php?page=remember' );
+		}
+		
+		// If user is WordPress admin, don't redirect
+		if ( user_can( $user, 'manage_options' ) ) {
+			return $redirect_to;
+		}
+
+		// Check if user is a member (for front-end dashboard redirect)
+		require_once plugin_dir_path( __FILE__ ) . 'models/class-member.php';
+		$member_model = new Remember_Member();
+		$member = $member_model->get( $user->ID );
+
+		if ( $member ) {
+			// Get dashboard page URL
+			$created_pages = get_option( 'remember_created_pages', array() );
+			$dashboard_page_id = isset( $created_pages['dashboard'] ) ? $created_pages['dashboard'] : 0;
+			
+			if ( $dashboard_page_id ) {
+				return get_permalink( $dashboard_page_id );
+			}
+		}
+
+		return $redirect_to;
+	}
+	
+	/**
+	 * Redirect users with reMember capabilities to reMember dashboard on admin_init.
+	 * This is a fallback in case the login_redirect filter didn't catch it.
+	 */
+	public function maybe_redirect_to_remember_dashboard() {
+		// Only redirect if we're in admin and not already on the reMember dashboard
+		if ( ! is_admin() ) {
+			return;
+		}
+		
+		// Don't redirect if already on reMember pages or if doing AJAX
+		if ( isset( $_GET['page'] ) && strpos( $_GET['page'], 'remember' ) === 0 ) {
+			return;
+		}
+		
+		if ( defined( 'DOING_AJAX' ) && DOING_AJAX ) {
+			return;
+		}
+		
+		$user = wp_get_current_user();
+		if ( ! $user || ! $user->ID ) {
+			return;
+		}
+		
+		// Sync capabilities first
+		require_once plugin_dir_path( __FILE__ ) . 'utilities/class-remember-capabilities.php';
+		Remember_Capabilities::sync_user_capabilities_from_roles( $user->ID );
+		
+		// Refresh user object
+		$user = get_userdata( $user->ID );
+		if ( ! $user ) {
+			return;
+		}
+		
+		// Check if user has any reMember admin capabilities
+		$all_caps = Remember_Capabilities::get_all_capabilities();
+		$has_remember_admin_cap = false;
+		foreach ( array_keys( $all_caps ) as $cap ) {
+			if ( user_can( $user, $cap ) ) {
+				$has_remember_admin_cap = true;
+				break;
+			}
+		}
+		
+		// If user has reMember capabilities but is not a WordPress admin, redirect to reMember dashboard
+		if ( $has_remember_admin_cap && ! user_can( $user, 'manage_options' ) ) {
+			// Only redirect if we're on a non-reMember admin page (like profile.php)
+			$current_screen = get_current_screen();
+			if ( $current_screen && $current_screen->id !== 'toplevel_page_remember' ) {
+				wp_safe_redirect( admin_url( 'admin.php?page=remember' ) );
+				exit;
+			}
+		}
+	}
+
+	/**
+	 * Sync user capabilities from assigned roles on login.
+	 *
+	 * @param string  $user_login User login name.
+	 * @param WP_User $user       WP_User object.
+	 */
+	public function sync_user_capabilities_on_login( $user_login, $user ) {
+		if ( ! $user || ! $user->ID ) {
+			return;
+		}
+		
+		require_once plugin_dir_path( __FILE__ ) . 'utilities/class-remember-capabilities.php';
+		Remember_Capabilities::sync_user_capabilities_from_roles( $user->ID );
 	}
 
 	/**

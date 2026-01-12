@@ -37,6 +37,11 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 	$member_id = isset( $_POST['member_id'] ) ? absint( $_POST['member_id'] ) : 0;
 	
 	if ( 'add' === $action ) {
+		// Check capability
+		if ( ! current_user_can( 'remember_create_members' ) ) {
+			wp_die( __( 'You do not have sufficient permissions to perform this action.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+		}
+		
 		// Create WordPress user first
 		$username = isset( $_POST['username'] ) ? sanitize_user( $_POST['username'] ) : '';
 		$email = isset( $_POST['email'] ) ? sanitize_email( $_POST['email'] ) : '';
@@ -138,6 +143,11 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 			}
 		}
 	} elseif ( $member_id > 0 && 'update_status' === $action ) {
+		// Check capability
+		if ( ! current_user_can( 'remember_update_members' ) ) {
+			wp_die( __( 'You do not have sufficient permissions to perform this action.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+		}
+		
 		$status = isset( $_POST['status'] ) ? sanitize_text_field( $_POST['status'] ) : '';
 		if ( ! empty( $status ) ) {
 			$result = $member_model->update_status( $member_id, $status );
@@ -150,6 +160,11 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 			}
 		}
 	} elseif ( $member_id > 0 && 'update_profile' === $action ) {
+		// Check capability
+		if ( ! current_user_can( 'remember_update_members' ) ) {
+			wp_die( __( 'You do not have sufficient permissions to perform this action.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+		}
+		
 		global $wpdb;
 		
 		// Update WordPress user display_name and nickname if provided
@@ -348,6 +363,9 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 						WHERE member_id = %d AND role_id IN ($placeholders)",
 						array_merge( array( $member_id ), $roles_to_remove )
 					) );
+					// Sync capabilities after role removal
+					require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-capabilities.php';
+					Remember_Capabilities::sync_user_capabilities_from_roles( $member_id );
 				}
 				
 				// Add new roles
@@ -367,6 +385,10 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 						);
 					}
 				}
+				
+				// Sync capabilities to WordPress user
+				require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-capabilities.php';
+				Remember_Capabilities::sync_user_capabilities_from_roles( $member_id );
 				
 				Remember_Logger::info( 'Member roles updated', array( 'member_id' => $member_id, 'roles' => $selected_role_ids ) );
 			}

@@ -21,6 +21,11 @@ $role_model = new Remember_Role();
 
 // Handle delete (GET request)
 if ( isset( $_GET['delete'] ) && isset( $_GET['remember_role_nonce'] ) && check_admin_referer( 'remember_role_action', 'remember_role_nonce' ) ) {
+	// Check capability
+	if ( ! current_user_can( 'remember_delete_roles' ) ) {
+		wp_die( __( 'You do not have sufficient permissions to perform this action.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+	}
+	
 	$role_id = absint( $_GET['delete'] );
 	// Delete capabilities first
 	global $wpdb;
@@ -41,6 +46,11 @@ if ( isset( $_POST['remember_role_action'] ) && check_admin_referer( 'remember_r
 	$action = sanitize_text_field( $_POST['remember_role_action'] );
 	
 	if ( 'add' === $action ) {
+		// Check capability
+		if ( ! current_user_can( 'remember_create_roles' ) ) {
+			wp_die( __( 'You do not have sufficient permissions to perform this action.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+		}
+		
 		$data = array(
 			'role_name'     => sanitize_text_field( $_POST['role_name'] ),
 			'role_type'     => sanitize_text_field( $_POST['role_type'] ),
@@ -61,14 +71,20 @@ if ( isset( $_POST['remember_role_action'] ) && check_admin_referer( 'remember_r
 			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to create role.', 'remember' ) . '</p></div>';
 		}
 	} elseif ( 'update_role' === $action && isset( $_POST['role_id'] ) ) {
+		// Check capability
+		if ( ! current_user_can( 'remember_update_roles' ) ) {
+			wp_die( __( 'You do not have sufficient permissions to perform this action.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+		}
+		
 		$role_id = absint( $_POST['role_id'] );
 		
 		// Update role details
 		$data = array(
-			'role_name'     => sanitize_text_field( $_POST['role_name'] ),
-			'role_type'     => sanitize_text_field( $_POST['role_type'] ),
-			'is_event_role' => ( 'event' === $_POST['role_type'] ) ? 1 : 0,
-			'description'   => sanitize_textarea_field( $_POST['description'] ),
+			'role_name'        => sanitize_text_field( $_POST['role_name'] ),
+			'role_type'        => sanitize_text_field( $_POST['role_type'] ),
+			'is_event_role'    => ( 'event' === $_POST['role_type'] ) ? 1 : 0,
+			'show_in_frontend' => isset( $_POST['show_in_frontend'] ) && $_POST['show_in_frontend'] ? 1 : 0,
+			'description'      => sanitize_textarea_field( $_POST['description'] ),
 		);
 		$update_result = $role_model->update( $role_id, $data );
 		
@@ -154,6 +170,16 @@ $editing_role_capabilities = $editing_role ? $role_model->get_capabilities( $edi
 					<tr>
 						<th><label for="description"><?php esc_html_e( 'Description', 'remember' ); ?></label></th>
 						<td><textarea id="description" name="description" class="large-text" rows="3"></textarea></td>
+					</tr>
+					<tr>
+						<th><label for="show_in_frontend"><?php esc_html_e( 'Show in Front End', 'remember' ); ?></label></th>
+						<td>
+							<label>
+								<input type="checkbox" id="show_in_frontend" name="show_in_frontend" value="1" checked>
+								<?php esc_html_e( 'Show this role in the front-end application form', 'remember' ); ?>
+							</label>
+							<p class="description"><?php esc_html_e( 'If unchecked, this role will not appear as an option when members apply for events on the front end. It can still be assigned manually in the admin.', 'remember' ); ?></p>
+						</td>
 					</tr>
 					<tr>
 						<th><label><?php esc_html_e( 'Capabilities', 'remember' ); ?></label></th>
@@ -323,6 +349,16 @@ $editing_role_capabilities = $editing_role ? $role_model->get_capabilities( $edi
 					<tr>
 						<th><label for="description"><?php esc_html_e( 'Description', 'remember' ); ?></label></th>
 						<td><textarea id="description" name="description" class="large-text" rows="3"><?php echo esc_textarea( $editing_role->description ? $editing_role->description : '' ); ?></textarea></td>
+					</tr>
+					<tr>
+						<th><label for="show_in_frontend_edit"><?php esc_html_e( 'Show in Front End', 'remember' ); ?></label></th>
+						<td>
+							<label>
+								<input type="checkbox" id="show_in_frontend_edit" name="show_in_frontend" value="1" <?php checked( isset( $editing_role->show_in_frontend ) ? $editing_role->show_in_frontend : 1, 1 ); ?>>
+								<?php esc_html_e( 'Show this role in the front-end application form', 'remember' ); ?>
+							</label>
+							<p class="description"><?php esc_html_e( 'If unchecked, this role will not appear as an option when members apply for events on the front end. It can still be assigned manually in the admin.', 'remember' ); ?></p>
+						</td>
 					</tr>
 					<tr>
 						<th><label><?php esc_html_e( 'Capabilities', 'remember' ); ?></label></th>

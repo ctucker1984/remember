@@ -31,6 +31,11 @@ if ( isset( $_POST['remember_location_action'] ) && check_admin_referer( 'rememb
 	$action = sanitize_text_field( $_POST['remember_location_action'] );
 	
 	if ( 'add' === $action ) {
+		// Check capability
+		if ( ! current_user_can( 'remember_create_locations' ) ) {
+			wp_die( __( 'You do not have sufficient permissions to perform this action.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+		}
+		
 		$data = array(
 			'location_name'  => sanitize_text_field( $_POST['location_name'] ),
 			'address_street' => sanitize_text_field( $_POST['address_street'] ),
@@ -62,6 +67,11 @@ if ( isset( $_POST['remember_location_action'] ) && check_admin_referer( 'rememb
 			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to create location.', 'remember' ) . '</p></div>';
 		}
 	} elseif ( 'edit' === $action && isset( $_POST['location_id'] ) ) {
+		// Check capability
+		if ( ! current_user_can( 'remember_update_locations' ) ) {
+			wp_die( __( 'You do not have sufficient permissions to perform this action.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+		}
+		
 		$location_id = absint( $_POST['location_id'] );
 		$location = $location_model->get( $location_id );
 		
@@ -107,6 +117,11 @@ if ( isset( $_POST['remember_location_action'] ) && check_admin_referer( 'rememb
 			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to update location.', 'remember' ) . '</p></div>';
 		}
 	} elseif ( 'delete' === $action && isset( $_GET['delete'] ) ) {
+		// Check capability
+		if ( ! current_user_can( 'remember_delete_locations' ) ) {
+			wp_die( __( 'You do not have sufficient permissions to perform this action.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+		}
+		
 		$location_id = absint( $_GET['delete'] );
 		$location = $location_model->get( $location_id );
 		
@@ -154,6 +169,11 @@ if ( isset( $_GET['view'] ) ) {
 		$location_events = $event_model->get_historical_by_location( $view_id );
 	}
 } elseif ( isset( $_GET['edit'] ) ) {
+	// Check capability
+	if ( ! current_user_can( 'remember_update_locations' ) ) {
+		wp_die( __( 'You do not have sufficient permissions to edit locations.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+	}
+	
 	$edit_id = absint( $_GET['edit'] );
 	$editing_location = $location_model->get( $edit_id );
 }
@@ -188,9 +208,13 @@ function remember_format_address( $location ) {
 	<h1 class="wp-heading-inline"><?php echo esc_html( get_admin_page_title() ); ?></h1>
 	
 	<?php if ( ! $viewing_location && ! $editing_location ) : ?>
-		<button type="button" class="page-title-action" onclick="document.getElementById('remember-add-location').style.display='block'; this.style.display='none';"><?php esc_html_e( 'Add New', 'remember' ); ?></button>
+		<?php if ( current_user_can( 'remember_create_locations' ) ) : ?>
+			<button type="button" class="page-title-action" onclick="document.getElementById('remember-add-location').style.display='block'; this.style.display='none';"><?php esc_html_e( 'Add New', 'remember' ); ?></button>
+		<?php endif; ?>
 	<?php elseif ( $viewing_location ) : ?>
-		<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-locations&edit=' . $viewing_location->location_id ) ); ?>" class="page-title-action"><?php esc_html_e( 'Edit', 'remember' ); ?></a>
+		<?php if ( current_user_can( 'remember_update_locations' ) ) : ?>
+			<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-locations&edit=' . $viewing_location->location_id ) ); ?>" class="page-title-action"><?php esc_html_e( 'Edit', 'remember' ); ?></a>
+		<?php endif; ?>
 		<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-locations' ) ); ?>" class="page-title-action"><?php esc_html_e( 'Back to List', 'remember' ); ?></a>
 	<?php else : ?>
 		<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-locations' ) ); ?>" class="page-title-action"><?php esc_html_e( 'Cancel', 'remember' ); ?></a>
@@ -384,9 +408,13 @@ function remember_format_address( $location ) {
 							<?php endif; ?>
 						</td>
 						<td class="column-actions">
-							<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-locations&view=' . $location->location_id ) ); ?>"><?php esc_html_e( 'View', 'remember' ); ?></a> |
-							<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-locations&edit=' . $location->location_id ) ); ?>"><?php esc_html_e( 'Edit', 'remember' ); ?></a> |
-							<a href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin.php?page=remember-locations&delete=' . $location->location_id ), 'remember_location_action', 'remember_location_nonce' ) ); ?>" onclick="return confirm('<?php esc_attr_e( 'Are you sure you want to delete this location?', 'remember' ); ?>');"><?php esc_html_e( 'Delete', 'remember' ); ?></a>
+							<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-locations&view=' . $location->location_id ) ); ?>"><?php esc_html_e( 'View', 'remember' ); ?></a>
+							<?php if ( current_user_can( 'remember_update_locations' ) ) : ?>
+								| <a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-locations&edit=' . $location->location_id ) ); ?>"><?php esc_html_e( 'Edit', 'remember' ); ?></a>
+							<?php endif; ?>
+							<?php if ( current_user_can( 'remember_delete_locations' ) ) : ?>
+								| <a href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin.php?page=remember-locations&delete=' . $location->location_id ), 'remember_location_action', 'remember_location_nonce' ) ); ?>" onclick="return confirm('<?php esc_attr_e( 'Are you sure you want to delete this location?', 'remember' ); ?>');"><?php esc_html_e( 'Delete', 'remember' ); ?></a>
+							<?php endif; ?>
 						</td>
 					</tr>
 				<?php endforeach; ?>

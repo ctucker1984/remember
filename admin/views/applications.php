@@ -31,6 +31,11 @@ if ( isset( $_POST['remember_application_action'] ) && check_admin_referer( 'rem
 	$application_id = isset( $_POST['application_id'] ) ? absint( $_POST['application_id'] ) : 0;
 	
 	if ( 'add' === $action ) {
+		// Check capability
+		if ( ! current_user_can( 'remember_create_applications' ) ) {
+			wp_die( __( 'You do not have sufficient permissions to perform this action.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+		}
+		
 		$event_id = isset( $_POST['event_id'] ) ? absint( $_POST['event_id'] ) : 0;
 		$member_id = isset( $_POST['member_id'] ) ? absint( $_POST['member_id'] ) : 0;
 		$event_role_id = isset( $_POST['event_role_id'] ) ? absint( $_POST['event_role_id'] ) : 0;
@@ -70,6 +75,10 @@ if ( isset( $_POST['remember_application_action'] ) && check_admin_referer( 'rem
 		}
 	} elseif ( $application_id > 0 ) {
 		if ( 'accept' === $action ) {
+			// Check capability
+			if ( ! current_user_can( 'remember_update_applications' ) ) {
+				wp_die( __( 'You do not have sufficient permissions to perform this action.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+			}
 			$result = $application_model->update_status( $application_id, 'accepted', get_current_user_id() );
 			if ( $result !== false ) {
 				Remember_Logger::info( 'Application accepted', array( 'application_id' => $application_id ) );
@@ -97,6 +106,10 @@ if ( isset( $_POST['remember_application_action'] ) && check_admin_referer( 'rem
 				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to accept application.', 'remember' ) . '</p></div>';
 			}
 		} elseif ( 'decline' === $action ) {
+			// Check capability
+			if ( ! current_user_can( 'remember_update_applications' ) ) {
+				wp_die( __( 'You do not have sufficient permissions to perform this action.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+			}
 			$result = $application_model->update_status( $application_id, 'declined', get_current_user_id() );
 			if ( $result !== false ) {
 				Remember_Logger::info( 'Application declined', array( 'application_id' => $application_id ) );
@@ -106,6 +119,11 @@ if ( isset( $_POST['remember_application_action'] ) && check_admin_referer( 'rem
 				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to decline application.', 'remember' ) . '</p></div>';
 			}
 		} elseif ( 'waitlist' === $action ) {
+			// Check capability
+			if ( ! current_user_can( 'remember_update_applications' ) ) {
+				wp_die( __( 'You do not have sufficient permissions to perform this action.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+			}
+			
 			$result = $application_model->update_status( $application_id, 'waitlisted', get_current_user_id() );
 			if ( $result !== false ) {
 				Remember_Logger::info( 'Application waitlisted', array( 'application_id' => $application_id ) );

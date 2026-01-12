@@ -42,6 +42,42 @@ class Remember_Application extends Remember_Base_Model {
 	 * @return int|false Application ID or false on error.
 	 */
 	public function create( $data ) {
+		// Validate event_role_id exists before creating
+		if ( isset( $data['event_role_id'] ) && ! empty( $data['event_role_id'] ) ) {
+			global $wpdb;
+			$event_role_exists = $wpdb->get_var( $wpdb->prepare(
+				"SELECT COUNT(*) FROM {$wpdb->prefix}remember_event_roles WHERE event_role_id = %d",
+				$data['event_role_id']
+			) );
+			
+			if ( ! $event_role_exists ) {
+				$this->last_error = sprintf( 
+					__( 'Invalid event_role_id: %d. The event role does not exist.', 'remember' ),
+					$data['event_role_id']
+				);
+				return false;
+			}
+			
+			// Also validate that the event_role belongs to the specified event
+			if ( isset( $data['event_id'] ) && ! empty( $data['event_id'] ) ) {
+				$event_role_belongs_to_event = $wpdb->get_var( $wpdb->prepare(
+					"SELECT COUNT(*) FROM {$wpdb->prefix}remember_event_roles 
+					WHERE event_role_id = %d AND event_id = %d",
+					$data['event_role_id'],
+					$data['event_id']
+				) );
+				
+				if ( ! $event_role_belongs_to_event ) {
+					$this->last_error = sprintf( 
+						__( 'Event role %d does not belong to event %d.', 'remember' ),
+						$data['event_role_id'],
+						$data['event_id']
+					);
+					return false;
+				}
+			}
+		}
+		
 		$data['applied_at'] = current_time( 'mysql' );
 		return $this->insert( $data );
 	}
@@ -149,5 +185,35 @@ class Remember_Application extends Remember_Base_Model {
 				$member_id
 			)
 		);
+	}
+
+	/**
+	 * Find and return applications with orphaned event_role_id values.
+	 *
+	 * @return array Array of application objects with orphaned event_role_id.
+	 */
+	public function get_orphaned_applications() {
+		global $wpdb;
+		return $wpdb->get_results(
+			"SELECT a.* 
+			FROM {$this->get_table()} a
+			LEFT JOIN {$wpdb->prefix}remember_event_roles er ON a.event_role_id = er.event_role_id
+			WHERE er.event_role_id IS NULL"
+		);
+	}
+
+	/**
+	 * Clean up orphaned applications (delete applications with invalid event_role_id).
+	 *
+	 * @return int Number of applications deleted.
+	 */
+	public function cleanup_orphaned_applications() {
+		global $wpdb;
+		$deleted = $wpdb->query(
+			"DELETE a FROM {$this->get_table()} a
+			LEFT JOIN {$wpdb->prefix}remember_event_roles er ON a.event_role_id = er.event_role_id
+			WHERE er.event_role_id IS NULL"
+		);
+		return $deleted;
 	}
 }

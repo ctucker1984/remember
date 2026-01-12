@@ -85,11 +85,36 @@ class Remember_Admin {
 		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-logger.php';
 		Remember_Logger::debug( 'Building admin menu' );
 
-		// Main menu item (Dashboard)
+		// Check if user has any reMember capability
+		$has_remember_cap = false;
+		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-capabilities.php';
+		$all_caps = Remember_Capabilities::get_all_capabilities();
+		foreach ( array_keys( $all_caps ) as $cap ) {
+			if ( current_user_can( $cap ) ) {
+				$has_remember_cap = true;
+				break;
+			}
+		}
+		
+		// If user has no reMember capabilities, don't show menu
+		if ( ! $has_remember_cap ) {
+			return;
+		}
+
+		// Main menu item (Dashboard) - use the first capability the user has
+		$main_cap = 'remember_read_events';
+		// Try to find a capability the user actually has
+		foreach ( array( 'remember_read_vetting', 'remember_read_events', 'remember_read_members', 'remember_read_applications' ) as $cap ) {
+			if ( current_user_can( $cap ) ) {
+				$main_cap = $cap;
+				break;
+			}
+		}
+		
 		add_menu_page(
 			__( 'reMember Dashboard', 'remember' ),
 			__( 'reMember', 'remember' ),
-			'remember_read_events',
+			$main_cap,
 			'remember',
 			array( $this, 'display_dashboard_page' ),
 			'dashicons-groups',
@@ -101,7 +126,7 @@ class Remember_Admin {
 			'remember',
 			__( 'Dashboard', 'remember' ),
 			__( 'Dashboard', 'remember' ),
-			'remember_read_events',
+			$main_cap,
 			'remember',
 			array( $this, 'display_dashboard_page' )
 		);
@@ -222,6 +247,11 @@ class Remember_Admin {
 	 * @since    1.0.0
 	 */
 	public function display_dashboard_page() {
+		// Check capability
+		if ( ! current_user_can( 'remember_read_events' ) && ! current_user_can( 'remember_read_vetting' ) && ! current_user_can( 'remember_read_members' ) ) {
+			wp_die( __( 'You do not have sufficient permissions to access this page.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+		}
+		
 		require_once plugin_dir_path( __FILE__ ) . '../includes/models/class-member.php';
 		require_once plugin_dir_path( __FILE__ ) . '../includes/models/class-event.php';
 		require_once plugin_dir_path( __FILE__ ) . '../includes/models/class-application.php';
@@ -235,6 +265,11 @@ class Remember_Admin {
 	 * @since    1.0.0
 	 */
 	public function display_members_page() {
+		// Check capability
+		if ( ! current_user_can( 'remember_read_members' ) && ! current_user_can( 'remember_read_attendees' ) ) {
+			wp_die( __( 'You do not have sufficient permissions to access this page.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+		}
+		
 		require_once plugin_dir_path( __FILE__ ) . '../includes/models/class-member.php';
 		include_once 'views/members.php';
 	}
@@ -245,6 +280,11 @@ class Remember_Admin {
 	 * @since    1.0.0
 	 */
 	public function display_events_page() {
+		// Check capability
+		if ( ! current_user_can( 'remember_read_events' ) ) {
+			wp_die( __( 'You do not have sufficient permissions to access this page.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+		}
+		
 		require_once plugin_dir_path( __FILE__ ) . '../includes/models/class-event.php';
 		require_once plugin_dir_path( __FILE__ ) . '../includes/models/class-location.php';
 		include_once 'views/events.php';
@@ -256,6 +296,11 @@ class Remember_Admin {
 	 * @since    1.0.0
 	 */
 	public function display_applications_page() {
+		// Check capability
+		if ( ! current_user_can( 'remember_read_applications' ) ) {
+			wp_die( __( 'You do not have sufficient permissions to access this page.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+		}
+		
 		require_once plugin_dir_path( __FILE__ ) . '../includes/models/class-application.php';
 		include_once 'views/applications.php';
 	}
@@ -266,6 +311,11 @@ class Remember_Admin {
 	 * @since    1.0.0
 	 */
 	public function display_vetting_page() {
+		// Check capability
+		if ( ! current_user_can( 'remember_read_vetting' ) ) {
+			wp_die( __( 'You do not have sufficient permissions to access this page.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+		}
+		
 		require_once plugin_dir_path( __FILE__ ) . '../includes/models/class-vetting.php';
 		include_once 'views/vetting.php';
 	}
@@ -276,6 +326,11 @@ class Remember_Admin {
 	 * @since    1.0.0
 	 */
 	public function display_billing_page() {
+		// Check capability
+		if ( ! current_user_can( 'remember_read_billing' ) ) {
+			wp_die( __( 'You do not have sufficient permissions to access this page.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+		}
+		
 		require_once plugin_dir_path( __FILE__ ) . '../includes/models/class-payment.php';
 		include_once 'views/billing.php';
 	}
@@ -286,6 +341,11 @@ class Remember_Admin {
 	 * @since    1.0.0
 	 */
 	public function display_locations_page() {
+		// Check capability
+		if ( ! current_user_can( 'remember_read_locations' ) ) {
+			wp_die( __( 'You do not have sufficient permissions to access this page.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+		}
+		
 		require_once plugin_dir_path( __FILE__ ) . '../includes/models/class-location.php';
 		include_once 'views/locations.php';
 	}
@@ -296,6 +356,11 @@ class Remember_Admin {
 	 * @since    1.0.0
 	 */
 	public function display_roles_page() {
+		// Check capability
+		if ( ! current_user_can( 'remember_read_roles' ) ) {
+			wp_die( __( 'You do not have sufficient permissions to access this page.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+		}
+		
 		require_once plugin_dir_path( __FILE__ ) . '../includes/models/class-role.php';
 		include_once 'views/roles.php';
 	}
@@ -306,6 +371,11 @@ class Remember_Admin {
 	 * @since    1.0.0
 	 */
 	public function display_settings_page() {
+		// Check capability
+		if ( ! current_user_can( 'remember_access_settings' ) ) {
+			wp_die( __( 'You do not have sufficient permissions to access this page.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+		}
+		
 		include_once 'views/settings.php';
 	}
 
@@ -315,6 +385,11 @@ class Remember_Admin {
 	 * @since    1.0.0
 	 */
 	public function display_import_export_page() {
+		// Check capability
+		if ( ! current_user_can( 'remember_access_settings' ) ) {
+			wp_die( __( 'You do not have sufficient permissions to access this page.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+		}
+		
 		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-import-export.php';
 		include_once 'views/import-export.php';
 	}
@@ -472,30 +547,68 @@ class Remember_Admin {
 		$event_model = new Remember_Event();
 		$member_model = new Remember_Member();
 		
-		// Get all event roles for this event
-		$event_roles = $event_model->get_event_roles( $event_id );
+		global $wpdb;
 		
-		// If user is logged in, filter to only roles they're assigned
-		if ( is_user_logged_in() ) {
-			$member_id = get_current_user_id();
-			$member_event_role_ids = $member_model->get_member_event_role_ids( $member_id );
-			
-			// Filter event roles to only those the member has
-			if ( ! empty( $member_event_role_ids ) ) {
-				$filtered_roles = array();
-				foreach ( $event_roles as $event_role ) {
-					if ( in_array( absint( $event_role->role_id ), array_map( 'absint', $member_event_role_ids ), true ) ) {
-						$filtered_roles[] = $event_role;
-					}
+		// Check if show_in_frontend column exists
+		$columns = $wpdb->get_col( "SHOW COLUMNS FROM {$wpdb->prefix}remember_roles" );
+		$has_show_in_frontend = in_array( 'show_in_frontend', $columns, true );
+		
+		// Check if user is an admin (has any reMember admin capability)
+		// For front-end users, they should NOT have these capabilities
+		$is_admin = current_user_can( 'remember_read_events' ) || current_user_can( 'remember_create_applications' ) || current_user_can( 'remember_update_applications' );
+		
+		if ( $is_admin ) {
+			// Admin users get all roles
+			$event_roles = $event_model->get_event_roles( $event_id );
+		} else {
+			// For non-admin users, filter at the SQL level:
+			// 1. Only roles the member has assigned (join with member_roles)
+			// 2. Only roles with show_in_frontend != 0
+			// 3. Only event roles (role_type = 'event')
+			if ( is_user_logged_in() ) {
+				$member_id = get_current_user_id();
+				
+				if ( $has_show_in_frontend ) {
+					// Filter by member roles AND show_in_frontend
+					$event_roles = $wpdb->get_results(
+						$wpdb->prepare(
+							"SELECT DISTINCT er.*, r.role_name, r.show_in_frontend 
+							FROM {$wpdb->prefix}remember_event_roles er 
+							JOIN {$wpdb->prefix}remember_roles r ON er.role_id = r.role_id 
+							JOIN {$wpdb->prefix}remember_member_roles mr ON r.role_id = mr.role_id 
+							WHERE er.event_id = %d 
+							AND mr.member_id = %d 
+							AND r.role_type = 'event'
+							AND COALESCE(r.show_in_frontend, 1) != 0
+							ORDER BY r.role_name ASC",
+							$event_id,
+							$member_id
+						)
+					);
+				} else {
+					// Column doesn't exist yet - filter by member roles only
+					$event_roles = $wpdb->get_results(
+						$wpdb->prepare(
+							"SELECT DISTINCT er.*, r.role_name 
+							FROM {$wpdb->prefix}remember_event_roles er 
+							JOIN {$wpdb->prefix}remember_roles r ON er.role_id = r.role_id 
+							JOIN {$wpdb->prefix}remember_member_roles mr ON r.role_id = mr.role_id 
+							WHERE er.event_id = %d 
+							AND mr.member_id = %d 
+							AND r.role_type = 'event'
+							ORDER BY r.role_name ASC",
+							$event_id,
+							$member_id
+						)
+					);
 				}
-				$event_roles = $filtered_roles;
 			} else {
-				// Member has no event roles assigned, so they can't apply
+				// Not logged in - return empty (can't apply without being logged in)
 				$event_roles = array();
 			}
 		}
 		
-		// Format for response
+		// Format for response - return event_role_id and role_name
 		$formatted_roles = array();
 		foreach ( $event_roles as $event_role ) {
 			$formatted_roles[] = array(

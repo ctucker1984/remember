@@ -27,19 +27,26 @@ $role_model = new Remember_Role();
 // Get all available event roles for the forms
 $event_roles = $role_model->get_event_roles();
 
+// Initialize editing event role IDs (will be set if editing)
+$editing_event_role_ids = array();
+
 // Handle form submissions
 if ( isset( $_POST['remember_event_action'] ) && check_admin_referer( 'remember_event_action', 'remember_event_nonce' ) ) {
 	$action = sanitize_text_field( $_POST['remember_event_action'] );
 	
 	if ( 'add' === $action ) {
+		// Check capability
+		if ( ! current_user_can( 'remember_create_events' ) ) {
+			wp_die( __( 'You do not have sufficient permissions to perform this action.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+		}
 		$data = array(
-			'event_name'        => sanitize_text_field( $_POST['event_name'] ),
-			'event_description' => sanitize_textarea_field( $_POST['event_description'] ),
+			'event_name'        => sanitize_text_field( wp_unslash( $_POST['event_name'] ) ),
+			'event_description' => sanitize_textarea_field( wp_unslash( $_POST['event_description'] ) ),
 			'location_id'       => ! empty( $_POST['location_id'] ) ? absint( $_POST['location_id'] ) : null,
-			'start_date'        => sanitize_text_field( $_POST['start_date'] ),
-			'end_date'          => sanitize_text_field( $_POST['end_date'] ),
+			'start_date'        => sanitize_text_field( wp_unslash( $_POST['start_date'] ) ),
+			'end_date'          => sanitize_text_field( wp_unslash( $_POST['end_date'] ) ),
 			'is_private'        => isset( $_POST['is_private'] ) ? 1 : 0,
-			'status'            => sanitize_text_field( $_POST['status'] ),
+			'status'            => sanitize_text_field( wp_unslash( $_POST['status'] ) ),
 			'created_by'        => get_current_user_id(),
 		);
 		$event_id = $event_model->create( $data );
@@ -56,15 +63,20 @@ if ( isset( $_POST['remember_event_action'] ) && check_admin_referer( 'remember_
 			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to create event.', 'remember' ) . '</p></div>';
 		}
 	} elseif ( 'edit' === $action && isset( $_POST['event_id'] ) ) {
+		// Check capability
+		if ( ! current_user_can( 'remember_update_events' ) ) {
+			wp_die( __( 'You do not have sufficient permissions to perform this action.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+		}
+		
 		$event_id = absint( $_POST['event_id'] );
 		$data = array(
-			'event_name'        => sanitize_text_field( $_POST['event_name'] ),
-			'event_description' => sanitize_textarea_field( $_POST['event_description'] ),
+			'event_name'        => sanitize_text_field( wp_unslash( $_POST['event_name'] ) ),
+			'event_description' => sanitize_textarea_field( wp_unslash( $_POST['event_description'] ) ),
 			'location_id'       => ! empty( $_POST['location_id'] ) ? absint( $_POST['location_id'] ) : null,
-			'start_date'        => sanitize_text_field( $_POST['start_date'] ),
-			'end_date'          => sanitize_text_field( $_POST['end_date'] ),
+			'start_date'        => sanitize_text_field( wp_unslash( $_POST['start_date'] ) ),
+			'end_date'          => sanitize_text_field( wp_unslash( $_POST['end_date'] ) ),
 			'is_private'        => isset( $_POST['is_private'] ) ? 1 : 0,
-			'status'            => sanitize_text_field( $_POST['status'] ),
+			'status'            => sanitize_text_field( wp_unslash( $_POST['status'] ) ),
 		);
 		$result = $event_model->update( $event_id, $data );
 		if ( $result !== false ) {
@@ -76,13 +88,26 @@ if ( isset( $_POST['remember_event_action'] ) && check_admin_referer( 'remember_
 				// If no roles selected, clear all event roles
 				$event_model->set_event_roles( $event_id, array() );
 			}
-			Remember_Logger::info( 'Event updated', array( 'event_id' => $event_id ) );
+			Remember_Logger::info( 'Event updated', array( 'event_id' => $event_id, 'role_ids' => isset( $_POST['event_roles'] ) ? $_POST['event_roles'] : array() ) );
 			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Event updated successfully.', 'remember' ) . '</p></div>';
+			// Reload the event data to reflect changes
+			$editing_event = $event_model->get( $event_id );
+			if ( $editing_event ) {
+				$editing_event_roles = $event_model->get_event_roles( $event_id );
+				$editing_event_role_ids = array_map( function( $role ) {
+					return $role->role_id;
+				}, $editing_event_roles );
+			}
 		} else {
 			Remember_Logger::error( 'Failed to update event', array( 'event_id' => $event_id ) );
 			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to update event.', 'remember' ) . '</p></div>';
 		}
 	} elseif ( 'delete' === $action && isset( $_GET['delete'] ) ) {
+		// Check capability
+		if ( ! current_user_can( 'remember_delete_events' ) ) {
+			wp_die( __( 'You do not have sufficient permissions to perform this action.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+		}
+		
 		$event_id = absint( $_GET['delete'] );
 		$result = $event_model->delete( $event_id );
 		if ( $result !== false ) {
@@ -114,8 +139,20 @@ if ( isset( $_GET['view'] ) ) {
 		}
 	}
 } elseif ( isset( $_GET['edit'] ) ) {
+	// Check capability
+	if ( ! current_user_can( 'remember_update_events' ) ) {
+		wp_die( __( 'You do not have sufficient permissions to edit events.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+	}
+	
 	$edit_id = absint( $_GET['edit'] );
 	$editing_event = $event_model->get( $edit_id );
+	if ( $editing_event ) {
+		// Get existing event roles for this event
+		$editing_event_roles = $event_model->get_event_roles( $edit_id );
+		$editing_event_role_ids = array_map( function( $role ) {
+			return $role->role_id;
+		}, $editing_event_roles );
+	}
 }
 ?>
 
@@ -123,9 +160,13 @@ if ( isset( $_GET['view'] ) ) {
 	<h1 class="wp-heading-inline"><?php echo esc_html( get_admin_page_title() ); ?></h1>
 	
 	<?php if ( ! $viewing_event && ! $editing_event ) : ?>
-		<button type="button" class="page-title-action" onclick="document.getElementById('remember-add-event').style.display='block'; this.style.display='none';"><?php esc_html_e( 'Add New', 'remember' ); ?></button>
+		<?php if ( current_user_can( 'remember_create_events' ) ) : ?>
+			<button type="button" class="page-title-action" onclick="document.getElementById('remember-add-event').style.display='block'; this.style.display='none';"><?php esc_html_e( 'Add New', 'remember' ); ?></button>
+		<?php endif; ?>
 	<?php elseif ( $viewing_event ) : ?>
-		<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-events&edit=' . $viewing_event->event_id ) ); ?>" class="page-title-action"><?php esc_html_e( 'Edit', 'remember' ); ?></a>
+		<?php if ( current_user_can( 'remember_update_events' ) ) : ?>
+			<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-events&edit=' . $viewing_event->event_id ) ); ?>" class="page-title-action"><?php esc_html_e( 'Edit', 'remember' ); ?></a>
+		<?php endif; ?>
 		<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-events' ) ); ?>" class="page-title-action"><?php esc_html_e( 'Back to List', 'remember' ); ?></a>
 	<?php else : ?>
 		<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-events' ) ); ?>" class="page-title-action"><?php esc_html_e( 'Cancel', 'remember' ); ?></a>
@@ -345,9 +386,13 @@ if ( isset( $_GET['view'] ) ) {
 							<?php endif; ?>
 						</td>
 						<td class="column-actions">
-							<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-events&view=' . $event->event_id ) ); ?>"><?php esc_html_e( 'View', 'remember' ); ?></a> |
-							<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-events&edit=' . $event->event_id ) ); ?>"><?php esc_html_e( 'Edit', 'remember' ); ?></a> |
-							<a href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin.php?page=remember-events&delete=' . $event->event_id ), 'remember_event_action', 'remember_event_nonce' ) ); ?>" onclick="return confirm('<?php esc_attr_e( 'Are you sure you want to delete this event?', 'remember' ); ?>');"><?php esc_html_e( 'Delete', 'remember' ); ?></a>
+							<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-events&view=' . $event->event_id ) ); ?>"><?php esc_html_e( 'View', 'remember' ); ?></a>
+							<?php if ( current_user_can( 'remember_update_events' ) ) : ?>
+								| <a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-events&edit=' . $event->event_id ) ); ?>"><?php esc_html_e( 'Edit', 'remember' ); ?></a>
+							<?php endif; ?>
+							<?php if ( current_user_can( 'remember_delete_events' ) ) : ?>
+								| <a href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin.php?page=remember-events&delete=' . $event->event_id ), 'remember_event_action', 'remember_event_nonce' ) ); ?>" onclick="return confirm('<?php esc_attr_e( 'Are you sure you want to delete this event?', 'remember' ); ?>');"><?php esc_html_e( 'Delete', 'remember' ); ?></a>
+							<?php endif; ?>
 						</td>
 					</tr>
 				<?php endforeach; ?>

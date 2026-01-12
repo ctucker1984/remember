@@ -121,14 +121,41 @@ $is_multi_day = $viewing_event->start_date !== $viewing_event->end_date;
 						$member = $member_model->get( $application->member_id );
 						$user = $member ? get_user_by( 'ID', $application->member_id ) : null;
 						
-						// Get role info
-						global $wpdb;
-						$event_role = $wpdb->get_row( $wpdb->prepare(
-							"SELECT er.*, r.role_name FROM {$wpdb->prefix}remember_event_roles er 
-							JOIN {$wpdb->prefix}remember_roles r ON er.role_id = r.role_id 
-							WHERE er.event_role_id = %d",
-							$application->event_role_id
-						) );
+						// Get role info - join through event_roles to get role_name
+						$event_role = null;
+						if ( ! empty( $application->event_role_id ) ) {
+							global $wpdb;
+							// Query: application.event_role_id -> event_roles.event_role_id -> event_roles.role_id -> roles.role_id -> roles.role_name
+							$event_role = $wpdb->get_row( $wpdb->prepare(
+								"SELECT er.event_role_id, er.event_id, er.role_id, r.role_name 
+								FROM {$wpdb->prefix}remember_event_roles er 
+								LEFT JOIN {$wpdb->prefix}remember_roles r ON er.role_id = r.role_id 
+								WHERE er.event_role_id = %d",
+								$application->event_role_id
+							) );
+							
+							// Debug: if still no role, check if event_role exists at all
+							if ( ! $event_role ) {
+								$event_role_check = $wpdb->get_row( $wpdb->prepare(
+									"SELECT * FROM {$wpdb->prefix}remember_event_roles WHERE event_role_id = %d",
+									$application->event_role_id
+								) );
+								if ( $event_role_check ) {
+									// Event role exists, get role name separately
+									$role = $wpdb->get_row( $wpdb->prepare(
+										"SELECT role_name FROM {$wpdb->prefix}remember_roles WHERE role_id = %d",
+										$event_role_check->role_id
+									) );
+									if ( $role ) {
+										$event_role = (object) array(
+											'event_role_id' => $event_role_check->event_role_id,
+											'role_id' => $event_role_check->role_id,
+											'role_name' => $role->role_name,
+										);
+									}
+								}
+							}
+						}
 					?>
 						<tr>
 							<td class="column-member">
@@ -203,14 +230,41 @@ $is_multi_day = $viewing_event->start_date !== $viewing_event->end_date;
 						$member = $member_model->get( $attendee->member_id );
 						$user = $member ? get_user_by( 'ID', $attendee->member_id ) : null;
 						
-						// Get role info
-						global $wpdb;
-						$event_role = $wpdb->get_row( $wpdb->prepare(
-							"SELECT er.*, r.role_name FROM {$wpdb->prefix}remember_event_roles er 
-							JOIN {$wpdb->prefix}remember_roles r ON er.role_id = r.role_id 
-							WHERE er.event_role_id = %d",
-							$attendee->event_role_id
-						) );
+						// Get role info - join through event_roles to get role_name
+						$event_role = null;
+						if ( ! empty( $attendee->event_role_id ) ) {
+							global $wpdb;
+							// Query: application.event_role_id -> event_roles.event_role_id -> event_roles.role_id -> roles.role_id -> roles.role_name
+							$event_role = $wpdb->get_row( $wpdb->prepare(
+								"SELECT er.event_role_id, er.event_id, er.role_id, r.role_name 
+								FROM {$wpdb->prefix}remember_event_roles er 
+								LEFT JOIN {$wpdb->prefix}remember_roles r ON er.role_id = r.role_id 
+								WHERE er.event_role_id = %d",
+								$attendee->event_role_id
+							) );
+							
+							// Debug: if still no role, check if event_role exists at all
+							if ( ! $event_role ) {
+								$event_role_check = $wpdb->get_row( $wpdb->prepare(
+									"SELECT * FROM {$wpdb->prefix}remember_event_roles WHERE event_role_id = %d",
+									$attendee->event_role_id
+								) );
+								if ( $event_role_check ) {
+									// Event role exists, get role name separately
+									$role = $wpdb->get_row( $wpdb->prepare(
+										"SELECT role_name FROM {$wpdb->prefix}remember_roles WHERE role_id = %d",
+										$event_role_check->role_id
+									) );
+									if ( $role ) {
+										$event_role = (object) array(
+											'event_role_id' => $event_role_check->event_role_id,
+											'role_id' => $event_role_check->role_id,
+											'role_name' => $role->role_name,
+										);
+									}
+								}
+							}
+						}
 					?>
 						<tr>
 							<td class="column-member">

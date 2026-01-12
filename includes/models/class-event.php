@@ -126,7 +126,7 @@ class Remember_Event extends Remember_Base_Model {
 		global $wpdb;
 		return $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT er.*, r.role_name 
+				"SELECT er.*, r.role_name, r.show_in_frontend 
 				FROM {$wpdb->prefix}remember_event_roles er 
 				JOIN {$wpdb->prefix}remember_roles r ON er.role_id = r.role_id 
 				WHERE er.event_id = %d 

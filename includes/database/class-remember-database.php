@@ -304,6 +304,7 @@ class Remember_Database {
 			role_name VARCHAR(100) NOT NULL,
 			role_type ENUM('event', 'system') DEFAULT 'event',
 			is_event_role BOOLEAN DEFAULT 1,
+			show_in_frontend BOOLEAN DEFAULT 1,
 			description TEXT DEFAULT NULL,
 			created_at DATETIME NOT NULL,
 			PRIMARY KEY (role_id),
