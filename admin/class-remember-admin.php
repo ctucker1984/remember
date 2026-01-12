@@ -192,6 +192,16 @@ class Remember_Admin {
 			array( $this, 'display_settings_page' )
 		);
 
+		// Import/Export
+		add_submenu_page(
+			'remember',
+			__( 'Import/Export', 'remember' ),
+			__( 'Import/Export', 'remember' ),
+			'remember_access_settings',
+			'remember-import-export',
+			array( $this, 'display_import_export_page' )
+		);
+
 		Remember_Logger::debug( 'Admin menu registered' );
 	}
 
@@ -286,6 +296,16 @@ class Remember_Admin {
 	 */
 	public function display_settings_page() {
 		include_once 'views/settings.php';
+	}
+
+	/**
+	 * Render the import/export page.
+	 *
+	 * @since    1.0.0
+	 */
+	public function display_import_export_page() {
+		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-import-export.php';
+		include_once 'views/import-export.php';
 	}
 
 	/**

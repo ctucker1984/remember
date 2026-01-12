@@ -321,3 +321,22 @@
 .remember-toggle-switch input:checked:hover + .remember-toggle-slider {
 	background-color: #135e96;
 }
+
+/* Import/Export page styles */
+.remember-import-export-container {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+	gap: 20px;
+}
+
+@media screen and (max-width: 1200px) {
+	.remember-import-export-container {
+		grid-template-columns: 1fr;
+	}
+}
+
+@media screen and (max-width: 782px) {
+	.remember-import-export-container {
+		grid-template-columns: 1fr;
+	}
+}

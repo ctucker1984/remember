@@ -128,4 +128,20 @@ class Remember_Location extends Remember_Base_Model {
 		);
 		return $states ? $states : array();
 	}
+
+	/**
+	 * Get location by name.
+	 *
+	 * @param string $name Location name.
+	 * @return object|null Location object or null if not found.
+	 */
+	public function get_by_name( $name ) {
+		global $wpdb;
+		return $wpdb->get_row(
+			$wpdb->prepare(
+				"SELECT * FROM {$this->get_table()} WHERE location_name = %s LIMIT 1",
+				$name
+			)
+		);
+	}
 }
