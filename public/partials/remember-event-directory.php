@@ -83,7 +83,6 @@ foreach ( $event_roles as $event_role ) {
 ?>
 
 <div class="remember-event-directory">
-	<h2><?php echo esc_html( $event->event_name ); ?></h2>
 	<p class="remember-description"><?php esc_html_e( 'Members accepted to this event. Contact information is shown only if members have chosen to share it.', 'remember' ); ?></p>
 
 	<div class="remember-member-directory">
