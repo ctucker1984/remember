@@ -23,8 +23,13 @@ $all_pages = get_pages( array( 'sort_column' => 'post_title' ) );
 
 <div class="wrap remember-setup-wizard">
 	<h1><?php esc_html_e( 'Welcome to reMember', 'remember' ); ?></h1>
-	
+
 	<div class="remember-setup-content" style="max-width: 900px; margin: 20px 0;">
+		<?php
+		$remember_gs_context = 'wizard';
+		require plugin_dir_path( __FILE__ ) . 'partials/getting-started-static-data.php';
+		?>
+
 		<div style="background: #fff; border: 1px solid #ccd0d4; border-radius: 4px; padding: 30px; margin-bottom: 20px;">
 			<h2 style="margin-top: 0;"><?php esc_html_e( 'Setup Front-End Pages', 'remember' ); ?></h2>
 			<p>
@@ -105,7 +110,10 @@ $all_pages = get_pages( array( 'sort_column' => 'post_title' ) );
 				<?php esc_html_e( 'You can manually create pages and add shortcodes anytime. Visit the Settings page for complete shortcode documentation.', 'remember' ); ?>
 			</p>
 			<p>
-				<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-settings#shortcodes' ) ); ?>" class="button">
+				<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-getting-started' ) ); ?>" class="button">
+					<?php esc_html_e( 'Getting Started (full guide)', 'remember' ); ?>
+				</a>
+				<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-settings#shortcodes' ) ); ?>" class="button" style="margin-left: 8px;">
 					<?php esc_html_e( 'View Shortcode Documentation', 'remember' ); ?>
 				</a>
 			</p>

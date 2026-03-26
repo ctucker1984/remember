@@ -19,6 +19,14 @@ require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remem
 
 Remember_Logger::debug( 'Settings page loaded' );
 
+if ( current_user_can( 'remember_access_settings' ) ) {
+	echo '<div class="notice notice-info" style="margin: 12px 0 18px;"><p>';
+	echo '<strong>' . esc_html__( 'Getting Started', 'remember' ) . '</strong> — ';
+	echo esc_html__( 'Set up locations, roles, optional add-ons (Products), and events in the recommended order, then wire up front-end pages when you are ready.', 'remember' ) . ' ';
+	echo '<a href="' . esc_url( admin_url( 'admin.php?page=remember-getting-started' ) ) . '">' . esc_html__( 'Open the Getting Started guide', 'remember' ) . '</a>';
+	echo '</p></div>';
+}
+
 // Show success message if pages were just set up
 if ( isset( $_GET['pages_setup'] ) ) {
 	$message = urldecode( sanitize_text_field( $_GET['pages_setup'] ) );

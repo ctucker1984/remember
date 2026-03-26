@@ -131,6 +131,16 @@ class Remember_Admin {
 			array( $this, 'display_dashboard_page' )
 		);
 
+		// Getting Started (locations, roles, products, events — plus wizard link).
+		add_submenu_page(
+			'remember',
+			__( 'Getting Started', 'remember' ),
+			__( 'Getting Started', 'remember' ),
+			'remember_read_events',
+			'remember-getting-started',
+			array( $this, 'display_getting_started_page' )
+		);
+
 		// Members (accessible with either members or attendees capability)
 		// Check at menu registration time which capability the user has
 		// The members page will handle filtering based on actual capabilities
@@ -353,6 +363,19 @@ class Remember_Admin {
 		
 		require_once plugin_dir_path( __FILE__ ) . '../includes/models/class-vetting.php';
 		include_once 'views/vetting.php';
+	}
+
+	/**
+	 * Render Getting Started (static data setup + links to wizard and docs).
+	 *
+	 * @since 1.0.0
+	 */
+	public function display_getting_started_page() {
+		if ( ! current_user_can( 'remember_read_events' ) && ! current_user_can( 'remember_access_settings' ) ) {
+			wp_die( __( 'You do not have sufficient permissions to access this page.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+		}
+
+		include_once 'views/getting-started.php';
 	}
 
 	/**
