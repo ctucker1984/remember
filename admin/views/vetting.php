@@ -371,14 +371,57 @@ $decision_labels = array(
 						<select id="member_id" name="member_id" class="regular-text" required>
 							<option value=""><?php esc_html_e( '-- Select Member --', 'remember' ); ?></option>
 							<?php
-							// Get all members
 							$all_members = $member_model->get_all();
+							global $wpdb;
+							$profiles_by_member_id = array();
+							if ( ! empty( $all_members ) ) {
+								$member_ids_for_profiles = array_unique(
+									array_map(
+										static function ( $row ) {
+											return absint( $row->member_id );
+										},
+										$all_members
+									)
+								);
+								$member_ids_for_profiles = array_filter( $member_ids_for_profiles );
+								if ( ! empty( $member_ids_for_profiles ) ) {
+									$in_list = implode( ',', array_map( 'absint', $member_ids_for_profiles ) );
+									// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- IDs are absint'd.
+									$profile_rows = $wpdb->get_results(
+										"SELECT member_id, legal_first_name, legal_last_name FROM {$wpdb->prefix}remember_member_profiles WHERE member_id IN ($in_list)"
+									);
+									foreach ( $profile_rows as $prow ) {
+										$profiles_by_member_id[ absint( $prow->member_id ) ] = $prow;
+									}
+								}
+							}
 							foreach ( $all_members as $m ) :
 								$user = get_user_by( 'ID', $m->member_id );
-								if ( ! $user ) continue;
+								if ( ! $user ) {
+									continue;
+								}
+								$profile = isset( $profiles_by_member_id[ $m->member_id ] ) ? $profiles_by_member_id[ $m->member_id ] : null;
+								$legal_first = $profile ? trim( (string) $profile->legal_first_name ) : '';
+								$legal_last  = $profile ? trim( (string) $profile->legal_last_name ) : '';
+								$legal_name  = trim( $legal_first . ' ' . $legal_last );
+								if ( '' === $legal_name ) {
+									$legal_name = trim(
+										(string) get_user_meta( $m->member_id, 'first_name', true ) . ' ' . (string) get_user_meta( $m->member_id, 'last_name', true )
+									);
+								}
+								if ( '' === $legal_name ) {
+									$legal_name = $user->display_name;
+								}
+								$display_part = $user->display_name ? $user->display_name : $user->user_login;
+								$option_label = sprintf(
+									'%s (%s - %s)',
+									$legal_name,
+									$display_part,
+									$user->user_login
+								);
 							?>
 								<option value="<?php echo esc_attr( $m->member_id ); ?>" <?php selected( $pre_selected_member_id, $m->member_id ); ?>>
-									<?php echo esc_html( $user->display_name . ' (' . $user->user_email . ')' ); ?>
+									<?php echo esc_html( $option_label ); ?>
 								</option>
 							<?php endforeach; ?>
 						</select>
