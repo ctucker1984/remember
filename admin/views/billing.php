@@ -24,34 +24,6 @@ $application_model = new Remember_Application();
 $member_model = new Remember_Member();
 $subtotal_disclaimer = Remember_Billing_Messaging::get_subtotal_disclaimer();
 
-// Handle form submissions
-if ( isset( $_POST['remember_payment_action'] ) && check_admin_referer( 'remember_payment_action', 'remember_payment_nonce' ) ) {
-	$action = sanitize_text_field( $_POST['remember_payment_action'] );
-	$payment_id = isset( $_POST['payment_id'] ) ? absint( $_POST['payment_id'] ) : 0;
-	
-	if ( $payment_id > 0 && 'record' === $action ) {
-		$amount = isset( $_POST['amount'] ) ? floatval( $_POST['amount'] ) : 0;
-		$method = isset( $_POST['payment_method'] ) ? sanitize_text_field( $_POST['payment_method'] ) : 'manual';
-		$transaction_id = isset( $_POST['transaction_id'] ) ? sanitize_text_field( $_POST['transaction_id'] ) : '';
-		
-		$extra_data = array(
-			'payment_method' => $method,
-		);
-		if ( ! empty( $transaction_id ) ) {
-			$extra_data['transaction_id'] = $transaction_id;
-		}
-		
-		$result = $payment_model->record_payment( $payment_id, $amount, $extra_data );
-		if ( $result !== false ) {
-			Remember_Logger::info( 'Payment recorded', array( 'payment_id' => $payment_id, 'amount' => $amount ) );
-			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Payment recorded successfully.', 'remember' ) . '</p></div>';
-		} else {
-			Remember_Logger::error( 'Failed to record payment', array( 'payment_id' => $payment_id ) );
-			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to record payment.', 'remember' ) . '</p></div>';
-		}
-	}
-}
-
 // Get filter parameters
 $filter_status = isset( $_GET['filter_status'] ) ? sanitize_text_field( $_GET['filter_status'] ) : '';
 
@@ -169,59 +141,12 @@ $status_colors = array(
 						</td>
 						<td class="column-actions">
 							<?php if ( $payment->amount_due > 0 ) : ?>
-								<button type="button" class="button button-small" onclick="document.getElementById('payment-record-<?php echo esc_attr( $payment->payment_id ); ?>').style.display='block';"><?php esc_html_e( 'Record Payment', 'remember' ); ?></button>
+								<span class="description"><?php esc_html_e( 'Manage payments in QuickBooks, then sync.', 'remember' ); ?></span>
 							<?php else : ?>
-								<span class="description"><?php esc_html_e( 'Paid', 'remember' ); ?></span>
+								<span class="description"><?php esc_html_e( 'Paid (via QuickBooks sync)', 'remember' ); ?></span>
 							<?php endif; ?>
 						</td>
 					</tr>
-					
-					<!-- Record Payment Form (hidden by default) -->
-					<?php if ( $payment->amount_due > 0 ) : ?>
-						<tr id="payment-record-<?php echo esc_attr( $payment->payment_id ); ?>" style="display:none; background: #f9f9f9;">
-							<td colspan="8" style="padding: 20px;">
-								<form method="post" action="">
-									<?php wp_nonce_field( 'remember_payment_action', 'remember_payment_nonce' ); ?>
-									<input type="hidden" name="remember_payment_action" value="record">
-									<input type="hidden" name="payment_id" value="<?php echo esc_attr( $payment->payment_id ); ?>">
-									
-									<table class="form-table">
-										<tr>
-											<th><label for="amount-<?php echo esc_attr( $payment->payment_id ); ?>"><?php esc_html_e( 'Amount', 'remember' ); ?></label></th>
-											<td>
-												<input type="number" id="amount-<?php echo esc_attr( $payment->payment_id ); ?>" name="amount" step="0.01" min="0" max="<?php echo esc_attr( $payment->amount_due ); ?>" value="<?php echo esc_attr( $payment->amount_due ); ?>" class="small-text" required>
-												<span class="description"><?php echo esc_html( sprintf( __( 'Maximum: $%s', 'remember' ), number_format( $payment->amount_due, 2 ) ) ); ?></span>
-											</td>
-										</tr>
-										<tr>
-											<th><label for="payment_method-<?php echo esc_attr( $payment->payment_id ); ?>"><?php esc_html_e( 'Payment Method', 'remember' ); ?></label></th>
-											<td>
-												<select id="payment_method-<?php echo esc_attr( $payment->payment_id ); ?>" name="payment_method">
-													<option value="manual"><?php esc_html_e( 'Manual Entry', 'remember' ); ?></option>
-													<option value="cash"><?php esc_html_e( 'Cash', 'remember' ); ?></option>
-													<option value="check"><?php esc_html_e( 'Check', 'remember' ); ?></option>
-													<option value="bank_transfer"><?php esc_html_e( 'Bank Transfer', 'remember' ); ?></option>
-													<option value="quickbooks"><?php esc_html_e( 'QuickBooks', 'remember' ); ?></option>
-												</select>
-											</td>
-										</tr>
-										<tr>
-											<th><label for="transaction_id-<?php echo esc_attr( $payment->payment_id ); ?>"><?php esc_html_e( 'Transaction ID', 'remember' ); ?></label></th>
-											<td>
-												<input type="text" id="transaction_id-<?php echo esc_attr( $payment->payment_id ); ?>" name="transaction_id" class="regular-text">
-												<span class="description"><?php esc_html_e( 'Optional: Reference number or transaction ID', 'remember' ); ?></span>
-											</td>
-										</tr>
-									</table>
-									
-									<p class="submit">
-										<input type="submit" class="button button-primary" value="<?php esc_attr_e( 'Record Payment', 'remember' ); ?>">
-										<button type="button" class="button" onclick="document.getElementById('payment-record-<?php echo esc_attr( $payment->payment_id ); ?>').style.display='none';"><?php esc_html_e( 'Cancel', 'remember' ); ?></button>
-									</p>
-								</form>
-							</td>
-						</tr>
-					<?php endif; ?>
 				<?php endforeach; ?>
 			</tbody>
 		</table>
