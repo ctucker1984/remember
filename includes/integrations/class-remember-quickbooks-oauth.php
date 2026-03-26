@@ -292,13 +292,4 @@ class Remember_QuickBooks_OAuth {
 		}
 		return $key;
 	}
-
-	/**
-	 * Get redirect URI for OAuth callback.
-	 *
-	 * @return string Redirect URI.
-	 */
-	public static function get_redirect_uri() {
-		return admin_url( 'admin.php?page=remember-settings&tab=quickbooks&qb_oauth_callback=1' );
-	}
 }

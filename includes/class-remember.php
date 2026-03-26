@@ -149,6 +149,9 @@ class Remember {
 		$this->loader->add_action( 'remember_member_vetted', $this, 'sync_vetted_member_to_qb' );
 		$this->loader->add_action( 'remember_qb_sync', $this, 'sync_qb_payments' );
 
+		// Import/export CSV downloads must run before admin headers are sent.
+		$this->loader->add_action( 'admin_init', $plugin_admin, 'handle_import_export_requests', 1 );
+
 		// Setup wizard redirect and form processing
 		$this->loader->add_action( 'admin_init', $plugin_admin, 'maybe_show_setup_wizard' );
 		$this->loader->add_action( 'admin_init', $plugin_admin, 'process_setup_wizard' );

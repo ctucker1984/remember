@@ -11,36 +11,13 @@ if ( ! defined( 'WPINC' ) ) {
 	die;
 }
 
-// Handle GET requests (template downloads)
-if ( isset( $_GET['remember_import_export_action'] ) && isset( $_GET['remember_import_export_nonce'] ) ) {
-	if ( wp_verify_nonce( $_GET['remember_import_export_nonce'], 'remember_import_export_action' ) ) {
-		$action = sanitize_text_field( $_GET['remember_import_export_action'] );
-		
-		// Handle template downloads
-		if ( 'download_members_template' === $action ) {
-			Remember_Import_Export::download_members_template();
-		} elseif ( 'download_events_template' === $action ) {
-			Remember_Import_Export::download_events_template();
-		} elseif ( 'download_locations_template' === $action ) {
-			Remember_Import_Export::download_locations_template();
-		}
-	}
-}
+// Template downloads and CSV exports are handled in Remember_Admin::handle_import_export_requests() on admin_init.
 
-// Handle form submissions
+// Handle form submissions (imports only; exports run on admin_init).
 if ( isset( $_POST['remember_import_export_action'] ) ) {
 	check_admin_referer( 'remember_import_export_action', 'remember_import_export_nonce' );
 	
-	$action = sanitize_text_field( $_POST['remember_import_export_action'] );
-	
-	// Handle exports
-	if ( 'export_members' === $action ) {
-		Remember_Import_Export::export_members();
-	} elseif ( 'export_events' === $action ) {
-		Remember_Import_Export::export_events();
-	} elseif ( 'export_locations' === $action ) {
-		Remember_Import_Export::export_locations();
-	}
+	$action = sanitize_text_field( wp_unslash( $_POST['remember_import_export_action'] ) );
 	
 	// Handle imports
 	if ( 'import_members' === $action || 'import_events' === $action || 'import_locations' === $action ) {

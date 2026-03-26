@@ -41,7 +41,7 @@ if ( isset( $_GET['qb_oauth_callback'] ) && isset( $_GET['code'] ) ) {
 		if ( ! $settings || empty( $settings['client_id'] ) || empty( $settings['client_secret'] ) ) {
 			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'QuickBooks credentials not configured. Please enter Client ID and Client Secret first.', 'remember' ) . '</p></div>';
 		} else {
-			$redirect_uri = Remember_QuickBooks_OAuth::get_redirect_uri();
+			$redirect_uri = admin_url( 'admin.php?page=remember-settings&tab=quickbooks&qb_oauth_callback=1' );
 			$token_data = Remember_QuickBooks_OAuth::exchange_code_for_token(
 				$code,
 				$settings['client_id'],
@@ -773,7 +773,7 @@ $social_platforms = $wpdb->get_results(
 					<?php
 					$auth_url = Remember_QuickBooks_OAuth::get_authorization_url(
 						$qb_settings['client_id'],
-						Remember_QuickBooks_OAuth::get_redirect_uri()
+						admin_url( 'admin.php?page=remember-settings&tab=quickbooks&qb_oauth_callback=1' )
 					);
 					?>
 					<p>

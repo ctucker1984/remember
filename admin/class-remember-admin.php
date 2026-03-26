@@ -395,6 +395,61 @@ class Remember_Admin {
 	}
 
 	/**
+	 * Serve CSV template downloads and exports before admin HTML output (avoids "headers already sent").
+	 *
+	 * @since    1.0.0
+	 */
+	public function handle_import_export_requests() {
+		if ( ! is_admin() || ! isset( $_GET['page'] ) || 'remember-import-export' !== $_GET['page'] ) {
+			return;
+		}
+
+		if ( ! current_user_can( 'remember_access_settings' ) ) {
+			return;
+		}
+
+		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-import-export.php';
+
+		// GET: template downloads.
+		if ( isset( $_GET['remember_import_export_action'], $_GET['remember_import_export_nonce'] ) ) {
+			if ( ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_GET['remember_import_export_nonce'] ) ), 'remember_import_export_action' ) ) {
+				return;
+			}
+
+			$action = sanitize_text_field( wp_unslash( $_GET['remember_import_export_action'] ) );
+
+			if ( 'download_members_template' === $action ) {
+				Remember_Import_Export::download_members_template();
+			} elseif ( 'download_events_template' === $action ) {
+				Remember_Import_Export::download_events_template();
+			} elseif ( 'download_locations_template' === $action ) {
+				Remember_Import_Export::download_locations_template();
+			}
+			// Valid downloads exit inside the handler; unknown actions fall through to the page.
+		}
+
+		// POST: CSV exports only (imports render notices in the view).
+		if ( ! isset( $_POST['remember_import_export_action'] ) ) {
+			return;
+		}
+
+		$action = sanitize_text_field( wp_unslash( $_POST['remember_import_export_action'] ) );
+		if ( ! in_array( $action, array( 'export_members', 'export_events', 'export_locations' ), true ) ) {
+			return;
+		}
+
+		check_admin_referer( 'remember_import_export_action', 'remember_import_export_nonce' );
+
+		if ( 'export_members' === $action ) {
+			Remember_Import_Export::export_members();
+		} elseif ( 'export_events' === $action ) {
+			Remember_Import_Export::export_events();
+		} else {
+			Remember_Import_Export::export_locations();
+		}
+	}
+
+	/**
 	 * Process setup wizard form submission.
 	 * Called on admin_init to process before any output.
 	 *
