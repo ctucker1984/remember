@@ -455,19 +455,83 @@ class Remember_QuickBooks_API {
 	/**
 	 * Get payment for invoice.
 	 *
-	 * @param string $invoice_id Invoice ID.
+	 * @param string      $invoice_id  Invoice ID.
+	 * @param string|null $customer_id Optional QuickBooks Customer Id to narrow the search.
 	 * @return array|WP_Error Payment data or error.
 	 */
-	public static function get_invoice_payment( $invoice_id ) {
-		$response = self::api_request( 'GET', 'payment?query=SELECT * FROM Payment WHERE Line[0].LinkedTxn[0].TxnId = \'' . $invoice_id . '\'' );
+	public static function get_invoice_payment( $invoice_id, $customer_id = null ) {
+		$invoice_id = trim( (string) $invoice_id );
+		if ( '' === $invoice_id ) {
+			return new WP_Error( 'invalid_invoice_id', __( 'Invalid QuickBooks invoice ID.', 'remember' ) );
+		}
+
+		// First, pull a reasonably-scoped set of payments from QBO. We can't reliably filter on
+		// Line.LinkedTxn in the SQL WHERE clause across all environments, so we:
+		// 1) Optionally narrow by CustomerRef when a customer_id is available.
+		// 2) Filter by LinkedTxn.TxnId = invoice_id in PHP.
+		$customer_id = $customer_id ? trim( (string) $customer_id ) : '';
+		$where_parts = array();
+		if ( '' !== $customer_id ) {
+			$where_parts[] = "CustomerRef = '" . $customer_id . "'";
+		}
+
+		$query = 'SELECT * FROM Payment';
+		if ( ! empty( $where_parts ) ) {
+			$query .= ' WHERE ' . implode( ' AND ', $where_parts );
+		}
+
+		$response = self::api_request( 'GET', 'query?query=' . rawurlencode( $query ) );
 
 		if ( is_wp_error( $response ) ) {
 			return $response;
 		}
 
-		return isset( $response['QueryResponse']['Payment'] ) 
-			? $response['QueryResponse']['Payment'] 
-			: array();
+		if ( ! isset( $response['QueryResponse']['Payment'] ) ) {
+			return array();
+		}
+
+		$raw = $response['QueryResponse']['Payment'];
+		if ( ! is_array( $raw ) ) {
+			return array();
+		}
+
+		// Normalize single Payment → list of one.
+		$payments = isset( $raw['Id'] ) ? array( $raw ) : $raw;
+
+		$matches = array();
+		foreach ( $payments as $payment ) {
+			if ( ! is_array( $payment ) || ! isset( $payment['Line'] ) ) {
+				continue;
+			}
+			$lines = $payment['Line'];
+			if ( isset( $lines['Amount'] ) ) {
+				$lines = array( $lines );
+			}
+			if ( ! is_array( $lines ) ) {
+				continue;
+			}
+			foreach ( $lines as $line ) {
+				if ( ! is_array( $line ) || ! isset( $line['LinkedTxn'] ) ) {
+					continue;
+				}
+				$linked = $line['LinkedTxn'];
+				if ( isset( $linked['TxnId'] ) ) {
+					$linked = array( $linked );
+				}
+				if ( ! is_array( $linked ) ) {
+					continue;
+				}
+				foreach ( $linked as $lt ) {
+					if ( isset( $lt['TxnId'] ) && (string) $lt['TxnId'] === $invoice_id ) {
+						$matches[] = $payment;
+						// Once matched, no need to scan remaining linked Txn for this payment.
+						break 3;
+					}
+				}
+			}
+		}
+
+		return $matches;
 	}
 
 	/**

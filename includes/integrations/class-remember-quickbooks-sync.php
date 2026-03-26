@@ -338,11 +338,17 @@ class Remember_QuickBooks_Sync {
 			return $invoice;
 		}
 
-		// Get payments for this invoice
-		$payments = Remember_QuickBooks_API::get_invoice_payment( $payment->quickbooks_invoice_id );
+		// Get payments for this invoice (narrowed by QuickBooks customer when possible).
+		$qb_customer_id = get_user_meta( $payment->member_id, 'remember_qb_customer_id', true );
+		$payments       = Remember_QuickBooks_API::get_invoice_payment( $payment->quickbooks_invoice_id, $qb_customer_id );
+
+		if ( is_wp_error( $payments ) ) {
+			// Bubble up API/query errors so manual sync UI can report them.
+			return $payments;
+		}
 
 		$total_paid = 0;
-		if ( ! is_wp_error( $payments ) && ! empty( $payments ) ) {
+		if ( ! empty( $payments ) ) {
 			foreach ( $payments as $qb_payment ) {
 				$total_paid += floatval( $qb_payment['TotalAmt'] ?? 0 );
 			}
