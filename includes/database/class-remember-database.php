@@ -536,7 +536,7 @@ class Remember_Database {
 			updated_at DATETIME NOT NULL,
 			PRIMARY KEY (product_id),
 			UNIQUE KEY product_name (product_name),
-			UNIQUE KEY quickbooks_product_id (quickbooks_product_id)
+			KEY idx_quickbooks_product_id (quickbooks_product_id)
 		) $charset_collate;";
 
 		dbDelta( $sql );

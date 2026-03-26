@@ -450,6 +450,137 @@ class Remember_Admin {
 	}
 
 	/**
+	 * QuickBooks OAuth: redirect to Intuit and handle callback before admin HTML output.
+	 * Running this in the settings view is too late — wp_redirect() fails after headers are sent (white screen).
+	 *
+	 * @since    1.0.0
+	 */
+	public function handle_quickbooks_oauth() {
+		if ( ! is_admin() ) {
+			return;
+		}
+
+		// Start OAuth (POST).
+		if ( isset( $_POST['remember_settings_action'] ) && 'start_qb_oauth' === $_POST['remember_settings_action'] ) {
+			if ( ! current_user_can( 'remember_access_settings' ) ) {
+				return;
+			}
+			if ( ! check_admin_referer( 'remember_settings_action', 'remember_settings_nonce' ) ) {
+				return;
+			}
+
+			require_once plugin_dir_path( __FILE__ ) . '../includes/integrations/class-remember-quickbooks-oauth.php';
+
+			$qb = Remember_QuickBooks_OAuth::get_settings();
+			if ( empty( $qb['client_id'] ) || empty( $qb['client_secret'] ) ) {
+				wp_safe_redirect( admin_url( 'admin.php?page=remember-settings&qb_oauth_error=nocreds#quickbooks' ) );
+				exit;
+			}
+
+			$env = isset( $_POST['qb_environment_oauth'] ) ? sanitize_text_field( wp_unslash( $_POST['qb_environment_oauth'] ) ) : 'sandbox';
+			if ( ! in_array( $env, array( 'sandbox', 'production' ), true ) ) {
+				$env = 'sandbox';
+			}
+			set_transient( 'remember_qb_oauth_env_' . get_current_user_id(), $env, 30 * MINUTE_IN_SECONDS );
+
+			$auth_url = Remember_QuickBooks_OAuth::get_authorization_url(
+				$qb['client_id'],
+				Remember_QuickBooks_OAuth::get_redirect_uri()
+			);
+			wp_redirect( $auth_url ); // phpcs:ignore WordPress.Security.SafeRedirect.wp_redirect_wp_redirect -- External Intuit URL.
+			exit;
+		}
+
+		// OAuth callback (GET) — must be reMember settings screen.
+		if ( ! isset( $_GET['page'] ) || 'remember-settings' !== $_GET['page'] ) {
+			return;
+		}
+		if ( ! isset( $_GET['qb_oauth_callback'], $_GET['code'] ) ) {
+			return;
+		}
+		if ( ! current_user_can( 'remember_access_settings' ) ) {
+			return;
+		}
+
+		require_once plugin_dir_path( __FILE__ ) . '../includes/integrations/class-remember-quickbooks-oauth.php';
+
+		$code  = sanitize_text_field( wp_unslash( $_GET['code'] ) );
+		$state = isset( $_GET['state'] ) ? sanitize_text_field( wp_unslash( $_GET['state'] ) ) : '';
+
+		$uid     = get_current_user_id();
+		$notice  = 'remember_qb_oauth_notice_' . $uid;
+		$redirect = admin_url( 'admin.php?page=remember-settings#quickbooks' );
+
+		if ( ! wp_verify_nonce( $state, 'remember_qb_oauth' ) ) {
+			set_transient( $notice, array( 'type' => 'error', 'message' => __( 'Invalid OAuth state. Please try again.', 'remember' ) ), 60 );
+			wp_safe_redirect( $redirect );
+			exit;
+		}
+
+		$settings = Remember_QuickBooks_OAuth::get_settings();
+		if ( ! $settings || empty( $settings['client_id'] ) || empty( $settings['client_secret'] ) ) {
+			set_transient( $notice, array( 'type' => 'error', 'message' => __( 'QuickBooks credentials not configured. Please enter Client ID and Client Secret first.', 'remember' ) ), 60 );
+			wp_safe_redirect( $redirect );
+			exit;
+		}
+
+		$redirect_uri = Remember_QuickBooks_OAuth::get_redirect_uri();
+		$token_data   = Remember_QuickBooks_OAuth::exchange_code_for_token(
+			$code,
+			$settings['client_id'],
+			$settings['client_secret'],
+			$redirect_uri
+		);
+
+		if ( is_wp_error( $token_data ) ) {
+			set_transient( $notice, array( 'type' => 'error', 'message' => wp_strip_all_tags( $token_data->get_error_message() ) ), 60 );
+			wp_safe_redirect( $redirect );
+			exit;
+		}
+
+		$settings['access_token']  = isset( $token_data['access_token'] ) ? $token_data['access_token'] : '';
+		$settings['refresh_token'] = isset( $token_data['refresh_token'] ) ? $token_data['refresh_token'] : '';
+		$expires_in                = isset( $token_data['expires_in'] ) ? (int) $token_data['expires_in'] : 3600;
+		if ( $expires_in < 60 ) {
+			$expires_in = 3600;
+		}
+		$settings['expires_at'] = time() + $expires_in;
+
+		if ( ! empty( $_GET['realmId'] ) ) {
+			$settings['realm_id'] = sanitize_text_field( wp_unslash( $_GET['realmId'] ) );
+		} elseif ( ! empty( $_GET['realmid'] ) ) {
+			$settings['realm_id'] = sanitize_text_field( wp_unslash( $_GET['realmid'] ) );
+		} else {
+			$settings['realm_id'] = '';
+		}
+
+		$pending_env = get_transient( 'remember_qb_oauth_env_' . $uid );
+		if ( $pending_env && in_array( $pending_env, array( 'sandbox', 'production' ), true ) ) {
+			$settings['environment'] = $pending_env;
+		}
+		delete_transient( 'remember_qb_oauth_env_' . $uid );
+
+		if ( ! Remember_QuickBooks_OAuth::save_settings( $settings ) ) {
+			set_transient( $notice, array( 'type' => 'error', 'message' => __( 'Failed to save QuickBooks connection.', 'remember' ) ), 60 );
+			wp_safe_redirect( $redirect );
+			exit;
+		}
+
+		global $wpdb;
+		$wpdb->update(
+			$wpdb->prefix . 'remember_payment_processors',
+			array( 'is_active' => 1 ),
+			array( 'processor_type' => 'quickbooks' ),
+			array( '%d' ),
+			array( '%s' )
+		);
+
+		set_transient( $notice, array( 'type' => 'success', 'message' => __( 'QuickBooks connected successfully!', 'remember' ) ), 60 );
+		wp_safe_redirect( $redirect );
+		exit;
+	}
+
+	/**
 	 * Process setup wizard form submission.
 	 * Called on admin_init to process before any output.
 	 *

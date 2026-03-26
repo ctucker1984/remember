@@ -206,6 +206,13 @@ class Remember_QuickBooks_OAuth {
 			$settings['refresh_token'] = self::decrypt( $settings['refresh_token_encrypted'] );
 		}
 
+		// Trim whitespace/newlines that break the Authorization header or OAuth body.
+		foreach ( array( 'client_secret', 'access_token', 'refresh_token' ) as $k ) {
+			if ( isset( $settings[ $k ] ) && is_string( $settings[ $k ] ) ) {
+				$settings[ $k ] = trim( $settings[ $k ] );
+			}
+		}
+
 		return $settings;
 	}
 

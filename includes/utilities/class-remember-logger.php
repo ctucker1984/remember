@@ -142,14 +142,11 @@ class Remember_Logger {
 
 		$log_entry .= "\n";
 
-		// Write to WordPress standard debug.log location
 		$log_file = self::get_log_file_path();
-		
-		// Use error_log if it's the default location, otherwise write directly
-		if ( $log_file === WP_CONTENT_DIR . '/debug.log' || ! file_exists( $log_file ) ) {
-			error_log( $log_entry );
-		} else {
-			// Write directly to custom log file
+
+		// Append to the log file explicitly. A bare error_log( $msg ) follows PHP's error_log
+		// ini setting, which on many hosts (e.g. Laravel Valet) is not wp-content/debug.log.
+		if ( false === @error_log( $log_entry, 3, $log_file ) ) {
 			@file_put_contents( $log_file, $log_entry, FILE_APPEND | LOCK_EX );
 		}
 	}

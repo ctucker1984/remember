@@ -12,6 +12,7 @@ if ( ! defined( 'WPINC' ) ) {
 }
 
 require_once plugin_dir_path( __FILE__ ) . 'class-remember-quickbooks-oauth.php';
+require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-logger.php';
 
 /**
  * QuickBooks API wrapper class.
@@ -27,6 +28,13 @@ class Remember_QuickBooks_API {
 	 * QuickBooks API base URL.
 	 */
 	const QB_API_BASE = 'https://sandbox-quickbooks.api.intuit.com/v3/company/';
+
+	/**
+	 * Minor version for v3 API requests (Intuit recommends always sending this).
+	 *
+	 * @link https://developer.intuit.com/app/developer/qbo/docs/learn/rest-api-features#minor-versions
+	 */
+	const QB_MINOR_VERSION = 73;
 
 	/**
 	 * Get API base URL (sandbox or production).
@@ -62,32 +70,96 @@ class Remember_QuickBooks_API {
 	private static function get_access_token() {
 		$settings = Remember_QuickBooks_OAuth::get_settings();
 
-		if ( empty( $settings['access_token'] ) ) {
+		$access = isset( $settings['access_token'] ) ? trim( (string) $settings['access_token'] ) : '';
+		if ( ! is_string( $access ) || strlen( $access ) < 20 ) {
+			Remember_Logger::error(
+				'QuickBooks API: access token missing or invalid after decrypt',
+				array( 'code' => 'no_token' )
+			);
 			return new WP_Error( 'no_token', __( 'No access token available. Please reconnect QuickBooks.', 'remember' ) );
 		}
 
-		// Check if token is expired (with 5 minute buffer)
-		$expires_at = isset( $settings['expires_at'] ) ? $settings['expires_at'] : 0;
-		if ( time() >= ( $expires_at - 300 ) ) {
-			// Token expired or expiring soon, refresh it
+		// Check if token is expired (with 5 minute buffer). Missing expires_at (0) means unknown — refresh if possible.
+		$expires_at    = isset( $settings['expires_at'] ) ? (int) $settings['expires_at'] : 0;
+		$needs_refresh = ( $expires_at <= 0 ) || ( time() >= ( $expires_at - 300 ) );
+
+		if ( $needs_refresh ) {
+			$refresh_token = isset( $settings['refresh_token'] ) ? trim( (string) $settings['refresh_token'] ) : '';
+			if ( strlen( $refresh_token ) < 10 ) {
+				Remember_Logger::error( 'QuickBooks API: refresh token missing or invalid', array( 'code' => 'no_refresh_token' ) );
+				return new WP_Error( 'no_refresh_token', __( 'QuickBooks session expired. Please reconnect QuickBooks.', 'remember' ) );
+			}
 			$refresh_result = Remember_QuickBooks_OAuth::refresh_token(
-				$settings['refresh_token'],
+				$refresh_token,
 				$settings['client_id'],
 				$settings['client_secret']
 			);
 
 			if ( is_wp_error( $refresh_result ) ) {
+				Remember_Logger::error(
+					'QuickBooks API: token refresh failed',
+					array(
+						'code'    => $refresh_result->get_error_code(),
+						'message' => $refresh_result->get_error_message(),
+					)
+				);
 				return $refresh_result;
 			}
 
 			// Update settings with new tokens
 			$settings['access_token'] = $refresh_result['access_token'];
 			$settings['refresh_token'] = isset( $refresh_result['refresh_token'] ) ? $refresh_result['refresh_token'] : $settings['refresh_token'];
-			$settings['expires_at'] = time() + $refresh_result['expires_in'];
+			$rin = isset( $refresh_result['expires_in'] ) ? (int) $refresh_result['expires_in'] : 3600;
+			if ( $rin < 60 ) {
+				$rin = 3600;
+			}
+			$settings['expires_at'] = time() + $rin;
 			Remember_QuickBooks_OAuth::save_settings( $settings );
+
+			return trim( (string) $settings['access_token'] );
 		}
 
-		return $settings['access_token'];
+		return $access;
+	}
+
+	/**
+	 * Human-readable message from QuickBooks JSON error body (handles Intuit lowercase fault/error shape).
+	 *
+	 * @param array|null $body Decoded JSON body.
+	 * @return string
+	 */
+	private static function parse_qb_error_message( $body ) {
+		if ( ! is_array( $body ) ) {
+			return __( 'QuickBooks API error.', 'remember' );
+		}
+
+		// Legacy XML-style JSON (Fault / Error / Message).
+		if ( ! empty( $body['Fault']['Error'][0]['Message'] ) ) {
+			return (string) $body['Fault']['Error'][0]['Message'];
+		}
+
+		// REST JSON (fault / error[] with detail or message; keys may be mixed case).
+		$fault = isset( $body['fault'] ) ? $body['fault'] : ( isset( $body['Fault'] ) ? $body['Fault'] : null );
+		if ( is_array( $fault ) ) {
+			$errors = isset( $fault['error'] ) ? $fault['error'] : ( isset( $fault['Error'] ) ? $fault['Error'] : null );
+			if ( is_array( $errors ) && ! empty( $errors[0] ) && is_array( $errors[0] ) ) {
+				$err = $errors[0];
+				if ( ! empty( $err['Detail'] ) ) {
+					return (string) $err['Detail'];
+				}
+				if ( ! empty( $err['detail'] ) ) {
+					return (string) $err['detail'];
+				}
+				if ( ! empty( $err['Message'] ) ) {
+					return (string) $err['Message'];
+				}
+				if ( ! empty( $err['message'] ) ) {
+					return (string) $err['message'];
+				}
+			}
+		}
+
+		return __( 'QuickBooks API error.', 'remember' );
 	}
 
 	/**
@@ -106,38 +178,77 @@ class Remember_QuickBooks_API {
 
 		$company_id = self::get_company_id();
 		if ( ! $company_id ) {
+			Remember_Logger::error(
+				'QuickBooks API: no company (realm) ID',
+				array( 'code' => 'no_company_id' )
+			);
 			return new WP_Error( 'no_company_id', __( 'No company ID available. Please reconnect QuickBooks.', 'remember' ) );
 		}
 
 		$url = self::get_api_base() . $company_id . '/' . $endpoint;
+		$url .= ( strpos( $url, '?' ) !== false ? '&' : '?' ) . 'minorversion=' . self::QB_MINOR_VERSION;
+
+		$qb_opts = Remember_QuickBooks_OAuth::get_settings();
+		$qb_env  = isset( $qb_opts['environment'] ) ? $qb_opts['environment'] : 'unknown';
+
+		$token = trim( (string) $token );
 
 		$args = array(
 			'method'  => $method,
 			'headers' => array(
 				'Authorization' => 'Bearer ' . $token,
-				'Accept'        => 'application/json',
-				'Content-Type'  => 'application/json',
+				'Accept'          => 'application/json',
 			),
+			'timeout' => 60,
 		);
 
 		if ( ! empty( $data ) && in_array( $method, array( 'POST', 'PUT' ), true ) ) {
-			$args['body'] = json_encode( $data );
+			$args['headers']['Content-Type'] = 'application/json';
+			$args['body']                    = wp_json_encode( $data );
 		}
 
 		$response = wp_remote_request( $url, $args );
 
 		if ( is_wp_error( $response ) ) {
+			Remember_Logger::error(
+				'QuickBooks API: HTTP transport error',
+				array(
+					'method'   => $method,
+					'endpoint' => $endpoint,
+					'code'     => $response->get_error_code(),
+					'message'  => $response->get_error_message(),
+				)
+			);
 			return $response;
 		}
 
 		$status_code = wp_remote_retrieve_response_code( $response );
-		$body = json_decode( wp_remote_retrieve_body( $response ), true );
+		$raw_body    = wp_remote_retrieve_body( $response );
+		$body        = json_decode( $raw_body, true );
 
 		if ( $status_code >= 400 ) {
-			$error_message = isset( $body['Fault']['Error'][0]['Message'] ) 
-				? $body['Fault']['Error'][0]['Message'] 
-				: __( 'QuickBooks API error.', 'remember' );
-			
+			$error_message = self::parse_qb_error_message( $body );
+
+			$body_for_log = is_array( $body ) ? $body : $raw_body;
+			$encoded      = is_string( $body_for_log ) ? $body_for_log : wp_json_encode( $body_for_log, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES );
+			if ( is_string( $encoded ) && strlen( $encoded ) > 6000 ) {
+				$encoded = substr( $encoded, 0, 6000 ) . '...<truncated>';
+			}
+
+			Remember_Logger::error(
+				'QuickBooks API: error response',
+				array(
+					'method'        => $method,
+					'endpoint'      => $endpoint,
+					'status'        => $status_code,
+					'qb_message'    => $error_message,
+					'response_body' => $encoded,
+					'environment'   => $qb_env,
+					'api_base'      => self::get_api_base(),
+					'realm_id'      => substr( (string) $company_id, 0, 6 ) . '…',
+				)
+			);
+
 			return new WP_Error(
 				'qb_api_error',
 				$error_message,
@@ -282,6 +393,51 @@ class Remember_QuickBooks_API {
 	}
 
 	/**
+	 * Normalize QueryResponse Item payload to a list of item arrays.
+	 *
+	 * @param array $response Decoded API response.
+	 * @return array<int, array<string, mixed>>
+	 */
+	private static function normalize_item_query_response( $response ) {
+		if ( ! isset( $response['QueryResponse']['Item'] ) ) {
+			return array();
+		}
+		$raw = $response['QueryResponse']['Item'];
+		if ( ! is_array( $raw ) ) {
+			return array();
+		}
+		// Single item is returned as one associative array with an "Id" key, not 0..n.
+		if ( isset( $raw['Id'] ) ) {
+			return array( $raw );
+		}
+		return $raw;
+	}
+
+	/**
+	 * Remove QuickBooks Category rows (folder/grouping only; not invoice line items).
+	 *
+	 * @param array $items List of Item entities.
+	 * @return array<int, array<string, mixed>>
+	 */
+	private static function exclude_category_items( $items ) {
+		if ( ! is_array( $items ) ) {
+			return array();
+		}
+		$out = array();
+		foreach ( $items as $item ) {
+			if ( ! is_array( $item ) ) {
+				continue;
+			}
+			$type = isset( $item['Type'] ) ? (string) $item['Type'] : '';
+			if ( strcasecmp( $type, 'Category' ) === 0 ) {
+				continue;
+			}
+			$out[] = $item;
+		}
+		return $out;
+	}
+
+	/**
 	 * Query items/products.
 	 *
 	 * @param string $query SQL-like query.
@@ -294,9 +450,8 @@ class Remember_QuickBooks_API {
 			return $response;
 		}
 
-		return isset( $response['QueryResponse']['Item'] ) 
-			? $response['QueryResponse']['Item'] 
-			: array();
+		$items = self::normalize_item_query_response( $response );
+		return self::exclude_category_items( $items );
 	}
 
 	/**

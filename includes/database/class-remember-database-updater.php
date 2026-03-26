@@ -30,7 +30,7 @@ class Remember_Database_Updater {
 		
 		// Check current schema version
 		$current_version = get_option( 'remember_db_version', '0.0.0' );
-		$target_version = '1.5.0'; // Version that adds show_in_frontend to roles
+		$target_version = '1.6.0'; // Latest schema (see migrations below).
 		
 		// Update to 1.1.0 (unvetted status)
 		if ( version_compare( $current_version, '1.1.0', '<' ) ) {
@@ -220,6 +220,35 @@ class Remember_Database_Updater {
 			// Update version
 			update_option( 'remember_db_version', '1.5.0' );
 			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.5.0' ) );
+		}
+
+		// Update to 1.6.0 (multiple reMember line items may map to the same QuickBooks item — drop UNIQUE on quickbooks_product_id).
+		if ( version_compare( $current_version, '1.6.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => $current_version, 'to' => '1.6.0' ) );
+
+			$products_table = $wpdb->prefix . 'remember_products';
+			$table_exists   = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $products_table ) );
+
+			if ( $table_exists === $products_table ) {
+				$qb_indexes = $wpdb->get_results( "SHOW INDEX FROM {$products_table} WHERE Key_name = 'quickbooks_product_id'" );
+				if ( ! empty( $qb_indexes ) ) {
+					$drop = $wpdb->query( "ALTER TABLE {$products_table} DROP INDEX quickbooks_product_id" );
+					if ( false !== $drop ) {
+						$wpdb->query( "ALTER TABLE {$products_table} ADD KEY idx_quickbooks_product_id (quickbooks_product_id)" );
+						Remember_Logger::info( 'remember_products: replaced UNIQUE(quickbooks_product_id) with non-unique index' );
+					} else {
+						Remember_Logger::error( 'remember_products: failed to drop UNIQUE(quickbooks_product_id)', array( 'error' => $wpdb->last_error ) );
+					}
+				} else {
+					$idx_rows = $wpdb->get_results( "SHOW INDEX FROM {$products_table} WHERE Key_name = 'idx_quickbooks_product_id'" );
+					if ( empty( $idx_rows ) ) {
+						$wpdb->query( "ALTER TABLE {$products_table} ADD KEY idx_quickbooks_product_id (quickbooks_product_id)" );
+					}
+				}
+			}
+
+			update_option( 'remember_db_version', '1.6.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.6.0' ) );
 		}
 	}
 }
