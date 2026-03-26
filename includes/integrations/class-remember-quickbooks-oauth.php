@@ -29,6 +29,15 @@ class Remember_QuickBooks_OAuth {
 	const QB_REVOKE_URL = 'https://developer.api.intuit.com/v2/oauth2/tokens/revoke';
 
 	/**
+	 * OAuth redirect URI registered with Intuit and sent on authorize/token exchange.
+	 *
+	 * @return string Redirect URI for this site’s admin settings tab.
+	 */
+	public static function get_redirect_uri(): string {
+		return admin_url( 'admin.php?page=remember-settings&tab=quickbooks&qb_oauth_callback=1' );
+	}
+
+	/**
 	 * Get OAuth authorization URL.
 	 *
 	 * @param string $client_id Client ID.

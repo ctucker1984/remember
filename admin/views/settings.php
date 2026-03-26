@@ -41,7 +41,7 @@ if ( isset( $_GET['qb_oauth_callback'] ) && isset( $_GET['code'] ) ) {
 		if ( ! $settings || empty( $settings['client_id'] ) || empty( $settings['client_secret'] ) ) {
 			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'QuickBooks credentials not configured. Please enter Client ID and Client Secret first.', 'remember' ) . '</p></div>';
 		} else {
-			$redirect_uri = admin_url( 'admin.php?page=remember-settings&tab=quickbooks&qb_oauth_callback=1' );
+			$redirect_uri = Remember_QuickBooks_OAuth::get_redirect_uri();
 			$token_data = Remember_QuickBooks_OAuth::exchange_code_for_token(
 				$code,
 				$settings['client_id'],
@@ -715,6 +715,19 @@ $social_platforms = $wpdb->get_results(
 				<table class="form-table">
 					<tr>
 						<th scope="row">
+							<label for="remember_qb_redirect_uri"><?php esc_html_e( 'Redirect URI', 'remember' ); ?></label>
+						</th>
+						<td>
+							<input type="text" id="remember_qb_redirect_uri" class="large-text" readonly
+								value="<?php echo esc_attr( Remember_QuickBooks_OAuth::get_redirect_uri() ); ?>"
+								onclick="this.select();" />
+							<p class="description">
+								<?php esc_html_e( 'Add this exact URL as a Redirect URI in your Intuit Developer app (Keys & credentials). It must match for sandbox and production.', 'remember' ); ?>
+							</p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row">
 							<label for="qb_environment"><?php esc_html_e( 'Environment', 'remember' ); ?></label>
 						</th>
 						<td>
@@ -773,7 +786,7 @@ $social_platforms = $wpdb->get_results(
 					<?php
 					$auth_url = Remember_QuickBooks_OAuth::get_authorization_url(
 						$qb_settings['client_id'],
-						admin_url( 'admin.php?page=remember-settings&tab=quickbooks&qb_oauth_callback=1' )
+						Remember_QuickBooks_OAuth::get_redirect_uri()
 					);
 					?>
 					<p>
