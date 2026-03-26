@@ -123,7 +123,13 @@ $is_multi_day = ( $event->start_date !== $event->end_date );
 		</div>
 	</div>
 
-	<?php if ( $is_accepted ) : ?>
+	<?php if ( $current_member && ! Remember_Member::is_vetted_member( $current_member ) ) : ?>
+		<div class="remember-event-notice">
+			<p class="remember-notice remember-warning">
+				<?php esc_html_e( 'Member is not yet vetted.', 'remember' ); ?>
+			</p>
+		</div>
+	<?php elseif ( $is_accepted ) : ?>
 		<div class="remember-event-attendees">
 			<h3><?php esc_html_e( 'Event Attendees', 'remember' ); ?></h3>
 			<?php

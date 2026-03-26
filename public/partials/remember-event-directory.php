@@ -32,16 +32,23 @@ if ( ! $event ) {
 $current_user_id = get_current_user_id();
 $current_member = $member_model->get( $current_user_id );
 
+if ( ! $current_member ) {
+	echo '<p class="remember-notice remember-error">' . esc_html__( 'You must be registered as a member to view this directory.', 'remember' ) . '</p>';
+	return;
+}
+
+if ( ! Remember_Member::is_vetted_member( $current_member ) ) {
+	echo '<p class="remember-notice remember-warning">' . esc_html__( 'Member is not yet vetted.', 'remember' ) . '</p>';
+	return;
+}
+
 // Check if current user is accepted to this event
+$applications = $application_model->get_by_event( $event_id );
 $current_user_application = null;
-if ( $current_member ) {
-	$applications = $application_model->get_by_event( $event_id );
-	foreach ( $applications as $app ) {
-		// Use absint() for type-safe comparison
-		if ( absint( $app->member_id ) === absint( $current_user_id ) && 'accepted' === $app->status ) {
-			$current_user_application = $app;
-			break;
-		}
+foreach ( $applications as $app ) {
+	if ( absint( $app->member_id ) === absint( $current_user_id ) && 'accepted' === $app->status ) {
+		$current_user_application = $app;
+		break;
 	}
 }
 

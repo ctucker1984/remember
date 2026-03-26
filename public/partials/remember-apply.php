@@ -12,6 +12,7 @@ if ( ! defined( 'WPINC' ) ) {
 }
 
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-event.php';
+require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-member.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-application.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-merchandise.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-vetting-workflow.php';
@@ -24,7 +25,9 @@ if ( ! isset( $event_id ) ) {
 $event_model = new Remember_Event();
 $application_model = new Remember_Application();
 $merchandise_model = new Remember_Merchandise();
-$member_id = get_current_user_id();
+$member_id      = get_current_user_id();
+$member_model   = new Remember_Member();
+$member_row     = $member_model->get( $member_id );
 $subtotal_disclaimer = Remember_Billing_Messaging::get_subtotal_disclaimer();
 
 // Handle form submission
@@ -32,6 +35,9 @@ $submission_success = false;
 $submission_error = '';
 
 if ( isset( $_POST['remember_apply_action'] ) && check_admin_referer( 'remember_apply_action', 'remember_apply_nonce' ) ) {
+	if ( ! Remember_Member::is_vetted_member( $member_row ) ) {
+		$submission_error = __( 'Member is not yet vetted.', 'remember' );
+	} else {
 	$event_id = isset( $_POST['event_id'] ) ? absint( $_POST['event_id'] ) : 0;
 	$event_role_id = isset( $_POST['event_role_id'] ) ? absint( $_POST['event_role_id'] ) : 0;
 
@@ -109,6 +115,7 @@ if ( isset( $_POST['remember_apply_action'] ) && check_admin_referer( 'remember_
 	} else {
 		$submission_error = __( 'Please select an event and role.', 'remember' );
 	}
+	}
 }
 
 // Get selected event if provided
@@ -135,6 +142,10 @@ if ( ! $selected_event ) {
 <?php elseif ( ! empty( $submission_error ) ) : ?>
 	<div class="remember-notice remember-error">
 		<p><?php echo esc_html( $submission_error ); ?></p>
+	</div>
+<?php elseif ( ! Remember_Member::is_vetted_member( $member_row ) ) : ?>
+	<div class="remember-notice remember-warning">
+		<p><?php esc_html_e( 'Member is not yet vetted.', 'remember' ); ?></p>
 	</div>
 <?php else : ?>
 	<div class="remember-apply-form">

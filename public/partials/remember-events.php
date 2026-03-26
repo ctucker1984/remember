@@ -155,9 +155,9 @@ $status_colors = array(
 								<span class="remember-status-badge" style="background-color: <?php echo esc_attr( $status_color ); ?>; padding: 8px 16px; border-radius: 3px; display: inline-block;">
 									<strong><?php esc_html_e( 'Application Status:', 'remember' ); ?></strong> <?php echo esc_html( $status_label ); ?>
 								</span>
-							<?php elseif ( 'open' === $event->status ) : ?>
+							<?php elseif ( 'open' === $event->status && Remember_Member::is_vetted_member( $current_member ) ) : ?>
 								<?php
-								// No application yet and event is open - show apply button
+								// No application yet, event is open, member is vetted - show apply button
 								$created_pages = Remember_Page_Creator::get_created_pages();
 								$apply_page_id = isset( $created_pages['apply'] ) ? $created_pages['apply'] : 0;
 								
@@ -171,6 +171,8 @@ $status_colors = array(
 								<a href="<?php echo esc_url( $apply_url ); ?>" class="remember-button remember-button-primary">
 									<?php esc_html_e( 'Apply for Event', 'remember' ); ?>
 								</a>
+							<?php elseif ( 'open' === $event->status ) : ?>
+								<p class="remember-notice remember-warning" style="margin:0;display:inline-block;"><?php esc_html_e( 'Member is not yet vetted.', 'remember' ); ?></p>
 							<?php endif; ?>
 						</footer>
 					<?php elseif ( 'open' === $event->status ) : ?>

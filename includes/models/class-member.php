@@ -98,6 +98,17 @@ class Remember_Member extends Remember_Base_Model {
 	}
 
 	/**
+	 * Whether the member has vetted status (may apply to events and use member-only features).
+	 *
+	 * @param object|null $member Row from get().
+	 * @return bool
+	 */
+	public static function is_vetted_member( $member ) {
+		$is_vetted = $member && isset( $member->status ) && 'vetted' === $member->status;
+		return (bool) apply_filters( 'remember_member_is_vetted', $is_vetted, $member );
+	}
+
+	/**
 	 * Get members by status.
 	 *
 	 * @param string $status Member status.
