@@ -19,6 +19,7 @@ require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-applicat
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-event.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-image-uploader.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-vetting-workflow.php';
+require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-import-export.php';
 
 Remember_Logger::debug( 'Members page loaded' );
 
@@ -799,7 +800,7 @@ if ( $view_member_id > 0 ) {
 						<td class="column-name">
 							<strong><a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-members&view=' . $member->member_id ) ); ?>"><?php echo esc_html( $user->display_name ); ?></a></strong>
 							<?php if ( $profile ) : ?>
-								<br><span class="description"><?php echo esc_html( $profile->legal_first_name . ' ' . $profile->legal_last_name ); ?></span>
+								<br><span class="description"><?php echo esc_html( Remember_Import_Export::member_list_legal_name_line( $profile, (int) $member->member_id ) ); ?></span>
 							<?php endif; ?>
 						</td>
 						<td class="column-email">

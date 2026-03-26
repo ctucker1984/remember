@@ -13,6 +13,7 @@ if ( ! defined( 'WPINC' ) ) {
 
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-member.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-countries.php';
+require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-import-export.php';
 
 $user = wp_get_current_user();
 $member_model = new Remember_Member();
@@ -383,10 +384,13 @@ for ( $i = 0; $i < 3; $i++ ) {
 				<div class="remember-form-section">
 					<h3 class="remember-form-section-title"><?php esc_html_e( 'Basic Information', 'remember' ); ?></h3>
 					<div class="remember-profile-view-grid">
-						<?php if ( ! empty( $profile->legal_first_name ) || ! empty( $profile->legal_last_name ) ) : ?>
+						<?php
+						$remember_legal_name_line = trim( Remember_Import_Export::member_list_legal_name_line( $profile, (int) $user->ID ) );
+						if ( ! empty( $remember_legal_name_line ) ) :
+							?>
 							<div class="remember-profile-view-item">
 								<strong class="remember-profile-view-label"><?php esc_html_e( 'Legal Name', 'remember' ); ?></strong>
-								<span class="remember-profile-view-value"><?php echo esc_html( trim( ( $profile->legal_first_name ?? '' ) . ' ' . ( $profile->legal_last_name ?? '' ) ) ); ?></span>
+								<span class="remember-profile-view-value"><?php echo esc_html( $remember_legal_name_line ); ?></span>
 							</div>
 						<?php endif; ?>
 						<?php if ( ! empty( $profile->cell_phone ) ) : ?>

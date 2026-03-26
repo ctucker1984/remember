@@ -65,6 +65,9 @@ if ( empty( $selected_timezone ) ) {
 // Load countries helper
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-countries.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-image-uploader.php';
+require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-import-export.php';
+
+list( $legal_first_resolved, $legal_last_resolved ) = Remember_Import_Export::member_resolve_legal_name_parts( $view_profile, (int) $view_member_id );
 
 // Get max image dimensions from settings
 $options = get_option( 'remember_options', array() );
@@ -159,27 +162,13 @@ $max_image_size = isset( $options['photo_max_dimensions'] ) ? absint( $options['
 		<tr>
 			<th><label for="legal_first_name"><?php esc_html_e( 'Legal First Name', 'remember' ); ?> <span class="description">(required)</span></label></th>
 			<td>
-				<?php
-				$legal_first = $view_profile ? $view_profile->legal_first_name : '';
-				// Fall back to WP user meta if empty
-				if ( empty( $legal_first ) ) {
-					$legal_first = get_user_meta( $view_member_id, 'first_name', true );
-				}
-				?>
-				<input type="text" id="legal_first_name" name="legal_first_name" class="regular-text" value="<?php echo esc_attr( $legal_first ); ?>" required>
+				<input type="text" id="legal_first_name" name="legal_first_name" class="regular-text" value="<?php echo esc_attr( $legal_first_resolved ); ?>" required>
 			</td>
 		</tr>
 		<tr>
 			<th><label for="legal_last_name"><?php esc_html_e( 'Legal Last Name', 'remember' ); ?> <span class="description">(required)</span></label></th>
 			<td>
-				<?php
-				$legal_last = $view_profile ? $view_profile->legal_last_name : '';
-				// Fall back to WP user meta if empty
-				if ( empty( $legal_last ) ) {
-					$legal_last = get_user_meta( $view_member_id, 'last_name', true );
-				}
-				?>
-				<input type="text" id="legal_last_name" name="legal_last_name" class="regular-text" value="<?php echo esc_attr( $legal_last ); ?>" required>
+				<input type="text" id="legal_last_name" name="legal_last_name" class="regular-text" value="<?php echo esc_attr( $legal_last_resolved ); ?>" required>
 			</td>
 		</tr>
 		<tr>

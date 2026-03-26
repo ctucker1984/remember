@@ -109,23 +109,7 @@ if ( $is_editing && ! current_user_can( 'remember_update_members' ) ) {
 							<th><?php esc_html_e( 'Legal Name', 'remember' ); ?></th>
 							<td>
 								<?php
-								$legal_first = $view_profile ? $view_profile->legal_first_name : '';
-								$legal_last = $view_profile ? $view_profile->legal_last_name : '';
-								
-								// Fall back to WP user meta if legal names are empty
-								if ( empty( $legal_first ) && empty( $legal_last ) ) {
-									$legal_first = get_user_meta( $view_member_id, 'first_name', true );
-									$legal_last = get_user_meta( $view_member_id, 'last_name', true );
-								}
-								
-								// Fall back to display name if still empty
-								if ( empty( $legal_first ) && empty( $legal_last ) && ! empty( $view_user->display_name ) ) {
-									$name_parts = explode( ' ', $view_user->display_name, 2 );
-									$legal_first = $name_parts[0];
-									$legal_last = isset( $name_parts[1] ) ? $name_parts[1] : '';
-								}
-								
-								$full_legal_name = trim( $legal_first . ' ' . $legal_last );
+								$full_legal_name = trim( Remember_Import_Export::member_list_legal_name_line( $view_profile, (int) $view_member_id ) );
 								if ( ! empty( $full_legal_name ) ) :
 									echo esc_html( $full_legal_name );
 								else :

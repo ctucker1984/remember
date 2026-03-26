@@ -24,6 +24,7 @@ $payment_model = new Remember_Payment();
 $application_model = new Remember_Application();
 $member_model = new Remember_Member();
 $subtotal_disclaimer = Remember_Billing_Messaging::get_subtotal_disclaimer();
+$status_labels       = Remember_Billing_Template::get_payment_status_labels();
 
 // Get filter parameters
 $filter_status = isset( $_GET['filter_status'] ) ? sanitize_text_field( $_GET['filter_status'] ) : '';

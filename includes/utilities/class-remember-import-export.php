@@ -403,6 +403,186 @@ class Remember_Import_Export {
 	}
 
 	/**
+	 * True if a name field should be ignored (empty, Excel zero, etc.).
+	 *
+	 * @param mixed $value Field value.
+	 * @return bool
+	 */
+	private static function member_import_is_placeholder_name( $value ) {
+		$s = trim( (string) $value );
+		if ( '' === $s ) {
+			return true;
+		}
+		if ( '0' === $s ) {
+			return true;
+		}
+		if ( is_numeric( $s ) && (float) $s === 0.0 ) {
+			return true;
+		}
+		return false;
+	}
+
+	/**
+	 * Trim; empty string if value is a placeholder.
+	 *
+	 * @param mixed $value Field value.
+	 * @return string
+	 */
+	private static function member_import_normalize_csv_name( $value ) {
+		$s = trim( (string) $value );
+		if ( self::member_import_is_placeholder_name( $s ) ) {
+			return '';
+		}
+		return $s;
+	}
+
+	/**
+	 * Split a full display string into first + last (first word / remainder).
+	 *
+	 * @param string $display Display name.
+	 * @return array Two strings: first name, last name.
+	 */
+	private static function member_import_split_display_name( $display ) {
+		$display = trim( preg_replace( '/\s+/', ' ', (string) $display ) );
+		if ( '' === $display ) {
+			return array( '', '' );
+		}
+		$parts = explode( ' ', $display, 2 );
+		$first = $parts[0];
+		$last  = isset( $parts[1] ) ? trim( $parts[1] ) : '';
+		return array( $first, $last );
+	}
+
+	/**
+	 * Legal names from CSV + WordPress user when placeholders appear in the sheet.
+	 *
+	 * @param array    $row_data Row keyed by CSV header.
+	 * @param int|null $user_id  WordPress user ID after create/update, or null.
+	 * @return array With keys legal_first_name and legal_last_name.
+	 */
+	private static function member_import_legal_names( $row_data, $user_id ) {
+		$legal_first = self::member_import_normalize_csv_name( $row_data['Legal First Name'] ?? '' );
+		$legal_last  = self::member_import_normalize_csv_name( $row_data['Legal Last Name'] ?? '' );
+		$first       = self::member_import_normalize_csv_name( $row_data['First Name'] ?? '' );
+		$last        = self::member_import_normalize_csv_name( $row_data['Last Name'] ?? '' );
+		$display_raw = isset( $row_data['Display Name'] ) ? trim( (string) $row_data['Display Name'] ) : '';
+		list( $disp_first, $disp_last ) = self::member_import_split_display_name( $display_raw );
+
+		if ( self::member_import_is_placeholder_name( $legal_first ) ) {
+			$legal_first = $first;
+		}
+		if ( self::member_import_is_placeholder_name( $legal_last ) ) {
+			$legal_last = $last;
+		}
+
+		if ( self::member_import_is_placeholder_name( $legal_first ) ) {
+			$legal_first = $disp_first;
+		}
+		if ( self::member_import_is_placeholder_name( $legal_last ) ) {
+			$legal_last = $disp_last;
+		}
+
+		if ( $user_id ) {
+			if ( self::member_import_is_placeholder_name( $legal_first ) ) {
+				$meta_first = trim( (string) get_user_meta( $user_id, 'first_name', true ) );
+				if ( ! self::member_import_is_placeholder_name( $meta_first ) ) {
+					$legal_first = $meta_first;
+				}
+			}
+			if ( self::member_import_is_placeholder_name( $legal_last ) ) {
+				$meta_last = trim( (string) get_user_meta( $user_id, 'last_name', true ) );
+				if ( ! self::member_import_is_placeholder_name( $meta_last ) ) {
+					$legal_last = $meta_last;
+				}
+			}
+			if ( self::member_import_is_placeholder_name( $legal_first ) || self::member_import_is_placeholder_name( $legal_last ) ) {
+				$ud = get_userdata( $user_id );
+				if ( $ud && ! empty( $ud->display_name ) ) {
+					list( $df, $dl ) = self::member_import_split_display_name( $ud->display_name );
+					if ( self::member_import_is_placeholder_name( $legal_first ) && ! self::member_import_is_placeholder_name( $df ) ) {
+						$legal_first = $df;
+					}
+					if ( self::member_import_is_placeholder_name( $legal_last ) && ! self::member_import_is_placeholder_name( $dl ) ) {
+						$legal_last = $dl;
+					}
+				}
+			}
+		}
+
+		if ( self::member_import_is_placeholder_name( $legal_first ) ) {
+			$legal_first = '';
+		}
+		if ( self::member_import_is_placeholder_name( $legal_last ) ) {
+			$legal_last = '';
+		}
+
+		return array(
+			'legal_first_name' => $legal_first,
+			'legal_last_name'  => $legal_last,
+		);
+	}
+
+	/**
+	 * Resolve legal first/last for display when DB has placeholders (e.g. "0") or one side is missing.
+	 *
+	 * @param object|null $profile Profile row or null.
+	 * @param int         $user_id WordPress user ID.
+	 * @return array Two strings: first name, last name.
+	 */
+	public static function member_resolve_legal_name_parts( $profile, $user_id ) {
+		if ( ! $profile ) {
+			return array( '', '' );
+		}
+		$first = trim( (string) $profile->legal_first_name );
+		$last  = trim( (string) $profile->legal_last_name );
+
+		if ( self::member_import_is_placeholder_name( $first ) ) {
+			$first = trim( (string) get_user_meta( $user_id, 'first_name', true ) );
+		}
+		if ( self::member_import_is_placeholder_name( $last ) ) {
+			$last = trim( (string) get_user_meta( $user_id, 'last_name', true ) );
+		}
+		if ( self::member_import_is_placeholder_name( $first ) || self::member_import_is_placeholder_name( $last ) ) {
+			$ud = get_userdata( $user_id );
+			if ( $ud && ! empty( $ud->display_name ) ) {
+				list( $df, $dl ) = self::member_import_split_display_name( $ud->display_name );
+				if ( self::member_import_is_placeholder_name( $first ) && ! self::member_import_is_placeholder_name( $df ) ) {
+					$first = $df;
+				}
+				if ( self::member_import_is_placeholder_name( $last ) && ! self::member_import_is_placeholder_name( $dl ) ) {
+					$last = $dl;
+				}
+			}
+		}
+
+		if ( self::member_import_is_placeholder_name( $first ) ) {
+			$first = '';
+		}
+		if ( self::member_import_is_placeholder_name( $last ) ) {
+			$last = '';
+		}
+
+		return array( $first, $last );
+	}
+
+	/**
+	 * Human-readable legal name line for admin lists when profile rows still hold placeholders.
+	 *
+	 * @param object|null $profile Profile row or null.
+	 * @param int         $user_id WordPress user ID.
+	 * @return string
+	 */
+	public static function member_list_legal_name_line( $profile, $user_id ) {
+		list( $first, $last ) = self::member_resolve_legal_name_parts( $profile, $user_id );
+		$line = trim( $first . ' ' . $last );
+		// Legacy bad imports stored literal "0" as first name; show surname only for display.
+		if ( preg_match( '/^0\s+(.+)/u', $line, $matches ) ) {
+			return trim( $matches[1] );
+		}
+		return $line;
+	}
+
+	/**
 	 * Import members from CSV.
 	 *
 	 * @param string $file_path Path to CSV file.
@@ -433,7 +613,7 @@ class Remember_Import_Export {
 		}
 		
 		// Read headers
-		$headers = fgetcsv( $handle );
+		$headers = self::read_csv_line( $handle );
 		if ( false === $headers ) {
 			fclose( $handle );
 			$results['errors'][] = __( 'Could not read CSV headers.', 'remember' );
@@ -443,7 +623,7 @@ class Remember_Import_Export {
 		$member_model = new Remember_Member();
 		$row_number = 1;
 		
-		while ( ( $data = fgetcsv( $handle ) ) !== false ) {
+		while ( ( $data = self::read_csv_line( $handle ) ) !== false ) {
 			$row_number++;
 			
 			if ( count( $data ) < count( $headers ) ) {
@@ -479,15 +659,29 @@ class Remember_Import_Export {
 					continue;
 				}
 				
-				// Update user data
+				// Update user data (do not store Excel "0" placeholders in user meta).
 				wp_update_user( array(
 					'ID'           => $user_id,
 					'display_name' => $display_name,
-					'first_name'   => $row_data['First Name'] ?? '',
-					'last_name'    => $row_data['Last Name'] ?? '',
+					'first_name'   => self::member_import_normalize_csv_name( $row_data['First Name'] ?? '' ),
+					'last_name'    => self::member_import_normalize_csv_name( $row_data['Last Name'] ?? '' ),
 				) );
 			} else {
 				$user_id = $user->ID;
+				// Sync WP name fields from CSV on re-import (clears Excel "0" placeholders).
+				$user_update = array( 'ID' => $user_id );
+				if ( ! empty( trim( (string) ( $row_data['Display Name'] ?? '' ) ) ) ) {
+					$user_update['display_name'] = trim( (string) $row_data['Display Name'] );
+				}
+				if ( array_key_exists( 'First Name', $row_data ) ) {
+					$user_update['first_name'] = self::member_import_normalize_csv_name( $row_data['First Name'] );
+				}
+				if ( array_key_exists( 'Last Name', $row_data ) ) {
+					$user_update['last_name'] = self::member_import_normalize_csv_name( $row_data['Last Name'] );
+				}
+				if ( count( $user_update ) > 1 ) {
+					wp_update_user( $user_update );
+				}
 			}
 			
 			// Check if member record exists
@@ -512,24 +706,25 @@ class Remember_Import_Export {
 				)
 			);
 			
-			$profile_data = array(
-				'legal_first_name'            => $row_data['Legal First Name'] ?? '',
-				'legal_last_name'             => $row_data['Legal Last Name'] ?? '',
-				'address_street'              => $row_data['Street Address'] ?? '',
-				'address_city'                => $row_data['City'] ?? '',
-				'address_state'               => $row_data['State'] ?? '',
-				'address_postal'              => $row_data['Postal Code'] ?? '',
-				'address_country'             => $row_data['Country'] ?? 'US',
-				'cell_phone'                  => $row_data['Cell Phone'] ?? '',
-				'timezone'                    => $row_data['Timezone'] ?? '',
-				'im_handle'                   => $row_data['IM Handle'] ?? '',
-				'im_type'                     => $row_data['IM Type'] ?? 'telegram',
-				'interests'                   => $row_data['Interests'] ?? '',
-				'emergency_contact_first'     => $row_data['Emergency Contact First'] ?? '',
-				'emergency_contact_last'      => $row_data['Emergency Contact Last'] ?? '',
-				'emergency_contact_phone'     => $row_data['Emergency Contact Phone'] ?? '',
-				'emergency_contact_relationship' => $row_data['Emergency Contact Relationship'] ?? '',
-				'updated_at'                  => current_time( 'mysql' ),
+			$profile_data = array_merge(
+				self::member_import_legal_names( $row_data, $user_id ),
+				array(
+					'address_street'                 => $row_data['Street Address'] ?? '',
+					'address_city'                   => $row_data['City'] ?? '',
+					'address_state'                  => $row_data['State'] ?? '',
+					'address_postal'                 => $row_data['Postal Code'] ?? '',
+					'address_country'                => $row_data['Country'] ?? 'US',
+					'cell_phone'                     => $row_data['Cell Phone'] ?? '',
+					'timezone'                       => $row_data['Timezone'] ?? '',
+					'im_handle'                      => $row_data['IM Handle'] ?? '',
+					'im_type'                        => $row_data['IM Type'] ?? 'telegram',
+					'interests'                      => $row_data['Interests'] ?? '',
+					'emergency_contact_first'        => $row_data['Emergency Contact First'] ?? '',
+					'emergency_contact_last'         => $row_data['Emergency Contact Last'] ?? '',
+					'emergency_contact_phone'        => $row_data['Emergency Contact Phone'] ?? '',
+					'emergency_contact_relationship' => $row_data['Emergency Contact Relationship'] ?? '',
+					'updated_at'                     => current_time( 'mysql' ),
+				)
 			);
 			
 			if ( $profile ) {
@@ -537,7 +732,7 @@ class Remember_Import_Export {
 					$wpdb->prefix . 'remember_member_profiles',
 					$profile_data,
 					array( 'member_id' => $user_id ),
-					array( '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s' ),
+					array( '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s' ),
 					array( '%d' )
 				);
 			} else {
@@ -588,7 +783,7 @@ class Remember_Import_Export {
 		}
 		
 		// Read headers
-		$headers = fgetcsv( $handle );
+		$headers = self::read_csv_line( $handle );
 		if ( false === $headers ) {
 			fclose( $handle );
 			$results['errors'][] = __( 'Could not read CSV headers.', 'remember' );
@@ -598,7 +793,7 @@ class Remember_Import_Export {
 		$event_model = new Remember_Event();
 		$row_number = 1;
 		
-		while ( ( $data = fgetcsv( $handle ) ) !== false ) {
+		while ( ( $data = self::read_csv_line( $handle ) ) !== false ) {
 			$row_number++;
 			
 			if ( count( $data ) < count( $headers ) ) {
@@ -703,7 +898,7 @@ class Remember_Import_Export {
 		}
 		
 		// Read headers
-		$headers = fgetcsv( $handle );
+		$headers = self::read_csv_line( $handle );
 		if ( false === $headers ) {
 			fclose( $handle );
 			$results['errors'][] = __( 'Could not read CSV headers.', 'remember' );
@@ -713,7 +908,7 @@ class Remember_Import_Export {
 		$location_model = new Remember_Location();
 		$row_number = 1;
 		
-		while ( ( $data = fgetcsv( $handle ) ) !== false ) {
+		while ( ( $data = self::read_csv_line( $handle ) ) !== false ) {
 			$row_number++;
 			
 			if ( count( $data ) < count( $headers ) ) {
@@ -811,5 +1006,15 @@ class Remember_Import_Export {
 		}
 		
 		return false;
+	}
+
+	/**
+	 * Read one CSV row (PHP 8.4+ requires explicit $escape for fgetcsv()).
+	 *
+	 * @param resource $handle Open read handle.
+	 * @return array<int, string>|false|null
+	 */
+	private static function read_csv_line( $handle ) {
+		return fgetcsv( $handle, 0, ',', '"', '\\' );
 	}
 }

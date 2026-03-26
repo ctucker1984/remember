@@ -20,6 +20,7 @@ require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remem
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-payment.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-template.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-messaging.php';
+require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-import-export.php';
 
 $user = wp_get_current_user();
 $member_model = new Remember_Member();
@@ -312,10 +313,13 @@ foreach ( $selected_application_addons as $selected_addon_row ) {
 				<?php endif; ?>
 				<?php if ( $profile ) : ?>
 					<div class="remember-header-profile-info">
-						<?php if ( ! empty( $profile->legal_first_name ) || ! empty( $profile->legal_last_name ) ) : ?>
+						<?php
+						$remember_legal_name_line = trim( Remember_Import_Export::member_list_legal_name_line( $profile, get_current_user_id() ) );
+						if ( ! empty( $remember_legal_name_line ) ) :
+							?>
 							<span class="remember-header-info-item">
 								<strong><?php esc_html_e( 'Legal Name:', 'remember' ); ?></strong>
-								<?php echo esc_html( trim( ( $profile->legal_first_name ?? '' ) . ' ' . ( $profile->legal_last_name ?? '' ) ) ); ?>
+								<?php echo esc_html( $remember_legal_name_line ); ?>
 							</span>
 						<?php endif; ?>
 						<?php if ( ! empty( $profile->cell_phone ) ) : ?>
