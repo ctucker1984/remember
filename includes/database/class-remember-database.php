@@ -611,6 +611,7 @@ class Remember_Database {
 			payment_method VARCHAR(50) DEFAULT NULL,
 			transaction_id VARCHAR(255) DEFAULT NULL,
 			quickbooks_invoice_id VARCHAR(100) DEFAULT NULL,
+			quickbooks_invoice_number VARCHAR(50) DEFAULT NULL,
 			notes TEXT DEFAULT NULL,
 			created_at DATETIME NOT NULL,
 			updated_at DATETIME NOT NULL,

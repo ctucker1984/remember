@@ -90,6 +90,7 @@ $status_colors = array(
 			<thead>
 				<tr>
 					<th class="column-member"><?php esc_html_e( 'Member', 'remember' ); ?></th>
+					<th class="column-qb-invoice"><?php esc_html_e( 'QB Invoice #', 'remember' ); ?></th>
 					<th class="column-amount"><?php esc_html_e( 'Subtotal Amount', 'remember' ); ?></th>
 					<th class="column-paid"><?php esc_html_e( 'Amount Paid', 'remember' ); ?></th>
 					<th class="column-due"><?php esc_html_e( 'Amount Due', 'remember' ); ?></th>
@@ -110,6 +111,15 @@ $status_colors = array(
 								<span class="description"><?php echo esc_html( $user->user_email ); ?></span>
 							<?php else : ?>
 								<span class="description"><?php esc_html_e( 'Member not found', 'remember' ); ?></span>
+							<?php endif; ?>
+						</td>
+						<td class="column-qb-invoice">
+							<?php if ( ! empty( $payment->quickbooks_invoice_number ) ) : ?>
+								<strong><?php echo esc_html( $payment->quickbooks_invoice_number ); ?></strong>
+							<?php elseif ( ! empty( $payment->quickbooks_invoice_id ) ) : ?>
+								<span class="description"><?php esc_html_e( 'Sync payments to load invoice #', 'remember' ); ?></span>
+							<?php else : ?>
+								<span class="description">—</span>
 							<?php endif; ?>
 						</td>
 						<td class="column-amount">

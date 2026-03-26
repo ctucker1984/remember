@@ -524,8 +524,8 @@ class Remember_QuickBooks_API {
 				foreach ( $linked as $lt ) {
 					if ( isset( $lt['TxnId'] ) && (string) $lt['TxnId'] === $invoice_id ) {
 						$matches[] = $payment;
-						// Once matched, no need to scan remaining linked Txn for this payment.
-						break 3;
+						// Stop scanning this Payment's lines only; other Payment entities may also apply.
+						break 2;
 					}
 				}
 			}

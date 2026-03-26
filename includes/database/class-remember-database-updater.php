@@ -30,7 +30,7 @@ class Remember_Database_Updater {
 		
 		// Check current schema version
 		$current_version = get_option( 'remember_db_version', '0.0.0' );
-		$target_version = '1.8.0'; // Latest schema (see migrations below).
+		$target_version = '1.9.0'; // Latest schema (see migrations below).
 		
 		// Update to 1.1.0 (unvetted status)
 		if ( version_compare( $current_version, '1.1.0', '<' ) ) {
@@ -330,6 +330,33 @@ class Remember_Database_Updater {
 
 			update_option( 'remember_db_version', '1.8.0' );
 			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.8.0' ) );
+		}
+
+		// Update to 1.9.0 (QuickBooks invoice DocNumber for display; distinct from QBO entity Id in quickbooks_invoice_id).
+		if ( version_compare( $current_version, '1.9.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => $current_version, 'to' => '1.9.0' ) );
+
+			$payments_table = $wpdb->prefix . 'remember_payments';
+			$table_exists   = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $payments_table ) ) === $payments_table;
+			if ( $table_exists ) {
+				$cols = $wpdb->get_col( "SHOW COLUMNS FROM {$payments_table}", 0 );
+				if ( is_array( $cols ) && ! in_array( 'quickbooks_invoice_number', $cols, true ) ) {
+					$ok = $wpdb->query(
+						"ALTER TABLE {$payments_table} ADD COLUMN quickbooks_invoice_number VARCHAR(50) DEFAULT NULL AFTER quickbooks_invoice_id"
+					);
+					if ( false === $ok ) {
+						Remember_Logger::error(
+							'Failed to add quickbooks_invoice_number to remember_payments',
+							array( 'error' => $wpdb->last_error )
+						);
+					} else {
+						Remember_Logger::info( 'Added quickbooks_invoice_number to remember_payments' );
+					}
+				}
+			}
+
+			update_option( 'remember_db_version', '1.9.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.9.0' ) );
 		}
 	}
 }

@@ -271,22 +271,27 @@ class Remember_QuickBooks_Sync {
 			}
 
 			$payment_data = array(
-				'event_application_id'    => $application_id,
-				'member_id'               => $member_id,
-				'role_cost'               => $event_role ? floatval( $event_role->cost ) : 0,
-				'merchandise_cost'        => 0, // Calculate from merchandise items
-				'total_amount'           => $total_amount,
-				'amount_paid'            => 0,
-				'amount_due'             => $total_amount,
-				'payment_status'         => 'pending',
-				'quickbooks_invoice_id'  => $invoice_result['Id'],
+				'event_application_id'           => $application_id,
+				'member_id'                      => $member_id,
+				'role_cost'                      => $event_role ? floatval( $event_role->cost ) : 0,
+				'merchandise_cost'               => 0, // Calculate from merchandise items
+				'total_amount'                   => $total_amount,
+				'amount_paid'                    => 0,
+				'amount_due'                     => $total_amount,
+				'payment_status'                 => 'pending',
+				'quickbooks_invoice_id'          => $invoice_result['Id'],
+				'quickbooks_invoice_number'      => isset( $invoice_result['DocNumber'] ) ? sanitize_text_field( (string) $invoice_result['DocNumber'] ) : null,
 			);
 
 			$payment_model->create( $payment_data );
 		} else {
-			$payment_model->update( $payment->payment_id, array(
+			$update_invoice = array(
 				'quickbooks_invoice_id' => $invoice_result['Id'],
-			) );
+			);
+			if ( isset( $invoice_result['DocNumber'] ) ) {
+				$update_invoice['quickbooks_invoice_number'] = sanitize_text_field( (string) $invoice_result['DocNumber'] );
+			}
+			$payment_model->update( $payment->payment_id, $update_invoice );
 		}
 
 		Remember_Logger::info( 'QuickBooks invoice created', array(
@@ -327,10 +332,11 @@ class Remember_QuickBooks_Sync {
 				$payment_model->update(
 					$payment_id,
 					array(
-						'quickbooks_invoice_id' => null,
-						'amount_paid'           => 0,
-						'payment_status'        => 'pending',
-						'payment_date'          => null,
+						'quickbooks_invoice_id'         => null,
+						'quickbooks_invoice_number'     => null,
+						'amount_paid'                   => 0,
+						'payment_status'              => 'pending',
+						'payment_date'                  => null,
 					)
 				);
 				return true;
@@ -365,12 +371,16 @@ class Remember_QuickBooks_Sync {
 			$payment_status = 'partial';
 		}
 
-		$payment_model->update( $payment_id, array(
+		$update_data = array(
 			'amount_paid'    => $total_paid,
 			'amount_due'     => $amount_due,
 			'payment_status' => $payment_status,
 			'payment_date'   => $total_paid > 0 ? current_time( 'mysql' ) : null,
-		) );
+		);
+		if ( isset( $invoice['DocNumber'] ) ) {
+			$update_data['quickbooks_invoice_number'] = sanitize_text_field( (string) $invoice['DocNumber'] );
+		}
+		$payment_model->update( $payment_id, $update_data );
 
 		Remember_Logger::info( 'Payment status synced from QuickBooks', array(
 			'payment_id'     => $payment_id,

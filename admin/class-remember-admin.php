@@ -365,7 +365,15 @@ class Remember_Admin {
 		if ( ! current_user_can( 'remember_read_billing' ) ) {
 			wp_die( __( 'You do not have sufficient permissions to access this page.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
 		}
-		
+
+		// Refresh payment rows from QuickBooks so the table shows current amounts and invoice numbers.
+		require_once plugin_dir_path( __FILE__ ) . '../includes/integrations/class-remember-quickbooks-oauth.php';
+		$qb_settings = Remember_QuickBooks_OAuth::get_settings();
+		if ( $qb_settings && ! empty( $qb_settings['access_token'] ) && ! empty( $qb_settings['realm_id'] ) ) {
+			require_once plugin_dir_path( __FILE__ ) . '../includes/integrations/class-remember-quickbooks-sync.php';
+			Remember_QuickBooks_Sync::sync_all_payments();
+		}
+
 		require_once plugin_dir_path( __FILE__ ) . '../includes/models/class-payment.php';
 		include_once 'views/billing.php';
 	}
