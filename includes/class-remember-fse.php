@@ -94,6 +94,25 @@ class Remember_FSE {
 <!-- /wp:group -->',
 			)
 		);
+
+		// Member registration (minimal signup; works when Settings → General → Membership is off).
+		register_block_pattern(
+			'remember/member-register',
+			array(
+				'title'       => __( 'Member registration', 'remember' ),
+				'description' => __( 'Minimal form: username, legal name, email, password. Creates a WordPress user and reMember member record.', 'remember' ),
+				'categories'  => array( 'remember' ),
+				'content'     => '<!-- wp:group {"className":"remember-register-container"} -->
+<div class="wp-block-group remember-register-container"><!-- wp:heading {"level":2} -->
+<h2>' . __( 'Become a member', 'remember' ) . '</h2>
+<!-- /wp:heading -->
+
+<!-- wp:shortcode -->
+[remember_register]
+<!-- /wp:shortcode --></div>
+<!-- /wp:group -->',
+			)
+		);
 	}
 
 	/**

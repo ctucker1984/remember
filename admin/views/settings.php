@@ -528,6 +528,14 @@ $social_platforms = $wpdb->get_results(
 								<p style="margin-top: 10px;"><strong><?php esc_html_e( 'Example:', 'remember' ); ?></strong> <code>[remember_apply event_id="5"]</code></p>
 								<p style="margin-top: 10px;"><strong><?php esc_html_e( 'Note:', 'remember' ); ?></strong> <?php esc_html_e( 'If no event_id is provided, users can select an event from a dropdown. The form will automatically load available roles for the selected event.', 'remember' ); ?></p>
 							</div>
+						<?php elseif ( '[remember_register]' === $page_data['shortcode'] ) : ?>
+							<div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #ddd;">
+								<h4 style="margin-top: 0;"><?php esc_html_e( 'Notes:', 'remember' ); ?></h4>
+								<ul style="margin: 0; padding-left: 20px;">
+									<li><?php esc_html_e( 'Creates a WordPress user and reMember member record; does not require “Anyone can register” in Settings → General.', 'remember' ); ?></li>
+									<li><?php esc_html_e( 'Disable the form site-wide with the remember_allow_public_registration filter.', 'remember' ); ?></li>
+								</ul>
+							</div>
 						<?php elseif ( 'remember_profile' === $page_data['shortcode'] ) : ?>
 							<div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #ddd;">
 								<h4 style="margin-top: 0;"><?php esc_html_e( 'Features:', 'remember' ); ?></h4>

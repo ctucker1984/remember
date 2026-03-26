@@ -81,6 +81,228 @@ class Remember_Public {
 		add_shortcode( 'remember_profile', array( $this, 'shortcode_profile' ) );
 		add_shortcode( 'remember_event_directory', array( $this, 'shortcode_event_directory' ) );
 		add_shortcode( 'remember_event_detail', array( $this, 'shortcode_event_detail' ) );
+		add_shortcode( 'remember_register', array( $this, 'shortcode_register' ) );
+		add_shortcode( 'remember_registration', array( $this, 'shortcode_register' ) );
+	}
+
+	/**
+	 * Process public member registration POST before output (works when wp-login registration is off).
+	 *
+	 * @return void
+	 */
+	public function maybe_process_member_registration() {
+		if ( ! isset( $_POST['remember_register_submit'] ) ) {
+			return;
+		}
+
+		if ( ! isset( $_POST['remember_register_nonce'] ) || ! wp_verify_nonce( wp_unslash( $_POST['remember_register_nonce'] ), 'remember_register_member' ) ) {
+			$this->redirect_member_registration( 'invalid_nonce' );
+		}
+
+		if ( ! apply_filters( 'remember_allow_public_registration', true ) ) {
+			$this->redirect_member_registration( 'disabled' );
+		}
+
+		// Honeypot — should stay empty (no visible field; blocks naive bots).
+		if ( ! empty( $_POST['remember_hp'] ) || ! empty( $_POST['remember_company'] ) ) {
+			$this->redirect_member_registration( 'invalid_nonce' );
+		}
+
+		$username   = isset( $_POST['remember_reg_username'] ) ? sanitize_user( wp_unslash( $_POST['remember_reg_username'] ), true ) : '';
+		$first_name = isset( $_POST['remember_reg_first_name'] ) ? sanitize_text_field( wp_unslash( $_POST['remember_reg_first_name'] ) ) : '';
+		$last_name  = isset( $_POST['remember_reg_last_name'] ) ? sanitize_text_field( wp_unslash( $_POST['remember_reg_last_name'] ) ) : '';
+		$email      = isset( $_POST['remember_reg_email'] ) ? sanitize_email( wp_unslash( $_POST['remember_reg_email'] ) ) : '';
+		$password   = isset( $_POST['remember_reg_password'] ) ? wp_unslash( $_POST['remember_reg_password'] ) : '';
+		$password_confirm = isset( $_POST['remember_reg_password_confirm'] ) ? wp_unslash( $_POST['remember_reg_password_confirm'] ) : '';
+
+		if ( '' === $username || '' === $first_name || '' === $last_name || '' === $email || '' === $password || '' === $password_confirm ) {
+			$this->redirect_member_registration( 'missing_fields' );
+		}
+
+		if ( $password !== $password_confirm ) {
+			$this->redirect_member_registration( 'password_mismatch' );
+		}
+
+		if ( ! is_email( $email ) ) {
+			$this->redirect_member_registration( 'invalid_email' );
+		}
+
+		if ( ! validate_username( $username ) ) {
+			$this->redirect_member_registration( 'invalid_username' );
+		}
+
+		$min_len = (int) apply_filters( 'remember_registration_password_min_length', 8 );
+		if ( $min_len > 0 && strlen( $password ) < $min_len ) {
+			$this->redirect_member_registration( 'weak_password' );
+		}
+
+		if ( username_exists( $username ) ) {
+			$this->redirect_member_registration( 'username_exists' );
+		}
+
+		if ( email_exists( $email ) ) {
+			$this->redirect_member_registration( 'email_exists' );
+		}
+
+		require_once plugin_dir_path( __FILE__ ) . '../includes/models/class-member.php';
+		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-vetting-workflow.php';
+		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-logger.php';
+
+		$user_id = wp_create_user( $username, $password, $email );
+
+		if ( is_wp_error( $user_id ) ) {
+			Remember_Logger::warning(
+				'Public member registration: wp_create_user failed',
+				array( 'error' => $user_id->get_error_message() )
+			);
+			$this->redirect_member_registration( 'create_failed' );
+		}
+
+		update_user_meta( $user_id, 'first_name', $first_name );
+		update_user_meta( $user_id, 'last_name', $last_name );
+		wp_update_user(
+			array(
+				'ID'           => $user_id,
+				'display_name' => trim( $first_name . ' ' . $last_name ),
+			)
+		);
+
+		$vetting_workflow = Remember_Vetting_Workflow::get_workflow();
+		if ( 'first_application' === $vetting_workflow ) {
+			$status = 'unvetted';
+		} else {
+			$status = 'pending_vetting';
+		}
+
+		$member_model = new Remember_Member();
+		$member_ok    = $member_model->create( $user_id, $status );
+
+		if ( ! $member_ok ) {
+			Remember_Logger::error( 'Public member registration: member row failed', array( 'user_id' => $user_id ) );
+			wp_delete_user( $user_id );
+			$this->redirect_member_registration( 'member_failed' );
+		}
+
+		global $wpdb;
+		$profile_inserted = $wpdb->insert(
+			$wpdb->prefix . 'remember_member_profiles',
+			array(
+				'member_id'                       => $user_id,
+				'legal_first_name'                => $first_name,
+				'legal_last_name'                 => $last_name,
+				'emergency_contact_first'         => $first_name,
+				'emergency_contact_last'          => $last_name,
+				'emergency_contact_phone'         => '',
+				'emergency_contact_relationship'  => '',
+				'created_at'                      => current_time( 'mysql' ),
+				'updated_at'                      => current_time( 'mysql' ),
+			),
+			array( '%d', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s' )
+		);
+
+		if ( ! $profile_inserted ) {
+			Remember_Logger::error(
+				'Public member registration: profile insert failed',
+				array( 'user_id' => $user_id, 'db_error' => $wpdb->last_error )
+			);
+			$member_model->delete( $user_id );
+			wp_delete_user( $user_id );
+			$this->redirect_member_registration( 'profile_failed' );
+		}
+
+		if ( Remember_Vetting_Workflow::should_vet_on_join() ) {
+			$vetting_result = Remember_Vetting_Workflow::create_vetting_case( $user_id );
+			if ( ! $vetting_result ) {
+				Remember_Logger::warning( 'Public member registration: vetting case not created', array( 'member_id' => $user_id ) );
+			}
+		}
+
+		Remember_Logger::info( 'Public member registration completed', array( 'user_id' => $user_id ) );
+
+		$this->redirect_member_registration( null, true );
+	}
+
+	/**
+	 * Redirect after registration attempt (GET query args for shortcode messages).
+	 *
+	 * @param string|null $error_code Error code or null on success.
+	 * @param bool        $success    Whether registration succeeded.
+	 * @return void
+	 */
+	private function redirect_member_registration( $error_code, $success = false ) {
+		$redirect = wp_get_referer();
+		if ( ! $redirect ) {
+			$redirect = home_url( '/' );
+		}
+		$redirect = wp_validate_redirect( $redirect, home_url( '/' ) );
+
+		if ( $success ) {
+			wp_safe_redirect( add_query_arg( 'remember_registered', '1', $redirect ) );
+			exit;
+		}
+
+		wp_safe_redirect( add_query_arg( 'remember_reg_error', rawurlencode( (string) $error_code ), $redirect ) );
+		exit;
+	}
+
+	/**
+	 * Map registration error codes to messages.
+	 *
+	 * @param string $code Error code.
+	 * @return string
+	 */
+	private function get_member_registration_error_message( $code ) {
+		$messages = array(
+			'invalid_nonce'    => __( 'That submission was invalid or expired. Please try again.', 'remember' ),
+			'disabled'         => __( 'New member registration is not available.', 'remember' ),
+			'missing_fields'   => __( 'Please fill in all required fields.', 'remember' ),
+			'invalid_email'    => __( 'Please enter a valid email address.', 'remember' ),
+			'invalid_username' => __( 'That username is not allowed. Please choose another.', 'remember' ),
+			'weak_password'    => __( 'Please choose a stronger password (at least eight characters).', 'remember' ),
+			'password_mismatch' => __( 'Password and confirm password do not match.', 'remember' ),
+			'username_exists'  => __( 'That username is already taken.', 'remember' ),
+			'email_exists'     => __( 'That email address is already registered.', 'remember' ),
+			'create_failed'    => __( 'Could not create your account. Please try again or contact support.', 'remember' ),
+			'member_failed'    => __( 'Could not complete member setup. Please contact support.', 'remember' ),
+			'profile_failed'   => __( 'Could not save your profile. Please contact support.', 'remember' ),
+		);
+
+		return isset( $messages[ $code ] ) ? $messages[ $code ] : __( 'Registration could not be completed.', 'remember' );
+	}
+
+	/**
+	 * Minimal member registration shortcode (creates WP user + reMember member + profile).
+	 *
+	 * @param array $atts Shortcode attributes (unused).
+	 * @return string
+	 */
+	public function shortcode_register( $atts ) {
+		if ( is_user_logged_in() ) {
+			$created_pages     = get_option( 'remember_created_pages', array() );
+			$dashboard_page_id = isset( $created_pages['member_dashboard'] ) ? absint( $created_pages['member_dashboard'] ) : ( isset( $created_pages['dashboard'] ) ? absint( $created_pages['dashboard'] ) : 0 );
+			$dash              = $dashboard_page_id ? get_permalink( $dashboard_page_id ) : home_url( '/' );
+			return '<p class="remember-notice remember-info">' .
+				wp_kses_post(
+					sprintf(
+						/* translators: %s: Dashboard link */
+						__( 'You are already logged in. %s', 'remember' ),
+						'<a href="' . esc_url( $dash ) . '">' . esc_html__( 'Go to your dashboard', 'remember' ) . '</a>'
+					)
+				) .
+				'</p>';
+		}
+
+		$remember_register_success = isset( $_GET['remember_registered'] ) && '1' === $_GET['remember_registered'];
+		$remember_register_error_message = '';
+
+		if ( isset( $_GET['remember_reg_error'] ) ) {
+			$code = sanitize_text_field( wp_unslash( $_GET['remember_reg_error'] ) );
+			$remember_register_error_message = $this->get_member_registration_error_message( $code );
+		}
+
+		ob_start();
+		include plugin_dir_path( __FILE__ ) . 'partials/remember-register.php';
+		return ob_get_clean();
 	}
 
 	/**

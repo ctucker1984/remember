@@ -448,6 +448,18 @@ class Remember_Database_Updater {
 			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.12.0' ) );
 		}
 
+		// Update to 1.13.0 — ensure member registration page exists and is stored in remember_created_pages.
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.13.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.13.0' ) );
+
+			require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-page-creator.php';
+			Remember_Logger::activation_debug( 'migration 1.13.0: ensure member_register page' );
+			Remember_Page_Creator::create_pages( array( 'member_register' ) );
+
+			update_option( 'remember_db_version', '1.13.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.13.0' ) );
+		}
+
 		Remember_Logger::activation_debug(
 			'update_schema: exit',
 			array( 'remember_db_version' => get_option( 'remember_db_version', '0.0.0' ) )

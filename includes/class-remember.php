@@ -191,6 +191,7 @@ class Remember {
 		$this->loader->add_action( 'wp_enqueue_scripts', $plugin_public, 'enqueue_styles' );
 		$this->loader->add_action( 'wp_enqueue_scripts', $plugin_public, 'enqueue_scripts' );
 		$this->loader->add_action( 'init', $plugin_public, 'register_shortcodes' );
+		$this->loader->add_action( 'template_redirect', $plugin_public, 'maybe_process_member_registration', 1 );
 		$this->loader->add_action( 'remember_member_profile_saved', $this, 'maybe_sync_member_profile_to_qb', 10, 1 );
 
 		// Register FSE block patterns
@@ -388,9 +389,9 @@ class Remember {
 		$member = $member_model->get( $user->ID );
 
 		if ( $member ) {
-			// Get dashboard page URL
+			// Get dashboard page URL (member_dashboard key; dashboard was a legacy typo).
 			$created_pages = get_option( 'remember_created_pages', array() );
-			$dashboard_page_id = isset( $created_pages['dashboard'] ) ? $created_pages['dashboard'] : 0;
+			$dashboard_page_id = isset( $created_pages['member_dashboard'] ) ? $created_pages['member_dashboard'] : ( isset( $created_pages['dashboard'] ) ? $created_pages['dashboard'] : 0 );
 			
 			if ( $dashboard_page_id ) {
 				return get_permalink( $dashboard_page_id );
