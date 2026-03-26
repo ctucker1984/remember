@@ -420,10 +420,13 @@ if ( isset( $_GET['view'] ) ) {
 										<div class="remember-addon-row" style="border:1px solid #ccd0d4; padding:10px; margin:8px 0;">
 											<input type="hidden" name="event_addons[<?php echo esc_attr( $index ); ?>][id]" value="<?php echo esc_attr( $addon->merchandise_id ); ?>">
 											<p>
-												<select class="regular-text" name="event_addons[<?php echo esc_attr( $index ); ?>][product_id]" required>
+												<select class="regular-text remember-addon-product-select" name="event_addons[<?php echo esc_attr( $index ); ?>][product_id]" required>
 													<option value=""><?php esc_html_e( '-- Select Product --', 'remember' ); ?></option>
 													<?php foreach ( $catalog_products as $catalog_product ) : ?>
-														<option value="<?php echo esc_attr( $catalog_product->product_id ); ?>" <?php selected( $selected_catalog_product_id, $catalog_product->product_id ); ?>>
+														<?php
+														$catalog_dp = isset( $catalog_product->default_price ) ? (float) $catalog_product->default_price : 0;
+														?>
+														<option value="<?php echo esc_attr( $catalog_product->product_id ); ?>" data-default-price="<?php echo esc_attr( number_format( $catalog_dp, 2, '.', '' ) ); ?>" <?php selected( $selected_catalog_product_id, $catalog_product->product_id ); ?>>
 															<?php echo esc_html( $catalog_product->product_name ); ?>
 														</option>
 													<?php endforeach; ?>
@@ -631,7 +634,8 @@ jQuery(document).ready(function($) {
 	var productOptionsHtml = <?php
 	$options = '<option value="">' . esc_html__( '-- Select Product --', 'remember' ) . '</option>';
 	foreach ( $catalog_products as $catalog_product ) {
-		$options .= '<option value="' . esc_attr( $catalog_product->product_id ) . '">' . esc_html( $catalog_product->product_name ) . '</option>';
+		$catalog_dp = isset( $catalog_product->default_price ) ? (float) $catalog_product->default_price : 0;
+		$options   .= '<option value="' . esc_attr( $catalog_product->product_id ) . '" data-default-price="' . esc_attr( number_format( $catalog_dp, 2, '.', '' ) ) . '">' . esc_html( $catalog_product->product_name ) . '</option>';
 	}
 	echo wp_json_encode( $options );
 	?>;
@@ -640,7 +644,7 @@ jQuery(document).ready(function($) {
 		return '' +
 			'<div class="remember-addon-row" style="border:1px solid #ccd0d4; padding:10px; margin:8px 0;">' +
 				'<input type="hidden" name="event_addons[' + index + '][id]" value="">' +
-				'<p><select class="regular-text" name="event_addons[' + index + '][product_id]" required>' + productOptionsHtml + '</select></p>' +
+				'<p><select class="regular-text remember-addon-product-select" name="event_addons[' + index + '][product_id]" required>' + productOptionsHtml + '</select></p>' +
 				'<p>' +
 					'<label><?php echo esc_js( __( 'Subtotal Price', 'remember' ) ); ?> <input type="number" step="0.01" min="0" class="small-text" name="event_addons[' + index + '][cost]" value="0.00"></label>' +
 					'<label style="margin-left: 15px;"><?php echo esc_js( __( 'Max Qty (blank = unlimited)', 'remember' ) ); ?> <input type="number" min="1" class="small-text" name="event_addons[' + index + '][max_quantity]" value=""></label>' +
@@ -659,6 +663,21 @@ jQuery(document).ready(function($) {
 
 	$(document).on('click', '.remember-remove-addon', function() {
 		$(this).closest('.remember-addon-row').remove();
+	});
+
+	function rememberApplyCatalogDefaultPrice($select) {
+		var $opt = $select.find('option:selected');
+		var dp = $opt.attr('data-default-price');
+		if (typeof dp !== 'undefined' && dp !== null && dp !== '') {
+			var n = parseFloat(dp);
+			if (!isNaN(n)) {
+				$select.closest('.remember-addon-row').find('input[name*="[cost]"]').val(n.toFixed(2));
+			}
+		}
+	}
+
+	$(document).on('change', '.remember-addon-product-select', function() {
+		rememberApplyCatalogDefaultPrice($(this));
 	});
 });
 </script>

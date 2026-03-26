@@ -530,6 +530,7 @@ class Remember_Database {
 			product_name VARCHAR(255) NOT NULL,
 			description TEXT DEFAULT NULL,
 			product_type VARCHAR(50) DEFAULT NULL,
+			default_price DECIMAL(10,2) NOT NULL DEFAULT 0.00,
 			is_active BOOLEAN DEFAULT 1,
 			created_at DATETIME NOT NULL,
 			updated_at DATETIME NOT NULL,

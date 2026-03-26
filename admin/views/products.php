@@ -15,6 +15,17 @@ require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-product.
 
 $product_model = new Remember_Product();
 
+/**
+ * Sanitize catalog default price (non-negative, 2 decimals).
+ *
+ * @param mixed $raw Raw POST value.
+ * @return float
+ */
+$remember_sanitize_catalog_price = function ( $raw ) {
+	$s = is_string( $raw ) ? str_replace( ',', '', $raw ) : (string) $raw;
+	return round( max( 0, floatval( $s ) ), 2 );
+};
+
 if ( isset( $_POST['remember_products_action'] ) && check_admin_referer( 'remember_products_action', 'remember_products_nonce' ) ) {
 	$action = sanitize_text_field( wp_unslash( $_POST['remember_products_action'] ) );
 
@@ -22,6 +33,7 @@ if ( isset( $_POST['remember_products_action'] ) && check_admin_referer( 'rememb
 		$product_name        = isset( $_POST['product_name'] ) ? sanitize_text_field( wp_unslash( $_POST['product_name'] ) ) : '';
 		$product_description = isset( $_POST['description'] ) ? sanitize_textarea_field( wp_unslash( $_POST['description'] ) ) : '';
 		$product_type        = isset( $_POST['product_type'] ) ? sanitize_text_field( wp_unslash( $_POST['product_type'] ) ) : 'Service';
+		$default_price       = isset( $_POST['default_price'] ) ? $remember_sanitize_catalog_price( wp_unslash( $_POST['default_price'] ) ) : 0.00;
 
 		if ( '' === $product_name ) {
 			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Product name is required.', 'remember' ) . '</p></div>';
@@ -32,10 +44,11 @@ if ( isset( $_POST['remember_products_action'] ) && check_admin_referer( 'rememb
 					$product_model->update(
 						$existing->product_id,
 						array(
-							'description' => $product_description,
-							'product_type' => $product_type,
-							'is_active'   => 1,
-							'updated_at'  => current_time( 'mysql' ),
+							'description'    => $product_description,
+							'product_type'     => $product_type,
+							'default_price'    => $default_price,
+							'is_active'        => 1,
+							'updated_at'       => current_time( 'mysql' ),
 						)
 					);
 					echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Product restored from inactive status.', 'remember' ) . '</p></div>';
@@ -45,12 +58,13 @@ if ( isset( $_POST['remember_products_action'] ) && check_admin_referer( 'rememb
 			} else {
 				$created = $product_model->insert(
 					array(
-						'product_name'  => $product_name,
-						'description'   => $product_description,
-						'product_type'  => $product_type,
-						'is_active'     => 1,
-						'created_at'    => current_time( 'mysql' ),
-						'updated_at'    => current_time( 'mysql' ),
+						'product_name'   => $product_name,
+						'description'    => $product_description,
+						'product_type'     => $product_type,
+						'default_price'    => $default_price,
+						'is_active'        => 1,
+						'created_at'       => current_time( 'mysql' ),
+						'updated_at'       => current_time( 'mysql' ),
 					)
 				);
 				if ( $created ) {
@@ -65,15 +79,17 @@ if ( isset( $_POST['remember_products_action'] ) && check_admin_referer( 'rememb
 		$product_name        = isset( $_POST['product_name'] ) ? sanitize_text_field( wp_unslash( $_POST['product_name'] ) ) : '';
 		$product_description = isset( $_POST['description'] ) ? sanitize_textarea_field( wp_unslash( $_POST['description'] ) ) : '';
 		$product_type        = isset( $_POST['product_type'] ) ? sanitize_text_field( wp_unslash( $_POST['product_type'] ) ) : 'Service';
+		$default_price       = isset( $_POST['default_price'] ) ? $remember_sanitize_catalog_price( wp_unslash( $_POST['default_price'] ) ) : 0.00;
 
 		if ( $product_id > 0 && '' !== $product_name ) {
 			$result = $product_model->update(
 				$product_id,
 				array(
-					'product_name'  => $product_name,
-					'description'   => $product_description,
-					'product_type'    => $product_type,
-					'updated_at'      => current_time( 'mysql' ),
+					'product_name'   => $product_name,
+					'description'    => $product_description,
+					'product_type'     => $product_type,
+					'default_price'    => $default_price,
+					'updated_at'       => current_time( 'mysql' ),
 				)
 			);
 			if ( false !== $result ) {
@@ -113,7 +129,7 @@ foreach ( $all_products as $product ) {
 	<h1 class="wp-heading-inline"><?php esc_html_e( 'Products', 'remember' ); ?></h1>
 	<hr class="wp-header-end">
 
-	<p class="description"><?php esc_html_e( 'Define static reMember add-on line items here. Events select from this catalog. Map each catalog item to a QuickBooks Product/Service under Settings → QuickBooks. Deleting is soft-delete only.', 'remember' ); ?></p>
+	<p class="description"><?php esc_html_e( 'Define static reMember add-on line items here. Set a default subtotal price; each event can still override the price when the add-on is attached. Events select from this catalog. Map each catalog item to a QuickBooks Product/Service under Settings → QuickBooks. Deleting is soft-delete only.', 'remember' ); ?></p>
 
 	<div style="margin: 16px 0; padding: 15px; background: #fff; border: 1px solid #ccd0d4; border-radius: 4px;">
 		<h2 style="margin-top:0;"><?php esc_html_e( 'Add Product', 'remember' ); ?></h2>
@@ -128,6 +144,13 @@ foreach ( $all_products as $product ) {
 				<tr>
 					<th><label for="remember_product_description"><?php esc_html_e( 'Description', 'remember' ); ?></label></th>
 					<td><input id="remember_product_description" type="text" name="description" class="regular-text"></td>
+				</tr>
+				<tr>
+					<th><label for="remember_product_default_price"><?php esc_html_e( 'Default price', 'remember' ); ?></label></th>
+					<td>
+						<input id="remember_product_default_price" type="number" name="default_price" class="small-text" step="0.01" min="0" value="0.00">
+						<p class="description"><?php esc_html_e( 'Default subtotal for this add-on when placed on an event (events may override).', 'remember' ); ?></p>
+					</td>
 				</tr>
 				<tr>
 					<th><label for="remember_product_type"><?php esc_html_e( 'Type', 'remember' ); ?></label></th>
@@ -148,15 +171,16 @@ foreach ( $all_products as $product ) {
 	<table class="wp-list-table widefat striped" style="table-layout: fixed;">
 		<thead>
 			<tr>
-				<th style="width: 28%;"><?php esc_html_e( 'Name', 'remember' ); ?></th>
-				<th style="width: 32%;"><?php esc_html_e( 'Description', 'remember' ); ?></th>
-				<th style="width: 18%;"><?php esc_html_e( 'Type', 'remember' ); ?></th>
-				<th style="width: 22%;"><?php esc_html_e( 'Actions', 'remember' ); ?></th>
+				<th style="width: 22%;"><?php esc_html_e( 'Name', 'remember' ); ?></th>
+				<th style="width: 26%;"><?php esc_html_e( 'Description', 'remember' ); ?></th>
+				<th style="width: 12%;"><?php esc_html_e( 'Default price', 'remember' ); ?></th>
+				<th style="width: 14%;"><?php esc_html_e( 'Type', 'remember' ); ?></th>
+				<th style="width: 26%;"><?php esc_html_e( 'Actions', 'remember' ); ?></th>
 			</tr>
 		</thead>
 		<tbody>
 			<?php if ( empty( $active_products ) ) : ?>
-				<tr><td colspan="4"><?php esc_html_e( 'No active products.', 'remember' ); ?></td></tr>
+				<tr><td colspan="5"><?php esc_html_e( 'No active products.', 'remember' ); ?></td></tr>
 			<?php else : ?>
 				<?php foreach ( $active_products as $product ) : ?>
 					<?php $update_form_id = 'remember-product-update-' . absint( $product->product_id ); ?>
@@ -166,6 +190,12 @@ foreach ( $all_products as $product ) {
 						</td>
 						<td style="padding: 10px;">
 							<input type="text" name="description" form="<?php echo esc_attr( $update_form_id ); ?>" value="<?php echo esc_attr( $product->description ); ?>" class="regular-text" style="width: 100%;">
+						</td>
+						<td style="padding: 10px;">
+							<?php
+							$dp = isset( $product->default_price ) ? (float) $product->default_price : 0;
+							?>
+							<input type="number" name="default_price" form="<?php echo esc_attr( $update_form_id ); ?>" value="<?php echo esc_attr( number_format( $dp, 2, '.', '' ) ); ?>" class="small-text" step="0.01" min="0" style="width: 100%;">
 						</td>
 						<td style="padding: 10px;">
 							<select name="product_type" form="<?php echo esc_attr( $update_form_id ); ?>" style="width: 100%;">
@@ -200,19 +230,21 @@ foreach ( $all_products as $product ) {
 	<table class="wp-list-table widefat striped" style="table-layout: fixed;">
 		<thead>
 			<tr>
-				<th style="width: 35%;"><?php esc_html_e( 'Name', 'remember' ); ?></th>
-				<th style="width: 45%;"><?php esc_html_e( 'Description', 'remember' ); ?></th>
-				<th style="width: 20%;"><?php esc_html_e( 'Actions', 'remember' ); ?></th>
+				<th style="width: 28%;"><?php esc_html_e( 'Name', 'remember' ); ?></th>
+				<th style="width: 32%;"><?php esc_html_e( 'Description', 'remember' ); ?></th>
+				<th style="width: 15%;"><?php esc_html_e( 'Default price', 'remember' ); ?></th>
+				<th style="width: 25%;"><?php esc_html_e( 'Actions', 'remember' ); ?></th>
 			</tr>
 		</thead>
 		<tbody>
 			<?php if ( empty( $inactive_products ) ) : ?>
-				<tr><td colspan="3"><?php esc_html_e( 'No archived products.', 'remember' ); ?></td></tr>
+				<tr><td colspan="4"><?php esc_html_e( 'No archived products.', 'remember' ); ?></td></tr>
 			<?php else : ?>
 				<?php foreach ( $inactive_products as $product ) : ?>
 					<tr>
 						<td style="padding: 10px;"><?php echo esc_html( $product->product_name ); ?></td>
 						<td style="padding: 10px;"><?php echo esc_html( $product->description ); ?></td>
+						<td style="padding: 10px;">$<?php echo esc_html( number_format( isset( $product->default_price ) ? (float) $product->default_price : 0, 2 ) ); ?></td>
 						<td style="padding: 10px;">
 							<form method="post" action="">
 								<?php wp_nonce_field( 'remember_products_action', 'remember_products_nonce' ); ?>

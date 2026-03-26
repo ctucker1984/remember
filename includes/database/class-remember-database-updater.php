@@ -30,7 +30,7 @@ class Remember_Database_Updater {
 		
 		// Check current schema version
 		$current_version = get_option( 'remember_db_version', '0.0.0' );
-		$target_version = '1.9.0'; // Latest schema (see migrations below).
+		$target_version = '1.10.0'; // Latest schema (see migrations below).
 		
 		// Update to 1.1.0 (unvetted status)
 		if ( version_compare( $current_version, '1.1.0', '<' ) ) {
@@ -357,6 +357,33 @@ class Remember_Database_Updater {
 
 			update_option( 'remember_db_version', '1.9.0' );
 			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.9.0' ) );
+		}
+
+		// Update to 1.10.0 (catalog default_price for add-on products).
+		if ( version_compare( $current_version, '1.10.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => $current_version, 'to' => '1.10.0' ) );
+
+			$products_table = $wpdb->prefix . 'remember_products';
+			$table_exists   = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $products_table ) ) === $products_table;
+			if ( $table_exists ) {
+				$cols = $wpdb->get_col( "SHOW COLUMNS FROM {$products_table}", 0 );
+				if ( is_array( $cols ) && ! in_array( 'default_price', $cols, true ) ) {
+					$ok = $wpdb->query(
+						"ALTER TABLE {$products_table} ADD COLUMN default_price DECIMAL(10,2) NOT NULL DEFAULT 0.00 AFTER product_type"
+					);
+					if ( false === $ok ) {
+						Remember_Logger::error(
+							'Failed to add default_price to remember_products',
+							array( 'error' => $wpdb->last_error )
+						);
+					} else {
+						Remember_Logger::info( 'Added default_price to remember_products' );
+					}
+				}
+			}
+
+			update_option( 'remember_db_version', '1.10.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.10.0' ) );
 		}
 	}
 }
