@@ -17,6 +17,7 @@ require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-event.ph
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-member.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-payment.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-vetting-workflow.php';
+require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-messaging.php';
 
 Remember_Logger::debug( 'Applications page loaded' );
 
@@ -24,6 +25,43 @@ $application_model = new Remember_Application();
 $event_model = new Remember_Event();
 $member_model = new Remember_Member();
 $payment_model = new Remember_Payment();
+$subtotal_disclaimer = Remember_Billing_Messaging::get_subtotal_disclaimer();
+
+/**
+ * Notify event administrators about waitlist/capacity events.
+ *
+ * @param int    $event_id Event ID.
+ * @param string $subject  Email subject.
+ * @param string $message  Email body.
+ * @return void
+ */
+function remember_notify_event_admins( $event_id, $subject, $message ) {
+	global $wpdb;
+	$emails = $wpdb->get_col(
+		$wpdb->prepare(
+			"SELECT DISTINCT u.user_email
+			FROM {$wpdb->prefix}remember_event_applications a
+			JOIN {$wpdb->prefix}remember_event_roles er ON a.event_role_id = er.event_role_id
+			JOIN {$wpdb->prefix}remember_roles r ON er.role_id = r.role_id
+			JOIN {$wpdb->users} u ON a.member_id = u.ID
+			WHERE a.event_id = %d
+			AND a.status = 'accepted'
+			AND r.role_name = %s
+			AND u.user_email IS NOT NULL
+			AND u.user_email != ''",
+			$event_id,
+			'Event Administrator'
+		)
+	);
+
+	if ( empty( $emails ) ) {
+		return;
+	}
+
+	foreach ( $emails as $email ) {
+		wp_mail( $email, $subject, $message );
+	}
+}
 
 // Handle form submissions
 if ( isset( $_POST['remember_application_action'] ) && check_admin_referer( 'remember_application_action', 'remember_application_nonce' ) ) {
@@ -79,8 +117,54 @@ if ( isset( $_POST['remember_application_action'] ) && check_admin_referer( 'rem
 			if ( ! current_user_can( 'remember_update_applications' ) ) {
 				wp_die( __( 'You do not have sufficient permissions to perform this action.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
 			}
-			$result = $application_model->update_status( $application_id, 'accepted', get_current_user_id() );
-			if ( $result !== false ) {
+			$application = $application_model->get( $application_id );
+			if ( ! $application ) {
+				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Application not found.', 'remember' ) . '</p></div>';
+			} else {
+				global $wpdb;
+				$event_role = $wpdb->get_row(
+					$wpdb->prepare(
+						"SELECT er.*, r.role_name FROM {$wpdb->prefix}remember_event_roles er
+						LEFT JOIN {$wpdb->prefix}remember_roles r ON er.role_id = r.role_id
+						WHERE er.event_role_id = %d",
+						$application->event_role_id
+					)
+				);
+
+				$accepted_count = $application_model->get_accepted_count_for_event_role( $application->event_role_id, $application_id );
+				$is_full = false;
+				if ( $event_role && null !== $event_role->max_participants && '' !== $event_role->max_participants ) {
+					$is_full = intval( $accepted_count ) >= intval( $event_role->max_participants );
+				}
+
+				if ( $is_full ) {
+					$result = $application_model->update_status( $application_id, 'waitlisted', get_current_user_id() );
+					if ( false !== $result ) {
+						$event = $event_model->get( $application->event_id );
+						$member = $member_model->get( $application->member_id );
+						$user = $member ? get_user_by( 'ID', $member->member_id ) : null;
+						$member_name = $user ? $user->display_name : __( 'Unknown Member', 'remember' );
+						$event_name = $event ? $event->event_name : __( 'Unknown Event', 'remember' );
+						$role_name = $event_role && ! empty( $event_role->role_name ) ? $event_role->role_name : __( 'Event Role', 'remember' );
+
+						remember_notify_event_admins(
+							$application->event_id,
+							sprintf( __( 'Waitlist update for %s', 'remember' ), $event_name ),
+							sprintf(
+								__( 'A member was added to the waitlist because capacity is full.%1$sEvent: %2$s%1$sRole: %3$s%1$sMember: %4$s', 'remember' ),
+								"\n",
+								$event_name,
+								$role_name,
+								$member_name
+							)
+						);
+						echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html__( 'Role is at capacity. Application moved to waitlist and Event Administrators were notified.', 'remember' ) . '</p></div>';
+					} else {
+						echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Role is at capacity, and moving the application to waitlist failed.', 'remember' ) . '</p></div>';
+					}
+				} else {
+					$result = $application_model->update_status( $application_id, 'accepted', get_current_user_id() );
+					if ( $result !== false ) {
 				Remember_Logger::info( 'Application accepted', array( 'application_id' => $application_id ) );
 				
 				// Create QuickBooks invoice if connected
@@ -101,18 +185,32 @@ if ( isset( $_POST['remember_application_action'] ) && check_admin_referer( 'rem
 				} else {
 					echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Application accepted successfully.', 'remember' ) . '</p></div>';
 				}
-			} else {
-				Remember_Logger::error( 'Failed to accept application', array( 'application_id' => $application_id ) );
-				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to accept application.', 'remember' ) . '</p></div>';
+					} else {
+						Remember_Logger::error( 'Failed to accept application', array( 'application_id' => $application_id ) );
+						echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to accept application.', 'remember' ) . '</p></div>';
+					}
+				}
 			}
 		} elseif ( 'decline' === $action ) {
 			// Check capability
 			if ( ! current_user_can( 'remember_update_applications' ) ) {
 				wp_die( __( 'You do not have sufficient permissions to perform this action.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
 			}
+			$application = $application_model->get( $application_id );
+			$previous_status = $application ? $application->status : '';
 			$result = $application_model->update_status( $application_id, 'declined', get_current_user_id() );
 			if ( $result !== false ) {
 				Remember_Logger::info( 'Application declined', array( 'application_id' => $application_id ) );
+				if ( 'accepted' === $previous_status && $application ) {
+					$event = $event_model->get( $application->event_id );
+					$event_name = $event ? $event->event_name : __( 'Unknown Event', 'remember' );
+					remember_notify_event_admins(
+						$application->event_id,
+						sprintf( __( 'Seat opened for %s', 'remember' ), $event_name ),
+						sprintf( __( 'A previously accepted attendee was declined. A seat is now available for this event.%1$sEvent: %2$s', 'remember' ), "\n", $event_name )
+					);
+					echo '<div class="notice notice-info is-dismissible"><p>' . esc_html__( 'Seat opened and Event Administrators were notified for manual waitlist promotion.', 'remember' ) . '</p></div>';
+				}
 				echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Application declined successfully.', 'remember' ) . '</p></div>';
 			} else {
 				Remember_Logger::error( 'Failed to decline application', array( 'application_id' => $application_id ) );
@@ -124,13 +222,63 @@ if ( isset( $_POST['remember_application_action'] ) && check_admin_referer( 'rem
 				wp_die( __( 'You do not have sufficient permissions to perform this action.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
 			}
 			
+			$application = $application_model->get( $application_id );
+			$previous_status = $application ? $application->status : '';
 			$result = $application_model->update_status( $application_id, 'waitlisted', get_current_user_id() );
 			if ( $result !== false ) {
 				Remember_Logger::info( 'Application waitlisted', array( 'application_id' => $application_id ) );
+				if ( $application ) {
+					$event = $event_model->get( $application->event_id );
+					$event_name = $event ? $event->event_name : __( 'Unknown Event', 'remember' );
+					remember_notify_event_admins(
+						$application->event_id,
+						sprintf( __( 'Waitlist update for %s', 'remember' ), $event_name ),
+						sprintf( __( 'An application was moved to the waitlist.%1$sEvent: %2$s', 'remember' ), "\n", $event_name )
+					);
+					if ( 'accepted' === $previous_status ) {
+						echo '<div class="notice notice-info is-dismissible"><p>' . esc_html__( 'Seat opened and Event Administrators were notified for manual waitlist promotion.', 'remember' ) . '</p></div>';
+					}
+				}
 				echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Application moved to waitlist.', 'remember' ) . '</p></div>';
 			} else {
 				Remember_Logger::error( 'Failed to waitlist application', array( 'application_id' => $application_id ) );
 				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to waitlist application.', 'remember' ) . '</p></div>';
+			}
+		} elseif ( 'reopen_pending' === $action ) {
+			// Check capability
+			if ( ! current_user_can( 'remember_update_applications' ) ) {
+				wp_die( __( 'You do not have sufficient permissions to perform this action.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+			}
+
+			$result = $application_model->update_status( $application_id, 'pending', get_current_user_id() );
+			if ( false !== $result ) {
+				echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Application moved back to pending.', 'remember' ) . '</p></div>';
+			} else {
+				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to move application back to pending.', 'remember' ) . '</p></div>';
+			}
+		} elseif ( 'reprocess_billing' === $action ) {
+			// Check capability
+			if ( ! current_user_can( 'remember_update_applications' ) ) {
+				wp_die( __( 'You do not have sufficient permissions to perform this action.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+			}
+
+			$application = $application_model->get( $application_id );
+			if ( ! $application || 'accepted' !== $application->status ) {
+				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Only accepted applications can be reprocessed for billing.', 'remember' ) . '</p></div>';
+			} else {
+				require_once plugin_dir_path( __FILE__ ) . '../../includes/integrations/class-remember-quickbooks-oauth.php';
+				$qb_settings = Remember_QuickBooks_OAuth::get_settings();
+				if ( $qb_settings && ! empty( $qb_settings['access_token'] ) && ! empty( $qb_settings['realm_id'] ) ) {
+					require_once plugin_dir_path( __FILE__ ) . '../../includes/integrations/class-remember-quickbooks-sync.php';
+					$invoice_result = Remember_QuickBooks_Sync::create_invoice_for_application( $application_id );
+					if ( is_wp_error( $invoice_result ) ) {
+						echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html__( 'Billing reprocess failed: ', 'remember' ) . esc_html( $invoice_result->get_error_message() ) . '</p></div>';
+					} else {
+						echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Billing reprocess succeeded. QuickBooks invoice created.', 'remember' ) . '</p></div>';
+					}
+				} else {
+					echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html__( 'QuickBooks is not connected. Connect QuickBooks in Settings to reprocess billing.', 'remember' ) . '</p></div>';
+				}
 			}
 		}
 	}
@@ -178,6 +326,28 @@ if ( isset( $_GET['view'] ) ) {
 		
 		// Get payment if exists
 		$viewing_payment = $payment_model->get_by_application( $view_id );
+		$viewing_billing_label = __( 'Not invoiced yet', 'remember' );
+		$viewing_billing_color = '#72777c';
+		if ( $viewing_payment && ! empty( $viewing_payment->quickbooks_invoice_id ) ) {
+			$viewing_billing_label = sprintf(
+				/* translators: %s: QuickBooks invoice ID */
+				__( 'Invoiced in QuickBooks (Invoice ID: %s)', 'remember' ),
+				$viewing_payment->quickbooks_invoice_id
+			);
+			$viewing_billing_color = '#46b450';
+		}
+
+		// Get selected add-ons/merchandise for this application.
+		$viewing_application_addons = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT am.*, em.merchandise_name, em.description AS addon_description
+				FROM {$wpdb->prefix}remember_application_merchandise am
+				LEFT JOIN {$wpdb->prefix}remember_event_merchandise em ON am.merchandise_id = em.merchandise_id
+				WHERE am.event_application_id = %d
+				ORDER BY am.application_merchandise_id ASC",
+				$view_id
+			)
+		);
 		
 		// Get location if event has one
 		if ( $viewing_event && $viewing_event->location_id ) {
@@ -212,6 +382,7 @@ $status_colors = array(
 
 <div class="wrap remember-applications">
 	<h1 class="wp-heading-inline"><?php echo esc_html( get_admin_page_title() ); ?></h1>
+	<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-waitlist' ) ); ?>" class="page-title-action"><?php esc_html_e( 'Open Waitlist', 'remember' ); ?></a>
 	
 	<?php if ( ! $viewing_application ) : ?>
 		<button type="button" class="page-title-action" onclick="document.getElementById('remember-add-application').style.display='block'; this.style.display='none';"><?php esc_html_e( 'Add New', 'remember' ); ?></button>
@@ -220,6 +391,13 @@ $status_colors = array(
 	<?php endif; ?>
 	
 	<hr class="wp-header-end">
+
+	<div class="notice notice-info" style="margin: 15px 0;">
+		<p>
+			<strong><?php esc_html_e( 'Billing note:', 'remember' ); ?></strong>
+			<?php echo esc_html( $subtotal_disclaimer ); ?>
+		</p>
+	</div>
 
 	<?php if ( $viewing_application ) : ?>
 		<?php include 'application-detail.php'; ?>
@@ -329,6 +507,7 @@ $status_colors = array(
 					<th class="column-member"><?php esc_html_e( 'Member', 'remember' ); ?></th>
 					<th class="column-role"><?php esc_html_e( 'Role', 'remember' ); ?></th>
 					<th class="column-status"><?php esc_html_e( 'Status', 'remember' ); ?></th>
+					<th class="column-billing"><?php esc_html_e( 'Billing', 'remember' ); ?></th>
 					<th class="column-date"><?php esc_html_e( 'Applied', 'remember' ); ?></th>
 					<th class="column-actions"><?php esc_html_e( 'Actions', 'remember' ); ?></th>
 				</tr>
@@ -347,6 +526,13 @@ $status_colors = array(
 						WHERE er.event_role_id = %d",
 						$application->event_role_id
 					) );
+					$application_payment = $payment_model->get_by_application( $application->application_id );
+					$billing_label = __( 'Not invoiced', 'remember' );
+					$billing_color = '#72777c';
+					if ( $application_payment && ! empty( $application_payment->quickbooks_invoice_id ) ) {
+						$billing_label = __( 'Invoiced', 'remember' );
+						$billing_color = '#46b450';
+					}
 				?>
 					<tr>
 						<td class="column-event">
@@ -372,6 +558,11 @@ $status_colors = array(
 						<td class="column-status">
 							<span style="color: <?php echo esc_attr( $status_colors[ $application->status ] ); ?>; font-weight: bold;">
 								<?php echo esc_html( $status_labels[ $application->status ] ); ?>
+							</span>
+						</td>
+						<td class="column-billing">
+							<span style="color: <?php echo esc_attr( $billing_color ); ?>; font-weight: bold;">
+								<?php echo esc_html( $billing_label ); ?>
 							</span>
 						</td>
 						<td class="column-date">
@@ -404,7 +595,23 @@ $status_colors = array(
 									</form>
 								<?php endif; ?>
 							<?php else : ?>
-								<span class="description"><?php esc_html_e( 'Processed', 'remember' ); ?></span>
+								<?php if ( 'accepted' === $application->status ) : ?>
+									|
+									<form method="post" action="" style="display: inline;">
+										<?php wp_nonce_field( 'remember_application_action', 'remember_application_nonce' ); ?>
+										<input type="hidden" name="remember_application_action" value="reopen_pending">
+										<input type="hidden" name="application_id" value="<?php echo esc_attr( $application->application_id ); ?>">
+										<input type="submit" class="button button-small" value="<?php esc_attr_e( 'Move to Pending', 'remember' ); ?>" onclick="return confirm('<?php esc_attr_e( 'Move this accepted application back to pending?', 'remember' ); ?>');">
+									</form>
+									<form method="post" action="" style="display: inline;">
+										<?php wp_nonce_field( 'remember_application_action', 'remember_application_nonce' ); ?>
+										<input type="hidden" name="remember_application_action" value="reprocess_billing">
+										<input type="hidden" name="application_id" value="<?php echo esc_attr( $application->application_id ); ?>">
+										<input type="submit" class="button button-small" value="<?php esc_attr_e( 'Reprocess Billing', 'remember' ); ?>">
+									</form>
+								<?php else : ?>
+									<span class="description"><?php esc_html_e( 'Processed', 'remember' ); ?></span>
+								<?php endif; ?>
 							<?php endif; ?>
 						</td>
 					</tr>

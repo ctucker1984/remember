@@ -10,6 +10,8 @@
 if ( ! defined( 'WPINC' ) ) {
 	die;
 }
+require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-messaging.php';
+$subtotal_disclaimer = Remember_Billing_Messaging::get_subtotal_disclaimer();
 
 // Status labels and colors
 $status_labels = array(
@@ -72,7 +74,7 @@ $status_colors = array(
 							<strong><?php esc_html_e( 'Role:', 'remember' ); ?></strong>
 							<?php echo esc_html( $viewing_event_role->role_name ); ?>
 							<?php if ( $viewing_event_role->cost > 0 ) : ?>
-								<span style="color: #999;">($<?php echo esc_html( number_format( $viewing_event_role->cost, 2 ) ); ?>)</span>
+								<span style="color: #999;">($<?php echo esc_html( number_format( $viewing_event_role->cost, 2 ) ); ?> <?php esc_html_e( 'subtotal', 'remember' ); ?>)</span>
 							<?php endif; ?>
 						</p>
 					<?php endif; ?>
@@ -84,6 +86,12 @@ $status_colors = array(
 							</a>
 						</p>
 					<?php endif; ?>
+				<p style="margin: 5px 0;">
+					<strong><?php esc_html_e( 'Billing:', 'remember' ); ?></strong>
+					<span style="color: <?php echo esc_attr( isset( $viewing_billing_color ) ? $viewing_billing_color : '#72777c' ); ?>;">
+						<?php echo esc_html( isset( $viewing_billing_label ) ? $viewing_billing_label : __( 'Not invoiced yet', 'remember' ) ); ?>
+					</span>
+				</p>
 				</div>
 			</div>
 		</div>
@@ -127,15 +135,71 @@ $status_colors = array(
 			</table>
 		</div>
 
+		<!-- Itemized Charges Section -->
+		<div class="remember-application-detail-section">
+			<h3><?php esc_html_e( 'Itemized Charges (Subtotal)', 'remember' ); ?></h3>
+			<table class="wp-list-table widefat striped" style="margin: 0;">
+				<thead>
+					<tr>
+						<th><?php esc_html_e( 'Item', 'remember' ); ?></th>
+						<th style="width: 110px;"><?php esc_html_e( 'Qty', 'remember' ); ?></th>
+						<th style="width: 140px;"><?php esc_html_e( 'Unit Price', 'remember' ); ?></th>
+						<th style="width: 140px;"><?php esc_html_e( 'Line Subtotal', 'remember' ); ?></th>
+					</tr>
+				</thead>
+				<tbody>
+					<tr>
+						<td>
+							<?php
+							$role_label = $viewing_event_role ? $viewing_event_role->role_name : __( 'Role', 'remember' );
+							echo esc_html( $role_label );
+							?>
+						</td>
+						<td>1</td>
+						<td>$<?php echo esc_html( number_format( $viewing_event_role ? (float) $viewing_event_role->cost : 0, 2 ) ); ?></td>
+						<td>$<?php echo esc_html( number_format( $viewing_event_role ? (float) $viewing_event_role->cost : 0, 2 ) ); ?></td>
+					</tr>
+					<?php if ( ! empty( $viewing_application_addons ) ) : ?>
+						<?php foreach ( $viewing_application_addons as $addon_item ) : ?>
+							<tr>
+								<td>
+									<?php echo esc_html( ! empty( $addon_item->merchandise_name ) ? $addon_item->merchandise_name : __( 'Add-on', 'remember' ) ); ?>
+								</td>
+								<td><?php echo esc_html( intval( $addon_item->quantity ) ); ?></td>
+								<td>$<?php echo esc_html( number_format( (float) $addon_item->unit_cost, 2 ) ); ?></td>
+								<td>$<?php echo esc_html( number_format( (float) $addon_item->total_cost, 2 ) ); ?></td>
+							</tr>
+						<?php endforeach; ?>
+					<?php endif; ?>
+					<?php
+					$itemized_subtotal = $viewing_event_role ? (float) $viewing_event_role->cost : 0;
+					if ( ! empty( $viewing_application_addons ) ) {
+						foreach ( $viewing_application_addons as $addon_item ) {
+							$itemized_subtotal += (float) $addon_item->total_cost;
+						}
+					}
+					?>
+					<tr>
+						<th colspan="3" style="text-align:right;"><?php esc_html_e( 'Subtotal', 'remember' ); ?></th>
+						<th>$<?php echo esc_html( number_format( $itemized_subtotal, 2 ) ); ?></th>
+					</tr>
+				</tbody>
+			</table>
+			<p class="description" style="margin-top: 8px;"><?php echo esc_html( $subtotal_disclaimer ); ?></p>
+		</div>
+
 		<!-- Payment Information Section -->
 		<?php if ( $viewing_payment ) : ?>
 			<div class="remember-application-detail-section">
 				<h3><?php esc_html_e( 'Payment Information', 'remember' ); ?></h3>
 				<table class="form-table" style="margin: 0;">
 					<tr>
-						<th style="width: 140px;"><?php esc_html_e( 'Total Amount:', 'remember' ); ?></th>
+						<th style="width: 140px;"><?php esc_html_e( 'Subtotal Amount:', 'remember' ); ?></th>
 						<td>
 							<strong>$<?php echo esc_html( number_format( $viewing_payment->total_amount, 2 ) ); ?></strong>
+							<p class="description" style="margin: 6px 0 0 0;">
+								<?php echo esc_html( $subtotal_disclaimer ); ?>
+							</p>
 						</td>
 					</tr>
 					<tr>
@@ -206,29 +270,46 @@ $status_colors = array(
 	</div>
 
 	<!-- Action Buttons -->
-	<?php if ( 'pending' === $viewing_application->status || 'waitlisted' === $viewing_application->status ) : ?>
+	<?php if ( 'pending' === $viewing_application->status || 'waitlisted' === $viewing_application->status || 'accepted' === $viewing_application->status ) : ?>
 		<div style="background: #fff; border: 1px solid #ccd0d4; border-radius: 4px; padding: 20px; margin-top: 20px;">
 			<h3 style="margin-top: 0;"><?php esc_html_e( 'Actions', 'remember' ); ?></h3>
-			<form method="post" action="" style="display: inline-block; margin-right: 10px;">
-				<?php wp_nonce_field( 'remember_application_action', 'remember_application_nonce' ); ?>
-				<input type="hidden" name="remember_application_action" value="accept">
-				<input type="hidden" name="application_id" value="<?php echo esc_attr( $viewing_application->application_id ); ?>">
-				<input type="submit" class="button button-primary" value="<?php esc_attr_e( 'Accept Application', 'remember' ); ?>" onclick="return confirm('<?php esc_attr_e( 'Accept this application?', 'remember' ); ?>');">
-			</form>
-			
-			<form method="post" action="" style="display: inline-block; margin-right: 10px;">
-				<?php wp_nonce_field( 'remember_application_action', 'remember_application_nonce' ); ?>
-				<input type="hidden" name="remember_application_action" value="decline">
-				<input type="hidden" name="application_id" value="<?php echo esc_attr( $viewing_application->application_id ); ?>">
-				<input type="submit" class="button" value="<?php esc_attr_e( 'Decline Application', 'remember' ); ?>" onclick="return confirm('<?php esc_attr_e( 'Decline this application?', 'remember' ); ?>');">
-			</form>
-			
+			<?php if ( 'pending' === $viewing_application->status || 'waitlisted' === $viewing_application->status ) : ?>
+				<form method="post" action="" style="display: inline-block; margin-right: 10px;">
+					<?php wp_nonce_field( 'remember_application_action', 'remember_application_nonce' ); ?>
+					<input type="hidden" name="remember_application_action" value="accept">
+					<input type="hidden" name="application_id" value="<?php echo esc_attr( $viewing_application->application_id ); ?>">
+					<input type="submit" class="button button-primary" value="<?php esc_attr_e( 'Accept Application', 'remember' ); ?>" onclick="return confirm('<?php esc_attr_e( 'Accept this application?', 'remember' ); ?>');">
+				</form>
+
+				<form method="post" action="" style="display: inline-block; margin-right: 10px;">
+					<?php wp_nonce_field( 'remember_application_action', 'remember_application_nonce' ); ?>
+					<input type="hidden" name="remember_application_action" value="decline">
+					<input type="hidden" name="application_id" value="<?php echo esc_attr( $viewing_application->application_id ); ?>">
+					<input type="submit" class="button" value="<?php esc_attr_e( 'Decline Application', 'remember' ); ?>" onclick="return confirm('<?php esc_attr_e( 'Decline this application?', 'remember' ); ?>');">
+				</form>
+			<?php endif; ?>
+
 			<?php if ( 'pending' === $viewing_application->status ) : ?>
 				<form method="post" action="" style="display: inline-block;">
 					<?php wp_nonce_field( 'remember_application_action', 'remember_application_nonce' ); ?>
 					<input type="hidden" name="remember_application_action" value="waitlist">
 					<input type="hidden" name="application_id" value="<?php echo esc_attr( $viewing_application->application_id ); ?>">
 					<input type="submit" class="button" value="<?php esc_attr_e( 'Move to Waitlist', 'remember' ); ?>">
+				</form>
+			<?php endif; ?>
+
+			<?php if ( 'accepted' === $viewing_application->status ) : ?>
+				<form method="post" action="" style="display: inline-block; margin-right: 10px;">
+					<?php wp_nonce_field( 'remember_application_action', 'remember_application_nonce' ); ?>
+					<input type="hidden" name="remember_application_action" value="reopen_pending">
+					<input type="hidden" name="application_id" value="<?php echo esc_attr( $viewing_application->application_id ); ?>">
+					<input type="submit" class="button" value="<?php esc_attr_e( 'Move to Pending', 'remember' ); ?>" onclick="return confirm('<?php esc_attr_e( 'Move this accepted application back to pending?', 'remember' ); ?>');">
+				</form>
+				<form method="post" action="" style="display: inline-block;">
+					<?php wp_nonce_field( 'remember_application_action', 'remember_application_nonce' ); ?>
+					<input type="hidden" name="remember_application_action" value="reprocess_billing">
+					<input type="hidden" name="application_id" value="<?php echo esc_attr( $viewing_application->application_id ); ?>">
+					<input type="submit" class="button button-primary" value="<?php esc_attr_e( 'Reprocess Billing', 'remember' ); ?>">
 				</form>
 			<?php endif; ?>
 		</div>

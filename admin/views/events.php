@@ -16,6 +16,8 @@ require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-event.ph
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-location.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-application.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-role.php';
+require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-merchandise.php';
+require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-product.php';
 
 Remember_Logger::debug( 'Events page loaded' );
 
@@ -23,12 +25,134 @@ $event_model = new Remember_Event();
 $location_model = new Remember_Location();
 $application_model = new Remember_Application();
 $role_model = new Remember_Role();
+$merchandise_model = new Remember_Merchandise();
+$product_model = new Remember_Product();
+$catalog_products = $product_model->get_active();
+$catalog_products_by_name = array();
+foreach ( $catalog_products as $catalog_product ) {
+	$catalog_products_by_name[ $catalog_product->product_name ] = $catalog_product;
+}
+$has_catalog_products = ! empty( $catalog_products );
 
 // Get all available event roles for the forms
 $event_roles = $role_model->get_event_roles();
 
 // Initialize editing event role IDs (will be set if editing)
 $editing_event_role_ids = array();
+$editing_event_roles_by_id = array();
+$editing_addons = array();
+
+/**
+ * Build role config payload from submitted form values.
+ *
+ * @return array
+ */
+function remember_build_role_configs_from_post() {
+	$role_configs = array();
+	if ( empty( $_POST['event_roles_config'] ) || ! is_array( $_POST['event_roles_config'] ) ) {
+		return $role_configs;
+	}
+
+	foreach ( $_POST['event_roles_config'] as $role_id => $config ) {
+		$role_id = absint( $role_id );
+		if ( $role_id <= 0 || ! is_array( $config ) ) {
+			continue;
+		}
+		$role_configs[ $role_id ] = array(
+			'enabled'          => isset( $config['enabled'] ) ? 1 : 0,
+			'cost'             => isset( $config['cost'] ) ? floatval( wp_unslash( $config['cost'] ) ) : 0,
+			'max_participants' => isset( $config['max_participants'] ) ? sanitize_text_field( wp_unslash( $config['max_participants'] ) ) : '',
+		);
+	}
+
+	return $role_configs;
+}
+
+/**
+ * Build add-on payload from submitted form values.
+ *
+ * @return array
+ */
+function remember_build_addons_from_post( $product_model ) {
+	$addons = array();
+	if ( empty( $_POST['event_addons'] ) || ! is_array( $_POST['event_addons'] ) ) {
+		return $addons;
+	}
+
+	foreach ( $_POST['event_addons'] as $addon ) {
+		if ( ! is_array( $addon ) ) {
+			continue;
+		}
+
+		$product_id = isset( $addon['product_id'] ) ? absint( $addon['product_id'] ) : 0;
+		if ( $product_id <= 0 ) {
+			continue;
+		}
+
+		$product = $product_model->get( $product_id );
+		if ( ! $product || empty( $product->product_name ) ) {
+			continue;
+		}
+
+		$addons[] = array(
+			'merchandise_id' => isset( $addon['id'] ) ? absint( $addon['id'] ) : 0,
+			'merchandise_name' => sanitize_text_field( $product->product_name ),
+			'description'    => isset( $product->description ) ? sanitize_textarea_field( $product->description ) : '',
+			'cost'           => isset( $addon['cost'] ) ? floatval( wp_unslash( $addon['cost'] ) ) : 0,
+			'max_quantity'   => ( isset( $addon['max_quantity'] ) && '' !== $addon['max_quantity'] ) ? absint( $addon['max_quantity'] ) : null,
+			'is_available'   => isset( $addon['is_available'] ) ? 1 : 0,
+		);
+	}
+
+	return $addons;
+}
+
+/**
+ * Sync event add-ons (event_merchandise rows) from UI payload.
+ *
+ * @param Remember_Merchandise $merchandise_model Merchandise model.
+ * @param int                  $event_id Event ID.
+ * @param array                $addons Addon payload.
+ * @return void
+ */
+function remember_sync_event_addons( $merchandise_model, $event_id, $addons ) {
+	$existing = $merchandise_model->get_all_by_event( $event_id );
+	$existing_ids = array_map(
+		function( $item ) {
+			return absint( $item->merchandise_id );
+		},
+		$existing
+	);
+
+	$incoming_ids = array();
+	foreach ( $addons as $addon ) {
+		$data = array(
+			'event_id'          => $event_id,
+			'merchandise_name'  => $addon['merchandise_name'],
+			'description'       => $addon['description'],
+			'cost'              => $addon['cost'],
+			'max_quantity'      => $addon['max_quantity'],
+			'is_available'      => $addon['is_available'],
+		);
+
+		if ( ! empty( $addon['merchandise_id'] ) ) {
+			$merchandise_id = absint( $addon['merchandise_id'] );
+			$incoming_ids[] = $merchandise_id;
+			$merchandise_model->update( $merchandise_id, $data );
+		} else {
+			$new_id = $merchandise_model->create( $data );
+			if ( $new_id ) {
+				$incoming_ids[] = absint( $new_id );
+			}
+		}
+	}
+
+	foreach ( $existing_ids as $existing_id ) {
+		if ( ! in_array( $existing_id, $incoming_ids, true ) ) {
+			$merchandise_model->delete( $existing_id );
+		}
+	}
+}
 
 // Handle form submissions
 if ( isset( $_POST['remember_event_action'] ) && check_admin_referer( 'remember_event_action', 'remember_event_nonce' ) ) {
@@ -51,11 +175,12 @@ if ( isset( $_POST['remember_event_action'] ) && check_admin_referer( 'remember_
 		);
 		$event_id = $event_model->create( $data );
 		if ( $event_id ) {
-			// Handle event roles
-			if ( isset( $_POST['event_roles'] ) && is_array( $_POST['event_roles'] ) ) {
-				$role_ids = array_map( 'absint', $_POST['event_roles'] );
-				$event_model->set_event_roles( $event_id, $role_ids );
-			}
+			$role_configs = remember_build_role_configs_from_post();
+			$event_model->sync_event_role_configs( $event_id, $role_configs );
+
+			$addons = remember_build_addons_from_post( $product_model );
+			remember_sync_event_addons( $merchandise_model, $event_id, $addons );
+
 			Remember_Logger::info( 'Event created', array( 'event_id' => $event_id ) );
 			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Event created successfully.', 'remember' ) . '</p></div>';
 		} else {
@@ -80,15 +205,13 @@ if ( isset( $_POST['remember_event_action'] ) && check_admin_referer( 'remember_
 		);
 		$result = $event_model->update( $event_id, $data );
 		if ( $result !== false ) {
-			// Handle event roles
-			if ( isset( $_POST['event_roles'] ) && is_array( $_POST['event_roles'] ) ) {
-				$role_ids = array_map( 'absint', $_POST['event_roles'] );
-				$event_model->set_event_roles( $event_id, $role_ids );
-			} else {
-				// If no roles selected, clear all event roles
-				$event_model->set_event_roles( $event_id, array() );
-			}
-			Remember_Logger::info( 'Event updated', array( 'event_id' => $event_id, 'role_ids' => isset( $_POST['event_roles'] ) ? $_POST['event_roles'] : array() ) );
+			$role_configs = remember_build_role_configs_from_post();
+			$event_model->sync_event_role_configs( $event_id, $role_configs );
+
+			$addons = remember_build_addons_from_post( $product_model );
+			remember_sync_event_addons( $merchandise_model, $event_id, $addons );
+
+			Remember_Logger::info( 'Event updated', array( 'event_id' => $event_id, 'role_configs' => $role_configs ) );
 			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Event updated successfully.', 'remember' ) . '</p></div>';
 			// Reload the event data to reflect changes
 			$editing_event = $event_model->get( $event_id );
@@ -97,6 +220,11 @@ if ( isset( $_POST['remember_event_action'] ) && check_admin_referer( 'remember_
 				$editing_event_role_ids = array_map( function( $role ) {
 					return $role->role_id;
 				}, $editing_event_roles );
+				$editing_event_roles_by_id = array();
+				foreach ( $editing_event_roles as $editing_event_role ) {
+					$editing_event_roles_by_id[ absint( $editing_event_role->role_id ) ] = $editing_event_role;
+				}
+				$editing_addons = $merchandise_model->get_all_by_event( $event_id );
 			}
 		} else {
 			Remember_Logger::error( 'Failed to update event', array( 'event_id' => $event_id ) );
@@ -152,6 +280,10 @@ if ( isset( $_GET['view'] ) ) {
 		$editing_event_role_ids = array_map( function( $role ) {
 			return $role->role_id;
 		}, $editing_event_roles );
+		foreach ( $editing_event_roles as $editing_event_role ) {
+			$editing_event_roles_by_id[ absint( $editing_event_role->role_id ) ] = $editing_event_role;
+		}
+		$editing_addons = $merchandise_model->get_all_by_event( $edit_id );
 	}
 }
 ?>
@@ -232,19 +364,82 @@ if ( isset( $_GET['view'] ) ) {
 					<tr>
 						<th><label><?php esc_html_e( 'Event Roles', 'remember' ); ?></label></th>
 						<td>
-							<p class="description"><?php esc_html_e( 'Select the roles that are available for this event. Members can apply for these roles when submitting applications.', 'remember' ); ?></p>
-							<fieldset style="border: 1px solid #ccd0d4; padding: 10px; margin-top: 10px;">
-								<?php if ( ! empty( $event_roles ) ) : ?>
-									<?php foreach ( $event_roles as $role ) : ?>
-										<label style="display: block; margin: 5px 0;">
-											<input type="checkbox" name="event_roles[]" value="<?php echo esc_attr( $role->role_id ); ?>" <?php checked( isset( $editing_event_role_ids ) && in_array( $role->role_id, $editing_event_role_ids ) ); ?>>
-											<?php echo esc_html( $role->role_name ); ?>
-										</label>
+							<p class="description"><?php esc_html_e( 'Enable roles for this event and define per-role subtotal pricing and capacity.', 'remember' ); ?></p>
+							<?php if ( ! empty( $event_roles ) ) : ?>
+								<table class="widefat striped" style="max-width: 900px; margin-top: 10px;">
+									<thead>
+										<tr>
+											<th><?php esc_html_e( 'Enabled', 'remember' ); ?></th>
+											<th><?php esc_html_e( 'Role', 'remember' ); ?></th>
+											<th><?php esc_html_e( 'Subtotal Price', 'remember' ); ?></th>
+											<th><?php esc_html_e( 'Capacity', 'remember' ); ?></th>
+										</tr>
+									</thead>
+									<tbody>
+										<?php foreach ( $event_roles as $role ) : ?>
+											<?php
+											$existing_role = isset( $editing_event_roles_by_id[ $role->role_id ] ) ? $editing_event_roles_by_id[ $role->role_id ] : null;
+											?>
+											<tr>
+												<td>
+													<input type="checkbox" name="event_roles_config[<?php echo esc_attr( $role->role_id ); ?>][enabled]" value="1" <?php checked( isset( $editing_event_role_ids ) && in_array( $role->role_id, $editing_event_role_ids, true ) ); ?>>
+												</td>
+												<td><?php echo esc_html( $role->role_name ); ?></td>
+												<td>
+													<input type="number" step="0.01" min="0" class="small-text" name="event_roles_config[<?php echo esc_attr( $role->role_id ); ?>][cost]" value="<?php echo esc_attr( $existing_role ? number_format( (float) $existing_role->cost, 2, '.', '' ) : '0.00' ); ?>">
+												</td>
+												<td>
+													<input type="number" min="1" class="small-text" name="event_roles_config[<?php echo esc_attr( $role->role_id ); ?>][max_participants]" value="<?php echo esc_attr( $existing_role && null !== $existing_role->max_participants ? $existing_role->max_participants : '' ); ?>">
+													<span class="description"><?php esc_html_e( 'Blank = unlimited', 'remember' ); ?></span>
+												</td>
+											</tr>
+										<?php endforeach; ?>
+									</tbody>
+								</table>
+							<?php else : ?>
+								<p class="description"><?php esc_html_e( 'No event roles available. Create event roles in the Roles section first.', 'remember' ); ?></p>
+							<?php endif; ?>
+						</td>
+					</tr>
+					<tr>
+						<th><label><?php esc_html_e( 'Event Add-ons', 'remember' ); ?></label></th>
+						<td>
+							<p class="description"><?php esc_html_e( 'Define optional add-ons for this event (uniforms, sessions, services, etc.). Prices are subtotal amounts.', 'remember' ); ?></p>
+							<?php if ( ! $has_catalog_products ) : ?>
+								<p class="description" style="color:#b32d2e;"><?php esc_html_e( 'No active products found. Add products first under reMember > Products.', 'remember' ); ?></p>
+							<?php endif; ?>
+							<div class="remember-addon-rows" data-addon-target="edit">
+								<?php if ( ! empty( $editing_addons ) ) : ?>
+									<?php foreach ( $editing_addons as $index => $addon ) : ?>
+										<?php
+										$selected_catalog_product_id = 0;
+										if ( isset( $catalog_products_by_name[ $addon->merchandise_name ] ) ) {
+											$selected_catalog_product_id = absint( $catalog_products_by_name[ $addon->merchandise_name ]->product_id );
+										}
+										?>
+										<div class="remember-addon-row" style="border:1px solid #ccd0d4; padding:10px; margin:8px 0;">
+											<input type="hidden" name="event_addons[<?php echo esc_attr( $index ); ?>][id]" value="<?php echo esc_attr( $addon->merchandise_id ); ?>">
+											<p>
+												<select class="regular-text" name="event_addons[<?php echo esc_attr( $index ); ?>][product_id]" required>
+													<option value=""><?php esc_html_e( '-- Select Product --', 'remember' ); ?></option>
+													<?php foreach ( $catalog_products as $catalog_product ) : ?>
+														<option value="<?php echo esc_attr( $catalog_product->product_id ); ?>" <?php selected( $selected_catalog_product_id, $catalog_product->product_id ); ?>>
+															<?php echo esc_html( $catalog_product->product_name ); ?>
+														</option>
+													<?php endforeach; ?>
+												</select>
+											</p>
+											<p>
+												<label><?php esc_html_e( 'Subtotal Price', 'remember' ); ?> <input type="number" step="0.01" min="0" class="small-text" name="event_addons[<?php echo esc_attr( $index ); ?>][cost]" value="<?php echo esc_attr( number_format( (float) $addon->cost, 2, '.', '' ) ); ?>"></label>
+												<label style="margin-left: 15px;"><?php esc_html_e( 'Max Qty (blank = unlimited)', 'remember' ); ?> <input type="number" min="1" class="small-text" name="event_addons[<?php echo esc_attr( $index ); ?>][max_quantity]" value="<?php echo esc_attr( null !== $addon->max_quantity ? $addon->max_quantity : '' ); ?>"></label>
+												<label style="margin-left: 15px;"><input type="checkbox" name="event_addons[<?php echo esc_attr( $index ); ?>][is_available]" value="1" <?php checked( (int) $addon->is_available, 1 ); ?>> <?php esc_html_e( 'Available', 'remember' ); ?></label>
+												<button type="button" class="button button-link-delete remember-remove-addon"><?php esc_html_e( 'Remove', 'remember' ); ?></button>
+											</p>
+										</div>
 									<?php endforeach; ?>
-								<?php else : ?>
-									<p class="description"><?php esc_html_e( 'No event roles available. Create event roles in the Roles section first.', 'remember' ); ?></p>
 								<?php endif; ?>
-							</fieldset>
+							</div>
+							<button type="button" class="button remember-add-addon" data-addon-target="edit" <?php disabled( ! $has_catalog_products ); ?>><?php esc_html_e( 'Add Add-on', 'remember' ); ?></button>
 						</td>
 					</tr>
 				</table>
@@ -309,19 +504,45 @@ if ( isset( $_GET['view'] ) ) {
 					<tr>
 						<th><label><?php esc_html_e( 'Event Roles', 'remember' ); ?></label></th>
 						<td>
-							<p class="description"><?php esc_html_e( 'Select the roles that are available for this event. Members can apply for these roles when submitting applications.', 'remember' ); ?></p>
-							<fieldset style="border: 1px solid #ccd0d4; padding: 10px; margin-top: 10px;">
-								<?php if ( ! empty( $event_roles ) ) : ?>
-									<?php foreach ( $event_roles as $role ) : ?>
-										<label style="display: block; margin: 5px 0;">
-											<input type="checkbox" name="event_roles[]" value="<?php echo esc_attr( $role->role_id ); ?>">
-											<?php echo esc_html( $role->role_name ); ?>
-										</label>
-									<?php endforeach; ?>
-								<?php else : ?>
-									<p class="description"><?php esc_html_e( 'No event roles available. Create event roles in the Roles section first.', 'remember' ); ?></p>
-								<?php endif; ?>
-							</fieldset>
+							<p class="description"><?php esc_html_e( 'Enable roles for this event and define per-role subtotal pricing and capacity.', 'remember' ); ?></p>
+							<?php if ( ! empty( $event_roles ) ) : ?>
+								<table class="widefat striped" style="max-width: 900px; margin-top: 10px;">
+									<thead>
+										<tr>
+											<th><?php esc_html_e( 'Enabled', 'remember' ); ?></th>
+											<th><?php esc_html_e( 'Role', 'remember' ); ?></th>
+											<th><?php esc_html_e( 'Subtotal Price', 'remember' ); ?></th>
+											<th><?php esc_html_e( 'Capacity', 'remember' ); ?></th>
+										</tr>
+									</thead>
+									<tbody>
+										<?php foreach ( $event_roles as $role ) : ?>
+											<tr>
+												<td><input type="checkbox" name="event_roles_config[<?php echo esc_attr( $role->role_id ); ?>][enabled]" value="1"></td>
+												<td><?php echo esc_html( $role->role_name ); ?></td>
+												<td><input type="number" step="0.01" min="0" class="small-text" name="event_roles_config[<?php echo esc_attr( $role->role_id ); ?>][cost]" value="0.00"></td>
+												<td>
+													<input type="number" min="1" class="small-text" name="event_roles_config[<?php echo esc_attr( $role->role_id ); ?>][max_participants]" value="">
+													<span class="description"><?php esc_html_e( 'Blank = unlimited', 'remember' ); ?></span>
+												</td>
+											</tr>
+										<?php endforeach; ?>
+									</tbody>
+								</table>
+							<?php else : ?>
+								<p class="description"><?php esc_html_e( 'No event roles available. Create event roles in the Roles section first.', 'remember' ); ?></p>
+							<?php endif; ?>
+						</td>
+					</tr>
+					<tr>
+						<th><label><?php esc_html_e( 'Event Add-ons', 'remember' ); ?></label></th>
+						<td>
+							<p class="description"><?php esc_html_e( 'Select from your pre-defined product catalog and configure per-event subtotal pricing and availability.', 'remember' ); ?></p>
+							<?php if ( ! $has_catalog_products ) : ?>
+								<p class="description" style="color:#b32d2e;"><?php esc_html_e( 'No active products found. Add products first under reMember > Products.', 'remember' ); ?></p>
+							<?php endif; ?>
+							<div class="remember-addon-rows" data-addon-target="add"></div>
+							<button type="button" class="button remember-add-addon" data-addon-target="add" <?php disabled( ! $has_catalog_products ); ?>><?php esc_html_e( 'Add Add-on', 'remember' ); ?></button>
 						</td>
 					</tr>
 				</table>
@@ -403,3 +624,41 @@ if ( isset( $_GET['view'] ) ) {
 		<?php endif; ?>
 	<?php endif; ?>
 </div>
+
+<script>
+jQuery(document).ready(function($) {
+	// wp_json_encode() is a valid JS string literal; do not wrap in extra quotes (apostrophes in product names break "'...'+parse" otherwise).
+	var productOptionsHtml = <?php
+	$options = '<option value="">' . esc_html__( '-- Select Product --', 'remember' ) . '</option>';
+	foreach ( $catalog_products as $catalog_product ) {
+		$options .= '<option value="' . esc_attr( $catalog_product->product_id ) . '">' . esc_html( $catalog_product->product_name ) . '</option>';
+	}
+	echo wp_json_encode( $options );
+	?>;
+
+	function buildAddonRow(index) {
+		return '' +
+			'<div class="remember-addon-row" style="border:1px solid #ccd0d4; padding:10px; margin:8px 0;">' +
+				'<input type="hidden" name="event_addons[' + index + '][id]" value="">' +
+				'<p><select class="regular-text" name="event_addons[' + index + '][product_id]" required>' + productOptionsHtml + '</select></p>' +
+				'<p>' +
+					'<label><?php echo esc_js( __( 'Subtotal Price', 'remember' ) ); ?> <input type="number" step="0.01" min="0" class="small-text" name="event_addons[' + index + '][cost]" value="0.00"></label>' +
+					'<label style="margin-left: 15px;"><?php echo esc_js( __( 'Max Qty (blank = unlimited)', 'remember' ) ); ?> <input type="number" min="1" class="small-text" name="event_addons[' + index + '][max_quantity]" value=""></label>' +
+					'<label style="margin-left: 15px;"><input type="checkbox" name="event_addons[' + index + '][is_available]" value="1" checked> <?php echo esc_js( __( 'Available', 'remember' ) ); ?></label>' +
+					'<button type="button" class="button button-link-delete remember-remove-addon"><?php echo esc_js( __( 'Remove', 'remember' ) ); ?></button>' +
+				'</p>' +
+			'</div>';
+	}
+
+	$('.remember-add-addon').on('click', function() {
+		var target = $(this).data('addon-target');
+		var $container = $('.remember-addon-rows[data-addon-target="' + target + '"]');
+		var index = $container.find('.remember-addon-row').length;
+		$container.append(buildAddonRow(index));
+	});
+
+	$(document).on('click', '.remember-remove-addon', function() {
+		$(this).closest('.remember-addon-row').remove();
+	});
+});
+</script>

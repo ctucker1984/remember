@@ -15,6 +15,7 @@ require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remem
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-notification-setting.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/integrations/class-remember-quickbooks-oauth.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/integrations/class-remember-quickbooks-api.php';
+require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-messaging.php';
 
 Remember_Logger::debug( 'Settings page loaded' );
 
@@ -106,28 +107,41 @@ if ( isset( $_POST['remember_settings_action'] ) && 'save_qb_credentials' === $_
 	}
 }
 
-// Handle QuickBooks product mapping save (must run here; nested <form> inside the main settings form is invalid HTML
-// and browsers submit product rows as action "update" instead of "save_product_mapping").
-if ( isset( $_POST['remember_settings_action'] ) && 'save_product_mapping' === $_POST['remember_settings_action'] && check_admin_referer( 'remember_settings_action', 'remember_settings_nonce' ) ) {
-	require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-product.php';
-	$product_model = new Remember_Product();
-	if ( isset( $_POST['product_mappings'] ) && is_array( $_POST['product_mappings'] ) ) {
-		foreach ( $_POST['product_mappings'] as $product_id => $qb_product_id ) {
-			$product_id      = absint( $product_id );
-			$qb_product_id   = sanitize_text_field( wp_unslash( $qb_product_id ) );
-			if ( $product_id > 0 && ! empty( $qb_product_id ) ) {
-				$product_model->update(
-					$product_id,
-					array(
-						'quickbooks_product_id' => $qb_product_id,
-						'last_sync_at'          => current_time( 'mysql' ),
-						'updated_at'            => current_time( 'mysql' ),
-					)
-				);
+// Handle QuickBooks item mapping save (roles + catalog products; must run outside nested forms).
+if ( isset( $_POST['remember_settings_action'] ) && 'save_qb_item_mappings' === $_POST['remember_settings_action'] && check_admin_referer( 'remember_settings_action', 'remember_settings_nonce' ) ) {
+	require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-remember-qb-item-mapping.php';
+	require_once plugin_dir_path( __FILE__ ) . '../../includes/integrations/class-remember-quickbooks-api.php';
+	$mapping_model = new Remember_QB_Item_Mapping();
+	$qb_items      = Remember_QuickBooks_API::query_items();
+	$qb_names_by_id = array();
+	if ( ! is_wp_error( $qb_items ) ) {
+		foreach ( $qb_items as $item ) {
+			if ( ! empty( $item['Id'] ) ) {
+				$qb_names_by_id[ (string) $item['Id'] ] = isset( $item['Name'] ) ? (string) $item['Name'] : '';
 			}
 		}
-		echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Product mappings saved successfully.', 'remember' ) . '</p></div>';
 	}
+	if ( isset( $_POST['role_qb_mappings'] ) && is_array( $_POST['role_qb_mappings'] ) ) {
+		foreach ( $_POST['role_qb_mappings'] as $role_id => $qb_id ) {
+			$role_id = absint( $role_id );
+			$qb_id   = isset( $qb_id ) ? sanitize_text_field( wp_unslash( $qb_id ) ) : '';
+			$qb_name = ( '' !== $qb_id && isset( $qb_names_by_id[ $qb_id ] ) ) ? $qb_names_by_id[ $qb_id ] : null;
+			if ( $role_id > 0 ) {
+				$mapping_model->upsert( 'role', $role_id, $qb_id, $qb_name );
+			}
+		}
+	}
+	if ( isset( $_POST['product_qb_mappings'] ) && is_array( $_POST['product_qb_mappings'] ) ) {
+		foreach ( $_POST['product_qb_mappings'] as $product_id => $qb_id ) {
+			$product_id = absint( $product_id );
+			$qb_id      = isset( $qb_id ) ? sanitize_text_field( wp_unslash( $qb_id ) ) : '';
+			$qb_name    = ( '' !== $qb_id && isset( $qb_names_by_id[ $qb_id ] ) ) ? $qb_names_by_id[ $qb_id ] : null;
+			if ( $product_id > 0 ) {
+				$mapping_model->upsert( 'product', $product_id, $qb_id, $qb_name );
+			}
+		}
+	}
+	echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'QuickBooks mappings saved successfully.', 'remember' ) . '</p></div>';
 }
 
 // Handle form submissions
@@ -148,6 +162,11 @@ if ( isset( $_POST['remember_settings_action'] ) && check_admin_referer( 'rememb
 		// Update QuickBooks sync interval
 		if ( isset( $_POST['qb_sync_interval'] ) ) {
 			$options['qb_sync_interval'] = absint( $_POST['qb_sync_interval'] ) * 3600; // Convert hours to seconds
+		}
+
+		// Update subtotal disclaimer message.
+		if ( isset( $_POST['subtotal_disclaimer_text'] ) ) {
+			$options['subtotal_disclaimer_text'] = sanitize_textarea_field( wp_unslash( $_POST['subtotal_disclaimer_text'] ) );
 		}
 		
 		// Update vetting workflow
@@ -397,6 +416,17 @@ $social_platforms = $wpdb->get_results(
 						</select>
 						<p class="description">
 							<?php esc_html_e( 'When should vetting be triggered? "On Member Join" creates a vetting case immediately when a member is created. "On First Event Application" delays vetting until the member applies for their first event.', 'remember' ); ?>
+						</p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row">
+						<label for="subtotal_disclaimer_text"><?php esc_html_e( 'Subtotal Disclaimer', 'remember' ); ?></label>
+					</th>
+					<td>
+						<textarea id="subtotal_disclaimer_text" name="subtotal_disclaimer_text" rows="4" class="large-text"><?php echo esc_textarea( isset( $options['subtotal_disclaimer_text'] ) ? $options['subtotal_disclaimer_text'] : Remember_Billing_Messaging::get_default_subtotal_disclaimer() ); ?></textarea>
+						<p class="description">
+							<?php esc_html_e( 'Shown on billing/application pricing touchpoints. Use this to explain that reMember shows subtotal estimates and QuickBooks sends final totals/taxes/payment options.', 'remember' ); ?>
 						</p>
 					</td>
 				</tr>
@@ -835,260 +865,144 @@ $social_platforms = $wpdb->get_results(
 					<input type="hidden" name="remember_settings_action" value="sync_qb_payments">
 					<h3><?php esc_html_e( 'Manual Sync', 'remember' ); ?></h3>
 					<p class="description">
-						<?php esc_html_e( 'Manually sync payment status from QuickBooks for all pending and partial payments.', 'remember' ); ?>
+						<?php esc_html_e( 'Reconcile every payment that has a QuickBooks invoice ID: update amounts/status, and clear the link if the invoice no longer exists in QuickBooks.', 'remember' ); ?>
 					</p>
 					<?php submit_button( __( 'Sync Payments Now', 'remember' ), 'secondary' ); ?>
 				</form>
 			<?php endif; ?>
 			
-			<!-- Product Mapping -->
-			<?php if ( $is_connected ) : 
+			<!-- QuickBooks item mapping (event roles + add-on catalog) -->
+			<?php if ( $is_connected ) :
 				require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-product.php';
+				require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-role.php';
+				require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-remember-qb-item-mapping.php';
 				require_once plugin_dir_path( __FILE__ ) . '../../includes/integrations/class-remember-quickbooks-api.php';
-				
-				// Handle sync products from QuickBooks
+
 				if ( isset( $_POST['remember_settings_action'] ) && 'sync_qb_products' === $_POST['remember_settings_action'] && check_admin_referer( 'remember_settings_action', 'remember_settings_nonce' ) ) {
 					$qb_items = Remember_QuickBooks_API::query_items();
 					if ( ! is_wp_error( $qb_items ) ) {
-						$product_model = new Remember_Product();
-						foreach ( $qb_items as $item ) {
-							$qb_id   = isset( $item['Id'] ) ? (string) $item['Id'] : '';
-							$qb_name = isset( $item['Name'] ) ? (string) $item['Name'] : '';
-							if ( '' === $qb_id ) {
-								continue;
-							}
-							$existing = $product_model->get_by_qb_id( $qb_id );
-							if ( $existing ) {
-								$product_model->update(
-									$existing->product_id,
-									array(
-										'quickbooks_product_name' => $item['Name'] ?? $existing->quickbooks_product_name,
-										'last_sync_at'           => current_time( 'mysql' ),
-										'updated_at'             => current_time( 'mysql' ),
-									)
-								);
-								continue;
-							}
-							$by_name = $qb_name !== '' ? $product_model->get_by_name( $qb_name ) : null;
-							if ( $by_name ) {
-								$product_model->update(
-									$by_name->product_id,
-									array(
-										'quickbooks_product_id'   => $qb_id,
-										'quickbooks_product_name' => $item['Name'] ?? $by_name->quickbooks_product_name,
-										'product_type'            => $item['Type'] ?? $by_name->product_type,
-										'last_sync_at'            => current_time( 'mysql' ),
-										'updated_at'              => current_time( 'mysql' ),
-									)
-								);
-							} else {
-								$product_model->insert(
-									array(
-										'product_name'            => $item['Name'] ?? '',
-										'description'             => $item['Description'] ?? '',
-										'quickbooks_product_id'   => $qb_id,
-										'quickbooks_product_name' => $item['Name'] ?? '',
-										'product_type'            => $item['Type'] ?? 'Service',
-										'is_active'               => 1,
-										'last_sync_at'            => current_time( 'mysql' ),
-										'created_at'              => current_time( 'mysql' ),
-										'updated_at'              => current_time( 'mysql' ),
-									)
-								);
-							}
-						}
-						// Remove QuickBooks Category rows imported before we filtered them out.
-						global $wpdb;
-						$wpdb->query( "DELETE FROM {$wpdb->prefix}remember_products WHERE LOWER(product_type) = 'category'" );
-						echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Products synced from QuickBooks successfully.', 'remember' ) . '</p></div>';
+						echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'QuickBooks products/services refreshed for mapping dropdowns.', 'remember' ) . '</p></div>';
 					} else {
-						echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to sync products from QuickBooks: ', 'remember' ) . esc_html( $qb_items->get_error_message() ) . '</p></div>';
+						echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to refresh QuickBooks products/services: ', 'remember' ) . esc_html( $qb_items->get_error_message() ) . '</p></div>';
 					}
 				}
-				
-				// Get all products (ensure rows exist for every event role + merchandise so the left column is not QB-only).
-				$product_model = new Remember_Product();
-				$product_model->ensure_mapping_rows_for_line_items();
-				$all_products = $product_model->get_all(
-					array(
-						'orderby' => 'product_name',
-						'order'   => 'ASC',
-					)
-				);
-				require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-role.php';
-				$mapping_role_model   = new Remember_Role();
-				$mapping_role_names   = array();
-				foreach ( $mapping_role_model->get_event_roles() as $r ) {
-					$mapping_role_names[ $r->role_name ] = true;
+
+				$product_model   = new Remember_Product();
+				$role_model      = new Remember_Role();
+				$mapping_model   = new Remember_QB_Item_Mapping();
+				$event_roles     = $role_model->get_event_roles();
+				$catalog_products = $product_model->get_active();
+				$qb_products     = array();
+				$qb_items_result = Remember_QuickBooks_API::query_items();
+				if ( ! is_wp_error( $qb_items_result ) ) {
+					$qb_products = $qb_items_result;
 				}
-				global $wpdb;
-				$mapping_merch_names = array();
-				$merch_distinct      = $wpdb->get_col(
-					"SELECT DISTINCT merchandise_name FROM {$wpdb->prefix}remember_event_merchandise
-					WHERE merchandise_name IS NOT NULL AND merchandise_name != ''"
-				);
-				foreach ( $merch_distinct as $mn ) {
-					$mapping_merch_names[ $mn ] = true;
-				}
-				$mapping_tier = function ( $name ) use ( $mapping_role_names, $mapping_merch_names ) {
-					if ( isset( $mapping_role_names[ $name ] ) ) {
-						return 0;
-					}
-					if ( isset( $mapping_merch_names[ $name ] ) ) {
-						return 1;
-					}
-					return 2;
-				};
-				usort(
-					$all_products,
-					function ( $a, $b ) use ( $mapping_tier ) {
-						$ta = $mapping_tier( $a->product_name );
-						$tb = $mapping_tier( $b->product_name );
-						if ( $ta !== $tb ) {
-							return $ta - $tb;
-						}
-						return strcasecmp( $a->product_name, $b->product_name );
-					}
-				);
-				$qb_products = array();
-				if ( $is_connected ) {
-					$qb_items_result = Remember_QuickBooks_API::query_items();
-					if ( ! is_wp_error( $qb_items_result ) ) {
-						$qb_products = $qb_items_result;
-					}
-				}
-			?>
-				<form id="remember-product-mapping-form" method="post" action="" class="screen-reader-text" style="position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;">
+				?>
+				<form id="remember-qb-mapping-form" method="post" action="" class="screen-reader-text" style="position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;">
 					<?php wp_nonce_field( 'remember_settings_action', 'remember_settings_nonce' ); ?>
-					<input type="hidden" name="remember_settings_action" value="save_product_mapping" />
+					<input type="hidden" name="remember_settings_action" value="save_qb_item_mappings" />
 				</form>
-				<div class="remember-product-mapping" style="margin-top: 30px;">
-					<h3><?php esc_html_e( 'Product Mapping', 'remember' ); ?></h3>
-					<div class="notice notice-info inline" style="margin: 12px 0; padding: 10px 12px;">
-						<p style="margin: 0 0 8px 0;"><strong><?php esc_html_e( 'Where billable line items are defined (not in QuickBooks)', 'remember' ); ?></strong></p>
-						<ul style="margin: 0 0 0 1.2em; list-style: disc;">
-							<li>
-								<?php
-								echo wp_kses_post(
-									sprintf(
-										/* translators: 1: opening link to Roles screen, 2: closing link */
-										__( '%1$sRoles%2$s — create and name the event roles people apply for (e.g. “Weekend pass”). That name is what reMember matches to a row below.', 'remember' ),
-										'<a href="' . esc_url( admin_url( 'admin.php?page=remember-roles' ) ) . '">',
-										'</a>'
-									)
-								);
-								?>
-							</li>
-							<li>
-								<?php
-								echo wp_kses_post(
-									sprintf(
-										/* translators: 1: opening link to Events screen, 2: closing link */
-										__( '%1$sEvents%2$s — attach which roles are offered for each event. When an application is accepted, the invoice line uses the role name and the per-event role cost stored for that application.', 'remember' ),
-										'<a href="' . esc_url( admin_url( 'admin.php?page=remember-events' ) ) . '">',
-										'</a>'
-									)
-								);
-								?>
-							</li>
-							<li><?php esc_html_e( 'Optional merchandise add-ons on applications use the merchandise name as the line item key (same mapping table).', 'remember' ); ?></li>
-						</ul>
-						<p style="margin: 8px 0 0 0;" class="description">
-							<?php esc_html_e( 'This screen does not define those roles—it only links a reMember line item name (left) to a QuickBooks Item (right) so invoices use the correct QB product/service.', 'remember' ); ?>
-						</p>
-					</div>
+				<div class="remember-qb-mapping" style="margin-top: 30px;">
+					<h3><?php esc_html_e( 'QuickBooks line mapping', 'remember' ); ?></h3>
 					<p class="description">
-						<?php esc_html_e( 'The right-hand dropdown lists QuickBooks Items (service, inventory, etc.). Category folders from QuickBooks are excluded.', 'remember' ); ?>
+						<?php esc_html_e( 'Map each event role and each catalog add-on to a QuickBooks Product/Service. Role mapping uses role_id and applies to all events. Add-ons are defined under Products.', 'remember' ); ?>
 					</p>
-					
-					<?php if ( $is_connected ) : ?>
-						<p>
-							<button type="button" class="button button-secondary" onclick="document.getElementById('sync-qb-products-form').submit();">
-								<?php esc_html_e( 'Sync Products from QuickBooks', 'remember' ); ?>
-							</button>
-							<?php if ( empty( $qb_products ) ) : ?>
-								<span class="description" style="display: block; margin-top: 8px;">
-									<?php esc_html_e( 'Optional: loads QB items into the dropdown and can create rows in the table below that match QB names. You still map each row to the role or merchandise name you use in reMember.', 'remember' ); ?>
-								</span>
-							<?php endif; ?>
-						</p>
-						<?php if ( ! empty( $qb_products ) ) : ?>
-							<p class="description" style="margin-top: 8px;">
-								<?php esc_html_e( 'Optional: re-imports QB items into the dropdown and updates synced rows. It does not replace defining roles under Roles / Events.', 'remember' ); ?>
-							</p>
-						<?php endif; ?>
-					<?php endif; ?>
-					
-					<?php if ( ! empty( $all_products ) ) : ?>
-						<table class="wp-list-table widefat fixed striped" style="margin-top: 15px;">
+					<p>
+						<button type="button" class="button button-secondary" onclick="document.getElementById('sync-qb-products-form').submit();">
+							<?php esc_html_e( 'Refresh QuickBooks item list', 'remember' ); ?>
+						</button>
+					</p>
+
+					<h4 style="margin-top: 18px;"><?php esc_html_e( 'Event roles', 'remember' ); ?></h4>
+					<?php if ( ! empty( $event_roles ) ) : ?>
+						<table class="wp-list-table widefat fixed striped" style="margin-top: 8px;">
 							<thead>
 								<tr>
-									<th style="width: 180px;"><?php esc_html_e( 'reMember line item', 'remember' ); ?></th>
-									<th style="width: 110px;"><?php esc_html_e( 'Used for', 'remember' ); ?></th>
+									<th><?php esc_html_e( 'Role', 'remember' ); ?></th>
 									<th><?php esc_html_e( 'QuickBooks item', 'remember' ); ?></th>
-									<th style="width: 120px;"><?php esc_html_e( 'QB item ID', 'remember' ); ?></th>
-									<th style="width: 100px;"><?php esc_html_e( 'Last Synced', 'remember' ); ?></th>
+									<th style="width: 110px;"><?php esc_html_e( 'QB item ID', 'remember' ); ?></th>
 								</tr>
 							</thead>
 							<tbody>
-								<?php foreach ( $all_products as $product ) : ?>
+								<?php foreach ( $event_roles as $er ) : ?>
 									<?php
-									$pname = isset( $product->product_name ) ? (string) $product->product_name : '';
-									if ( isset( $mapping_role_names[ $pname ] ) ) {
-										$used_for = __( 'Event role', 'remember' );
-									} elseif ( isset( $mapping_merch_names[ $pname ] ) ) {
-										$used_for = __( 'Merchandise', 'remember' );
-									} else {
-										$used_for = __( 'QuickBooks only', 'remember' );
-									}
+									$m = $mapping_model->get_by_entity( 'role', $er->role_id );
+									$sel = $m && ! empty( $m->quickbooks_product_id ) ? $m->quickbooks_product_id : '';
 									?>
 									<tr>
+										<td><strong><?php echo esc_html( $er->role_name ); ?></strong></td>
 										<td>
-											<strong><?php echo esc_html( $product->product_name ); ?></strong>
-											<?php if ( ! empty( $product->description ) ) : ?>
-												<br><span class="description"><?php echo esc_html( $product->description ); ?></span>
-											<?php endif; ?>
-										</td>
-										<td><span class="description"><?php echo esc_html( $used_for ); ?></span></td>
-										<td>
-											<select name="product_mappings[<?php echo esc_attr( $product->product_id ); ?>]" class="regular-text" form="remember-product-mapping-form">
+											<select name="role_qb_mappings[<?php echo esc_attr( $er->role_id ); ?>]" class="regular-text" form="remember-qb-mapping-form">
 												<option value=""><?php esc_html_e( '-- Not Mapped --', 'remember' ); ?></option>
 												<?php foreach ( $qb_products as $qb_product ) : ?>
-													<option value="<?php echo esc_attr( $qb_product['Id'] ); ?>" <?php selected( $product->quickbooks_product_id, $qb_product['Id'] ); ?>>
+													<option value="<?php echo esc_attr( $qb_product['Id'] ); ?>" <?php selected( $sel, $qb_product['Id'] ); ?>>
 														<?php echo esc_html( ( $qb_product['Name'] ?? '' ) . ' (' . ( $qb_product['Type'] ?? 'Service' ) . ')' ); ?>
 													</option>
 												<?php endforeach; ?>
 											</select>
 										</td>
-										<td>
-											<?php if ( ! empty( $product->quickbooks_product_id ) ) : ?>
-												<code><?php echo esc_html( $product->quickbooks_product_id ); ?></code>
-											<?php else : ?>
-												<span class="description">—</span>
-											<?php endif; ?>
-										</td>
-										<td>
-											<?php if ( ! empty( $product->last_sync_at ) ) : ?>
-												<?php echo esc_html( date_i18n( get_option( 'date_format' ), strtotime( $product->last_sync_at ) ) ); ?>
-											<?php else : ?>
-												<span class="description">—</span>
-											<?php endif; ?>
-										</td>
+										<td><?php echo $sel ? '<code>' . esc_html( $sel ) . '</code>' : '<span class="description">—</span>'; ?></td>
 									</tr>
 								<?php endforeach; ?>
 							</tbody>
 						</table>
-						
-						<p class="submit" style="margin-bottom: 1.5em;">
-							<?php submit_button( __( 'Save Product Mappings', 'remember' ), 'primary', 'submit', false, array( 'form' => 'remember-product-mapping-form' ) ); ?>
-						</p>
 					<?php else : ?>
-						<p class="description">
-							<?php esc_html_e( 'No products found. Products will be created automatically when you sync from QuickBooks or when invoices are created.', 'remember' ); ?>
-						</p>
+						<p class="description"><?php esc_html_e( 'No event roles found. Create roles under Roles.', 'remember' ); ?></p>
 					<?php endif; ?>
+
+					<h4 style="margin-top: 22px;"><?php esc_html_e( 'Product catalog (add-ons)', 'remember' ); ?></h4>
+					<p class="description">
+						<?php
+						echo wp_kses_post(
+							sprintf(
+								/* translators: %s: Products admin URL */
+								__( 'Manage catalog items on <a href="%s">Products</a>.', 'remember' ),
+								esc_url( admin_url( 'admin.php?page=remember-products' ) )
+							)
+						);
+						?>
+					</p>
+					<?php if ( ! empty( $catalog_products ) ) : ?>
+						<table class="wp-list-table widefat fixed striped" style="margin-top: 8px;">
+							<thead>
+								<tr>
+									<th><?php esc_html_e( 'Product', 'remember' ); ?></th>
+									<th><?php esc_html_e( 'QuickBooks item', 'remember' ); ?></th>
+									<th style="width: 110px;"><?php esc_html_e( 'QB item ID', 'remember' ); ?></th>
+								</tr>
+							</thead>
+							<tbody>
+								<?php foreach ( $catalog_products as $product ) : ?>
+									<?php
+									$m = $mapping_model->get_by_entity( 'product', $product->product_id );
+									$sel = $m && ! empty( $m->quickbooks_product_id ) ? $m->quickbooks_product_id : '';
+									?>
+									<tr>
+										<td><strong><?php echo esc_html( $product->product_name ); ?></strong></td>
+										<td>
+											<select name="product_qb_mappings[<?php echo esc_attr( $product->product_id ); ?>]" class="regular-text" form="remember-qb-mapping-form">
+												<option value=""><?php esc_html_e( '-- Not Mapped --', 'remember' ); ?></option>
+												<?php foreach ( $qb_products as $qb_product ) : ?>
+													<option value="<?php echo esc_attr( $qb_product['Id'] ); ?>" <?php selected( $sel, $qb_product['Id'] ); ?>>
+														<?php echo esc_html( ( $qb_product['Name'] ?? '' ) . ' (' . ( $qb_product['Type'] ?? 'Service' ) . ')' ); ?>
+													</option>
+												<?php endforeach; ?>
+											</select>
+										</td>
+										<td><?php echo $sel ? '<code>' . esc_html( $sel ) . '</code>' : '<span class="description">—</span>'; ?></td>
+									</tr>
+								<?php endforeach; ?>
+							</tbody>
+						</table>
+					<?php else : ?>
+						<p class="description"><?php esc_html_e( 'No active catalog products. Add add-ons under Products.', 'remember' ); ?></p>
+					<?php endif; ?>
+
+					<p class="submit" style="margin-bottom: 1.5em;">
+						<?php submit_button( __( 'Save QuickBooks mappings', 'remember' ), 'primary', 'submit', false, array( 'form' => 'remember-qb-mapping-form' ) ); ?>
+					</p>
 				</div>
-				
+
 				<form id="sync-qb-products-form" method="post" action="" style="display: none;">
 					<?php wp_nonce_field( 'remember_settings_action', 'remember_settings_nonce' ); ?>
 					<input type="hidden" name="remember_settings_action" value="sync_qb_products">

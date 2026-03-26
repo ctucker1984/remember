@@ -167,6 +167,16 @@ class Remember_Admin {
 			array( $this, 'display_applications_page' )
 		);
 
+		// Waitlist
+		add_submenu_page(
+			'remember',
+			__( 'Waitlist', 'remember' ),
+			__( 'Waitlist', 'remember' ),
+			'remember_read_applications',
+			'remember-waitlist',
+			array( $this, 'display_waitlist_page' )
+		);
+
 		// Vetting
 		add_submenu_page(
 			'remember',
@@ -205,6 +215,16 @@ class Remember_Admin {
 			'remember_read_roles',
 			'remember-roles',
 			array( $this, 'display_roles_page' )
+		);
+
+		// Products
+		add_submenu_page(
+			'remember',
+			__( 'Products', 'remember' ),
+			__( 'Products', 'remember' ),
+			'remember_access_settings',
+			'remember-products',
+			array( $this, 'display_products_page' )
 		);
 
 		// Settings
@@ -306,6 +326,21 @@ class Remember_Admin {
 	}
 
 	/**
+	 * Render the waitlist page.
+	 *
+	 * @since    1.0.0
+	 */
+	public function display_waitlist_page() {
+		// Check capability
+		if ( ! current_user_can( 'remember_read_applications' ) ) {
+			wp_die( __( 'You do not have sufficient permissions to access this page.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+		}
+
+		require_once plugin_dir_path( __FILE__ ) . '../includes/models/class-application.php';
+		include_once 'views/waitlist.php';
+	}
+
+	/**
 	 * Render the vetting page.
 	 *
 	 * @since    1.0.0
@@ -377,6 +412,21 @@ class Remember_Admin {
 		}
 		
 		include_once 'views/settings.php';
+	}
+
+	/**
+	 * Render the products page.
+	 *
+	 * @since    1.0.0
+	 */
+	public function display_products_page() {
+		// Check capability
+		if ( ! current_user_can( 'remember_access_settings' ) ) {
+			wp_die( __( 'You do not have sufficient permissions to access this page.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+		}
+
+		require_once plugin_dir_path( __FILE__ ) . '../includes/models/class-product.php';
+		include_once 'views/products.php';
 	}
 
 	/**
@@ -893,6 +943,37 @@ class Remember_Admin {
 		) );
 		
 		wp_send_json_success( $formatted_roles );
+	}
+
+	/**
+	 * AJAX handler to get event add-ons for an event.
+	 *
+	 * @since    1.0.0
+	 */
+	public function ajax_get_event_addons() {
+		check_ajax_referer( 'remember_get_event_addons', 'nonce' );
+
+		$event_id = isset( $_POST['event_id'] ) ? absint( $_POST['event_id'] ) : 0;
+		if ( $event_id <= 0 ) {
+			wp_send_json_error( array( 'message' => __( 'Invalid event ID.', 'remember' ) ) );
+		}
+
+		require_once plugin_dir_path( __FILE__ ) . '../includes/models/class-merchandise.php';
+		$merchandise_model = new Remember_Merchandise();
+		$addons = $merchandise_model->get_by_event( $event_id );
+
+		$formatted_addons = array();
+		foreach ( $addons as $addon ) {
+			$formatted_addons[] = array(
+				'merchandise_id'   => absint( $addon->merchandise_id ),
+				'merchandise_name' => $addon->merchandise_name,
+				'description'      => $addon->description,
+				'cost'             => floatval( $addon->cost ),
+				'max_quantity'     => null !== $addon->max_quantity ? absint( $addon->max_quantity ) : null,
+			);
+		}
+
+		wp_send_json_success( $formatted_addons );
 	}
 
 	/**

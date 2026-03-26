@@ -16,6 +16,8 @@ require_once plugin_dir_path( __FILE__ ) . '../models/class-member.php';
 require_once plugin_dir_path( __FILE__ ) . '../models/class-application.php';
 require_once plugin_dir_path( __FILE__ ) . '../models/class-payment.php';
 require_once plugin_dir_path( __FILE__ ) . '../models/class-event.php';
+require_once plugin_dir_path( __FILE__ ) . '../models/class-product.php';
+require_once plugin_dir_path( __FILE__ ) . '../models/class-remember-qb-item-mapping.php';
 require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-logger.php';
 
 /**
@@ -169,8 +171,7 @@ class Remember_QuickBooks_Sync {
 
 		// Add role cost as line item
 		if ( $event_role && $event_role->cost > 0 ) {
-			// Get or create product for role cost
-			$role_product_id = self::get_or_create_role_product( $event_role->role_id, $event_role->role_name, $event_role->cost );
+			$role_product_id = self::resolve_qb_item_id_for_role( $event_role->role_id, $event_role->role_name );
 			if ( ! is_wp_error( $role_product_id ) ) {
 				$line_items[] = array(
 					'product_id'  => $role_product_id,
@@ -186,20 +187,19 @@ class Remember_QuickBooks_Sync {
 			}
 		}
 
-		// Add merchandise as line items
+		// Add merchandise as line items (names come from event_merchandise; QB mapping is by catalog product_id).
 		$merchandise_items = $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT am.*, m.merchandise_name, m.unit_cost 
+				"SELECT am.*, em.merchandise_name
 				FROM {$wpdb->prefix}remember_application_merchandise am
 				JOIN {$wpdb->prefix}remember_event_merchandise em ON am.merchandise_id = em.merchandise_id
-				JOIN {$wpdb->prefix}remember_merchandise m ON em.merchandise_id = m.merchandise_id
 				WHERE am.event_application_id = %d",
 				$application_id
 			)
 		);
 
 		foreach ( $merchandise_items as $item ) {
-			$product_id = self::get_or_create_merchandise_product( $item->merchandise_id, $item->merchandise_name, $item->unit_cost );
+			$product_id = self::resolve_qb_item_id_for_catalog_product( $item->merchandise_name );
 			if ( ! is_wp_error( $product_id ) ) {
 				$line_items[] = array(
 					'product_id'  => $product_id,
@@ -216,7 +216,7 @@ class Remember_QuickBooks_Sync {
 		}
 
 		if ( empty( $line_items ) ) {
-			return new WP_Error( 'no_line_items', __( 'No line items available. Please ensure products are mapped to QuickBooks in the Product Mapping section.', 'remember' ) );
+			return new WP_Error( 'no_line_items', __( 'No line items available. Map event roles and catalog products to QuickBooks under Settings → QuickBooks.', 'remember' ) );
 		}
 
 		// Create invoice in QuickBooks
@@ -289,6 +289,25 @@ class Remember_QuickBooks_Sync {
 		$invoice = Remember_QuickBooks_API::get_invoice( $payment->quickbooks_invoice_id );
 
 		if ( is_wp_error( $invoice ) ) {
+			if ( self::is_qb_invoice_missing_error( $invoice ) ) {
+				Remember_Logger::info(
+					'QuickBooks invoice no longer exists; clearing local invoice link',
+					array(
+						'payment_id'            => $payment_id,
+						'quickbooks_invoice_id' => $payment->quickbooks_invoice_id,
+					)
+				);
+				$payment_model->update(
+					$payment_id,
+					array(
+						'quickbooks_invoice_id' => null,
+						'amount_paid'           => 0,
+						'payment_status'        => 'pending',
+						'payment_date'          => null,
+					)
+				);
+				return true;
+			}
 			return $invoice;
 		}
 
@@ -337,11 +356,12 @@ class Remember_QuickBooks_Sync {
 	public static function sync_all_payments() {
 		global $wpdb;
 		
+		// Reconcile every row that references a QBO invoice (pending, partial, or paid) so
+		// deleted/voided invoices in QuickBooks are detected and cleared on the reMember side.
 		$payments = $wpdb->get_results(
 			"SELECT payment_id FROM {$wpdb->prefix}remember_payments 
 			WHERE quickbooks_invoice_id IS NOT NULL 
 			AND quickbooks_invoice_id != '' 
-			AND payment_status IN ('pending', 'partial')
 			ORDER BY payment_id ASC"
 		);
 
@@ -377,149 +397,101 @@ class Remember_QuickBooks_Sync {
 	}
 
 	/**
-	 * Get or create product for role.
+	 * Whether a QuickBooks API error means the invoice no longer exists (deleted, wrong company, etc.).
 	 *
-	 * @param int    $role_id Role ID.
-	 * @param string $role_name Role name.
-	 * @param float  $cost Role cost.
-	 * @return string|WP_Error Product ID or error.
+	 * @param WP_Error $error Error from Remember_QuickBooks_API::get_invoice().
+	 * @return bool
 	 */
-	private static function get_or_create_role_product( $role_id, $role_name, $cost ) {
-		global $wpdb;
-		
-		// Check if product exists in our mapping table
-		$product = $wpdb->get_row(
-			$wpdb->prepare(
-				"SELECT * FROM {$wpdb->prefix}remember_products 
-				WHERE product_name = %s",
-				$role_name
-			)
-		);
-
-		if ( $product && ! empty( $product->quickbooks_product_id ) ) {
-			return $product->quickbooks_product_id;
+	private static function is_qb_invoice_missing_error( $error ) {
+		if ( ! is_wp_error( $error ) ) {
+			return false;
 		}
-
-		// Try to find product in QuickBooks by name
-		$qb_items = Remember_QuickBooks_API::query_items( "SELECT * FROM Item WHERE Name = '" . esc_sql( $role_name ) . "'" );
-		
-		if ( ! is_wp_error( $qb_items ) && ! empty( $qb_items ) ) {
-			$qb_product = $qb_items[0];
-			$qb_product_id = $qb_product['Id'];
-			
-			// Store mapping
-			if ( ! $product ) {
-				$wpdb->insert(
-					$wpdb->prefix . 'remember_products',
-					array(
-						'product_name'            => $role_name,
-						'description'            => sprintf( __( 'Event role: %s', 'remember' ), $role_name ),
-						'quickbooks_product_id'  => $qb_product_id,
-						'quickbooks_product_name' => $qb_product['Name'] ?? $role_name,
-						'product_type'          => 'Service',
-						'is_active'             => 1,
-						'created_at'            => current_time( 'mysql' ),
-						'updated_at'            => current_time( 'mysql' ),
-					)
-				);
-			} else {
-				$wpdb->update(
-					$wpdb->prefix . 'remember_products',
-					array(
-						'quickbooks_product_id'  => $qb_product_id,
-						'quickbooks_product_name' => $qb_product['Name'] ?? $role_name,
-						'last_sync_at'           => current_time( 'mysql' ),
-						'updated_at'             => current_time( 'mysql' ),
-					),
-					array( 'product_id' => $product->product_id ),
-					array( '%s', '%s', '%s', '%s' ),
-					array( '%d' )
-				);
-			}
-			
-			return $qb_product_id;
+		$data = $error->get_error_data();
+		$status = ( is_array( $data ) && isset( $data['status'] ) ) ? (int) $data['status'] : 0;
+		if ( 404 === $status ) {
+			return true;
 		}
-
-		// Product not found - user needs to map it manually
-		// For now, we'll skip this line item and log a warning
-		Remember_Logger::warning( 'QuickBooks product not found for role', array(
-			'role_name' => $role_name,
-			'role_id'   => $role_id,
-		) );
-		
-		return new WP_Error( 'product_not_mapped', sprintf( __( 'Product "%s" not mapped to QuickBooks. Please map it in the Product Mapping section.', 'remember' ), $role_name ) );
+		$msg = strtolower( $error->get_error_message() );
+		if ( false !== strpos( $msg, 'not found' ) || false !== strpos( $msg, 'does not exist' ) ) {
+			return true;
+		}
+		return false;
 	}
 
 	/**
-	 * Get or create product for merchandise.
+	 * Resolve QuickBooks Item Id for an event role (by role_id; consistent across events).
 	 *
-	 * @param int    $merchandise_id Merchandise ID.
-	 * @param string $merchandise_name Merchandise name.
-	 * @param float  $cost Unit cost.
-	 * @return string|WP_Error Product ID or error.
+	 * @param int    $role_id   Role ID.
+	 * @param string $role_name Role display name (used for auto-match in QBO by name).
+	 * @return string|WP_Error QuickBooks Item Id string, or error.
 	 */
-	private static function get_or_create_merchandise_product( $merchandise_id, $merchandise_name, $cost ) {
-		global $wpdb;
-		
-		// Check if product exists in our mapping table
-		$product = $wpdb->get_row(
-			$wpdb->prepare(
-				"SELECT * FROM {$wpdb->prefix}remember_products 
-				WHERE product_name = %s",
-				$merchandise_name
-			)
-		);
+	private static function resolve_qb_item_id_for_role( $role_id, $role_name ) {
+		return self::resolve_qb_item_id( 'role', absint( $role_id ), $role_name );
+	}
 
-		if ( $product && ! empty( $product->quickbooks_product_id ) ) {
-			return $product->quickbooks_product_id;
+	/**
+	 * Resolve QuickBooks Item Id for a catalog product (add-on) by merchandise name.
+	 *
+	 * @param string $merchandise_name Must match a row in remember_products (catalog).
+	 * @return string|WP_Error QuickBooks Item Id string, or error.
+	 */
+	private static function resolve_qb_item_id_for_catalog_product( $merchandise_name ) {
+		$product_model = new Remember_Product();
+		$catalog       = $product_model->get_by_name( $merchandise_name );
+		if ( ! $catalog || (int) $catalog->is_active !== 1 ) {
+			return new WP_Error(
+				'catalog_product_missing',
+				sprintf(
+					/* translators: %s: product/add-on name */
+					__( 'Add-on "%s" is not an active catalog product. Add it under Products first.', 'remember' ),
+					$merchandise_name
+				)
+			);
+		}
+		return self::resolve_qb_item_id( 'product', absint( $catalog->product_id ), $merchandise_name );
+	}
+
+	/**
+	 * Resolve QuickBooks Item Id using remember_qb_item_mappings; optional auto-match by Item Name in QBO.
+	 *
+	 * @param string $entity_type 'role' or 'product'.
+	 * @param int    $entity_id   role_id or product_id.
+	 * @param string $fallback_name Name to query in QBO when no mapping exists.
+	 * @return string|WP_Error QuickBooks Item Id string, or error.
+	 */
+	private static function resolve_qb_item_id( $entity_type, $entity_id, $fallback_name ) {
+		$mapping_model = new Remember_QB_Item_Mapping();
+		$row           = $mapping_model->get_by_entity( $entity_type, $entity_id );
+		if ( $row && ! empty( $row->quickbooks_product_id ) ) {
+			return $row->quickbooks_product_id;
 		}
 
-		// Try to find product in QuickBooks by name
-		$qb_items = Remember_QuickBooks_API::query_items( "SELECT * FROM Item WHERE Name = '" . esc_sql( $merchandise_name ) . "'" );
-		
+		$qb_items = Remember_QuickBooks_API::query_items( "SELECT * FROM Item WHERE Name = '" . esc_sql( $fallback_name ) . "'" );
+
 		if ( ! is_wp_error( $qb_items ) && ! empty( $qb_items ) ) {
-			$qb_product = $qb_items[0];
+			$qb_product    = $qb_items[0];
 			$qb_product_id = $qb_product['Id'];
-			
-			// Store mapping
-			if ( ! $product ) {
-				$wpdb->insert(
-					$wpdb->prefix . 'remember_products',
-					array(
-						'product_name'            => $merchandise_name,
-						'description'            => sprintf( __( 'Merchandise: %s', 'remember' ), $merchandise_name ),
-						'quickbooks_product_id'  => $qb_product_id,
-						'quickbooks_product_name' => $qb_product['Name'] ?? $merchandise_name,
-						'product_type'          => 'Inventory',
-						'is_active'             => 1,
-						'created_at'            => current_time( 'mysql' ),
-						'updated_at'            => current_time( 'mysql' ),
-					)
-				);
-			} else {
-				$wpdb->update(
-					$wpdb->prefix . 'remember_products',
-					array(
-						'quickbooks_product_id'  => $qb_product_id,
-						'quickbooks_product_name' => $qb_product['Name'] ?? $merchandise_name,
-						'last_sync_at'           => current_time( 'mysql' ),
-						'updated_at'             => current_time( 'mysql' ),
-					),
-					array( 'product_id' => $product->product_id ),
-					array( '%s', '%s', '%s', '%s' ),
-					array( '%d' )
-				);
-			}
-			
+			$qb_name       = $qb_product['Name'] ?? $fallback_name;
+			$mapping_model->upsert( $entity_type, $entity_id, $qb_product_id, $qb_name );
 			return $qb_product_id;
 		}
 
-		// Product not found - user needs to map it manually
-		Remember_Logger::warning( 'QuickBooks product not found for merchandise', array(
-			'merchandise_name' => $merchandise_name,
-			'merchandise_id'   => $merchandise_id,
-		) );
-		
-		return new WP_Error( 'product_not_mapped', sprintf( __( 'Product "%s" not mapped to QuickBooks. Please map it in the Product Mapping section.', 'remember' ), $merchandise_name ) );
+		Remember_Logger::warning(
+			'QuickBooks Item not mapped and no name match in QBO',
+			array(
+				'entity_type' => $entity_type,
+				'entity_id'   => $entity_id,
+				'name'        => $fallback_name,
+			)
+		);
+
+		return new WP_Error(
+			'qb_item_not_mapped',
+			sprintf(
+				/* translators: %s: role or product name */
+				__( 'QuickBooks has no mapping for "%s". Set it under Settings → QuickBooks (Event roles + Products).', 'remember' ),
+				$fallback_name
+			)
+		);
 	}
 }

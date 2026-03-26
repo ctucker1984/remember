@@ -30,7 +30,7 @@ class Remember_Database_Updater {
 		
 		// Check current schema version
 		$current_version = get_option( 'remember_db_version', '0.0.0' );
-		$target_version = '1.6.0'; // Latest schema (see migrations below).
+		$target_version = '1.8.0'; // Latest schema (see migrations below).
 		
 		// Update to 1.1.0 (unvetted status)
 		if ( version_compare( $current_version, '1.1.0', '<' ) ) {
@@ -249,6 +249,87 @@ class Remember_Database_Updater {
 
 			update_option( 'remember_db_version', '1.6.0' );
 			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.6.0' ) );
+		}
+
+		// Update to 1.7.0 (track when applications are added to waitlist).
+		if ( version_compare( $current_version, '1.7.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => $current_version, 'to' => '1.7.0' ) );
+
+			$applications_table = $wpdb->prefix . 'remember_event_applications';
+			$table_exists       = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $applications_table ) );
+
+			if ( $table_exists === $applications_table ) {
+				$columns = $wpdb->get_col( "SHOW COLUMNS FROM {$applications_table}" );
+				if ( ! in_array( 'waitlisted_at', $columns, true ) ) {
+					$add_column = $wpdb->query( "ALTER TABLE {$applications_table} ADD COLUMN waitlisted_at DATETIME DEFAULT NULL AFTER applied_at" );
+					if ( false !== $add_column ) {
+						Remember_Logger::info( 'Added waitlisted_at column to remember_event_applications' );
+					} else {
+						Remember_Logger::error( 'Failed to add waitlisted_at column', array( 'error' => $wpdb->last_error ) );
+					}
+				}
+			}
+
+			update_option( 'remember_db_version', '1.7.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.7.0' ) );
+		}
+
+		// Update to 1.8.0 (QuickBooks mappings in remember_qb_item_mappings; remember_products = catalog only).
+		if ( version_compare( $current_version, '1.8.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => $current_version, 'to' => '1.8.0' ) );
+
+			require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-database.php';
+			$db = new Remember_Database();
+			$db->create_qb_item_mappings_table();
+
+			$products_table = $wpdb->prefix . 'remember_products';
+			$roles_table    = $wpdb->prefix . 'remember_roles';
+			$map_table      = $wpdb->prefix . 'remember_qb_item_mappings';
+
+			$product_cols = $wpdb->get_col( "SHOW COLUMNS FROM {$products_table}", 0 );
+			if ( is_array( $product_cols ) && in_array( 'quickbooks_product_id', $product_cols, true ) ) {
+				// Role mappings: product rows whose name matched an event role.
+				$wpdb->query(
+					"INSERT INTO {$map_table} (entity_type, entity_id, quickbooks_product_id, quickbooks_product_name, last_sync_at, created_at, updated_at)
+					SELECT 'role', r.role_id, p.quickbooks_product_id, p.quickbooks_product_name, p.last_sync_at, p.created_at, p.updated_at
+					FROM {$products_table} p
+					INNER JOIN {$roles_table} r ON r.role_name = p.product_name AND r.is_event_role = 1
+					WHERE p.quickbooks_product_id IS NOT NULL AND p.quickbooks_product_id != ''
+					ON DUPLICATE KEY UPDATE
+						quickbooks_product_id = VALUES(quickbooks_product_id),
+						quickbooks_product_name = VALUES(quickbooks_product_name),
+						last_sync_at = VALUES(last_sync_at),
+						updated_at = VALUES(updated_at)"
+				);
+
+				// Product (catalog) mappings: remaining product rows with QB ids not consumed as roles.
+				$wpdb->query(
+					"INSERT INTO {$map_table} (entity_type, entity_id, quickbooks_product_id, quickbooks_product_name, last_sync_at, created_at, updated_at)
+					SELECT 'product', p.product_id, p.quickbooks_product_id, p.quickbooks_product_name, p.last_sync_at, p.created_at, p.updated_at
+					FROM {$products_table} p
+					LEFT JOIN {$roles_table} r ON r.role_name = p.product_name AND r.is_event_role = 1
+					WHERE r.role_id IS NULL
+					AND p.quickbooks_product_id IS NOT NULL AND p.quickbooks_product_id != ''
+					ON DUPLICATE KEY UPDATE
+						quickbooks_product_id = VALUES(quickbooks_product_id),
+						quickbooks_product_name = VALUES(quickbooks_product_name),
+						last_sync_at = VALUES(last_sync_at),
+						updated_at = VALUES(updated_at)"
+				);
+
+				// Remove legacy rows that were only role-name mirrors in the products table.
+				$wpdb->query(
+					"DELETE p FROM {$products_table} p
+					INNER JOIN {$roles_table} r ON r.role_name = p.product_name AND r.is_event_role = 1"
+				);
+
+				// Drop QuickBooks columns from remember_products (indexes on those columns drop with the columns).
+				$wpdb->query( "ALTER TABLE {$products_table} DROP COLUMN quickbooks_product_id, DROP COLUMN quickbooks_product_name, DROP COLUMN last_sync_at" );
+			}
+
+			update_option( 'remember_db_version', '1.8.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.8.0' ) );
 		}
 	}
 }

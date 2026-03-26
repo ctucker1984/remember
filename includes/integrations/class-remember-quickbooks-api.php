@@ -284,13 +284,22 @@ class Remember_QuickBooks_API {
 		}
 
 		if ( ! empty( $customer_data['address'] ) ) {
-			$data['BillAddr'] = array(
-				'Line1'                  => $customer_data['address']['street'],
-				'City'                   => $customer_data['address']['city'],
-				'CountrySubDivisionCode' => $customer_data['address']['state'],
-				'PostalCode'             => $customer_data['address']['postal'],
-				'Country'                => $customer_data['address']['country'],
+			$bill_addr = array(
+				'Line1'                  => isset( $customer_data['address']['street'] ) ? $customer_data['address']['street'] : '',
+				'City'                   => isset( $customer_data['address']['city'] ) ? $customer_data['address']['city'] : '',
+				'CountrySubDivisionCode' => isset( $customer_data['address']['state'] ) ? $customer_data['address']['state'] : '',
+				'PostalCode'             => isset( $customer_data['address']['postal'] ) ? $customer_data['address']['postal'] : '',
+				'Country'                => isset( $customer_data['address']['country'] ) ? $customer_data['address']['country'] : '',
 			);
+			$bill_addr = array_filter(
+				$bill_addr,
+				function( $value ) {
+					return '' !== trim( (string) $value );
+				}
+			);
+			if ( ! empty( $bill_addr ) ) {
+				$data['BillAddr'] = $bill_addr;
+			}
 		}
 
 		// If customer ID exists, update instead of create
@@ -304,7 +313,8 @@ class Remember_QuickBooks_API {
 			$method = 'POST';
 		}
 
-		$response = self::api_request( $method, $endpoint, array( 'Customer' => $data ) );
+		// QBO v3 expects the Customer object as the top-level payload.
+		$response = self::api_request( $method, $endpoint, $data );
 
 		if ( is_wp_error( $response ) ) {
 			return $response;
@@ -347,7 +357,8 @@ class Remember_QuickBooks_API {
 			$data['Line'][] = $line_item;
 		}
 
-		$response = self::api_request( 'POST', 'invoice', array( 'Invoice' => $data ) );
+		// QBO v3 expects the Invoice object as the top-level payload.
+		$response = self::api_request( 'POST', 'invoice', $data );
 
 		if ( is_wp_error( $response ) ) {
 			return $response;
@@ -423,6 +434,7 @@ class Remember_QuickBooks_API {
 		if ( ! is_array( $items ) ) {
 			return array();
 		}
+		$excluded_exact_names = array( 'Hours', 'Services' );
 		$out = array();
 		foreach ( $items as $item ) {
 			if ( ! is_array( $item ) ) {
@@ -430,6 +442,10 @@ class Remember_QuickBooks_API {
 			}
 			$type = isset( $item['Type'] ) ? (string) $item['Type'] : '';
 			if ( strcasecmp( $type, 'Category' ) === 0 ) {
+				continue;
+			}
+			$name = isset( $item['Name'] ) ? trim( (string) $item['Name'] ) : '';
+			if ( in_array( $name, $excluded_exact_names, true ) ) {
 				continue;
 			}
 			$out[] = $item;

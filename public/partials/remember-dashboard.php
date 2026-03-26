@@ -15,6 +15,7 @@ require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-event.ph
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-application.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-vetting.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-location.php';
+require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-merchandise.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-timezone.php';
 
 $user = wp_get_current_user();
@@ -23,21 +24,95 @@ $event_model = new Remember_Event();
 $application_model = new Remember_Application();
 $vetting_model = new Remember_Vetting();
 $location_model = new Remember_Location();
+$merchandise_model = new Remember_Merchandise();
 
 // Get member record
 $member = $member_model->get( get_current_user_id() );
+$member_id_for_queries = ( $member && ! empty( $member->member_id ) ) ? absint( $member->member_id ) : get_current_user_id();
+
+// Handle member-side application actions (edit pending/waitlisted, withdraw accepted).
+if ( isset( $_POST['remember_member_application_action'] ) && check_admin_referer( 'remember_member_application_action', 'remember_member_application_nonce' ) ) {
+	$member_action = sanitize_text_field( wp_unslash( $_POST['remember_member_application_action'] ) );
+	$application_id = isset( $_POST['application_id'] ) ? absint( $_POST['application_id'] ) : 0;
+	$application = $application_id > 0 ? $application_model->get( $application_id ) : null;
+
+	if ( $application && absint( $application->member_id ) === absint( $member_id_for_queries ) ) {
+		if ( 'update_application' === $member_action && in_array( $application->status, array( 'pending', 'waitlisted' ), true ) ) {
+			$new_event_role_id = isset( $_POST['event_role_id'] ) ? absint( $_POST['event_role_id'] ) : 0;
+			if ( $new_event_role_id > 0 ) {
+				global $wpdb;
+				$event_role_exists = $wpdb->get_var(
+					$wpdb->prepare(
+						"SELECT COUNT(*) FROM {$wpdb->prefix}remember_event_roles WHERE event_role_id = %d AND event_id = %d",
+						$new_event_role_id,
+						$application->event_id
+					)
+				);
+				if ( $event_role_exists ) {
+					$application_model->update( $application_id, array( 'event_role_id' => $new_event_role_id ) );
+				}
+			}
+
+			// Replace add-ons with current selection.
+			$wpdb->delete(
+				$wpdb->prefix . 'remember_application_merchandise',
+				array( 'event_application_id' => $application_id ),
+				array( '%d' )
+			);
+			$event_addons = $merchandise_model->get_by_event( $application->event_id );
+			$addon_map = array();
+			foreach ( $event_addons as $event_addon ) {
+				$addon_map[ absint( $event_addon->merchandise_id ) ] = $event_addon;
+			}
+
+			if ( isset( $_POST['event_addons'] ) && is_array( $_POST['event_addons'] ) ) {
+				foreach ( $_POST['event_addons'] as $addon_id => $addon_data ) {
+					$addon_id = absint( $addon_id );
+					if ( $addon_id <= 0 || empty( $addon_data['selected'] ) || ! isset( $addon_map[ $addon_id ] ) ) {
+						continue;
+					}
+					$addon = $addon_map[ $addon_id ];
+					$quantity = isset( $addon_data['quantity'] ) ? absint( $addon_data['quantity'] ) : 1;
+					if ( $quantity < 1 ) {
+						$quantity = 1;
+					}
+					if ( null !== $addon->max_quantity && $quantity > absint( $addon->max_quantity ) ) {
+						$quantity = absint( $addon->max_quantity );
+					}
+
+					$unit_cost = (float) $addon->cost;
+					$total_cost = $unit_cost * $quantity;
+					$wpdb->insert(
+						$wpdb->prefix . 'remember_application_merchandise',
+						array(
+							'event_application_id' => $application_id,
+							'merchandise_id'       => $addon_id,
+							'quantity'             => $quantity,
+							'unit_cost'            => $unit_cost,
+							'total_cost'           => $total_cost,
+							'created_at'           => current_time( 'mysql' ),
+						),
+						array( '%d', '%d', '%d', '%f', '%f', '%s' )
+					);
+				}
+			}
+		} elseif ( 'withdraw_application' === $member_action && 'accepted' === $application->status ) {
+			$application_model->update_status( $application_id, 'cancelled', get_current_user_id() );
+		}
+	}
+}
 
 // Get member profile
 global $wpdb;
 $profile = $wpdb->get_row(
 	$wpdb->prepare(
 		"SELECT * FROM {$wpdb->prefix}remember_member_profiles WHERE member_id = %d",
-		get_current_user_id()
+		$member_id_for_queries
 	)
 );
 
 // Get applications
-$applications = $application_model->get_by_member( get_current_user_id() );
+$applications = $application_model->get_by_member( $member_id_for_queries );
 
 // Get accepted events (where member has accepted application)
 $accepted_events = array();
@@ -61,7 +136,7 @@ foreach ( $applications as $app ) {
 }
 
 // Get all vetting cases for this member
-$vetting_cases = $vetting_model->get_all_by_member( get_current_user_id() );
+$vetting_cases = $vetting_model->get_all_by_member( $member_id_for_queries );
 
 // Get profile page URL
 $created_pages = get_option( 'remember_created_pages', array() );
@@ -92,11 +167,112 @@ $app_status_labels = array(
 	'accepted'   => __( 'Accepted', 'remember' ),
 	'declined'   => __( 'Declined', 'remember' ),
 	'waitlisted' => __( 'Waitlisted', 'remember' ),
-	'withdrawn'  => __( 'Withdrawn', 'remember' ),
+	'cancelled'  => __( 'Withdrawn', 'remember' ),
 );
+
+$selected_application_id = isset( $_GET['application_id'] ) ? absint( $_GET['application_id'] ) : 0;
+$selected_application = null;
+$selected_event = null;
+$selected_event_role = null;
+$selected_event_roles = array();
+$selected_event_addons = array();
+$selected_application_addons = array();
+if ( $selected_application_id > 0 ) {
+	$selected_application = $application_model->get( $selected_application_id );
+	if ( $selected_application && absint( $selected_application->member_id ) === absint( $member_id_for_queries ) ) {
+		$selected_event = $event_model->get( $selected_application->event_id );
+		$selected_event_roles = $event_model->get_event_roles( $selected_application->event_id );
+		foreach ( $selected_event_roles as $role_option ) {
+			if ( absint( $role_option->event_role_id ) === absint( $selected_application->event_role_id ) ) {
+				$selected_event_role = $role_option;
+				break;
+			}
+		}
+		$selected_event_addons = $merchandise_model->get_by_event( $selected_application->event_id );
+		$selected_application_addons = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT * FROM {$wpdb->prefix}remember_application_merchandise WHERE event_application_id = %d",
+				$selected_application_id
+			)
+		);
+	} else {
+		$selected_application = null;
+	}
+}
+
+$selected_addon_map = array();
+foreach ( $selected_application_addons as $selected_addon_row ) {
+	$selected_addon_map[ absint( $selected_addon_row->merchandise_id ) ] = $selected_addon_row;
+}
 ?>
 
 <div class="remember-dashboard">
+	<?php if ( $selected_application ) : ?>
+		<div class="remember-dashboard-card-compact" style="margin-bottom: 20px;">
+			<h3><?php esc_html_e( 'Application Detail', 'remember' ); ?> #<?php echo esc_html( $selected_application->application_id ); ?></h3>
+			<p><strong><?php esc_html_e( 'Event:', 'remember' ); ?></strong> <?php echo esc_html( $selected_event ? $selected_event->event_name : __( 'Unknown Event', 'remember' ) ); ?></p>
+			<p><strong><?php esc_html_e( 'Status:', 'remember' ); ?></strong> <?php echo esc_html( $app_status_labels[ $selected_application->status ] ?? $selected_application->status ); ?></p>
+			<p><strong><?php esc_html_e( 'Applied:', 'remember' ); ?></strong> <?php echo esc_html( date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), strtotime( $selected_application->applied_at ) ) ); ?></p>
+
+			<?php
+			$itemized_subtotal = $selected_event_role ? (float) $selected_event_role->cost : 0;
+			foreach ( $selected_application_addons as $selected_addon_row ) {
+				$itemized_subtotal += (float) $selected_addon_row->total_cost;
+			}
+			?>
+			<p><strong><?php esc_html_e( 'Subtotal:', 'remember' ); ?></strong> $<?php echo esc_html( number_format( $itemized_subtotal, 2 ) ); ?></p>
+
+			<?php if ( in_array( $selected_application->status, array( 'pending', 'waitlisted' ), true ) ) : ?>
+				<form method="post" action="" class="remember-form" style="margin-top: 15px;">
+					<?php wp_nonce_field( 'remember_member_application_action', 'remember_member_application_nonce' ); ?>
+					<input type="hidden" name="remember_member_application_action" value="update_application">
+					<input type="hidden" name="application_id" value="<?php echo esc_attr( $selected_application->application_id ); ?>">
+
+					<div class="remember-form-group">
+						<label class="remember-form-label" for="member_app_event_role_id"><?php esc_html_e( 'Role', 'remember' ); ?></label>
+						<select id="member_app_event_role_id" name="event_role_id" class="remember-form-control">
+							<?php foreach ( $selected_event_roles as $role_option ) : ?>
+								<option value="<?php echo esc_attr( $role_option->event_role_id ); ?>" <?php selected( absint( $selected_application->event_role_id ), absint( $role_option->event_role_id ) ); ?>>
+									<?php echo esc_html( $role_option->role_name ); ?> ($<?php echo esc_html( number_format( (float) $role_option->cost, 2 ) ); ?> subtotal)
+								</option>
+							<?php endforeach; ?>
+						</select>
+					</div>
+
+					<div class="remember-form-group">
+						<label class="remember-form-label"><?php esc_html_e( 'Add-ons', 'remember' ); ?></label>
+						<?php if ( ! empty( $selected_event_addons ) ) : ?>
+							<?php foreach ( $selected_event_addons as $addon_option ) : ?>
+								<?php $existing_addon = isset( $selected_addon_map[ absint( $addon_option->merchandise_id ) ] ) ? $selected_addon_map[ absint( $addon_option->merchandise_id ) ] : null; ?>
+								<div style="border: 1px solid #ddd; padding: 8px; margin-bottom: 8px;">
+									<label>
+										<input type="checkbox" name="event_addons[<?php echo esc_attr( $addon_option->merchandise_id ); ?>][selected]" value="1" <?php checked( null !== $existing_addon ); ?>>
+										<strong><?php echo esc_html( $addon_option->merchandise_name ); ?></strong>
+										($<?php echo esc_html( number_format( (float) $addon_option->cost, 2 ) ); ?> subtotal)
+									</label>
+									<label style="margin-left: 10px;">
+										<?php esc_html_e( 'Qty', 'remember' ); ?>
+										<input type="number" class="small-text" min="1" <?php echo null !== $addon_option->max_quantity ? 'max="' . esc_attr( $addon_option->max_quantity ) . '"' : ''; ?> name="event_addons[<?php echo esc_attr( $addon_option->merchandise_id ); ?>][quantity]" value="<?php echo esc_attr( $existing_addon ? absint( $existing_addon->quantity ) : 1 ); ?>">
+									</label>
+								</div>
+							<?php endforeach; ?>
+						<?php else : ?>
+							<p class="remember-description"><?php esc_html_e( 'No add-ons available for this event.', 'remember' ); ?></p>
+						<?php endif; ?>
+					</div>
+
+					<button type="submit" class="remember-button remember-button-primary"><?php esc_html_e( 'Save Application Changes', 'remember' ); ?></button>
+				</form>
+			<?php elseif ( 'accepted' === $selected_application->status ) : ?>
+				<form method="post" action="" style="margin-top: 15px;">
+					<?php wp_nonce_field( 'remember_member_application_action', 'remember_member_application_nonce' ); ?>
+					<input type="hidden" name="remember_member_application_action" value="withdraw_application">
+					<input type="hidden" name="application_id" value="<?php echo esc_attr( $selected_application->application_id ); ?>">
+					<button type="submit" class="remember-button remember-button-secondary" onclick="return confirm('<?php echo esc_js( __( 'Withdraw from this accepted event?', 'remember' ) ); ?>');"><?php esc_html_e( 'Withdraw Application', 'remember' ); ?></button>
+				</form>
+			<?php endif; ?>
+		</div>
+	<?php else : ?>
 	<div class="remember-dashboard-header-compact">
 		<div class="remember-header-left">
 			<?php if ( $member && ! empty( $member->photo_url ) ) : ?>
@@ -214,7 +390,11 @@ $app_status_labels = array(
 						$event = $event_model->get( $app->event_id );
 					?>
 						<li>
-							<span class="remember-app-event"><?php echo $event ? esc_html( $event->event_name ) : __( 'Unknown Event', 'remember' ); ?></span>
+							<span class="remember-app-event">
+								<a href="<?php echo esc_url( add_query_arg( array( 'view' => 'dashboard', 'application_id' => $app->application_id ), get_permalink() ) ); ?>">
+									<?php echo $event ? esc_html( $event->event_name ) : __( 'Unknown Event', 'remember' ); ?>
+								</a>
+							</span>
 							<span class="remember-status-badge remember-status-<?php echo esc_attr( $app->status ); ?>">
 								<?php echo esc_html( $app_status_labels[ $app->status ] ?? $app->status ); ?>
 							</span>
@@ -329,4 +509,5 @@ $app_status_labels = array(
 			<?php endif; ?>
 		</div>
 	</div>
+	<?php endif; ?>
 </div>

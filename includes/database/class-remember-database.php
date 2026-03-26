@@ -70,6 +70,7 @@ class Remember_Database {
 		$this->create_event_applications_table();
 		$this->create_application_merchandise_table();
 		$this->create_products_table();
+		$this->create_qb_item_mappings_table();
 		$this->create_payment_processors_table();
 		$this->create_payments_table();
 		$this->create_vetting_table();
@@ -479,6 +480,7 @@ class Remember_Database {
 			event_role_id BIGINT(20) UNSIGNED NOT NULL,
 			status ENUM('pending', 'accepted', 'declined', 'cancelled', 'waitlisted') DEFAULT 'pending',
 			applied_at DATETIME NOT NULL,
+			waitlisted_at DATETIME DEFAULT NULL,
 			processed_at DATETIME DEFAULT NULL,
 			processed_by BIGINT(20) UNSIGNED DEFAULT NULL,
 			notes TEXT DEFAULT NULL,
@@ -517,7 +519,7 @@ class Remember_Database {
 	}
 
 	/**
-	 * Create products table (QuickBooks mapping).
+	 * Create products table (add-on catalog only; QuickBooks mapping is remember_qb_item_mappings).
 	 */
 	private function create_products_table() {
 		$table_name = $this->prefix . 'products';
@@ -527,15 +529,37 @@ class Remember_Database {
 			product_id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
 			product_name VARCHAR(255) NOT NULL,
 			description TEXT DEFAULT NULL,
-			quickbooks_product_id VARCHAR(100) DEFAULT NULL,
-			quickbooks_product_name VARCHAR(255) DEFAULT NULL,
 			product_type VARCHAR(50) DEFAULT NULL,
 			is_active BOOLEAN DEFAULT 1,
-			last_sync_at DATETIME DEFAULT NULL,
 			created_at DATETIME NOT NULL,
 			updated_at DATETIME NOT NULL,
 			PRIMARY KEY (product_id),
-			UNIQUE KEY product_name (product_name),
+			UNIQUE KEY product_name (product_name)
+		) $charset_collate;";
+
+		dbDelta( $sql );
+	}
+
+	/**
+	 * Create QuickBooks item mapping table (event roles + catalog products).
+	 *
+	 * Public so migrations can ensure the table exists before data moves.
+	 */
+	public function create_qb_item_mappings_table() {
+		$table_name = $this->prefix . 'qb_item_mappings';
+		$charset_collate = $this->wpdb->get_charset_collate();
+
+		$sql = "CREATE TABLE $table_name (
+			mapping_id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+			entity_type ENUM('role','product') NOT NULL,
+			entity_id BIGINT(20) UNSIGNED NOT NULL,
+			quickbooks_product_id VARCHAR(100) DEFAULT NULL,
+			quickbooks_product_name VARCHAR(255) DEFAULT NULL,
+			last_sync_at DATETIME DEFAULT NULL,
+			created_at DATETIME NOT NULL,
+			updated_at DATETIME NOT NULL,
+			PRIMARY KEY (mapping_id),
+			UNIQUE KEY entity (entity_type, entity_id),
 			KEY idx_quickbooks_product_id (quickbooks_product_id)
 		) $charset_collate;";
 

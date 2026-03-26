@@ -172,4 +172,93 @@ class Remember_Event extends Remember_Base_Model {
 		
 		return true;
 	}
+
+	/**
+	 * Sync event role configuration for an event.
+	 *
+	 * @param int   $event_id Event ID.
+	 * @param array $role_configs Role config keyed by role ID.
+	 * @return bool
+	 */
+	public function sync_event_role_configs( $event_id, $role_configs ) {
+		global $wpdb;
+		$table_name = $wpdb->prefix . 'remember_event_roles';
+
+		$incoming_ids = array();
+		foreach ( $role_configs as $role_id => $config ) {
+			$role_id = absint( $role_id );
+			if ( $role_id <= 0 || empty( $config['enabled'] ) ) {
+				continue;
+			}
+
+			$incoming_ids[] = $role_id;
+			$cost = isset( $config['cost'] ) ? floatval( $config['cost'] ) : 0;
+			$max_participants = null;
+			if ( isset( $config['max_participants'] ) && '' !== $config['max_participants'] ) {
+				$max_participants = absint( $config['max_participants'] );
+			}
+
+			$existing = $wpdb->get_row(
+				$wpdb->prepare(
+					"SELECT event_role_id FROM {$table_name} WHERE event_id = %d AND role_id = %d LIMIT 1",
+					$event_id,
+					$role_id
+				)
+			);
+
+			if ( $existing ) {
+				$wpdb->update(
+					$table_name,
+					array(
+						'cost'             => $cost,
+						'max_participants' => $max_participants,
+						'is_active'        => 1,
+					),
+					array(
+						'event_id' => $event_id,
+						'role_id'  => $role_id,
+					),
+					array( '%f', '%d', '%d' ),
+					array( '%d', '%d' )
+				);
+			} else {
+				$wpdb->insert(
+					$table_name,
+					array(
+						'event_id'          => $event_id,
+						'role_id'           => $role_id,
+						'cost'              => $cost,
+						'max_participants'  => $max_participants,
+						'current_count'     => 0,
+						'is_active'         => 1,
+						'created_at'        => current_time( 'mysql' ),
+					),
+					array( '%d', '%d', '%f', '%d', '%d', '%d', '%s' )
+				);
+			}
+		}
+
+		$existing_role_ids = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT role_id FROM {$table_name} WHERE event_id = %d",
+				$event_id
+			)
+		);
+
+		foreach ( $existing_role_ids as $existing_role_id ) {
+			$existing_role_id = absint( $existing_role_id );
+			if ( ! in_array( $existing_role_id, $incoming_ids, true ) ) {
+				$wpdb->delete(
+					$table_name,
+					array(
+						'event_id' => $event_id,
+						'role_id'  => $existing_role_id,
+					),
+					array( '%d', '%d' )
+				);
+			}
+		}
+
+		return true;
+	}
 }

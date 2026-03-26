@@ -15,12 +15,14 @@ require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remem
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-payment.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-application.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-member.php';
+require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-messaging.php';
 
 Remember_Logger::debug( 'Payments page loaded' );
 
 $payment_model = new Remember_Payment();
 $application_model = new Remember_Application();
 $member_model = new Remember_Member();
+$subtotal_disclaimer = Remember_Billing_Messaging::get_subtotal_disclaimer();
 
 // Handle form submissions
 if ( isset( $_POST['remember_payment_action'] ) && check_admin_referer( 'remember_payment_action', 'remember_payment_nonce' ) ) {
@@ -81,6 +83,13 @@ $status_colors = array(
 	<h1 class="wp-heading-inline"><?php echo esc_html( get_admin_page_title() ); ?></h1>
 	<hr class="wp-header-end">
 
+	<div class="notice notice-info" style="margin: 15px 0;">
+		<p>
+			<strong><?php esc_html_e( 'Billing note:', 'remember' ); ?></strong>
+			<?php echo esc_html( $subtotal_disclaimer ); ?>
+		</p>
+	</div>
+
 	<!-- Filters -->
 	<div class="remember-filters" style="margin: 20px 0; padding: 15px; background: #fff; border: 1px solid #ccd0d4; border-radius: 4px;">
 		<form method="get" action="">
@@ -109,7 +118,7 @@ $status_colors = array(
 			<thead>
 				<tr>
 					<th class="column-member"><?php esc_html_e( 'Member', 'remember' ); ?></th>
-					<th class="column-amount"><?php esc_html_e( 'Total Amount', 'remember' ); ?></th>
+					<th class="column-amount"><?php esc_html_e( 'Subtotal Amount', 'remember' ); ?></th>
 					<th class="column-paid"><?php esc_html_e( 'Amount Paid', 'remember' ); ?></th>
 					<th class="column-due"><?php esc_html_e( 'Amount Due', 'remember' ); ?></th>
 					<th class="column-status"><?php esc_html_e( 'Status', 'remember' ); ?></th>

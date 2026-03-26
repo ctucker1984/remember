@@ -91,14 +91,48 @@ class Remember_Application extends Remember_Base_Model {
 	 * @return int|false
 	 */
 	public function update_status( $application_id, $status, $processed_by = null ) {
+		global $wpdb;
+		$application = $this->get( $application_id );
+		if ( ! $application ) {
+			return false;
+		}
+
+		$previous_status = $application->status;
 		$data = array(
 			'status'      => $status,
 			'processed_at' => current_time( 'mysql' ),
 		);
+		if ( 'waitlisted' === $status ) {
+			$data['waitlisted_at'] = current_time( 'mysql' );
+		} elseif ( 'waitlisted' === $previous_status && 'waitlisted' !== $status ) {
+			$data['waitlisted_at'] = null;
+		}
 		if ( $processed_by ) {
 			$data['processed_by'] = $processed_by;
 		}
-		return $this->update( $application_id, $data );
+		$result = $this->update( $application_id, $data );
+		if ( false === $result ) {
+			return $result;
+		}
+
+		$event_roles_table = $wpdb->prefix . 'remember_event_roles';
+		if ( 'accepted' !== $previous_status && 'accepted' === $status ) {
+			$wpdb->query(
+				$wpdb->prepare(
+					"UPDATE {$event_roles_table} SET current_count = current_count + 1 WHERE event_role_id = %d",
+					$application->event_role_id
+				)
+			);
+		} elseif ( 'accepted' === $previous_status && 'accepted' !== $status ) {
+			$wpdb->query(
+				$wpdb->prepare(
+					"UPDATE {$event_roles_table} SET current_count = GREATEST(current_count - 1, 0) WHERE event_role_id = %d",
+					$application->event_role_id
+				)
+			);
+		}
+
+		return $result;
 	}
 
 	/**
@@ -215,5 +249,90 @@ class Remember_Application extends Remember_Base_Model {
 			WHERE er.event_role_id IS NULL"
 		);
 		return $deleted;
+	}
+
+	/**
+	 * Get count of accepted applications for an event role.
+	 *
+	 * @param int      $event_role_id Event role ID.
+	 * @param int|null $exclude_application_id Optional application ID to exclude.
+	 * @return int
+	 */
+	public function get_accepted_count_for_event_role( $event_role_id, $exclude_application_id = null ) {
+		global $wpdb;
+		$sql = "SELECT COUNT(*) FROM {$this->get_table()} WHERE event_role_id = %d AND status = 'accepted'";
+		$args = array( $event_role_id );
+
+		if ( ! empty( $exclude_application_id ) ) {
+			$sql .= ' AND application_id != %d';
+			$args[] = absint( $exclude_application_id );
+		}
+
+		return (int) $wpdb->get_var( $wpdb->prepare( $sql, $args ) );
+	}
+
+	/**
+	 * Get waitlisted applications with related details.
+	 *
+	 * @param array $args Query arguments.
+	 * @return array
+	 */
+	public function get_waitlisted_with_details( $args = array() ) {
+		global $wpdb;
+
+		$defaults = array(
+			'event_id' => 0,
+			'role_id'  => 0,
+			'orderby'  => 'waitlisted_at',
+			'order'    => 'ASC',
+		);
+		$args = wp_parse_args( $args, $defaults );
+
+		$allowed_orderby = array( 'waitlisted_at', 'applied_at', 'event_name', 'role_name', 'display_name' );
+		$orderby = in_array( $args['orderby'], $allowed_orderby, true ) ? $args['orderby'] : 'waitlisted_at';
+		$order = 'DESC' === strtoupper( $args['order'] ) ? 'DESC' : 'ASC';
+
+		$where = "WHERE a.status = 'waitlisted'";
+		$query_args = array();
+
+		if ( ! empty( $args['event_id'] ) ) {
+			$where .= ' AND a.event_id = %d';
+			$query_args[] = absint( $args['event_id'] );
+		}
+		if ( ! empty( $args['role_id'] ) ) {
+			$where .= ' AND er.role_id = %d';
+			$query_args[] = absint( $args['role_id'] );
+		}
+
+		$sql = "SELECT a.*, e.event_name, r.role_name, r.role_id, u.display_name, u.user_email
+			FROM {$this->get_table()} a
+			JOIN {$wpdb->prefix}remember_events e ON a.event_id = e.event_id
+			JOIN {$wpdb->prefix}remember_event_roles er ON a.event_role_id = er.event_role_id
+			JOIN {$wpdb->prefix}remember_roles r ON er.role_id = r.role_id
+			LEFT JOIN {$wpdb->users} u ON a.member_id = u.ID
+			{$where}
+			ORDER BY {$orderby} {$order}, a.applied_at ASC";
+
+		if ( ! empty( $query_args ) ) {
+			return $wpdb->get_results( $wpdb->prepare( $sql, $query_args ) );
+		}
+
+		return $wpdb->get_results( $sql );
+	}
+
+	/**
+	 * Get events that currently have waitlisted applications.
+	 *
+	 * @return array
+	 */
+	public function get_waitlisted_events() {
+		global $wpdb;
+		return $wpdb->get_results(
+			"SELECT DISTINCT e.event_id, e.event_name
+			FROM {$this->get_table()} a
+			JOIN {$wpdb->prefix}remember_events e ON a.event_id = e.event_id
+			WHERE a.status = 'waitlisted'
+			ORDER BY e.event_name ASC"
+		);
 	}
 }
