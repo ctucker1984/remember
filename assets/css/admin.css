@@ -239,48 +239,67 @@
 	margin-bottom: 20px;
 }
 
-/* Member Detail Grid Layout */
+/* Member Detail Grid Layout — use .remember-member-detail-grid--three-cols for Profile | Emergency | Health */
 .remember-member-detail-grid {
 	display: grid;
-	grid-template-columns: repeat(2, 1fr);
 	gap: 15px;
 	margin-bottom: 15px;
+	align-items: start;
+}
+
+.remember-member-detail-grid--three-cols {
+	grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .remember-member-detail-grid.full-width {
 	grid-template-columns: 1fr;
 }
 
-/* One column when there are no dietary/allergy/medical tags (avoid empty 50% grey column). */
-.remember-member-detail-grid--profile-only {
-	grid-template-columns: 1fr;
-}
-
-/*
- * Profile + Emergency: one row, two columns when the container is wide enough.
- * (Viewport-based breakpoints stacked these at <960px even on typical admin layouts.)
- */
-.remember-member-detail-profile-emergency {
+.remember-member-detail-health-column {
 	display: flex;
-	flex-direction: row;
-	flex-wrap: wrap;
-	gap: 15px;
-	align-items: flex-start;
-	width: 100%;
-	box-sizing: border-box;
-}
-
-.remember-member-detail-profile-emergency > .remember-member-detail-section {
-	flex: 1 1 calc(50% - 7.5px);
+	flex-direction: column;
+	gap: 12px;
 	min-width: 0;
-	max-width: 100%;
-	box-sizing: border-box;
 }
 
-@media (max-width: 600px) {
-	.remember-member-detail-profile-emergency > .remember-member-detail-section {
-		flex: 1 1 100%;
-	}
+.remember-member-detail-health-column .remember-member-detail-health-card {
+	margin: 0;
+}
+
+.remember-member-detail-pill-row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin: 0;
+}
+
+.remember-member-detail-pill {
+	display: inline-block;
+	padding: 4px 12px;
+	border-radius: 3px;
+	font-size: 12px;
+	line-height: 1.4;
+}
+
+.remember-member-detail-pill--dietary {
+	background: #fff3cd;
+	border: 1px solid #ffc107;
+}
+
+.remember-member-detail-pill--allergy {
+	background: #f8d7da;
+	border: 1px solid #f5c6cb;
+}
+
+.remember-member-detail-pill--medical {
+	background: #d1ecf1;
+	border: 1px solid #bee5eb;
+}
+
+.remember-member-detail-none {
+	margin: 0;
+	color: #646970;
+	font-size: 13px;
 }
 
 .remember-member-detail-section {
@@ -326,7 +345,7 @@
 }
 
 @media (max-width: 1200px) {
-	.remember-member-detail-grid {
+	.remember-member-detail-grid.remember-member-detail-grid--three-cols {
 		grid-template-columns: 1fr;
 	}
 }

@@ -95,156 +95,145 @@ if ( $is_editing && ! current_user_can( 'remember_update_members' ) ) {
 		<!-- Edit Form -->
 		<?php include 'member-edit.php'; ?>
 	<?php else : ?>
-		<?php
-		$remember_member_has_health_tags = ! empty( $view_dietary_restrictions ) || ! empty( $view_allergies ) || ! empty( $view_medical_accommodations );
-		?>
-		<!-- View Mode: full-width Profile|Emergency when no tags column; else 2-col with health tags -->
-		<div class="remember-member-detail-grid<?php echo $remember_member_has_health_tags ? '' : ' remember-member-detail-grid--profile-only'; ?>">
-			<div class="remember-member-detail-profile-emergency">
-				<!-- Profile Information -->
-				<div class="remember-member-detail-section">
-					<h3><?php esc_html_e( 'Profile Information', 'remember' ); ?></h3>
-					<table class="form-table">
-						<tr>
-							<th><?php esc_html_e( 'Legal Name', 'remember' ); ?></th>
-							<td>
+		<!-- View Mode: three equal columns — Profile | Emergency | Dietary / Allergies / Medical (stacked in column 3) -->
+		<div class="remember-member-detail-grid remember-member-detail-grid--three-cols">
+			<!-- Profile Information -->
+			<div class="remember-member-detail-section">
+				<h3><?php esc_html_e( 'Profile Information', 'remember' ); ?></h3>
+				<table class="form-table">
+					<tr>
+						<th><?php esc_html_e( 'Legal Name', 'remember' ); ?></th>
+						<td>
+							<?php
+							$full_legal_name = trim( Remember_Import_Export::member_list_legal_name_line( $view_profile, (int) $view_member_id ) );
+							if ( ! empty( $full_legal_name ) ) :
+								echo esc_html( $full_legal_name );
+							else :
+								?>
+								<span class="description"><?php esc_html_e( 'Not provided', 'remember' ); ?></span>
+							<?php endif; ?>
+						</td>
+					</tr>
+					<tr>
+						<th><?php esc_html_e( 'Address', 'remember' ); ?></th>
+						<td>
+							<?php if ( $view_profile && $view_profile->address_street ) : ?>
 								<?php
-								$full_legal_name = trim( Remember_Import_Export::member_list_legal_name_line( $view_profile, (int) $view_member_id ) );
-								if ( ! empty( $full_legal_name ) ) :
-									echo esc_html( $full_legal_name );
-								else :
-									?>
-									<span class="description"><?php esc_html_e( 'Not provided', 'remember' ); ?></span>
-								<?php endif; ?>
-							</td>
-						</tr>
-						<tr>
-							<th><?php esc_html_e( 'Address', 'remember' ); ?></th>
-							<td>
-								<?php if ( $view_profile && $view_profile->address_street ) : ?>
-									<?php 
-									$address_parts = array_filter( array(
-										$view_profile->address_street,
-										$view_profile->address_city,
-										$view_profile->address_state,
-										$view_profile->address_postal,
-									) );
-									echo esc_html( implode( ', ', $address_parts ) );
-									if ( $view_profile->address_country ) {
-										echo ', ' . esc_html( $view_profile->address_country );
-									}
-									?>
-								<?php else : ?>
-									<span class="description"><?php esc_html_e( 'Not provided', 'remember' ); ?></span>
-								<?php endif; ?>
-							</td>
-						</tr>
-						<tr>
-							<th><?php esc_html_e( 'Cell Phone', 'remember' ); ?></th>
-							<td>
-								<?php echo $view_profile && $view_profile->cell_phone ? esc_html( $view_profile->cell_phone ) : '<span class="description">' . esc_html__( 'Not provided', 'remember' ) . '</span>'; ?>
-							</td>
-						</tr>
-						<tr>
-							<th><?php esc_html_e( 'Time Zone', 'remember' ); ?></th>
-							<td>
-								<?php echo $view_profile && $view_profile->timezone ? esc_html( $view_profile->timezone ) : '<span class="description">' . esc_html__( 'Not provided', 'remember' ) . '</span>'; ?>
-							</td>
-						</tr>
-						<tr>
-							<th><?php esc_html_e( 'Instant Messenger', 'remember' ); ?></th>
-							<td>
-								<?php if ( $view_profile && $view_profile->im_handle ) : ?>
-									<?php echo esc_html( ucfirst( $view_profile->im_type ?: 'telegram' ) ); ?>: <?php echo esc_html( $view_profile->im_handle ); ?>
-								<?php else : ?>
-									<span class="description"><?php esc_html_e( 'Not provided', 'remember' ); ?></span>
-								<?php endif; ?>
-							</td>
-						</tr>
-						<tr>
-							<th><?php esc_html_e( 'Interests', 'remember' ); ?></th>
-							<td>
-								<?php echo $view_profile && $view_profile->interests ? esc_html( $view_profile->interests ) : '<span class="description">' . esc_html__( 'Not provided', 'remember' ) . '</span>'; ?>
-							</td>
-						</tr>
-					</table>
-				</div>
-
-				<!-- Emergency Contact -->
-				<div class="remember-member-detail-section">
-					<h3><?php esc_html_e( 'Emergency Contact', 'remember' ); ?></h3>
-					<table class="form-table">
-						<tr>
-							<th><?php esc_html_e( 'Name', 'remember' ); ?></th>
-							<td>
-								<?php if ( $view_profile ) : ?>
-									<?php echo esc_html( trim( $view_profile->emergency_contact_first . ' ' . $view_profile->emergency_contact_last ) ); ?>
-								<?php else : ?>
-									<span class="description"><?php esc_html_e( 'Not provided', 'remember' ); ?></span>
-								<?php endif; ?>
-							</td>
-						</tr>
-						<tr>
-							<th><?php esc_html_e( 'Phone', 'remember' ); ?></th>
-							<td>
-								<?php echo $view_profile && $view_profile->emergency_contact_phone ? esc_html( $view_profile->emergency_contact_phone ) : '<span class="description">' . esc_html__( 'Not provided', 'remember' ) . '</span>'; ?>
-							</td>
-						</tr>
-						<tr>
-							<th><?php esc_html_e( 'Relationship', 'remember' ); ?></th>
-							<td>
-								<?php echo $view_profile && $view_profile->emergency_contact_relationship ? esc_html( $view_profile->emergency_contact_relationship ) : '<span class="description">' . esc_html__( 'Not provided', 'remember' ) . '</span>'; ?>
-							</td>
-						</tr>
-					</table>
-				</div>
+								$address_parts = array_filter( array(
+									$view_profile->address_street,
+									$view_profile->address_city,
+									$view_profile->address_state,
+									$view_profile->address_postal,
+								) );
+								echo esc_html( implode( ', ', $address_parts ) );
+								if ( $view_profile->address_country ) {
+									echo ', ' . esc_html( $view_profile->address_country );
+								}
+								?>
+							<?php else : ?>
+								<span class="description"><?php esc_html_e( 'Not provided', 'remember' ); ?></span>
+							<?php endif; ?>
+						</td>
+					</tr>
+					<tr>
+						<th><?php esc_html_e( 'Cell Phone', 'remember' ); ?></th>
+						<td>
+							<?php echo $view_profile && $view_profile->cell_phone ? esc_html( $view_profile->cell_phone ) : '<span class="description">' . esc_html__( 'Not provided', 'remember' ) . '</span>'; ?>
+						</td>
+					</tr>
+					<tr>
+						<th><?php esc_html_e( 'Time Zone', 'remember' ); ?></th>
+						<td>
+							<?php echo $view_profile && $view_profile->timezone ? esc_html( $view_profile->timezone ) : '<span class="description">' . esc_html__( 'Not provided', 'remember' ) . '</span>'; ?>
+						</td>
+					</tr>
+					<tr>
+						<th><?php esc_html_e( 'Instant Messenger', 'remember' ); ?></th>
+						<td>
+							<?php if ( $view_profile && $view_profile->im_handle ) : ?>
+								<?php echo esc_html( ucfirst( $view_profile->im_type ?: 'telegram' ) ); ?>: <?php echo esc_html( $view_profile->im_handle ); ?>
+							<?php else : ?>
+								<span class="description"><?php esc_html_e( 'Not provided', 'remember' ); ?></span>
+							<?php endif; ?>
+						</td>
+					</tr>
+					<tr>
+						<th><?php esc_html_e( 'Interests', 'remember' ); ?></th>
+						<td>
+							<?php echo $view_profile && $view_profile->interests ? esc_html( $view_profile->interests ) : '<span class="description">' . esc_html__( 'Not provided', 'remember' ) . '</span>'; ?>
+						</td>
+					</tr>
+				</table>
 			</div>
 
-			<?php if ( $remember_member_has_health_tags ) : ?>
-			<div class="remember-member-detail-health-tags">
-				<!-- Dietary Restrictions -->
-				<?php if ( ! empty( $view_dietary_restrictions ) ) : ?>
-					<div class="remember-member-detail-section" style="margin-bottom: 15px;">
-						<h3><?php esc_html_e( 'Dietary Restrictions', 'remember' ); ?></h3>
-						<div style="display: flex; flex-wrap: wrap; gap: 8px;">
+			<!-- Emergency Contact -->
+			<div class="remember-member-detail-section">
+				<h3><?php esc_html_e( 'Emergency Contact', 'remember' ); ?></h3>
+				<table class="form-table">
+					<tr>
+						<th><?php esc_html_e( 'Name', 'remember' ); ?></th>
+						<td>
+							<?php if ( $view_profile ) : ?>
+								<?php echo esc_html( trim( $view_profile->emergency_contact_first . ' ' . $view_profile->emergency_contact_last ) ); ?>
+							<?php else : ?>
+								<span class="description"><?php esc_html_e( 'Not provided', 'remember' ); ?></span>
+							<?php endif; ?>
+						</td>
+					</tr>
+					<tr>
+						<th><?php esc_html_e( 'Phone', 'remember' ); ?></th>
+						<td>
+							<?php echo $view_profile && $view_profile->emergency_contact_phone ? esc_html( $view_profile->emergency_contact_phone ) : '<span class="description">' . esc_html__( 'Not provided', 'remember' ) . '</span>'; ?>
+						</td>
+					</tr>
+					<tr>
+						<th><?php esc_html_e( 'Relationship', 'remember' ); ?></th>
+						<td>
+							<?php echo $view_profile && $view_profile->emergency_contact_relationship ? esc_html( $view_profile->emergency_contact_relationship ) : '<span class="description">' . esc_html__( 'Not provided', 'remember' ) . '</span>'; ?>
+						</td>
+					</tr>
+				</table>
+			</div>
+
+			<!-- Dietary, Allergies, Medical: stacked in the third column; always show all three cards -->
+			<div class="remember-member-detail-health-column">
+				<div class="remember-member-detail-section remember-member-detail-health-card">
+					<h3><?php esc_html_e( 'Dietary Restrictions', 'remember' ); ?></h3>
+					<?php if ( ! empty( $view_dietary_restrictions ) ) : ?>
+						<div class="remember-member-detail-pill-row">
 							<?php foreach ( $view_dietary_restrictions as $restriction ) : ?>
-								<span style="display: inline-block; padding: 4px 12px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 3px; font-size: 12px;">
-									<?php echo esc_html( $restriction ); ?>
-								</span>
+								<span class="remember-member-detail-pill remember-member-detail-pill--dietary"><?php echo esc_html( $restriction ); ?></span>
 							<?php endforeach; ?>
 						</div>
-					</div>
-				<?php endif; ?>
-
-				<!-- Known Allergies -->
-				<?php if ( ! empty( $view_allergies ) ) : ?>
-					<div class="remember-member-detail-section" style="margin-bottom: 15px;">
-						<h3><?php esc_html_e( 'Known Allergies', 'remember' ); ?></h3>
-						<div style="display: flex; flex-wrap: wrap; gap: 8px;">
+					<?php else : ?>
+						<p class="remember-member-detail-none"><?php esc_html_e( 'None', 'remember' ); ?></p>
+					<?php endif; ?>
+				</div>
+				<div class="remember-member-detail-section remember-member-detail-health-card">
+					<h3><?php esc_html_e( 'Known Allergies', 'remember' ); ?></h3>
+					<?php if ( ! empty( $view_allergies ) ) : ?>
+						<div class="remember-member-detail-pill-row">
 							<?php foreach ( $view_allergies as $allergy ) : ?>
-								<span style="display: inline-block; padding: 4px 12px; background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 3px; font-size: 12px;">
-									<?php echo esc_html( $allergy ); ?>
-								</span>
+								<span class="remember-member-detail-pill remember-member-detail-pill--allergy"><?php echo esc_html( $allergy ); ?></span>
 							<?php endforeach; ?>
 						</div>
-					</div>
-				<?php endif; ?>
-
-				<!-- Medical Accommodations -->
-				<?php if ( ! empty( $view_medical_accommodations ) ) : ?>
-					<div class="remember-member-detail-section">
-						<h3><?php esc_html_e( 'Medical Accommodations', 'remember' ); ?></h3>
-						<div style="display: flex; flex-wrap: wrap; gap: 8px;">
+					<?php else : ?>
+						<p class="remember-member-detail-none"><?php esc_html_e( 'None', 'remember' ); ?></p>
+					<?php endif; ?>
+				</div>
+				<div class="remember-member-detail-section remember-member-detail-health-card">
+					<h3><?php esc_html_e( 'Medical Accommodations', 'remember' ); ?></h3>
+					<?php if ( ! empty( $view_medical_accommodations ) ) : ?>
+						<div class="remember-member-detail-pill-row">
 							<?php foreach ( $view_medical_accommodations as $accommodation ) : ?>
-								<span style="display: inline-block; padding: 4px 12px; background: #d1ecf1; border: 1px solid #bee5eb; border-radius: 3px; font-size: 12px;">
-									<?php echo esc_html( $accommodation ); ?>
-								</span>
+								<span class="remember-member-detail-pill remember-member-detail-pill--medical"><?php echo esc_html( $accommodation ); ?></span>
 							<?php endforeach; ?>
 						</div>
-					</div>
-				<?php endif; ?>
+					<?php else : ?>
+						<p class="remember-member-detail-none"><?php esc_html_e( 'None', 'remember' ); ?></p>
+					<?php endif; ?>
+				</div>
 			</div>
-			<?php endif; ?>
 		</div>
 
 		<!-- Vetting Cases (Full Width) -->
