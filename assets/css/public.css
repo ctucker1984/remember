@@ -139,6 +139,31 @@
 	margin-top: 1em;
 }
 
+/* Full-width billing block below the three dashboard cards */
+.remember-dashboard-billing {
+	margin-top: 1em;
+	width: 100%;
+	max-width: 100%;
+	box-sizing: border-box;
+}
+
+.remember-dashboard-billing .remember-billing-note {
+	margin-top: 0;
+}
+
+/* Member billing: table layout is enforced via inline #remember-member-billing-css (plugin) so themes cannot break columns. */
+.remember-billing-table-wrap {
+	overflow-x: auto;
+	-webkit-overflow-scrolling: touch;
+	margin-top: 0.75em;
+}
+
+.remember-billing-table-frame {
+	border: 1px solid #c3c4c7;
+	background: #fff;
+	box-shadow: 0 1px 1px rgba(0, 0, 0, 0.04);
+}
+
 .remember-dashboard-card {
 	padding: 1.5em;
 	background: #fff;

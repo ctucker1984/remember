@@ -1,0 +1,263 @@
+<?php
+/**
+ * Shared markup for payment / billing tables (admin and member-facing).
+ *
+ * @package    reMember
+ * @subpackage reMember/includes/utilities
+ */
+
+if ( ! defined( 'WPINC' ) ) {
+	die;
+}
+
+/**
+ * Billing table rendering helpers.
+ */
+class Remember_Billing_Template {
+
+	/**
+	 * Payment status labels (translation-ready keys).
+	 *
+	 * @return array<string, string>
+	 */
+	public static function get_payment_status_labels() {
+		return array(
+			'pending'   => __( 'Pending', 'remember' ),
+			'partial'   => __( 'Partial', 'remember' ),
+			'paid'      => __( 'Paid', 'remember' ),
+			'refunded'  => __( 'Refunded', 'remember' ),
+			'cancelled' => __( 'Cancelled', 'remember' ),
+		);
+	}
+
+	/**
+	 * Hex colors for payment status (admin and front end).
+	 *
+	 * @return array<string, string>
+	 */
+	public static function get_payment_status_colors() {
+		return array(
+			'pending'   => '#f0b849',
+			'partial'   => '#00a0d2',
+			'paid'      => '#46b450',
+			'refunded'  => '#dc3232',
+			'cancelled' => '#72777c',
+		);
+	}
+
+	/**
+	 * Output a payments table.
+	 *
+	 * @param array $args {
+	 *     @type array               $payments             List of payment row objects.
+	 *     @type string              $context              'admin' or 'member'.
+	 *     @type Remember_Member|null $member_model       Required when context is admin (for name/email column).
+	 *     @type array<int, string>  $payment_event_names Optional. payment_id => event name for member context.
+	 *     @type string              $table_class          Extra class on <table>.
+	 * }
+	 */
+	public static function render_payments_table( $args ) {
+		$defaults = array(
+			'payments'             => array(),
+			'context'              => 'admin',
+			'member_model'         => null,
+			'payment_event_names'  => array(),
+			'table_class'          => '',
+		);
+		$args = wp_parse_args( $args, $defaults );
+
+		$payments            = $args['payments'];
+		$context             = 'member' === $args['context'] ? 'member' : 'admin';
+		$member_model        = $args['member_model'];
+		$payment_event_names = is_array( $args['payment_event_names'] ) ? $args['payment_event_names'] : array();
+		$table_extra         = trim( $args['table_class'] );
+
+		$status_labels = self::get_payment_status_labels();
+		$status_colors = self::get_payment_status_colors();
+
+		// Front end: many themes set table { display: block } — use a div + CSS Grid instead of <table>.
+		if ( 'member' === $context ) {
+			self::render_member_billing_sheet( $payments, $payment_event_names, $status_labels, $status_colors );
+			return;
+		}
+
+		$table_classes = array( 'remember-billing-payments-table' );
+		$table_classes[] = 'wp-list-table';
+		$table_classes[] = 'widefat';
+		$table_classes[] = 'fixed';
+		$table_classes[] = 'striped';
+		if ( '' !== $table_extra ) {
+			$table_classes[] = $table_extra;
+		}
+
+		?>
+		<table class="<?php echo esc_attr( implode( ' ', $table_classes ) ); ?>">
+			<thead>
+				<tr>
+					<th class="column-member"><?php esc_html_e( 'Member', 'remember' ); ?></th>
+					<th class="column-qb-invoice"><?php esc_html_e( 'QB Invoice #', 'remember' ); ?></th>
+					<th class="column-amount"><?php esc_html_e( 'Subtotal Amount', 'remember' ); ?></th>
+					<th class="column-paid"><?php esc_html_e( 'Amount Paid', 'remember' ); ?></th>
+					<th class="column-due"><?php esc_html_e( 'Amount Due', 'remember' ); ?></th>
+					<th class="column-status"><?php esc_html_e( 'Status', 'remember' ); ?></th>
+					<th class="column-method"><?php esc_html_e( 'Method', 'remember' ); ?></th>
+					<th class="column-date"><?php esc_html_e( 'Date', 'remember' ); ?></th>
+				</tr>
+			</thead>
+			<tbody>
+				<?php foreach ( $payments as $payment ) : ?>
+					<tr>
+						<td class="column-member">
+							<?php
+							$user = null;
+							if ( $member_model && isset( $payment->member_id ) ) {
+								$member = $member_model->get( $payment->member_id );
+								$user   = $member ? get_user_by( 'ID', $payment->member_id ) : null;
+							}
+							if ( $user ) :
+								?>
+								<?php echo esc_html( $user->display_name ); ?><br>
+								<span class="description"><?php echo esc_html( $user->user_email ); ?></span>
+							<?php else : ?>
+								<span class="description"><?php esc_html_e( 'Member not found', 'remember' ); ?></span>
+							<?php endif; ?>
+						</td>
+						<td class="column-qb-invoice">
+							<?php if ( ! empty( $payment->quickbooks_invoice_number ) ) : ?>
+								<strong><?php echo esc_html( $payment->quickbooks_invoice_number ); ?></strong>
+							<?php elseif ( ! empty( $payment->quickbooks_invoice_id ) ) : ?>
+								<span class="description"><?php echo esc_html( __( 'Sync payments to load invoice #', 'remember' ) ); ?></span>
+							<?php else : ?>
+								<span class="description">—</span>
+							<?php endif; ?>
+						</td>
+						<td class="column-amount">
+							<strong>$<?php echo esc_html( number_format( (float) $payment->total_amount, 2 ) ); ?></strong>
+						</td>
+						<td class="column-paid">
+							$<?php echo esc_html( number_format( (float) $payment->amount_paid, 2 ) ); ?>
+						</td>
+						<td class="column-due">
+							<strong style="color: <?php echo (float) $payment->amount_due > 0 ? '#dc3232' : '#46b450'; ?>;">
+								$<?php echo esc_html( number_format( (float) $payment->amount_due, 2 ) ); ?>
+							</strong>
+						</td>
+						<td class="column-status">
+							<?php
+							$ps = isset( $payment->payment_status ) ? (string) $payment->payment_status : '';
+							$sl = isset( $status_labels[ $ps ] ) ? $status_labels[ $ps ] : $ps;
+							$sc = isset( $status_colors[ $ps ] ) ? $status_colors[ $ps ] : '#646970';
+							?>
+							<span style="color: <?php echo esc_attr( $sc ); ?>; font-weight: bold;"><?php echo esc_html( $sl ); ?></span>
+						</td>
+						<td class="column-method">
+							<?php echo esc_html( ucfirst( $payment->payment_method ? $payment->payment_method : 'manual' ) ); ?>
+						</td>
+						<td class="column-date">
+							<?php if ( ! empty( $payment->payment_date ) ) : ?>
+								<?php echo esc_html( date_i18n( get_option( 'date_format' ), strtotime( $payment->payment_date ) ) ); ?>
+							<?php else : ?>
+								<span class="description">—</span>
+							<?php endif; ?>
+						</td>
+					</tr>
+				<?php endforeach; ?>
+			</tbody>
+		</table>
+		<?php
+	}
+
+	/**
+	 * Member dashboard billing: real <table> plus scoped inline CSS so themes cannot force display:block on tables.
+	 *
+	 * @param array<int, object>      $payments            Payment rows.
+	 * @param array<int, string>      $payment_event_names payment_id => event name.
+	 * @param array<string, string>   $status_labels       Status labels.
+	 * @param array<string, string>   $status_colors       Status hex colors.
+	 */
+	private static function render_member_billing_sheet( $payments, $payment_event_names, $status_labels, $status_colors ) {
+		static $member_billing_css_printed = false;
+		if ( ! $member_billing_css_printed ) {
+			$member_billing_css_printed = true;
+			// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static CSS string only.
+			echo self::get_member_billing_inline_css();
+		}
+		?>
+		<table class="remember-billing-mt" aria-label="<?php echo esc_attr( __( 'Payment records', 'remember' ) ); ?>">
+			<thead>
+				<tr>
+					<th scope="col"><?php esc_html_e( 'Event', 'remember' ); ?></th>
+					<th scope="col"><?php esc_html_e( 'QB Invoice #', 'remember' ); ?></th>
+					<th scope="col" class="remember-billing-mt-num"><?php esc_html_e( 'Subtotal Amount', 'remember' ); ?></th>
+					<th scope="col" class="remember-billing-mt-num"><?php esc_html_e( 'Amount Paid', 'remember' ); ?></th>
+					<th scope="col" class="remember-billing-mt-num"><?php esc_html_e( 'Amount Due', 'remember' ); ?></th>
+					<th scope="col"><?php esc_html_e( 'Status', 'remember' ); ?></th>
+					<th scope="col"><?php esc_html_e( 'Method', 'remember' ); ?></th>
+					<th scope="col"><?php esc_html_e( 'Date', 'remember' ); ?></th>
+				</tr>
+			</thead>
+			<tbody>
+				<?php foreach ( $payments as $payment ) : ?>
+					<?php
+					$ename = isset( $payment_event_names[ $payment->payment_id ] ) ? $payment_event_names[ $payment->payment_id ] : '—';
+					$ps    = isset( $payment->payment_status ) ? (string) $payment->payment_status : '';
+					$sl    = isset( $status_labels[ $ps ] ) ? $status_labels[ $ps ] : $ps;
+					$sc    = isset( $status_colors[ $ps ] ) ? $status_colors[ $ps ] : '#646970';
+					?>
+					<tr>
+						<td><?php echo esc_html( $ename ); ?></td>
+						<td>
+							<?php if ( ! empty( $payment->quickbooks_invoice_number ) ) : ?>
+								<strong><?php echo esc_html( $payment->quickbooks_invoice_number ); ?></strong>
+							<?php elseif ( ! empty( $payment->quickbooks_invoice_id ) ) : ?>
+								<span class="remember-billing-mt-muted"><?php echo esc_html( __( 'Invoice # pending sync', 'remember' ) ); ?></span>
+							<?php else : ?>
+								<span class="remember-billing-mt-muted">—</span>
+							<?php endif; ?>
+						</td>
+						<td class="remember-billing-mt-num"><strong>$<?php echo esc_html( number_format( (float) $payment->total_amount, 2 ) ); ?></strong></td>
+						<td class="remember-billing-mt-num">$<?php echo esc_html( number_format( (float) $payment->amount_paid, 2 ) ); ?></td>
+						<td class="remember-billing-mt-num">
+							<strong style="color: <?php echo (float) $payment->amount_due > 0 ? '#dc3232' : '#46b450'; ?>;">
+								$<?php echo esc_html( number_format( (float) $payment->amount_due, 2 ) ); ?>
+							</strong>
+						</td>
+						<td><strong style="color: <?php echo esc_attr( $sc ); ?>;"><?php echo esc_html( $sl ); ?></strong></td>
+						<td><?php echo esc_html( ucfirst( $payment->payment_method ? $payment->payment_method : 'manual' ) ); ?></td>
+						<td>
+							<?php if ( ! empty( $payment->payment_date ) ) : ?>
+								<?php echo esc_html( date_i18n( get_option( 'date_format' ), strtotime( $payment->payment_date ) ) ); ?>
+							<?php else : ?>
+								<span class="remember-billing-mt-muted">—</span>
+							<?php endif; ?>
+						</td>
+					</tr>
+				<?php endforeach; ?>
+			</tbody>
+		</table>
+		<?php
+	}
+
+	/**
+	 * Critical CSS for member billing table (must override theme responsive-table rules). Scoped to #remember-member-billing.
+	 *
+	 * @return string
+	 */
+	private static function get_member_billing_inline_css() {
+		return '<style type="text/css" id="remember-member-billing-css">
+#remember-member-billing table.remember-billing-mt{display:table!important;width:100%!important;max-width:100%!important;border-collapse:collapse!important;border-spacing:0!important;margin:0!important;font-size:14px!important;line-height:1.5!important;color:#2c3338!important;background:#fff!important;table-layout:auto!important}
+#remember-member-billing table.remember-billing-mt thead{display:table-header-group!important}
+#remember-member-billing table.remember-billing-mt tbody{display:table-row-group!important}
+#remember-member-billing table.remember-billing-mt tr{display:table-row!important}
+#remember-member-billing table.remember-billing-mt colgroup{display:table-column-group!important}
+#remember-member-billing table.remember-billing-mt th,#remember-member-billing table.remember-billing-mt td{display:table-cell!important;float:none!important;vertical-align:middle!important;padding:10px 12px!important;width:auto!important;max-width:none!important;clear:none!important;position:static!important;border:none!important;border-top:1px solid #c3c4c7!important;text-align:left!important}
+#remember-member-billing table.remember-billing-mt thead th{background:#f6f7f7!important;font-weight:600!important;color:#1d2327!important;border-top:none!important;border-bottom:1px solid #c3c4c7!important}
+#remember-member-billing table.remember-billing-mt tbody tr:first-child td{border-top:none!important}
+#remember-member-billing table.remember-billing-mt tbody tr:nth-child(odd) td{background:#f6f7f7!important}
+#remember-member-billing table.remember-billing-mt tbody tr:nth-child(even) td{background:#fff!important}
+#remember-member-billing table.remember-billing-mt .remember-billing-mt-num{text-align:right!important;font-variant-numeric:tabular-nums!important}
+#remember-member-billing table.remember-billing-mt thead th.remember-billing-mt-num{text-align:right!important}
+#remember-member-billing table.remember-billing-mt .remember-billing-mt-muted{color:#646970!important;font-size:13px!important}
+</style>';
+	}
+}

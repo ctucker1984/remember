@@ -17,6 +17,9 @@ require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-vetting.
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-location.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-merchandise.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-timezone.php';
+require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-payment.php';
+require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-template.php';
+require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-messaging.php';
 
 $user = wp_get_current_user();
 $member_model = new Remember_Member();
@@ -137,6 +140,26 @@ foreach ( $applications as $app ) {
 
 // Get all vetting cases for this member
 $vetting_cases = $vetting_model->get_all_by_member( $member_id_for_queries );
+
+// Payments for billing table (same data as admin; scoped to this member).
+$payment_model       = new Remember_Payment();
+$member_payments       = $payment_model->get_by_member( $member_id_for_queries );
+$payment_event_names   = array();
+$billing_subtotal_note = Remember_Billing_Messaging::get_subtotal_disclaimer();
+foreach ( $member_payments as $mp ) {
+	$aid = isset( $mp->event_application_id ) ? absint( $mp->event_application_id ) : 0;
+	if ( $aid <= 0 ) {
+		$payment_event_names[ $mp->payment_id ] = '—';
+		continue;
+	}
+	$pay_app = $application_model->get( $aid );
+	if ( ! $pay_app ) {
+		$payment_event_names[ $mp->payment_id ] = '—';
+		continue;
+	}
+	$pay_event = $event_model->get( $pay_app->event_id );
+	$payment_event_names[ $mp->payment_id ] = $pay_event ? $pay_event->event_name : __( 'Unknown event', 'remember' );
+}
 
 // Get profile page URL
 $created_pages = get_option( 'remember_created_pages', array() );
@@ -508,6 +531,37 @@ foreach ( $selected_application_addons as $selected_addon_row ) {
 				<p class="remember-description"><?php esc_html_e( 'No accepted events yet.', 'remember' ); ?></p>
 			<?php endif; ?>
 		</div>
+	</div>
+
+	<div class="remember-dashboard-billing remember-dashboard-card-compact">
+		<h3><?php esc_html_e( 'Billing', 'remember' ); ?></h3>
+		<p class="remember-description remember-billing-note"><?php echo esc_html( $billing_subtotal_note ); ?></p>
+		<?php if ( ! empty( $member_payments ) ) : ?>
+			<div id="remember-member-billing" class="remember-billing-table-wrap remember-billing-table-frame">
+				<?php
+				Remember_Billing_Template::render_payments_table(
+					array(
+						'payments'            => $member_payments,
+						'context'             => 'member',
+						'payment_event_names' => $payment_event_names,
+					)
+				);
+				?>
+			</div>
+			<p class="remember-description" style="margin-top: 0.75em;">
+				<?php
+				echo esc_html(
+					sprintf(
+						/* translators: %d: number of payment rows */
+						_n( '%d payment record', '%d payment records', count( $member_payments ), 'remember' ),
+						count( $member_payments )
+					)
+				);
+				?>
+			</p>
+		<?php else : ?>
+			<p class="remember-description"><?php esc_html_e( 'No billing records yet.', 'remember' ); ?></p>
+		<?php endif; ?>
 	</div>
 	<?php endif; ?>
 </div>

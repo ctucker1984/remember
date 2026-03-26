@@ -16,6 +16,7 @@ require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-payment.
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-application.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-member.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-messaging.php';
+require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-template.php';
 
 Remember_Logger::debug( 'Payments page loaded' );
 
@@ -34,21 +35,6 @@ if ( ! empty( $filter_status ) ) {
 	$payments = $payment_model->get_all();
 }
 
-// Status labels and colors
-$status_labels = array(
-	'pending'  => __( 'Pending', 'remember' ),
-	'partial'  => __( 'Partial', 'remember' ),
-	'paid'     => __( 'Paid', 'remember' ),
-	'refunded' => __( 'Refunded', 'remember' ),
-	'cancelled' => __( 'Cancelled', 'remember' ),
-);
-$status_colors = array(
-	'pending'  => '#f0b849',
-	'partial'  => '#00a0d2',
-	'paid'     => '#46b450',
-	'refunded' => '#dc3232',
-	'cancelled' => '#72777c',
-);
 ?>
 
 <div class="wrap remember-billing">
@@ -86,72 +72,15 @@ $status_colors = array(
 
 	<!-- Payments List -->
 	<?php if ( ! empty( $payments ) ) : ?>
-		<table class="wp-list-table widefat fixed striped">
-			<thead>
-				<tr>
-					<th class="column-member"><?php esc_html_e( 'Member', 'remember' ); ?></th>
-					<th class="column-qb-invoice"><?php esc_html_e( 'QB Invoice #', 'remember' ); ?></th>
-					<th class="column-amount"><?php esc_html_e( 'Subtotal Amount', 'remember' ); ?></th>
-					<th class="column-paid"><?php esc_html_e( 'Amount Paid', 'remember' ); ?></th>
-					<th class="column-due"><?php esc_html_e( 'Amount Due', 'remember' ); ?></th>
-					<th class="column-status"><?php esc_html_e( 'Status', 'remember' ); ?></th>
-					<th class="column-method"><?php esc_html_e( 'Method', 'remember' ); ?></th>
-					<th class="column-date"><?php esc_html_e( 'Date', 'remember' ); ?></th>
-				</tr>
-			</thead>
-			<tbody>
-				<?php foreach ( $payments as $payment ) : 
-					$member = $member_model->get( $payment->member_id );
-					$user = $member ? get_user_by( 'ID', $payment->member_id ) : null;
-				?>
-					<tr>
-						<td class="column-member">
-							<?php if ( $user ) : ?>
-								<?php echo esc_html( $user->display_name ); ?><br>
-								<span class="description"><?php echo esc_html( $user->user_email ); ?></span>
-							<?php else : ?>
-								<span class="description"><?php esc_html_e( 'Member not found', 'remember' ); ?></span>
-							<?php endif; ?>
-						</td>
-						<td class="column-qb-invoice">
-							<?php if ( ! empty( $payment->quickbooks_invoice_number ) ) : ?>
-								<strong><?php echo esc_html( $payment->quickbooks_invoice_number ); ?></strong>
-							<?php elseif ( ! empty( $payment->quickbooks_invoice_id ) ) : ?>
-								<span class="description"><?php esc_html_e( 'Sync payments to load invoice #', 'remember' ); ?></span>
-							<?php else : ?>
-								<span class="description">—</span>
-							<?php endif; ?>
-						</td>
-						<td class="column-amount">
-							<strong>$<?php echo number_format( $payment->total_amount, 2 ); ?></strong>
-						</td>
-						<td class="column-paid">
-							$<?php echo number_format( $payment->amount_paid, 2 ); ?>
-						</td>
-						<td class="column-due">
-							<strong style="color: <?php echo $payment->amount_due > 0 ? '#dc3232' : '#46b450'; ?>;">
-								$<?php echo number_format( $payment->amount_due, 2 ); ?>
-							</strong>
-						</td>
-						<td class="column-status">
-							<span style="color: <?php echo esc_attr( $status_colors[ $payment->payment_status ] ); ?>; font-weight: bold;">
-								<?php echo esc_html( $status_labels[ $payment->payment_status ] ); ?>
-							</span>
-						</td>
-						<td class="column-method">
-							<?php echo esc_html( ucfirst( $payment->payment_method ? $payment->payment_method : 'manual' ) ); ?>
-						</td>
-						<td class="column-date">
-							<?php if ( $payment->payment_date ) : ?>
-								<?php echo esc_html( date_i18n( get_option( 'date_format' ), strtotime( $payment->payment_date ) ) ); ?>
-							<?php else : ?>
-								<span class="description">—</span>
-							<?php endif; ?>
-						</td>
-					</tr>
-				<?php endforeach; ?>
-			</tbody>
-		</table>
+		<?php
+		Remember_Billing_Template::render_payments_table(
+			array(
+				'payments'     => $payments,
+				'context'      => 'admin',
+				'member_model' => $member_model,
+			)
+		);
+		?>
 		
 		<p class="description" style="margin-top: 15px;">
 			<?php echo esc_html( sprintf( __( 'Showing %d payment(s)', 'remember' ), count( $payments ) ) ); ?>
