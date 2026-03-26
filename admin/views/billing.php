@@ -96,7 +96,6 @@ $status_colors = array(
 					<th class="column-status"><?php esc_html_e( 'Status', 'remember' ); ?></th>
 					<th class="column-method"><?php esc_html_e( 'Method', 'remember' ); ?></th>
 					<th class="column-date"><?php esc_html_e( 'Date', 'remember' ); ?></th>
-					<th class="column-actions"><?php esc_html_e( 'Actions', 'remember' ); ?></th>
 				</tr>
 			</thead>
 			<tbody>
@@ -137,13 +136,6 @@ $status_colors = array(
 								<?php echo esc_html( date_i18n( get_option( 'date_format' ), strtotime( $payment->payment_date ) ) ); ?>
 							<?php else : ?>
 								<span class="description">—</span>
-							<?php endif; ?>
-						</td>
-						<td class="column-actions">
-							<?php if ( $payment->amount_due > 0 ) : ?>
-								<span class="description"><?php esc_html_e( 'Manage payments in QuickBooks, then sync.', 'remember' ); ?></span>
-							<?php else : ?>
-								<span class="description"><?php esc_html_e( 'Paid (via QuickBooks sync)', 'remember' ); ?></span>
 							<?php endif; ?>
 						</td>
 					</tr>
