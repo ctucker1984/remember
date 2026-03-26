@@ -362,43 +362,48 @@ class Remember {
 		if ( ! $user ) {
 			return $redirect_to;
 		}
-		
-		// Check if user has any reMember admin capabilities
-		$all_caps = Remember_Capabilities::get_all_capabilities();
-		$has_remember_admin_cap = false;
-		foreach ( array_keys( $all_caps ) as $cap ) {
-			if ( user_can( $user, $cap ) ) {
-				$has_remember_admin_cap = true;
-				break;
-			}
-		}
-		
-		// If user has reMember admin capabilities, redirect to reMember admin dashboard
-		if ( $has_remember_admin_cap ) {
-			return admin_url( 'admin.php?page=remember' );
-		}
-		
-		// If user is WordPress admin, don't redirect
+
+		// Full site admins: respect the default redirect (usually wp-admin).
 		if ( user_can( $user, 'manage_options' ) ) {
 			return $redirect_to;
 		}
 
-		// Check if user is a member (for front-end dashboard redirect)
 		require_once plugin_dir_path( __FILE__ ) . 'models/class-member.php';
 		$member_model = new Remember_Member();
-		$member = $member_model->get( $user->ID );
+		$member       = $member_model->get( $user->ID );
 
-		if ( $member ) {
-			// Get dashboard page URL (member_dashboard key; dashboard was a legacy typo).
-			$created_pages = get_option( 'remember_created_pages', array() );
-			$dashboard_page_id = isset( $created_pages['member_dashboard'] ) ? $created_pages['member_dashboard'] : ( isset( $created_pages['dashboard'] ) ? $created_pages['dashboard'] : 0 );
-			
-			if ( $dashboard_page_id ) {
-				return get_permalink( $dashboard_page_id );
-			}
+		$created_pages     = get_option( 'remember_created_pages', array() );
+		$dashboard_page_id = isset( $created_pages['member_dashboard'] ) ? absint( $created_pages['member_dashboard'] ) : ( isset( $created_pages['dashboard'] ) ? absint( $created_pages['dashboard'] ) : 0 );
+
+		// Members: always prefer the front-end member dashboard when that page exists.
+		// Avoids sending subscribers to wp-admin with partial reMember caps they cannot use on the main plugin screen.
+		if ( $member && $dashboard_page_id ) {
+			return get_permalink( $dashboard_page_id );
+		}
+
+		// Staff-only users who can actually open admin.php?page=remember (same caps as display_dashboard_page).
+		if ( $this->user_can_access_remember_admin_main( $user ) ) {
+			return admin_url( 'admin.php?page=remember' );
 		}
 
 		return $redirect_to;
+	}
+
+	/**
+	 * Whether the user may load the main reMember wp-admin screen (admin.php?page=remember).
+	 *
+	 * Must match Remember_Admin::display_dashboard_page() capability checks.
+	 *
+	 * @param WP_User $user User object.
+	 * @return bool
+	 */
+	private function user_can_access_remember_admin_main( $user ) {
+		if ( ! $user || ! $user->ID ) {
+			return false;
+		}
+		return user_can( $user, 'remember_read_events' )
+			|| user_can( $user, 'remember_read_vetting' )
+			|| user_can( $user, 'remember_read_members' );
 	}
 	
 	/**
@@ -434,25 +439,32 @@ class Remember {
 		if ( ! $user ) {
 			return;
 		}
-		
-		// Check if user has any reMember admin capabilities
-		$all_caps = Remember_Capabilities::get_all_capabilities();
-		$has_remember_admin_cap = false;
-		foreach ( array_keys( $all_caps ) as $cap ) {
-			if ( user_can( $user, $cap ) ) {
-				$has_remember_admin_cap = true;
-				break;
-			}
+
+		if ( user_can( $user, 'manage_options' ) ) {
+			return;
+		}
+
+		require_once plugin_dir_path( __FILE__ ) . 'models/class-member.php';
+		$member_model = new Remember_Member();
+		$member       = $member_model->get( $user->ID );
+		$created_pages = get_option( 'remember_created_pages', array() );
+		$dashboard_page_id = isset( $created_pages['member_dashboard'] ) ? absint( $created_pages['member_dashboard'] ) : ( isset( $created_pages['dashboard'] ) ? absint( $created_pages['dashboard'] ) : 0 );
+
+		// Do not push members toward wp-admin when they have a public dashboard URL.
+		if ( $member && $dashboard_page_id ) {
+			return;
+		}
+
+		// Only redirect if they can open the main reMember admin screen (not merely any remember_* cap).
+		if ( ! $this->user_can_access_remember_admin_main( $user ) ) {
+			return;
 		}
 		
-		// If user has reMember capabilities but is not a WordPress admin, redirect to reMember dashboard
-		if ( $has_remember_admin_cap && ! user_can( $user, 'manage_options' ) ) {
-			// Only redirect if we're on a non-reMember admin page (like profile.php)
-			$current_screen = get_current_screen();
-			if ( $current_screen && $current_screen->id !== 'toplevel_page_remember' ) {
-				wp_safe_redirect( admin_url( 'admin.php?page=remember' ) );
-				exit;
-			}
+		// Staff: redirect from generic admin screens to reMember dashboard
+		$current_screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+		if ( $current_screen && $current_screen->id !== 'toplevel_page_remember' ) {
+			wp_safe_redirect( admin_url( 'admin.php?page=remember' ) );
+			exit;
 		}
 	}
 
