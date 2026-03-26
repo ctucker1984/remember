@@ -49,35 +49,43 @@ class Remember_Database {
 	 */
 	public function create_tables() {
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+		require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-logger.php';
 
-		$this->create_members_table();
-		$this->create_member_profiles_table();
-		$this->create_social_media_platforms_table();
-		$this->create_member_social_media_table();
-		$this->create_dietary_restrictions_table();
-		$this->create_member_dietary_restrictions_table();
-		$this->create_allergies_table();
-		$this->create_member_allergies_table();
-		$this->create_medical_accommodations_table();
-		$this->create_member_medical_accommodations_table();
-		$this->create_roles_table();
-		$this->create_member_roles_table();
-		$this->create_role_capabilities_table();
-		$this->create_locations_table();
-		$this->create_events_table();
-		$this->create_event_roles_table();
-		$this->create_event_merchandise_table();
-		$this->create_event_applications_table();
-		$this->create_application_merchandise_table();
-		$this->create_products_table();
-		$this->create_qb_item_mappings_table();
-		$this->create_payment_processors_table();
-		$this->create_payments_table();
-		$this->create_vetting_table();
-		$this->create_vetting_collaborators_table();
-		$this->create_vetting_notes_table();
-		$this->create_notification_settings_table();
-		$this->create_plugin_version_table();
+		$tables = array(
+			'members'                        => 'create_members_table',
+			'member_profiles'                => 'create_member_profiles_table',
+			'social_media_platforms'         => 'create_social_media_platforms_table',
+			'member_social_media'            => 'create_member_social_media_table',
+			'dietary_restrictions'           => 'create_dietary_restrictions_table',
+			'member_dietary_restrictions'    => 'create_member_dietary_restrictions_table',
+			'allergies'                      => 'create_allergies_table',
+			'member_allergies'               => 'create_member_allergies_table',
+			'medical_accommodations'         => 'create_medical_accommodations_table',
+			'member_medical_accommodations'  => 'create_member_medical_accommodations_table',
+			'roles'                          => 'create_roles_table',
+			'member_roles'                   => 'create_member_roles_table',
+			'role_capabilities'              => 'create_role_capabilities_table',
+			'locations'                      => 'create_locations_table',
+			'events'                         => 'create_events_table',
+			'event_roles'                    => 'create_event_roles_table',
+			'event_merchandise'              => 'create_event_merchandise_table',
+			'event_applications'             => 'create_event_applications_table',
+			'application_merchandise'        => 'create_application_merchandise_table',
+			'products'                       => 'create_products_table',
+			'qb_item_mappings'               => 'create_qb_item_mappings_table',
+			'payment_processors'             => 'create_payment_processors_table',
+			'payments'                       => 'create_payments_table',
+			'vetting'                        => 'create_vetting_table',
+			'vetting_collaborators'          => 'create_vetting_collaborators_table',
+			'vetting_notes'                  => 'create_vetting_notes_table',
+			'notification_settings'          => 'create_notification_settings_table',
+			'plugin_version'                 => 'create_plugin_version_table',
+		);
+
+		foreach ( $tables as $label => $method ) {
+			Remember_Logger::activation_debug( 'dbDelta: ' . $label );
+			$this->{$method}();
+		}
 	}
 
 	/**
@@ -86,6 +94,17 @@ class Remember_Database {
 	private function create_members_table() {
 		$table_name = $this->prefix . 'members';
 		$charset_collate = $this->wpdb->get_charset_collate();
+
+		$exists = $this->wpdb->get_var( $this->wpdb->prepare( 'SHOW TABLES LIKE %s', $table_name ) );
+		Remember_Logger::activation_debug( 'create_members_table: SHOW TABLES done', array( 'table' => $table_name, 'exists' => (bool) $exists ) );
+
+		$row_count = null;
+		if ( $exists ) {
+			Remember_Logger::activation_debug( 'create_members_table: COUNT(*) start' );
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is plugin-controlled prefix + literal.
+			$row_count = $this->wpdb->get_var( "SELECT COUNT(*) FROM `{$table_name}`" );
+			Remember_Logger::activation_debug( 'create_members_table: COUNT(*) end', array( 'row_count' => $row_count ) );
+		}
 
 		$sql = "CREATE TABLE $table_name (
 			member_id BIGINT(20) UNSIGNED NOT NULL,
@@ -97,7 +116,9 @@ class Remember_Database {
 			KEY status (status)
 		) $charset_collate;";
 
+		Remember_Logger::activation_debug( 'create_members_table: dbDelta( members ) start' );
 		dbDelta( $sql );
+		Remember_Logger::activation_debug( 'create_members_table: dbDelta( members ) end' );
 	}
 
 	/**
@@ -613,6 +634,8 @@ class Remember_Database {
 			transaction_id VARCHAR(255) DEFAULT NULL,
 			quickbooks_invoice_id VARCHAR(100) DEFAULT NULL,
 			quickbooks_invoice_number VARCHAR(50) DEFAULT NULL,
+			quickbooks_invoice_sort_ts BIGINT(20) UNSIGNED DEFAULT NULL,
+			quickbooks_payment_lines LONGTEXT DEFAULT NULL,
 			notes TEXT DEFAULT NULL,
 			created_at DATETIME NOT NULL,
 			updated_at DATETIME NOT NULL,

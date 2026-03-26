@@ -48,14 +48,21 @@ class Remember_Seeder {
 	 * @since    1.0.0
 	 */
 	public function seed() {
-		$this->seed_default_location();
-		$this->seed_default_roles();
-		$this->seed_social_media_platforms();
-		$this->seed_dietary_restrictions();
-		$this->seed_allergies();
-		$this->seed_medical_accommodations();
-		$this->seed_notification_settings();
-		$this->seed_payment_processors();
+		require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-logger.php';
+		$steps = array(
+			'seed_default_location',
+			'seed_default_roles',
+			'seed_social_media_platforms',
+			'seed_dietary_restrictions',
+			'seed_allergies',
+			'seed_medical_accommodations',
+			'seed_notification_settings',
+			'seed_payment_processors',
+		);
+		foreach ( $steps as $method ) {
+			Remember_Logger::activation_debug( 'seeder: ' . $method );
+			$this->{$method}();
+		}
 	}
 
 	/**

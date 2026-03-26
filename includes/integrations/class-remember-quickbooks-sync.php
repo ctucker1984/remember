@@ -334,6 +334,8 @@ class Remember_QuickBooks_Sync {
 					array(
 						'quickbooks_invoice_id'         => null,
 						'quickbooks_invoice_number'     => null,
+						'quickbooks_invoice_sort_ts'    => null,
+						'quickbooks_payment_lines'      => null,
 						'amount_paid'                   => 0,
 						'payment_status'              => 'pending',
 						'payment_date'                  => null,
@@ -344,38 +346,69 @@ class Remember_QuickBooks_Sync {
 			return $invoice;
 		}
 
-		// Get payments for this invoice (narrowed by QuickBooks customer when possible).
+		// Get each QuickBooks Payment applied to this invoice (multiple payments = multiple rows).
 		$qb_customer_id = get_user_meta( $payment->member_id, 'remember_qb_customer_id', true );
-		$payments       = Remember_QuickBooks_API::get_invoice_payment( $payment->quickbooks_invoice_id, $qb_customer_id );
+		$detail_lines   = Remember_QuickBooks_API::get_invoice_payment_lines( $payment->quickbooks_invoice_id, $qb_customer_id );
 
-		if ( is_wp_error( $payments ) ) {
+		if ( is_wp_error( $detail_lines ) ) {
 			// Bubble up API/query errors so manual sync UI can report them.
-			return $payments;
+			return $detail_lines;
 		}
 
 		$total_paid = 0;
-		if ( ! empty( $payments ) ) {
-			foreach ( $payments as $qb_payment ) {
-				$total_paid += floatval( $qb_payment['TotalAmt'] ?? 0 );
+		foreach ( $detail_lines as $row ) {
+			$total_paid += floatval( $row['amount'] ?? 0 );
+		}
+
+		$invoice_sort_ts = Remember_QuickBooks_API::qb_entity_sort_timestamp( $invoice );
+
+		// If QBO did not return Payment rows but the invoice shows paid, fall back to invoice totals (single register line).
+		if ( empty( $detail_lines ) ) {
+			$inv_balance = floatval( $invoice['Balance'] ?? 0 );
+			$inv_total   = floatval( $invoice['TotalAmt'] ?? 0 );
+			if ( $inv_total > 0 && $inv_balance <= 0.001 ) {
+				$total_paid   = $inv_total;
+				$pay_sort_ts  = $invoice_sort_ts > 0 ? $invoice_sort_ts + 1 : strtotime( current_time( 'mysql' ) );
+				$detail_lines = array(
+					array(
+						'amount'         => $inv_total,
+						'txn_date'       => isset( $invoice['TxnDate'] ) ? sanitize_text_field( (string) $invoice['TxnDate'] ) : '',
+						'payment_method' => '',
+						'qb_payment_id'  => '',
+						'sort_ts'        => $pay_sort_ts,
+					),
+				);
 			}
 		}
 
 		// Update payment record
-		$amount_due = floatval( $payment->total_amount ) - $total_paid;
+		$amount_due     = floatval( $payment->total_amount ) - $total_paid;
 		$payment_status = 'pending';
-		
+
 		if ( $total_paid >= floatval( $payment->total_amount ) ) {
 			$payment_status = 'paid';
-			$amount_due = 0;
+			$amount_due     = 0;
 		} elseif ( $total_paid > 0 ) {
 			$payment_status = 'partial';
 		}
 
+		$latest_ts = 0;
+		foreach ( $detail_lines as $row ) {
+			$t = isset( $row['sort_ts'] ) ? (int) $row['sort_ts'] : strtotime( $row['txn_date'] ?? '' );
+			if ( $t && $t > $latest_ts ) {
+				$latest_ts = $t;
+			}
+		}
+
 		$update_data = array(
-			'amount_paid'    => $total_paid,
-			'amount_due'     => $amount_due,
-			'payment_status' => $payment_status,
-			'payment_date'   => $total_paid > 0 ? current_time( 'mysql' ) : null,
+			'amount_paid'                => $total_paid,
+			'amount_due'                 => $amount_due,
+			'payment_status'             => $payment_status,
+			'payment_date'               => $total_paid > 0
+				? ( $latest_ts > 0 ? date( 'Y-m-d H:i:s', $latest_ts ) : current_time( 'mysql' ) )
+				: null,
+			'quickbooks_payment_lines'   => ! empty( $detail_lines ) ? wp_json_encode( $detail_lines ) : null,
+			'quickbooks_invoice_sort_ts' => $invoice_sort_ts > 0 ? $invoice_sort_ts : null,
 		);
 		if ( isset( $invoice['DocNumber'] ) ) {
 			$update_data['quickbooks_invoice_number'] = sanitize_text_field( (string) $invoice['DocNumber'] );

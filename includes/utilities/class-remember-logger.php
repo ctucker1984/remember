@@ -20,6 +20,67 @@ if ( ! defined( 'WPINC' ) ) {
 class Remember_Logger {
 
 	/**
+	 * Microtime when activation tracing started (for elapsed_ms).
+	 *
+	 * @var float|null
+	 */
+	private static $activation_start_time = null;
+
+	/**
+	 * Mark the start of plugin activation (call once at the beginning of Remember_Activator::activate).
+	 *
+	 * @return void
+	 */
+	public static function mark_activation_start() {
+		self::$activation_start_time = microtime( true );
+	}
+
+	/**
+	 * Log activation progress to wp-content/debug.log when WP_DEBUG_LOG is true.
+	 *
+	 * Ignores remember_options log_level so DEBUG lines always appear during activation troubleshooting.
+	 *
+	 * @param string $label   Short step name.
+	 * @param array  $context Extra context (merged with elapsed_ms, peak_memory_mb).
+	 * @return void
+	 */
+	public static function activation_debug( $label, $context = array() ) {
+		if ( ! defined( 'WP_DEBUG_LOG' ) || ! WP_DEBUG_LOG ) {
+			return;
+		}
+
+		if ( self::$activation_start_time === null ) {
+			self::$activation_start_time = microtime( true );
+		}
+
+		$elapsed_ms = round( ( microtime( true ) - self::$activation_start_time ) * 1000, 1 );
+		$peak_mb    = function_exists( 'memory_get_peak_usage' )
+			? round( memory_get_peak_usage( true ) / 1048576, 2 )
+			: 0.0;
+
+		$ctx = array_merge(
+			array(
+				'elapsed_ms'     => $elapsed_ms,
+				'peak_memory_mb' => $peak_mb,
+			),
+			$context
+		);
+
+		$timestamp = current_time( 'mysql' );
+		$log_entry   = sprintf(
+			'[%s] [reMember] [ACTIVATION] %s | %s' . "\n",
+			$timestamp,
+			$label,
+			wp_json_encode( $ctx, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES )
+		);
+
+		$log_file = self::get_log_file_path();
+		if ( false === @error_log( $log_entry, 3, $log_file ) ) {
+			@file_put_contents( $log_file, $log_entry, FILE_APPEND | LOCK_EX );
+		}
+	}
+
+	/**
 	 * Get the configured log level.
 	 *
 	 * @return string Log level (NONE, ERROR, WARNING, INFO, DEBUG).

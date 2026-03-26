@@ -120,6 +120,9 @@ class Remember_Capabilities {
 	 * @since    1.0.0
 	 */
 	public static function setup_capabilities() {
+		require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
+		Remember_Logger::activation_debug( 'setup_capabilities: start' );
+
 		// Get administrator role
 		$admin_role = get_role( 'administrator' );
 		
@@ -128,7 +131,12 @@ class Remember_Capabilities {
 			foreach ( array_keys( $capabilities ) as $cap ) {
 				$admin_role->add_cap( $cap );
 			}
+			Remember_Logger::activation_debug( 'setup_capabilities: caps added to administrator', array( 'count' => count( $capabilities ) ) );
+		} else {
+			Remember_Logger::activation_debug( 'setup_capabilities: administrator role missing' );
 		}
+
+		Remember_Logger::activation_debug( 'setup_capabilities: end' );
 	}
 
 	/**

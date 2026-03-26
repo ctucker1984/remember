@@ -535,6 +535,151 @@ class Remember_QuickBooks_API {
 	}
 
 	/**
+	 * Best-effort Unix timestamp for ordering entities (CreateTime preferred, then LastUpdatedTime, then TxnDate).
+	 *
+	 * @param array $entity QuickBooks Invoice or Payment payload.
+	 * @return int
+	 */
+	public static function qb_entity_sort_timestamp( $entity ) {
+		if ( ! is_array( $entity ) ) {
+			return 0;
+		}
+		if ( ! empty( $entity['MetaData']['CreateTime'] ) ) {
+			$t = strtotime( $entity['MetaData']['CreateTime'] );
+			if ( $t ) {
+				return $t;
+			}
+		}
+		if ( ! empty( $entity['MetaData']['LastUpdatedTime'] ) ) {
+			$t = strtotime( $entity['MetaData']['LastUpdatedTime'] );
+			if ( $t ) {
+				return $t;
+			}
+		}
+		if ( ! empty( $entity['TxnDate'] ) ) {
+			$t = strtotime( $entity['TxnDate'] . ' 12:00:00' );
+			if ( $t ) {
+				return $t;
+			}
+		}
+		return 0;
+	}
+
+	/**
+	 * Per–QuickBooks Payment rows applied to an invoice (multiple partial payments = multiple rows).
+	 *
+	 * @param string      $invoice_id  Invoice entity Id.
+	 * @param string|null $customer_id Optional QuickBooks Customer Id.
+	 * @return array|WP_Error List of rows with keys amount, txn_date, payment_method, qb_payment_id.
+	 */
+	public static function get_invoice_payment_lines( $invoice_id, $customer_id = null ) {
+		$payments = self::get_invoice_payment( $invoice_id, $customer_id );
+		if ( is_wp_error( $payments ) ) {
+			return $payments;
+		}
+
+		$invoice_id = trim( (string) $invoice_id );
+		$out          = array();
+
+		foreach ( $payments as $payment ) {
+			$row = self::summarize_payment_for_invoice( $payment, $invoice_id );
+			if ( null !== $row ) {
+				$out[] = $row;
+			}
+		}
+
+		usort(
+			$out,
+			function ( $a, $b ) {
+				$ta = isset( $a['sort_ts'] ) ? (int) $a['sort_ts'] : strtotime( $a['txn_date'] ?? '' );
+				$tb = isset( $b['sort_ts'] ) ? (int) $b['sort_ts'] : strtotime( $b['txn_date'] ?? '' );
+				if ( $ta === $tb ) {
+					return strcmp( (string) ( $a['qb_payment_id'] ?? '' ), (string) ( $b['qb_payment_id'] ?? '' ) );
+				}
+				return $ta <=> $tb;
+			}
+		);
+
+		return $out;
+	}
+
+	/**
+	 * One row per Payment entity: amount applied to this invoice, date, method, Id.
+	 *
+	 * @param array  $payment    QuickBooks Payment payload.
+	 * @param string $invoice_id Invoice entity Id.
+	 * @return array<string, mixed>|null
+	 */
+	private static function summarize_payment_for_invoice( $payment, $invoice_id ) {
+		if ( ! is_array( $payment ) || ! isset( $payment['Line'] ) ) {
+			return null;
+		}
+
+		$lines = $payment['Line'];
+		if ( isset( $lines['Amount'] ) ) {
+			$lines = array( $lines );
+		}
+		if ( ! is_array( $lines ) ) {
+			return null;
+		}
+
+		$amount_for_invoice = 0.0;
+		foreach ( $lines as $line ) {
+			if ( ! is_array( $line ) || ! isset( $line['LinkedTxn'] ) ) {
+				continue;
+			}
+			$linked = $line['LinkedTxn'];
+			if ( isset( $linked['TxnId'] ) ) {
+				$linked = array( $linked );
+			}
+			if ( ! is_array( $linked ) ) {
+				continue;
+			}
+			foreach ( $linked as $lt ) {
+				if ( isset( $lt['TxnId'] ) && (string) $lt['TxnId'] === $invoice_id ) {
+					$amount_for_invoice += isset( $line['Amount'] ) ? floatval( $line['Amount'] ) : floatval( $payment['TotalAmt'] ?? 0 );
+				}
+			}
+		}
+
+		if ( $amount_for_invoice <= 0 ) {
+			return null;
+		}
+
+		return array(
+			'amount'          => $amount_for_invoice,
+			'txn_date'        => isset( $payment['TxnDate'] ) ? sanitize_text_field( (string) $payment['TxnDate'] ) : '',
+			'payment_method'  => self::qb_payment_method_label( $payment ),
+			'qb_payment_id'   => isset( $payment['Id'] ) ? (string) $payment['Id'] : '',
+			'sort_ts'         => self::qb_entity_sort_timestamp( $payment ),
+		);
+	}
+
+	/**
+	 * Human-readable payment method from a QuickBooks Payment payload.
+	 *
+	 * @param array $payment Payment array.
+	 * @return string
+	 */
+	private static function qb_payment_method_label( $payment ) {
+		if ( ! is_array( $payment ) ) {
+			return '';
+		}
+		if ( isset( $payment['PaymentMethodRef']['name'] ) ) {
+			return sanitize_text_field( (string) $payment['PaymentMethodRef']['name'] );
+		}
+		// Do not show raw numeric method IDs when QBO omits the name (falls back to "QuickBooks" in UI).
+		if ( isset( $payment['PaymentMethodRef']['value'] ) ) {
+			$v = (string) $payment['PaymentMethodRef']['value'];
+			if ( $v !== '' && preg_match( '/^\d+$/', $v ) ) {
+				return '';
+			}
+			return sanitize_text_field( $v );
+		}
+		return '';
+	}
+
+	/**
 	 * Normalize QueryResponse Item payload to a list of item arrays.
 	 *
 	 * @param array $response Decoded API response.

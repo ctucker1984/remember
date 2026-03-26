@@ -27,14 +27,16 @@ class Remember_Database_Updater {
 	public static function update_schema() {
 		global $wpdb;
 		require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-logger.php';
-		
-		// Check current schema version
-		$current_version = get_option( 'remember_db_version', '0.0.0' );
-		$target_version = '1.10.0'; // Latest schema (see migrations below).
-		
+
+		Remember_Logger::activation_debug(
+			'update_schema: enter',
+			array( 'remember_db_version' => get_option( 'remember_db_version', '0.0.0' ) )
+		);
+
+		// Migrations compare fresh DB version each time so only the next pending migration runs per request.
 		// Update to 1.1.0 (unvetted status)
-		if ( version_compare( $current_version, '1.1.0', '<' ) ) {
-			Remember_Logger::info( 'Updating database schema', array( 'from' => $current_version, 'to' => $target_version ) );
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.1.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.1.0' ) );
 			
 			// Update members table to include 'unvetted' status
 			$table_name = $wpdb->prefix . 'remember_members';
@@ -75,8 +77,8 @@ class Remember_Database_Updater {
 		}
 		
 		// Update to 1.2.0 (privacy fields)
-		if ( version_compare( $current_version, '1.2.0', '<' ) ) {
-			Remember_Logger::info( 'Updating database schema', array( 'from' => $current_version, 'to' => '1.2.0' ) );
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.2.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.2.0' ) );
 			
 			// Add privacy fields to member_profiles table
 			$profiles_table = $wpdb->prefix . 'remember_member_profiles';
@@ -116,8 +118,8 @@ class Remember_Database_Updater {
 		}
 		
 		// Update to 1.3.0 (remove unique constraint on vetting.member_id to allow multiple cases)
-		if ( version_compare( $current_version, '1.3.0', '<' ) ) {
-			Remember_Logger::info( 'Updating database schema', array( 'from' => $current_version, 'to' => '1.3.0' ) );
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.3.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.3.0' ) );
 			
 			$vetting_table = $wpdb->prefix . 'remember_vetting';
 			
@@ -148,8 +150,8 @@ class Remember_Database_Updater {
 		}
 		
 		// Update to 1.4.0 (auto-assign default timezone to existing users)
-		if ( version_compare( $current_version, '1.4.0', '<' ) ) {
-			Remember_Logger::info( 'Updating database schema', array( 'from' => $current_version, 'to' => '1.4.0' ) );
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.4.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.4.0' ) );
 			
 			// Get all users without timezone_string meta
 			$users_without_timezone = $wpdb->get_col(
@@ -176,8 +178,8 @@ class Remember_Database_Updater {
 		}
 		
 		// Update to 1.5.0 (add show_in_frontend field to roles table)
-		if ( version_compare( $current_version, '1.5.0', '<' ) ) {
-			Remember_Logger::info( 'Updating database schema', array( 'from' => $current_version, 'to' => '1.5.0' ) );
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.5.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.5.0' ) );
 			
 			$roles_table = $wpdb->prefix . 'remember_roles';
 			
@@ -223,8 +225,8 @@ class Remember_Database_Updater {
 		}
 
 		// Update to 1.6.0 (multiple reMember line items may map to the same QuickBooks item — drop UNIQUE on quickbooks_product_id).
-		if ( version_compare( $current_version, '1.6.0', '<' ) ) {
-			Remember_Logger::info( 'Updating database schema', array( 'from' => $current_version, 'to' => '1.6.0' ) );
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.6.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.6.0' ) );
 
 			$products_table = $wpdb->prefix . 'remember_products';
 			$table_exists   = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $products_table ) );
@@ -252,8 +254,8 @@ class Remember_Database_Updater {
 		}
 
 		// Update to 1.7.0 (track when applications are added to waitlist).
-		if ( version_compare( $current_version, '1.7.0', '<' ) ) {
-			Remember_Logger::info( 'Updating database schema', array( 'from' => $current_version, 'to' => '1.7.0' ) );
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.7.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.7.0' ) );
 
 			$applications_table = $wpdb->prefix . 'remember_event_applications';
 			$table_exists       = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $applications_table ) );
@@ -275,12 +277,13 @@ class Remember_Database_Updater {
 		}
 
 		// Update to 1.8.0 (QuickBooks mappings in remember_qb_item_mappings; remember_products = catalog only).
-		if ( version_compare( $current_version, '1.8.0', '<' ) ) {
-			Remember_Logger::info( 'Updating database schema', array( 'from' => $current_version, 'to' => '1.8.0' ) );
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.8.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.8.0' ) );
 
 			require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 			require_once plugin_dir_path( __FILE__ ) . 'class-remember-database.php';
 			$db = new Remember_Database();
+			Remember_Logger::activation_debug( 'migration 1.8.0: create_qb_item_mappings_table' );
 			$db->create_qb_item_mappings_table();
 
 			$products_table = $wpdb->prefix . 'remember_products';
@@ -289,6 +292,7 @@ class Remember_Database_Updater {
 
 			$product_cols = $wpdb->get_col( "SHOW COLUMNS FROM {$products_table}", 0 );
 			if ( is_array( $product_cols ) && in_array( 'quickbooks_product_id', $product_cols, true ) ) {
+				Remember_Logger::activation_debug( 'migration 1.8.0: INSERT role mappings into qb_item_mappings' );
 				// Role mappings: product rows whose name matched an event role.
 				$wpdb->query(
 					"INSERT INTO {$map_table} (entity_type, entity_id, quickbooks_product_id, quickbooks_product_name, last_sync_at, created_at, updated_at)
@@ -303,6 +307,7 @@ class Remember_Database_Updater {
 						updated_at = VALUES(updated_at)"
 				);
 
+				Remember_Logger::activation_debug( 'migration 1.8.0: INSERT product mappings into qb_item_mappings' );
 				// Product (catalog) mappings: remaining product rows with QB ids not consumed as roles.
 				$wpdb->query(
 					"INSERT INTO {$map_table} (entity_type, entity_id, quickbooks_product_id, quickbooks_product_name, last_sync_at, created_at, updated_at)
@@ -318,23 +323,26 @@ class Remember_Database_Updater {
 						updated_at = VALUES(updated_at)"
 				);
 
+				Remember_Logger::activation_debug( 'migration 1.8.0: DELETE legacy product role mirrors' );
 				// Remove legacy rows that were only role-name mirrors in the products table.
 				$wpdb->query(
 					"DELETE p FROM {$products_table} p
 					INNER JOIN {$roles_table} r ON r.role_name = p.product_name AND r.is_event_role = 1"
 				);
 
+				Remember_Logger::activation_debug( 'migration 1.8.0: ALTER remember_products DROP QB columns' );
 				// Drop QuickBooks columns from remember_products (indexes on those columns drop with the columns).
 				$wpdb->query( "ALTER TABLE {$products_table} DROP COLUMN quickbooks_product_id, DROP COLUMN quickbooks_product_name, DROP COLUMN last_sync_at" );
 			}
 
 			update_option( 'remember_db_version', '1.8.0' );
 			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.8.0' ) );
+			Remember_Logger::activation_debug( 'migration 1.8.0: finished' );
 		}
 
 		// Update to 1.9.0 (QuickBooks invoice DocNumber for display; distinct from QBO entity Id in quickbooks_invoice_id).
-		if ( version_compare( $current_version, '1.9.0', '<' ) ) {
-			Remember_Logger::info( 'Updating database schema', array( 'from' => $current_version, 'to' => '1.9.0' ) );
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.9.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.9.0' ) );
 
 			$payments_table = $wpdb->prefix . 'remember_payments';
 			$table_exists   = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $payments_table ) ) === $payments_table;
@@ -360,8 +368,8 @@ class Remember_Database_Updater {
 		}
 
 		// Update to 1.10.0 (catalog default_price for add-on products).
-		if ( version_compare( $current_version, '1.10.0', '<' ) ) {
-			Remember_Logger::info( 'Updating database schema', array( 'from' => $current_version, 'to' => '1.10.0' ) );
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.10.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.10.0' ) );
 
 			$products_table = $wpdb->prefix . 'remember_products';
 			$table_exists   = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $products_table ) ) === $products_table;
@@ -385,5 +393,64 @@ class Remember_Database_Updater {
 			update_option( 'remember_db_version', '1.10.0' );
 			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.10.0' ) );
 		}
+
+		// Update to 1.11.0 (QuickBooks: one JSON row per Payment applied to an invoice for billing register).
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.11.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.11.0' ) );
+
+			$payments_table = $wpdb->prefix . 'remember_payments';
+			$table_exists   = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $payments_table ) ) === $payments_table;
+			if ( $table_exists ) {
+				$cols = $wpdb->get_col( "SHOW COLUMNS FROM {$payments_table}", 0 );
+				if ( is_array( $cols ) && ! in_array( 'quickbooks_payment_lines', $cols, true ) ) {
+					$ok = $wpdb->query(
+						"ALTER TABLE {$payments_table} ADD COLUMN quickbooks_payment_lines LONGTEXT DEFAULT NULL AFTER quickbooks_invoice_number"
+					);
+					if ( false === $ok ) {
+						Remember_Logger::error(
+							'Failed to add quickbooks_payment_lines to remember_payments',
+							array( 'error' => $wpdb->last_error )
+						);
+					} else {
+						Remember_Logger::info( 'Added quickbooks_payment_lines to remember_payments' );
+					}
+				}
+			}
+
+			update_option( 'remember_db_version', '1.11.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.11.0' ) );
+		}
+
+		// Update to 1.12.0 (QuickBooks invoice sort timestamp for billing register ordering).
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.12.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.12.0' ) );
+
+			$payments_table = $wpdb->prefix . 'remember_payments';
+			$table_exists   = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $payments_table ) ) === $payments_table;
+			if ( $table_exists ) {
+				$cols = $wpdb->get_col( "SHOW COLUMNS FROM {$payments_table}", 0 );
+				if ( is_array( $cols ) && ! in_array( 'quickbooks_invoice_sort_ts', $cols, true ) ) {
+					$ok = $wpdb->query(
+						"ALTER TABLE {$payments_table} ADD COLUMN quickbooks_invoice_sort_ts BIGINT(20) UNSIGNED DEFAULT NULL AFTER quickbooks_invoice_number"
+					);
+					if ( false === $ok ) {
+						Remember_Logger::error(
+							'Failed to add quickbooks_invoice_sort_ts to remember_payments',
+							array( 'error' => $wpdb->last_error )
+						);
+					} else {
+						Remember_Logger::info( 'Added quickbooks_invoice_sort_ts to remember_payments' );
+					}
+				}
+			}
+
+			update_option( 'remember_db_version', '1.12.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.12.0' ) );
+		}
+
+		Remember_Logger::activation_debug(
+			'update_schema: exit',
+			array( 'remember_db_version' => get_option( 'remember_db_version', '0.0.0' ) )
+		);
 	}
 }

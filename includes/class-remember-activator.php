@@ -29,7 +29,26 @@ class Remember_Activator {
 	 * @since    1.0.0
 	 */
 	public static function activate() {
+		// Avoid gateway timeouts on slow hosts (dbDelta, migrations, rewrite flush are heavy).
+		if ( function_exists( 'set_time_limit' ) ) {
+			@set_time_limit( 300 );
+		}
+		if ( function_exists( 'ini_set' ) ) {
+			@ini_set( 'max_execution_time', '300' );
+		}
+		if ( function_exists( 'wp_raise_memory_limit' ) ) {
+			wp_raise_memory_limit( 'admin' );
+		}
+
 		require_once plugin_dir_path( __FILE__ ) . 'utilities/class-remember-logger.php';
+		Remember_Logger::mark_activation_start();
+		Remember_Logger::activation_debug(
+			'activate: begin',
+			array(
+				'php_version' => PHP_VERSION,
+				'remember_file' => __FILE__,
+			)
+		);
 		Remember_Logger::info( 'Starting plugin activation' );
 
 		// Check WordPress version
@@ -40,32 +59,41 @@ class Remember_Activator {
 		}
 
 		// Create database tables
+		Remember_Logger::activation_debug( 'before create_tables' );
 		Remember_Logger::debug( 'Creating database tables' );
 		require_once plugin_dir_path( __FILE__ ) . 'database/class-remember-database.php';
 		$database = new Remember_Database();
 		$database->create_tables();
+		Remember_Logger::activation_debug( 'after create_tables' );
 		
 		// Update database schema if needed
+		Remember_Logger::activation_debug( 'before update_schema', array( 'remember_db_version' => get_option( 'remember_db_version', '0.0.0' ) ) );
 		Remember_Logger::debug( 'Updating database schema if needed' );
 		require_once plugin_dir_path( __FILE__ ) . 'database/class-remember-database-updater.php';
 		Remember_Database_Updater::update_schema();
+		Remember_Logger::activation_debug( 'after update_schema', array( 'remember_db_version' => get_option( 'remember_db_version', '0.0.0' ) ) );
 
 		// Seed initial data
+		Remember_Logger::activation_debug( 'before seeder.seed' );
 		Remember_Logger::debug( 'Seeding initial data' );
 		require_once plugin_dir_path( __FILE__ ) . 'database/class-remember-seeder.php';
 		$seeder = new Remember_Seeder();
 		$seeder->seed();
+		Remember_Logger::activation_debug( 'after seeder.seed' );
 
 		// Set up capabilities
+		Remember_Logger::activation_debug( 'before setup_capabilities' );
 		Remember_Logger::debug( 'Setting up capabilities' );
 		require_once plugin_dir_path( __FILE__ ) . 'utilities/class-remember-capabilities.php';
 		Remember_Capabilities::setup_capabilities();
+		Remember_Logger::activation_debug( 'after setup_capabilities' );
 
 		// Assign current user as first admin (all capabilities)
 		require_once plugin_dir_path( __FILE__ ) . 'utilities/class-remember-capabilities.php';
 		require_once plugin_dir_path( __FILE__ ) . 'models/class-member.php';
 		require_once plugin_dir_path( __FILE__ ) . 'models/class-role.php';
 		
+		Remember_Logger::activation_debug( 'before assign_current_user_caps_and_member' );
 		$current_user = wp_get_current_user();
 		if ( $current_user && $current_user->ID > 0 ) {
 			// Assign all capabilities to WordPress admin
@@ -73,6 +101,7 @@ class Remember_Activator {
 			foreach ( array_keys( $all_capabilities ) as $cap ) {
 				$current_user->add_cap( $cap );
 			}
+			Remember_Logger::activation_debug( 'after add_cap loop', array( 'cap_count' => count( $all_capabilities ) ) );
 			
 			// Create member record for WordPress admin
 			$member_model = new Remember_Member();
@@ -149,18 +178,23 @@ class Remember_Activator {
 			}
 		}
 
+		Remember_Logger::activation_debug( 'after assign_current_user_caps_and_member' );
+
 		// Store plugin version
 		update_option( 'remember_version', REMEMBER_VERSION );
 		Remember_Logger::debug( 'Plugin version stored', array( 'version' => REMEMBER_VERSION ) );
 
 		// Set default options
+		Remember_Logger::activation_debug( 'before default_options merge' );
 		$default_options = array(
 			'photo_max_size'      => 2097152, // 2MB in bytes
 			'photo_max_dimensions' => 800,
 			'qb_sync_interval'    => 3600, // 1 hour in seconds
 			'vetting_workflow'    => 'on_join', // Default: vet on member join
 		);
-		update_option( 'remember_options', $default_options );
+		$existing_opts = get_option( 'remember_options', array() );
+		update_option( 'remember_options', wp_parse_args( $existing_opts, $default_options ) );
+		Remember_Logger::activation_debug( 'after default_options merge' );
 
 		// Schedule QuickBooks sync cron job
 		if ( ! wp_next_scheduled( 'remember_qb_sync' ) ) {
@@ -168,12 +202,13 @@ class Remember_Activator {
 			Remember_Logger::debug( 'Scheduled QuickBooks sync cron job' );
 		}
 
-		// Flush rewrite rules
-		flush_rewrite_rules();
+		// Defer rewrite flush to next request so activation does not hit gateway/proxy timeouts.
+		update_option( 'remember_activation_needs_rewrite_flush', '1' );
 
 		// Set flag to show setup wizard
 		set_transient( 'remember_show_setup_wizard', true, 3600 ); // Show for 1 hour
 
+		Remember_Logger::activation_debug( 'activate: complete' );
 		Remember_Logger::info( 'Plugin activation completed successfully' );
 	}
 }

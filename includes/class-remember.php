@@ -205,6 +205,9 @@ class Remember {
 	 * @since    1.0.0
 	 */
 	public function run() {
+		// Run after activation (avoids timing out during the activation HTTP request).
+		$this->loader->add_action( 'init', $this, 'maybe_flush_rewrite_rules_after_activation', 0 );
+
 		// Run database updates on admin init
 		$this->loader->add_action( 'admin_init', $this, 'maybe_update_database' );
 		
@@ -212,6 +215,19 @@ class Remember {
 		$this->loader->add_action( 'admin_init', $this, 'maybe_schedule_qb_sync' );
 		
 		$this->loader->run();
+	}
+
+	/**
+	 * Flush permalinks after plugin activation (deferred from Remember_Activator::activate).
+	 *
+	 * @return void
+	 */
+	public function maybe_flush_rewrite_rules_after_activation() {
+		if ( ! get_option( 'remember_activation_needs_rewrite_flush' ) ) {
+			return;
+		}
+		flush_rewrite_rules();
+		delete_option( 'remember_activation_needs_rewrite_flush' );
 	}
 
 	/**

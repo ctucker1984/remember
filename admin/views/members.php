@@ -601,10 +601,23 @@ if ( $view_member_id > 0 ) {
 		$event = $application ? $event_model->get( $application->event_id ) : null;
 		
 		// Invoice entry (when payment record created)
+		$invoice_description = $event ? sprintf( __( 'Invoice: %s', 'remember' ), $event->event_name ) : __( 'Invoice', 'remember' );
+		if ( ! empty( $payment->quickbooks_invoice_number ) ) {
+			$invoice_description .= ' ' . sprintf( __( '(Invoice #%s)', 'remember' ), $payment->quickbooks_invoice_number );
+		}
+
+		$invoice_sort_ts = ! empty( $payment->quickbooks_invoice_sort_ts )
+			? (int) $payment->quickbooks_invoice_sort_ts
+			: strtotime( $payment->created_at );
+		if ( $invoice_sort_ts <= 0 ) {
+			$invoice_sort_ts = strtotime( $payment->created_at );
+		}
+
 		$billing_register[] = array(
-			'date' => $payment->created_at,
+			'date' => date( 'Y-m-d H:i:s', $invoice_sort_ts ),
+			'sort_ts' => $invoice_sort_ts,
 			'type' => 'invoice',
-			'description' => $event ? sprintf( __( 'Invoice: %s', 'remember' ), $event->event_name ) : __( 'Invoice', 'remember' ),
+			'description' => $invoice_description,
 			'debit' => $payment->total_amount,
 			'credit' => 0,
 			'balance' => 0, // Will calculate after sorting
@@ -613,10 +626,57 @@ if ( $view_member_id > 0 ) {
 			'application_id' => $payment->event_application_id,
 		);
 		
-		// Payment entry (when payment recorded)
-		if ( $payment->amount_paid > 0 && $payment->payment_date ) {
+		// Payment row(s): one line per QuickBooks Payment when synced; otherwise one aggregated line.
+		$qb_payment_lines = array();
+		if ( ! empty( $payment->quickbooks_payment_lines ) ) {
+			$decoded = json_decode( $payment->quickbooks_payment_lines, true );
+			if ( is_array( $decoded ) && ! empty( $decoded ) ) {
+				$qb_payment_lines = $decoded;
+			}
+		}
+
+		if ( ! empty( $qb_payment_lines ) ) {
+			foreach ( $qb_payment_lines as $qb_line ) {
+				$credit = isset( $qb_line['amount'] ) ? floatval( $qb_line['amount'] ) : 0;
+				if ( $credit <= 0 ) {
+					continue;
+				}
+				$method = isset( $qb_line['payment_method'] ) ? $qb_line['payment_method'] : '';
+				$desc   = sprintf(
+					__( 'Payment - %s', 'remember' ),
+					$method !== '' ? $method : __( 'QuickBooks', 'remember' )
+				);
+				if ( ! empty( $qb_line['qb_payment_id'] ) ) {
+					$desc .= ' ' . sprintf( __( '(QB #%s)', 'remember' ), $qb_line['qb_payment_id'] );
+				}
+				$line_sort_ts = isset( $qb_line['sort_ts'] ) ? (int) $qb_line['sort_ts'] : 0;
+				if ( $line_sort_ts <= 0 ) {
+					$line_sort_ts = ! empty( $qb_line['txn_date'] )
+						? strtotime( $qb_line['txn_date'] . ' 12:00:00' )
+						: strtotime( $payment->payment_date ? $payment->payment_date : 'now' );
+				}
+				$billing_register[] = array(
+					'date' => date( 'Y-m-d H:i:s', $line_sort_ts ),
+					'sort_ts' => $line_sort_ts,
+					'type' => 'payment',
+					'description' => $desc,
+					'debit' => 0,
+					'credit' => $credit,
+					'balance' => 0,
+					'status' => $payment->payment_status,
+					'payment_id' => $payment->payment_id,
+					'transaction_id' => $payment->transaction_id,
+					'qb_payment_id' => isset( $qb_line['qb_payment_id'] ) ? (string) $qb_line['qb_payment_id'] : '',
+				);
+			}
+		} elseif ( $payment->amount_paid > 0 && $payment->payment_date ) {
+			$manual_ts = strtotime( $payment->payment_date );
+			if ( $manual_ts <= 0 ) {
+				$manual_ts = strtotime( $payment->created_at );
+			}
 			$billing_register[] = array(
-				'date' => $payment->payment_date,
+				'date' => date( 'Y-m-d H:i:s', $manual_ts ),
+				'sort_ts' => $manual_ts,
 				'type' => 'payment',
 				'description' => sprintf( __( 'Payment - %s', 'remember' ), $payment->payment_method ?: __( 'Manual', 'remember' ) ),
 				'debit' => 0,
@@ -629,10 +689,30 @@ if ( $view_member_id > 0 ) {
 		}
 	}
 	
-	// Sort by date (oldest first)
-	usort( $billing_register, function( $a, $b ) {
-		return strtotime( $a['date'] ) - strtotime( $b['date'] );
-	} );
+	// Sort by QuickBooks timestamps (invoice before payment if tied).
+	usort(
+		$billing_register,
+		function ( $a, $b ) {
+			$ta = isset( $a['sort_ts'] ) ? (int) $a['sort_ts'] : strtotime( $a['date'] );
+			$tb = isset( $b['sort_ts'] ) ? (int) $b['sort_ts'] : strtotime( $b['date'] );
+			if ( $ta === $tb ) {
+				$order = array(
+					'invoice' => 0,
+					'payment' => 1,
+				);
+				$oa = isset( $order[ $a['type'] ] ) ? $order[ $a['type'] ] : 2;
+				$ob = isset( $order[ $b['type'] ] ) ? $order[ $b['type'] ] : 2;
+				if ( $oa !== $ob ) {
+					return $oa <=> $ob;
+				}
+				if ( 'payment' === ( $a['type'] ?? '' ) && 'payment' === ( $b['type'] ?? '' ) ) {
+					return strcmp( (string) ( $a['qb_payment_id'] ?? '' ), (string) ( $b['qb_payment_id'] ?? '' ) );
+				}
+				return ( $a['payment_id'] ?? 0 ) <=> ( $b['payment_id'] ?? 0 );
+			}
+			return $ta <=> $tb;
+		}
+	);
 	
 	// Calculate running balance
 	foreach ( $billing_register as &$entry ) {
