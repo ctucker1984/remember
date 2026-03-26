@@ -263,6 +263,68 @@ class Remember_QuickBooks_API {
 	}
 
 	/**
+	 * Normalize QueryResponse Customer list to a numeric array of customer rows.
+	 *
+	 * @param array $response Decoded API response.
+	 * @return array<int, array<string, mixed>>
+	 */
+	private static function normalize_customer_query_response( $response ) {
+		if ( ! isset( $response['QueryResponse']['Customer'] ) ) {
+			return array();
+		}
+		$raw = $response['QueryResponse']['Customer'];
+		if ( ! is_array( $raw ) ) {
+			return array();
+		}
+		if ( isset( $raw['Id'] ) ) {
+			return array( $raw );
+		}
+		return $raw;
+	}
+
+	/**
+	 * Fetch a single Customer by Id (includes current SyncToken).
+	 *
+	 * @param string $customer_id QuickBooks Customer Id.
+	 * @return array|WP_Error Customer entity or error.
+	 */
+	public static function get_customer( $customer_id ) {
+		$customer_id = trim( (string) $customer_id );
+		if ( '' === $customer_id ) {
+			return new WP_Error( 'invalid_customer_id', __( 'Invalid QuickBooks customer ID.', 'remember' ) );
+		}
+		$response = self::api_request( 'GET', 'customer/' . rawurlencode( $customer_id ) );
+		if ( is_wp_error( $response ) ) {
+			return $response;
+		}
+		return isset( $response['Customer'] ) ? $response['Customer'] : $response;
+	}
+
+	/**
+	 * Find customers whose PrimaryEmailAddr matches (first match wins).
+	 *
+	 * @param string $email Email address.
+	 * @return array|null Customer row or null if none.
+	 */
+	public static function find_customer_by_primary_email( $email ) {
+		$email = trim( (string) $email );
+		if ( '' === $email || ! is_email( $email ) ) {
+			return null;
+		}
+		$escaped = str_replace( "'", "''", $email );
+		$query     = "SELECT * FROM Customer WHERE PrimaryEmailAddr = '" . $escaped . "'";
+		$response  = self::api_request( 'GET', 'query?query=' . rawurlencode( $query ) );
+		if ( is_wp_error( $response ) ) {
+			return null;
+		}
+		$rows = self::normalize_customer_query_response( $response );
+		if ( empty( $rows ) ) {
+			return null;
+		}
+		return $rows[0];
+	}
+
+	/**
 	 * Create or update customer in QuickBooks.
 	 *
 	 * @param array $customer_data Customer data.
@@ -299,18 +361,23 @@ class Remember_QuickBooks_API {
 			);
 			if ( ! empty( $bill_addr ) ) {
 				$data['BillAddr'] = $bill_addr;
+				$data['ShipAddr'] = $bill_addr;
 			}
 		}
 
-		// If customer ID exists, update instead of create
+		// Updates require a current SyncToken from QBO (stored tokens go stale after edits in QBO or missing meta).
 		if ( ! empty( $customer_data['qb_customer_id'] ) ) {
-			$data['Id'] = $customer_data['qb_customer_id'];
-			$data['SyncToken'] = $customer_data['sync_token'] ?? '0';
-			$endpoint = 'customer';
-			$method = 'POST'; // QuickBooks uses POST for both create and update
+			$existing = self::get_customer( $customer_data['qb_customer_id'] );
+			if ( is_wp_error( $existing ) ) {
+				return $existing;
+			}
+			$data['Id']         = $customer_data['qb_customer_id'];
+			$data['SyncToken']  = isset( $existing['SyncToken'] ) ? (string) $existing['SyncToken'] : '0';
+			$endpoint           = 'customer';
+			$method               = 'POST';
 		} else {
 			$endpoint = 'customer';
-			$method = 'POST';
+			$method   = 'POST';
 		}
 
 		// QBO v3 expects the Customer object as the top-level payload.

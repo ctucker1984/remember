@@ -65,12 +65,22 @@ if ( $is_editing && ! current_user_can( 'remember_update_members' ) ) {
 					<?php endif; ?>
 				</div>
 			</div>
-			<div>
+			<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px; justify-content: flex-end;">
 				<?php if ( ! $is_editing ) : ?>
 					<?php if ( current_user_can( 'remember_update_members' ) ) : ?>
 						<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-members&view=' . $view_member_id . '&edit=1' ) ); ?>" class="button button-primary">
 							<?php esc_html_e( 'Edit Profile', 'remember' ); ?>
 						</a>
+					<?php endif; ?>
+					<?php if ( ! empty( $remember_qb_show_sync_customer ) ) : ?>
+						<form method="post" action="" style="display: inline-block; margin: 0;">
+							<?php wp_nonce_field( 'remember_member_action', 'remember_member_nonce' ); ?>
+							<input type="hidden" name="remember_member_action" value="sync_qb_customer" />
+							<input type="hidden" name="member_id" value="<?php echo esc_attr( $view_member_id ); ?>" />
+							<button type="submit" class="button" title="<?php esc_attr_e( 'Update the linked QuickBooks customer with this member’s name, email, phone, and billing address.', 'remember' ); ?>">
+								<?php esc_html_e( 'Sync to QuickBooks', 'remember' ); ?>
+							</button>
+						</form>
 					<?php endif; ?>
 				<?php else : ?>
 					<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-members&view=' . $view_member_id ) ); ?>" class="button">
@@ -85,14 +95,14 @@ if ( $is_editing && ! current_user_can( 'remember_update_members' ) ) {
 		<!-- Edit Form -->
 		<?php include 'member-edit.php'; ?>
 	<?php else : ?>
-		<!-- View Mode -->
-		
-		<!-- Two Column Grid: Left (Profile & Emergency), Right (Tags) -->
-		<div class="remember-member-detail-grid">
-			<!-- Left Column: Profile Information & Emergency Contact -->
-			<div>
+		<?php
+		$remember_member_has_health_tags = ! empty( $view_dietary_restrictions ) || ! empty( $view_allergies ) || ! empty( $view_medical_accommodations );
+		?>
+		<!-- View Mode: full-width Profile|Emergency when no tags column; else 2-col with health tags -->
+		<div class="remember-member-detail-grid<?php echo $remember_member_has_health_tags ? '' : ' remember-member-detail-grid--profile-only'; ?>">
+			<div class="remember-member-detail-profile-emergency">
 				<!-- Profile Information -->
-				<div class="remember-member-detail-section" style="margin-bottom: 15px;">
+				<div class="remember-member-detail-section">
 					<h3><?php esc_html_e( 'Profile Information', 'remember' ); ?></h3>
 					<table class="form-table">
 						<tr>
@@ -206,8 +216,8 @@ if ( $is_editing && ! current_user_can( 'remember_update_members' ) ) {
 				</div>
 			</div>
 
-			<!-- Right Column: Tags (Dietary, Allergies, Medical) -->
-			<div>
+			<?php if ( $remember_member_has_health_tags ) : ?>
+			<div class="remember-member-detail-health-tags">
 				<!-- Dietary Restrictions -->
 				<?php if ( ! empty( $view_dietary_restrictions ) ) : ?>
 					<div class="remember-member-detail-section" style="margin-bottom: 15px;">
@@ -250,6 +260,7 @@ if ( $is_editing && ! current_user_can( 'remember_update_members' ) ) {
 					</div>
 				<?php endif; ?>
 			</div>
+			<?php endif; ?>
 		</div>
 
 		<!-- Vetting Cases (Full Width) -->

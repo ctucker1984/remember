@@ -251,6 +251,38 @@
 	grid-template-columns: 1fr;
 }
 
+/* One column when there are no dietary/allergy/medical tags (avoid empty 50% grey column). */
+.remember-member-detail-grid--profile-only {
+	grid-template-columns: 1fr;
+}
+
+/*
+ * Profile + Emergency: one row, two columns when the container is wide enough.
+ * (Viewport-based breakpoints stacked these at <960px even on typical admin layouts.)
+ */
+.remember-member-detail-profile-emergency {
+	display: flex;
+	flex-direction: row;
+	flex-wrap: wrap;
+	gap: 15px;
+	align-items: flex-start;
+	width: 100%;
+	box-sizing: border-box;
+}
+
+.remember-member-detail-profile-emergency > .remember-member-detail-section {
+	flex: 1 1 calc(50% - 7.5px);
+	min-width: 0;
+	max-width: 100%;
+	box-sizing: border-box;
+}
+
+@media (max-width: 600px) {
+	.remember-member-detail-profile-emergency > .remember-member-detail-section {
+		flex: 1 1 100%;
+	}
+}
+
 .remember-member-detail-section {
 	background: #fff;
 	border: 1px solid #ccd0d4;

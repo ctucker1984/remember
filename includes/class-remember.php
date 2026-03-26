@@ -191,6 +191,7 @@ class Remember {
 		$this->loader->add_action( 'wp_enqueue_scripts', $plugin_public, 'enqueue_styles' );
 		$this->loader->add_action( 'wp_enqueue_scripts', $plugin_public, 'enqueue_scripts' );
 		$this->loader->add_action( 'init', $plugin_public, 'register_shortcodes' );
+		$this->loader->add_action( 'remember_member_profile_saved', $this, 'maybe_sync_member_profile_to_qb', 10, 1 );
 
 		// Register FSE block patterns
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-fse.php';
@@ -236,6 +237,25 @@ class Remember {
 			require_once plugin_dir_path( __FILE__ ) . 'integrations/class-remember-quickbooks-sync.php';
 			Remember_QuickBooks_Sync::sync_member_to_customer( $member_id );
 		}
+	}
+
+	/**
+	 * After member profile is saved (admin or front), push latest data to QuickBooks when connected.
+	 *
+	 * @param int $member_id Member user ID.
+	 */
+	public function maybe_sync_member_profile_to_qb( $member_id ) {
+		$member_id = absint( $member_id );
+		if ( $member_id <= 0 ) {
+			return;
+		}
+		require_once plugin_dir_path( __FILE__ ) . 'integrations/class-remember-quickbooks-oauth.php';
+		$qb_settings = Remember_QuickBooks_OAuth::get_settings();
+		if ( empty( $qb_settings['access_token'] ) || empty( $qb_settings['realm_id'] ) ) {
+			return;
+		}
+		require_once plugin_dir_path( __FILE__ ) . 'integrations/class-remember-quickbooks-sync.php';
+		Remember_QuickBooks_Sync::sync_member_to_customer( $member_id );
 	}
 
 	/**

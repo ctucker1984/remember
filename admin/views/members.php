@@ -394,6 +394,7 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 			}
 			
 			Remember_Logger::info( 'Member profile updated', array( 'member_id' => $member_id ) );
+			do_action( 'remember_member_profile_saved', $member_id );
 			// Set success flag and clear edit mode (no redirect to avoid headers already sent)
 			$profile_update_success = true;
 			$view_member_id = $member_id; // Ensure we're viewing this member
@@ -402,6 +403,32 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 			Remember_Logger::error( 'Failed to update member profile', array( 'member_id' => $member_id ) );
 			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to update member profile.', 'remember' ) . '</p></div>';
 		}
+	} elseif ( $member_id > 0 && 'sync_qb_customer' === $action ) {
+		if ( ! current_user_can( 'remember_update_members' ) ) {
+			wp_die( __( 'You do not have sufficient permissions to perform this action.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+		}
+		require_once plugin_dir_path( __FILE__ ) . '../../includes/integrations/class-remember-quickbooks-oauth.php';
+		$qb_settings = Remember_QuickBooks_OAuth::get_settings();
+		if ( empty( $qb_settings['access_token'] ) || empty( $qb_settings['realm_id'] ) ) {
+			echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html__( 'QuickBooks is not connected. Connect under Settings → QuickBooks.', 'remember' ) . '</p></div>';
+		} else {
+			require_once plugin_dir_path( __FILE__ ) . '../../includes/integrations/class-remember-quickbooks-sync.php';
+			$result = Remember_QuickBooks_Sync::sync_member_to_customer( $member_id );
+			if ( is_wp_error( $result ) ) {
+				Remember_Logger::error(
+					'Manual QuickBooks customer sync failed',
+					array(
+						'member_id' => $member_id,
+						'error'     => $result->get_error_message(),
+					)
+				);
+				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html( $result->get_error_message() ) . '</p></div>';
+			} else {
+				Remember_Logger::info( 'Manual QuickBooks customer sync succeeded', array( 'member_id' => $member_id ) );
+				echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Customer updated in QuickBooks.', 'remember' ) . '</p></div>';
+			}
+		}
+		$view_member_id = $member_id;
 	}
 }
 
@@ -612,6 +639,12 @@ if ( $view_member_id > 0 ) {
 		$entry['balance'] = $running_balance;
 	}
 	unset( $entry );
+
+	require_once plugin_dir_path( __FILE__ ) . '../../includes/integrations/class-remember-quickbooks-oauth.php';
+	$remember_qb_settings           = Remember_QuickBooks_OAuth::get_settings();
+	$remember_qb_show_sync_customer = current_user_can( 'remember_update_members' )
+		&& ! empty( $remember_qb_settings['access_token'] )
+		&& ! empty( $remember_qb_settings['realm_id'] );
 }
 ?>
 

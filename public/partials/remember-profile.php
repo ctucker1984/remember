@@ -115,6 +115,8 @@ if ( isset( $_POST['remember_profile_action'] ) && check_admin_referer( 'remembe
 		}
 	}
 
+	do_action( 'remember_member_profile_saved', $user->ID );
+
 	// Redirect to view mode
 	wp_safe_redirect( remove_query_arg( 'edit' ) );
 	exit;

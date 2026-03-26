@@ -60,13 +60,20 @@ class Remember_QuickBooks_Sync {
 			)
 		);
 
-		// Prepare customer data
+		$first_name = ! empty( $profile->legal_first_name ) ? $profile->legal_first_name : $user->first_name;
+		$last_name  = ! empty( $profile->legal_last_name ) ? $profile->legal_last_name : $user->last_name;
+		$full_name  = trim( $first_name . ' ' . $last_name );
+		if ( '' === $full_name ) {
+			$full_name = $user->display_name;
+		}
+
+		// Prepare customer data (DisplayName should match how you want the customer listed in QBO).
 		$customer_data = array(
-			'display_name' => $user->display_name,
-			'first_name'    => ! empty( $profile->legal_first_name ) ? $profile->legal_first_name : $user->first_name,
-			'last_name'     => ! empty( $profile->legal_last_name ) ? $profile->legal_last_name : $user->last_name,
-			'email'         => $user->user_email,
-			'phone'         => ! empty( $profile->cell_phone ) ? $profile->cell_phone : '',
+			'display_name' => $full_name,
+			'first_name'   => $first_name,
+			'last_name'    => $last_name,
+			'email'        => $user->user_email,
+			'phone'        => ! empty( $profile->cell_phone ) ? $profile->cell_phone : '',
 		);
 
 		// Add address if available
@@ -80,17 +87,39 @@ class Remember_QuickBooks_Sync {
 			);
 		}
 
-		// Check if customer already exists in QB
+		// Prefer stored QuickBooks Customer Id; otherwise match by WordPress email (second best).
 		$qb_customer_id = get_user_meta( $member_id, 'remember_qb_customer_id', true );
-		$qb_sync_token = get_user_meta( $member_id, 'remember_qb_sync_token', true );
+		if ( ! $qb_customer_id ) {
+			$by_email = Remember_QuickBooks_API::find_customer_by_primary_email( $user->user_email );
+			if ( is_array( $by_email ) && ! empty( $by_email['Id'] ) ) {
+				$qb_customer_id = $by_email['Id'];
+				update_user_meta( $member_id, 'remember_qb_customer_id', $qb_customer_id );
+				update_user_meta( $member_id, 'remember_qb_sync_token', isset( $by_email['SyncToken'] ) ? $by_email['SyncToken'] : '' );
+			}
+		}
 
 		if ( $qb_customer_id ) {
 			$customer_data['qb_customer_id'] = $qb_customer_id;
-			$customer_data['sync_token'] = $qb_sync_token;
 		}
 
-		// Create or update customer in QuickBooks
 		$result = Remember_QuickBooks_API::create_customer( $customer_data );
+
+		// Stale or invalid local Id (deleted in QBO, wrong sandbox, etc.): clear link and retry once.
+		if ( is_wp_error( $result ) && $qb_customer_id ) {
+			delete_user_meta( $member_id, 'remember_qb_customer_id' );
+			delete_user_meta( $member_id, 'remember_qb_sync_token' );
+			unset( $customer_data['qb_customer_id'] );
+
+			$by_email = Remember_QuickBooks_API::find_customer_by_primary_email( $user->user_email );
+			if ( is_array( $by_email ) && ! empty( $by_email['Id'] ) ) {
+				$customer_data['qb_customer_id'] = $by_email['Id'];
+				update_user_meta( $member_id, 'remember_qb_customer_id', $by_email['Id'] );
+				update_user_meta( $member_id, 'remember_qb_sync_token', isset( $by_email['SyncToken'] ) ? $by_email['SyncToken'] : '' );
+				$result = Remember_QuickBooks_API::create_customer( $customer_data );
+			} else {
+				$result = Remember_QuickBooks_API::create_customer( $customer_data );
+			}
+		}
 
 		if ( is_wp_error( $result ) ) {
 			Remember_Logger::error( 'Failed to sync member to QuickBooks customer', array(
@@ -102,7 +131,7 @@ class Remember_QuickBooks_Sync {
 
 		// Store QB customer ID and sync token
 		update_user_meta( $member_id, 'remember_qb_customer_id', $result['Id'] );
-		update_user_meta( $member_id, 'remember_qb_sync_token', $result['SyncToken'] );
+		update_user_meta( $member_id, 'remember_qb_sync_token', isset( $result['SyncToken'] ) ? $result['SyncToken'] : '' );
 
 		Remember_Logger::info( 'Member synced to QuickBooks customer', array(
 			'member_id'      => $member_id,
@@ -139,17 +168,15 @@ class Remember_QuickBooks_Sync {
 			return new WP_Error( 'invoice_exists', __( 'Invoice already exists for this application.', 'remember' ) );
 		}
 
-		// Get member and ensure they're synced to QB
+		// Always push latest member profile to QBO before attaching a new invoice (partial profiles get updated later).
 		$member_id = $application->member_id;
-		$qb_customer_id = get_user_meta( $member_id, 'remember_qb_customer_id', true );
-
+		$sync_result = self::sync_member_to_customer( $member_id );
+		if ( is_wp_error( $sync_result ) ) {
+			return $sync_result;
+		}
+		$qb_customer_id = isset( $sync_result['Id'] ) ? $sync_result['Id'] : get_user_meta( $member_id, 'remember_qb_customer_id', true );
 		if ( ! $qb_customer_id ) {
-			// Sync member to QB first
-			$sync_result = self::sync_member_to_customer( $member_id );
-			if ( is_wp_error( $sync_result ) ) {
-				return $sync_result;
-			}
-			$qb_customer_id = $sync_result['Id'];
+			return new WP_Error( 'no_qb_customer', __( 'Could not create or resolve QuickBooks customer for this member.', 'remember' ) );
 		}
 
 		// Get event and event role
