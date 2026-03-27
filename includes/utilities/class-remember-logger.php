@@ -36,6 +36,37 @@ class Remember_Logger {
 	}
 
 	/**
+	 * Development / troubleshooting line to debug.log when WP_DEBUG_LOG is true.
+	 *
+	 * Does not use remember_options log_level (unlike info/warning/error), so sync and QuickBooks
+	 * diagnostics are visible while WP_DEBUG_LOG is enabled.
+	 *
+	 * @param string $message Short message.
+	 * @param array  $context Context data.
+	 */
+	public static function dev_log( $message, $context = array() ) {
+		if ( ! defined( 'WP_DEBUG_LOG' ) || ! WP_DEBUG_LOG ) {
+			return;
+		}
+
+		$timestamp = current_time( 'mysql' );
+		$log_entry = sprintf( '[%s] [reMember] [DEV] %s', $timestamp, $message );
+		if ( ! empty( $context ) ) {
+			$log_entry .= ' | ' . wp_json_encode( $context, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES );
+		}
+		$log_entry .= "\n";
+
+		$log_file = WP_CONTENT_DIR . '/debug.log';
+		if ( defined( 'WP_DEBUG_LOG' ) && WP_DEBUG_LOG && is_string( WP_DEBUG_LOG ) ) {
+			$log_file = WP_DEBUG_LOG;
+		}
+
+		if ( false === @error_log( $log_entry, 3, $log_file ) ) {
+			@file_put_contents( $log_file, $log_entry, FILE_APPEND | LOCK_EX );
+		}
+	}
+
+	/**
 	 * Log activation progress to wp-content/debug.log when WP_DEBUG_LOG is true.
 	 *
 	 * Ignores remember_options log_level so DEBUG lines always appear during activation troubleshooting.

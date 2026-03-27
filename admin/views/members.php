@@ -687,6 +687,49 @@ if ( $view_member_id > 0 ) {
 				'transaction_id' => $payment->transaction_id,
 			);
 		}
+
+		// QuickBooks refund receipt row(s), chronological with payments.
+		$qb_refund_lines = array();
+		if ( ! empty( $payment->quickbooks_refund_lines ) ) {
+			$decoded = json_decode( $payment->quickbooks_refund_lines, true );
+			if ( is_array( $decoded ) && ! empty( $decoded ) ) {
+				$qb_refund_lines = $decoded;
+			}
+		}
+		foreach ( $qb_refund_lines as $rf_line ) {
+			$debit = isset( $rf_line['amount'] ) ? floatval( $rf_line['amount'] ) : 0;
+			if ( $debit <= 0 ) {
+				continue;
+			}
+			$method = isset( $rf_line['payment_method'] ) ? $rf_line['payment_method'] : '';
+			$desc   = sprintf(
+				__( 'Refund - %s', 'remember' ),
+				$method !== '' ? $method : __( 'QuickBooks', 'remember' )
+			);
+			if ( ! empty( $rf_line['doc_number'] ) ) {
+				$desc .= ' ' . sprintf( __( '(Receipt #%s)', 'remember' ), $rf_line['doc_number'] );
+			} elseif ( ! empty( $rf_line['qb_refund_id'] ) ) {
+				$desc .= ' ' . sprintf( __( '(QB #%s)', 'remember' ), $rf_line['qb_refund_id'] );
+			}
+			$rf_sort_ts = isset( $rf_line['sort_ts'] ) ? (int) $rf_line['sort_ts'] : 0;
+			if ( $rf_sort_ts <= 0 ) {
+				$rf_sort_ts = ! empty( $rf_line['txn_date'] )
+					? strtotime( $rf_line['txn_date'] . ' 12:00:00' )
+					: strtotime( $payment->payment_date ? $payment->payment_date : 'now' );
+			}
+			$billing_register[] = array(
+				'date'        => date( 'Y-m-d H:i:s', $rf_sort_ts ),
+				'sort_ts'     => $rf_sort_ts,
+				'type'        => 'refund',
+				'description' => $desc,
+				'debit'       => $debit,
+				'credit'      => 0,
+				'balance'     => 0,
+				'status'      => $payment->payment_status,
+				'payment_id'  => $payment->payment_id,
+				'qb_refund_id' => isset( $rf_line['qb_refund_id'] ) ? (string) $rf_line['qb_refund_id'] : '',
+			);
+		}
 	}
 	
 	// Sort by QuickBooks timestamps (invoice before payment if tied).
@@ -699,14 +742,18 @@ if ( $view_member_id > 0 ) {
 				$order = array(
 					'invoice' => 0,
 					'payment' => 1,
+					'refund'  => 2,
 				);
-				$oa = isset( $order[ $a['type'] ] ) ? $order[ $a['type'] ] : 2;
-				$ob = isset( $order[ $b['type'] ] ) ? $order[ $b['type'] ] : 2;
+				$oa = isset( $order[ $a['type'] ] ) ? $order[ $a['type'] ] : 3;
+				$ob = isset( $order[ $b['type'] ] ) ? $order[ $b['type'] ] : 3;
 				if ( $oa !== $ob ) {
 					return $oa <=> $ob;
 				}
 				if ( 'payment' === ( $a['type'] ?? '' ) && 'payment' === ( $b['type'] ?? '' ) ) {
 					return strcmp( (string) ( $a['qb_payment_id'] ?? '' ), (string) ( $b['qb_payment_id'] ?? '' ) );
+				}
+				if ( 'refund' === ( $a['type'] ?? '' ) && 'refund' === ( $b['type'] ?? '' ) ) {
+					return strcmp( (string) ( $a['qb_refund_id'] ?? '' ), (string) ( $b['qb_refund_id'] ?? '' ) );
 				}
 				return ( $a['payment_id'] ?? 0 ) <=> ( $b['payment_id'] ?? 0 );
 			}
@@ -714,8 +761,13 @@ if ( $view_member_id > 0 ) {
 		}
 	);
 	
-	// Calculate running balance
+	// Calculate running balance. Refund lines are shown for the audit trail (debit column)
+	// but do not change “balance due” — refunds are not new charges owed by the member.
 	foreach ( $billing_register as &$entry ) {
+		if ( 'refund' === ( $entry['type'] ?? '' ) ) {
+			$entry['balance'] = $running_balance;
+			continue;
+		}
 		$running_balance += $entry['debit'] - $entry['credit'];
 		$entry['balance'] = $running_balance;
 	}

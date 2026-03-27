@@ -460,6 +460,33 @@ class Remember_Database_Updater {
 			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.13.0' ) );
 		}
 
+		// Update to 1.14.0 (QuickBooks: refund receipts linked to an invoice for billing register + member billing).
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.14.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.14.0' ) );
+
+			$payments_table = $wpdb->prefix . 'remember_payments';
+			$table_exists   = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $payments_table ) ) === $payments_table;
+			if ( $table_exists ) {
+				$cols = $wpdb->get_col( "SHOW COLUMNS FROM {$payments_table}", 0 );
+				if ( is_array( $cols ) && ! in_array( 'quickbooks_refund_lines', $cols, true ) ) {
+					$ok = $wpdb->query(
+						"ALTER TABLE {$payments_table} ADD COLUMN quickbooks_refund_lines LONGTEXT DEFAULT NULL AFTER quickbooks_payment_lines"
+					);
+					if ( false === $ok ) {
+						Remember_Logger::error(
+							'Failed to add quickbooks_refund_lines to remember_payments',
+							array( 'error' => $wpdb->last_error )
+						);
+					} else {
+						Remember_Logger::info( 'Added quickbooks_refund_lines to remember_payments' );
+					}
+				}
+			}
+
+			update_option( 'remember_db_version', '1.14.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.14.0' ) );
+		}
+
 		Remember_Logger::activation_debug(
 			'update_schema: exit',
 			array( 'remember_db_version' => get_option( 'remember_db_version', '0.0.0' ) )

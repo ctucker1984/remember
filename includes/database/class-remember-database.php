@@ -636,6 +636,7 @@ class Remember_Database {
 			quickbooks_invoice_number VARCHAR(50) DEFAULT NULL,
 			quickbooks_invoice_sort_ts BIGINT(20) UNSIGNED DEFAULT NULL,
 			quickbooks_payment_lines LONGTEXT DEFAULT NULL,
+			quickbooks_refund_lines LONGTEXT DEFAULT NULL,
 			notes TEXT DEFAULT NULL,
 			created_at DATETIME NOT NULL,
 			updated_at DATETIME NOT NULL,

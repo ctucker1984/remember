@@ -325,7 +325,7 @@ if ( $is_editing && ! current_user_can( 'remember_update_members' ) ) {
 		<!-- Billing Register (Full Width) -->
 		<div class="remember-member-detail-section">
 			<h3><?php esc_html_e( 'Billing Register', 'remember' ); ?></h3>
-			<p class="description"><?php esc_html_e( 'Chronological accounting register of invoices and payments.', 'remember' ); ?></p>
+			<p class="description"><?php esc_html_e( 'Chronological accounting register of invoices, payments, and refunds.', 'remember' ); ?></p>
 			
 			<?php if ( ! empty( $billing_register ) ) : ?>
 				<table class="wp-list-table widefat fixed striped" style="margin-top: 15px;">
@@ -347,6 +347,8 @@ if ( $is_editing && ! current_user_can( 'remember_update_members' ) ) {
 								<td>
 									<?php if ( 'invoice' === $entry['type'] ) : ?>
 										<span style="color: #d63638;"><?php esc_html_e( 'Invoice', 'remember' ); ?></span>
+									<?php elseif ( 'refund' === $entry['type'] ) : ?>
+										<span style="color: #b32d2e;"><?php esc_html_e( 'Refund', 'remember' ); ?></span>
 									<?php else : ?>
 										<span style="color: #00a32a;"><?php esc_html_e( 'Payment', 'remember' ); ?></span>
 									<?php endif; ?>

@@ -336,6 +336,7 @@ class Remember_QuickBooks_Sync {
 						'quickbooks_invoice_number'     => null,
 						'quickbooks_invoice_sort_ts'    => null,
 						'quickbooks_payment_lines'      => null,
+						'quickbooks_refund_lines'       => null,
 						'amount_paid'                   => 0,
 						'payment_status'              => 'pending',
 						'payment_date'                  => null,
@@ -381,15 +382,48 @@ class Remember_QuickBooks_Sync {
 			}
 		}
 
-		// Update payment record
-		$amount_due     = floatval( $payment->total_amount ) - $total_paid;
-		$payment_status = 'pending';
+		$refund_lines = Remember_QuickBooks_API::get_invoice_refund_lines( $payment->quickbooks_invoice_id, $qb_customer_id );
+		if ( is_wp_error( $refund_lines ) ) {
+			return $refund_lines;
+		}
 
-		if ( $total_paid >= floatval( $payment->total_amount ) ) {
-			$payment_status = 'paid';
-			$amount_due     = 0;
-		} elseif ( $total_paid > 0 ) {
-			$payment_status = 'partial';
+		Remember_Logger::dev_log(
+			'sync_payment_status refund discovery',
+			array(
+				'payment_id'     => $payment_id,
+				'qb_invoice_id'  => $payment->quickbooks_invoice_id,
+				'refund_rows'    => count( $refund_lines ),
+			)
+		);
+
+		$total_refunded = 0;
+		foreach ( $refund_lines as $rrow ) {
+			$total_refunded += floatval( $rrow['amount'] ?? 0 );
+		}
+
+		$net_paid = $total_paid - $total_refunded;
+		if ( $net_paid < 0 ) {
+			$net_paid = 0;
+		}
+
+		$total_amt = floatval( $payment->total_amount );
+
+		if ( $total_refunded > 0 && $net_paid <= 0.001 ) {
+			$payment_status  = 'refunded';
+			$amount_due      = 0;
+			$amount_paid_out = 0;
+		} elseif ( $net_paid >= $total_amt - 0.001 ) {
+			$payment_status  = 'paid';
+			$amount_due      = 0;
+			$amount_paid_out = $net_paid;
+		} elseif ( $net_paid > 0 ) {
+			$payment_status  = 'partial';
+			$amount_due      = max( 0, $total_amt - $net_paid );
+			$amount_paid_out = $net_paid;
+		} else {
+			$payment_status  = 'pending';
+			$amount_due      = $total_amt;
+			$amount_paid_out = 0;
 		}
 
 		$latest_ts = 0;
@@ -399,15 +433,24 @@ class Remember_QuickBooks_Sync {
 				$latest_ts = $t;
 			}
 		}
+		foreach ( $refund_lines as $row ) {
+			$t = isset( $row['sort_ts'] ) ? (int) $row['sort_ts'] : strtotime( $row['txn_date'] ?? '' );
+			if ( $t && $t > $latest_ts ) {
+				$latest_ts = $t;
+			}
+		}
+
+		$has_money_activity = $total_paid > 0 || $total_refunded > 0;
 
 		$update_data = array(
-			'amount_paid'                => $total_paid,
+			'amount_paid'                => $amount_paid_out,
 			'amount_due'                 => $amount_due,
 			'payment_status'             => $payment_status,
-			'payment_date'               => $total_paid > 0
+			'payment_date'               => $has_money_activity
 				? ( $latest_ts > 0 ? date( 'Y-m-d H:i:s', $latest_ts ) : current_time( 'mysql' ) )
 				: null,
 			'quickbooks_payment_lines'   => ! empty( $detail_lines ) ? wp_json_encode( $detail_lines ) : null,
+			'quickbooks_refund_lines'    => ! empty( $refund_lines ) ? wp_json_encode( $refund_lines ) : null,
 			'quickbooks_invoice_sort_ts' => $invoice_sort_ts > 0 ? $invoice_sort_ts : null,
 		);
 		if ( isset( $invoice['DocNumber'] ) ) {
@@ -416,9 +459,10 @@ class Remember_QuickBooks_Sync {
 		$payment_model->update( $payment_id, $update_data );
 
 		Remember_Logger::info( 'Payment status synced from QuickBooks', array(
-			'payment_id'     => $payment_id,
-			'amount_paid'    => $total_paid,
-			'payment_status' => $payment_status,
+			'payment_id'       => $payment_id,
+			'amount_paid'      => $amount_paid_out,
+			'total_refunded'   => $total_refunded,
+			'payment_status'   => $payment_status,
 		) );
 
 		return true;

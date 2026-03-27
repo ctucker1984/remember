@@ -680,6 +680,374 @@ class Remember_QuickBooks_API {
 	}
 
 	/**
+	 * Fetch a single RefundReceipt by Id.
+	 *
+	 * @param string $refund_receipt_id QuickBooks RefundReceipt Id.
+	 * @return array|WP_Error
+	 */
+	public static function get_refund_receipt( $refund_receipt_id ) {
+		$refund_receipt_id = trim( (string) $refund_receipt_id );
+		if ( '' === $refund_receipt_id ) {
+			return new WP_Error( 'invalid_refund_receipt_id', __( 'Invalid QuickBooks refund receipt ID.', 'remember' ) );
+		}
+		$response = self::api_request( 'GET', 'refundreceipt/' . rawurlencode( $refund_receipt_id ) );
+		if ( is_wp_error( $response ) ) {
+			return $response;
+		}
+		return isset( $response['RefundReceipt'] ) ? $response['RefundReceipt'] : $response;
+	}
+
+	/**
+	 * One row for a RefundReceipt when the Invoice already links to it (use full document total).
+	 *
+	 * @param array $refund QuickBooks RefundReceipt payload.
+	 * @return array<string, mixed>|null
+	 */
+	private static function summarize_refund_receipt_row( $refund ) {
+		if ( ! is_array( $refund ) ) {
+			return null;
+		}
+		$amt = floatval( $refund['TotalAmt'] ?? 0 );
+		if ( $amt <= 0 ) {
+			return null;
+		}
+		return array(
+			'amount'         => $amt,
+			'txn_date'       => isset( $refund['TxnDate'] ) ? sanitize_text_field( (string) $refund['TxnDate'] ) : '',
+			'payment_method' => self::qb_payment_method_label( $refund ),
+			'qb_refund_id'   => isset( $refund['Id'] ) ? (string) $refund['Id'] : '',
+			'doc_number'     => isset( $refund['DocNumber'] ) ? sanitize_text_field( (string) $refund['DocNumber'] ) : '',
+			'sort_ts'        => self::qb_entity_sort_timestamp( $refund ),
+		);
+	}
+
+	/**
+	 * QuickBooks Payment Ids that apply to this invoice (refund receipts often link to Payment, not Invoice).
+	 *
+	 * @param string      $invoice_id  Invoice entity Id.
+	 * @param string|null $customer_id QuickBooks Customer Id.
+	 * @return array<int, string>
+	 */
+	private static function collect_qb_payment_ids_for_invoice( $invoice_id, $customer_id ) {
+		$payments = self::get_invoice_payment( $invoice_id, $customer_id );
+		if ( is_wp_error( $payments ) || ! is_array( $payments ) ) {
+			return array();
+		}
+		$ids = array();
+		foreach ( $payments as $p ) {
+			if ( ! empty( $p['Id'] ) ) {
+				$ids[] = (string) $p['Id'];
+			}
+		}
+		return array_values( array_unique( $ids ) );
+	}
+
+	/**
+	 * Whether a LinkedTxn on a refund line/document targets this invoice or one of its payments.
+	 *
+	 * @param array $lt            LinkedTxn element.
+	 * @param string $invoice_id   Invoice Id.
+	 * @param array $qb_payment_ids Payment Ids from collect_qb_payment_ids_for_invoice().
+	 * @return bool
+	 */
+	private static function refund_linked_txn_matches_invoice_or_payment( $lt, $invoice_id, array $qb_payment_ids ) {
+		if ( ! is_array( $lt ) || ! isset( $lt['TxnId'] ) ) {
+			return false;
+		}
+		$txn_id = (string) $lt['TxnId'];
+		$tt     = isset( $lt['TxnType'] ) ? (string) $lt['TxnType'] : '';
+
+		if ( $txn_id === (string) $invoice_id ) {
+			return ( '' === $tt || false !== stripos( $tt, 'Invoice' ) );
+		}
+
+		// Payment Id is unambiguous; TxnType may be missing or vendor-specific.
+		if ( ! empty( $qb_payment_ids ) && in_array( $txn_id, $qb_payment_ids, true ) ) {
+			return true;
+		}
+
+		return false;
+	}
+
+	/**
+	 * Whether any nested LinkedTxn in a line (e.g. under SalesItemLineDetail) matches invoice/payment.
+	 *
+	 * @param array $node Line or subtree.
+	 * @param string $invoice_id Invoice Id.
+	 * @param array $qb_payment_ids Payment Ids.
+	 * @return bool
+	 */
+	private static function refund_array_contains_matching_linked_txn( $node, $invoice_id, array $qb_payment_ids ) {
+		if ( ! is_array( $node ) ) {
+			return false;
+		}
+		if ( isset( $node['LinkedTxn'] ) ) {
+			$linked = $node['LinkedTxn'];
+			if ( isset( $linked['TxnId'] ) ) {
+				$linked = array( $linked );
+			}
+			foreach ( (array) $linked as $lt ) {
+				if ( is_array( $lt ) && self::refund_linked_txn_matches_invoice_or_payment( $lt, $invoice_id, $qb_payment_ids ) ) {
+					return true;
+				}
+			}
+		}
+		foreach ( $node as $key => $child ) {
+			if ( 'LinkedTxn' === $key || ! is_array( $child ) ) {
+				continue;
+			}
+			if ( self::refund_array_contains_matching_linked_txn( $child, $invoice_id, $qb_payment_ids ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Line amount when LinkedTxn appears only on nested detail objects (QBO often nests under SalesItemLineDetail).
+	 *
+	 * @param array $line RefundReceipt Line element.
+	 * @param string $invoice_id Invoice Id.
+	 * @param array $qb_payment_ids Payment Ids.
+	 * @return float
+	 */
+	private static function refund_line_amount_with_nested_linked_txn( $line, $invoice_id, array $qb_payment_ids ) {
+		if ( ! is_array( $line ) ) {
+			return 0.0;
+		}
+		if ( ! self::refund_array_contains_matching_linked_txn( $line, $invoice_id, $qb_payment_ids ) ) {
+			return 0.0;
+		}
+		return isset( $line['Amount'] ) ? floatval( $line['Amount'] ) : 0.0;
+	}
+
+	/**
+	 * Amount from RefundReceipt line(s) applied to a specific Invoice.
+	 *
+	 * Refunds created from “Refund receipt” in QBO usually reference the Payment entity (#153, #154),
+	 * not the Invoice — we match both Invoice and Payment LinkedTxn.
+	 *
+	 * @param array  $refund           QuickBooks RefundReceipt payload.
+	 * @param string $invoice_id       Invoice entity Id.
+	 * @param array  $qb_payment_ids   QuickBooks Payment Ids applied to this invoice.
+	 * @return array<string, mixed>|null
+	 */
+	private static function summarize_refund_for_invoice( $refund, $invoice_id, array $qb_payment_ids = array() ) {
+		if ( ! is_array( $refund ) ) {
+			return null;
+		}
+		$invoice_id = (string) $invoice_id;
+		$amount     = 0.0;
+
+		// Document-level LinkedTxn (some companies populate this).
+		if ( ! empty( $refund['LinkedTxn'] ) ) {
+			$linked = $refund['LinkedTxn'];
+			if ( isset( $linked['TxnId'] ) ) {
+				$linked = array( $linked );
+			}
+			if ( is_array( $linked ) ) {
+				foreach ( $linked as $lt ) {
+					if ( self::refund_linked_txn_matches_invoice_or_payment( $lt, $invoice_id, $qb_payment_ids ) ) {
+						$amount = floatval( $refund['TotalAmt'] ?? 0 );
+						break;
+					}
+				}
+			}
+		}
+
+		if ( $amount <= 0 && ! empty( $refund['Line'] ) ) {
+			$lines = $refund['Line'];
+			if ( isset( $lines['Amount'] ) ) {
+				$lines = array( $lines );
+			}
+			if ( is_array( $lines ) ) {
+				foreach ( $lines as $line ) {
+					if ( ! is_array( $line ) ) {
+						continue;
+					}
+					if ( ! empty( $line['LinkedTxn'] ) ) {
+						$linked = $line['LinkedTxn'];
+						if ( isset( $linked['TxnId'] ) ) {
+							$linked = array( $linked );
+						}
+						if ( is_array( $linked ) ) {
+							foreach ( $linked as $lt ) {
+								if ( self::refund_linked_txn_matches_invoice_or_payment( $lt, $invoice_id, $qb_payment_ids ) ) {
+									$amount += isset( $line['Amount'] ) ? floatval( $line['Amount'] ) : 0.0;
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+
+		// LinkedTxn often lives under SalesItemLineDetail (or other nested detail), not on the Line root.
+		if ( $amount <= 0 && ! empty( $refund['Line'] ) ) {
+			$lines = $refund['Line'];
+			if ( isset( $lines['Amount'] ) ) {
+				$lines = array( $lines );
+			}
+			if ( is_array( $lines ) ) {
+				foreach ( $lines as $line ) {
+					if ( ! is_array( $line ) ) {
+						continue;
+					}
+					$nested_add = self::refund_line_amount_with_nested_linked_txn( $line, $invoice_id, $qb_payment_ids );
+					if ( $nested_add > 0 ) {
+						$amount += $nested_add;
+					}
+				}
+			}
+		}
+
+		if ( $amount <= 0 ) {
+			return null;
+		}
+
+		return array(
+			'amount'         => $amount,
+			'txn_date'       => isset( $refund['TxnDate'] ) ? sanitize_text_field( (string) $refund['TxnDate'] ) : '',
+			'payment_method' => self::qb_payment_method_label( $refund ),
+			'qb_refund_id'   => isset( $refund['Id'] ) ? (string) $refund['Id'] : '',
+			'doc_number'     => isset( $refund['DocNumber'] ) ? sanitize_text_field( (string) $refund['DocNumber'] ) : '',
+			'sort_ts'        => self::qb_entity_sort_timestamp( $refund ),
+		);
+	}
+
+	/**
+	 * Refund receipt rows in QuickBooks that apply to this invoice (for billing register + net paid).
+	 *
+	 * @param string      $invoice_id  Invoice entity Id.
+	 * @param string|null $customer_id QuickBooks Customer Id (narrows RefundReceipt query).
+	 * @return array|WP_Error List of rows with keys amount, txn_date, payment_method, qb_refund_id, doc_number, sort_ts.
+	 */
+	public static function get_invoice_refund_lines( $invoice_id, $customer_id = null ) {
+		$invoice_id = trim( (string) $invoice_id );
+		if ( '' === $invoice_id ) {
+			return new WP_Error( 'invalid_invoice_id', __( 'Invalid QuickBooks invoice ID.', 'remember' ) );
+		}
+
+		$out  = array();
+		$seen = array();
+
+		$invoice = self::get_invoice( $invoice_id );
+		if ( is_wp_error( $invoice ) ) {
+			return $invoice;
+		}
+
+		// Prefer user meta; fall back to Invoice.CustomerRef so RefundReceipt queries still run if meta is empty.
+		$customer_id_resolved = $customer_id ? trim( (string) $customer_id ) : '';
+		if ( '' === $customer_id_resolved && ! empty( $invoice['CustomerRef']['value'] ) ) {
+			$customer_id_resolved = (string) $invoice['CustomerRef']['value'];
+		}
+
+		$qb_payment_ids = self::collect_qb_payment_ids_for_invoice( $invoice_id, $customer_id_resolved );
+
+		// 1) Invoice → LinkedTxn → RefundReceipt (reliable when QBO links the refund on the invoice).
+		if ( ! empty( $invoice['LinkedTxn'] ) ) {
+			$linked = $invoice['LinkedTxn'];
+			if ( isset( $linked['TxnId'] ) ) {
+				$linked = array( $linked );
+			}
+			if ( is_array( $linked ) ) {
+				foreach ( $linked as $lt ) {
+					if ( ! is_array( $lt ) || empty( $lt['TxnId'] ) ) {
+						continue;
+					}
+					$tt = isset( $lt['TxnType'] ) ? (string) $lt['TxnType'] : '';
+					if ( false === stripos( $tt, 'Refund' ) ) {
+						continue;
+					}
+					$rid = (string) $lt['TxnId'];
+					if ( '' === $rid || isset( $seen[ $rid ] ) ) {
+						continue;
+					}
+					$rr = self::get_refund_receipt( $rid );
+					if ( is_wp_error( $rr ) || ! is_array( $rr ) ) {
+						continue;
+					}
+					$seen[ $rid ] = true;
+					$row = self::summarize_refund_receipt_row( $rr );
+					if ( null !== $row ) {
+						$out[] = $row;
+					}
+				}
+			}
+		}
+
+		// 2) RefundReceipt WHERE CustomerRef — match line/document links to this invoice.
+		$refund_query_list = array();
+		if ( '' !== $customer_id_resolved ) {
+			$query    = "SELECT * FROM RefundReceipt WHERE CustomerRef = '" . esc_sql( $customer_id_resolved ) . "'";
+			$response = self::api_request( 'GET', 'query?query=' . rawurlencode( $query ) );
+			if ( ! is_wp_error( $response ) && isset( $response['QueryResponse']['RefundReceipt'] ) ) {
+				$raw  = $response['QueryResponse']['RefundReceipt'];
+				$list = isset( $raw['Id'] ) ? array( $raw ) : ( is_array( $raw ) ? $raw : array() );
+				$refund_query_list = $list;
+				foreach ( $list as $r ) {
+					if ( ! is_array( $r ) || empty( $r['Id'] ) ) {
+						continue;
+					}
+					$rid = (string) $r['Id'];
+					if ( isset( $seen[ $rid ] ) ) {
+						continue;
+					}
+					$full = self::get_refund_receipt( $rid );
+					$rr   = is_wp_error( $full ) ? $r : $full;
+					$row  = self::summarize_refund_for_invoice( $rr, $invoice_id, $qb_payment_ids );
+					if ( null !== $row ) {
+						$seen[ $rid ] = true;
+						$out[]        = $row;
+					}
+				}
+			}
+		}
+
+		// 3) Single RefundReceipt for this customer and no parseable LinkedTxn — attribute to this invoice (typical one-invoice customers).
+		if ( empty( $out ) && 1 === count( $refund_query_list ) ) {
+			$r = $refund_query_list[0];
+			if ( is_array( $r ) && ! empty( $r['Id'] ) ) {
+				$rid = (string) $r['Id'];
+				if ( ! isset( $seen[ $rid ] ) ) {
+					$full = self::get_refund_receipt( $rid );
+					$rr   = is_wp_error( $full ) ? $r : $full;
+					$row  = self::summarize_refund_receipt_row( $rr );
+					if ( null !== $row ) {
+						$out[] = $row;
+					}
+				}
+			}
+		}
+
+		Remember_Logger::dev_log(
+			'QuickBooks get_invoice_refund_lines',
+			array(
+				'invoice_id'           => $invoice_id,
+				'customer_id_param'    => $customer_id,
+				'customer_id_resolved'   => $customer_id_resolved,
+				'qb_payment_ids'        => $qb_payment_ids,
+				'refund_query_count'    => count( $refund_query_list ),
+				'matched_refund_rows'   => count( $out ),
+			)
+		);
+
+		usort(
+			$out,
+			function ( $a, $b ) {
+				$ta = isset( $a['sort_ts'] ) ? (int) $a['sort_ts'] : strtotime( $a['txn_date'] ?? '' );
+				$tb = isset( $b['sort_ts'] ) ? (int) $b['sort_ts'] : strtotime( $b['txn_date'] ?? '' );
+				if ( $ta === $tb ) {
+					return strcmp( (string) ( $a['qb_refund_id'] ?? '' ), (string) ( $b['qb_refund_id'] ?? '' ) );
+				}
+				return $ta <=> $tb;
+			}
+		);
+
+		return $out;
+	}
+
+	/**
 	 * Normalize QueryResponse Item payload to a list of item arrays.
 	 *
 	 * @param array $response Decoded API response.

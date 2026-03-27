@@ -63,17 +63,20 @@ class Remember_Payment extends Remember_Base_Model {
 	public function update( $payment_id, $data ) {
 		$data['updated_at'] = current_time( 'mysql' );
 		
-		// Recalculate amount_due if amount_paid changed
+		// Recalculate amount_due if amount_paid changed (caller may set amount_due and payment_status explicitly).
 		if ( isset( $data['amount_paid'] ) ) {
 			$payment = $this->get( $payment_id );
 			if ( $payment ) {
-				$data['amount_due'] = $payment->total_amount - $data['amount_paid'];
-				
-				// Update status based on payment
-				if ( $data['amount_due'] <= 0 ) {
-					$data['payment_status'] = 'paid';
-				} elseif ( $data['amount_paid'] > 0 ) {
-					$data['payment_status'] = 'partial';
+				if ( ! isset( $data['amount_due'] ) ) {
+					$data['amount_due'] = $payment->total_amount - $data['amount_paid'];
+				}
+
+				if ( ! isset( $data['payment_status'] ) ) {
+					if ( $data['amount_due'] <= 0 ) {
+						$data['payment_status'] = 'paid';
+					} elseif ( $data['amount_paid'] > 0 ) {
+						$data['payment_status'] = 'partial';
+					}
 				}
 			}
 		}
