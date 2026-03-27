@@ -115,8 +115,9 @@ class Remember_Billing_Template {
 								$user   = $member ? get_user_by( 'ID', $payment->member_id ) : null;
 							}
 							if ( $user ) :
+								$member_detail_url = admin_url( 'admin.php?page=remember-members&view=' . absint( $payment->member_id ) );
 								?>
-								<?php echo esc_html( $user->display_name ); ?><br>
+								<a href="<?php echo esc_url( $member_detail_url ); ?>"><?php echo esc_html( $user->display_name ); ?></a><br>
 								<span class="description"><?php echo esc_html( $user->user_email ); ?></span>
 							<?php else : ?>
 								<span class="description"><?php esc_html_e( 'Member not found', 'remember' ); ?></span>
