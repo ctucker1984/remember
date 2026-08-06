@@ -238,6 +238,11 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 		if ( ! current_user_can( 'remember_update_members' ) ) {
 			wp_die( __( 'You do not have sufficient permissions to perform this action.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
 		}
+
+		$cell_phone_check = isset( $_POST['cell_phone'] ) ? sanitize_text_field( wp_unslash( $_POST['cell_phone'] ) ) : '';
+		if ( '' === $cell_phone_check ) {
+			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Cell phone is required.', 'remember' ) . '</p></div>';
+		} else {
 		
 		global $wpdb;
 		
@@ -478,6 +483,7 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 			Remember_Logger::error( 'Failed to update member profile', array( 'member_id' => $member_id ) );
 			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to update member profile.', 'remember' ) . '</p></div>';
 		}
+		} // end cell_phone required check
 	} elseif ( $member_id > 0 && 'sync_qb_customer' === $action ) {
 		if ( ! current_user_can( 'remember_update_members' ) ) {
 			wp_die( __( 'You do not have sufficient permissions to perform this action.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );

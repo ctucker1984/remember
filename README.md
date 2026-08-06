@@ -148,6 +148,8 @@ Enable `WP_DEBUG` as needed; logging uses `Remember_Logger`.
 - **Privacy:** `share_photo_with_events` column (DB `1.15.0`); Share Profile Photo toggle in admin and front-end profile; event directory respects photo sharing. Legal name no longer resolved from `display_name` in list/import helpers.
 - **Membership on install:** Activation no longer creates a member/profile/System Administrator role for the activating user. **Members → Convert WP User** converts an existing non-member WP account with explicit confirmation.
 - **Admin Add Member:** New WP users created from Add New get display name/nickname from username (not legal name).
+- **Phone requirements:** Member cell phone required (registration, front-end profile, admin edit). Emergency contact phone is optional.
+- **Registration time zone:** Required on signup; saved to WordPress user meta `timezone_string` (same place as profile/admin).
 - **Xero (planned):** Parallel billing provider (one active provider per site); see `XERO_PLAN.md`.
 
 ### 1.0.0

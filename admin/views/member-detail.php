@@ -144,7 +144,12 @@ if ( $is_editing && ! current_user_can( 'remember_update_members' ) ) {
 					<tr>
 						<th><?php esc_html_e( 'Time Zone', 'remember' ); ?></th>
 						<td>
-							<?php echo $view_profile && $view_profile->timezone ? esc_html( $view_profile->timezone ) : '<span class="description">' . esc_html__( 'Not provided', 'remember' ) . '</span>'; ?>
+							<?php
+							$view_timezone = $view_user ? get_user_meta( $view_user->ID, 'timezone_string', true ) : '';
+							echo ! empty( $view_timezone )
+								? esc_html( $view_timezone )
+								: '<span class="description">' . esc_html__( 'Not provided', 'remember' ) . '</span>';
+							?>
 						</td>
 					</tr>
 					<tr>

@@ -205,9 +205,10 @@ $max_image_size = isset( $options['photo_max_dimensions'] ) ? absint( $options['
 			</td>
 		</tr>
 		<tr>
-			<th><label for="cell_phone"><?php esc_html_e( 'Cell Phone', 'remember' ); ?></label></th>
+			<th><label for="cell_phone"><?php esc_html_e( 'Cell Phone', 'remember' ); ?> <span class="description">(required)</span></label></th>
 			<td>
-				<input type="text" id="cell_phone" name="cell_phone" class="regular-text" value="<?php echo esc_attr( $view_profile ? $view_profile->cell_phone : '' ); ?>" placeholder="<?php esc_attr_e( 'International format', 'remember' ); ?>">
+				<input type="text" id="cell_phone" name="cell_phone" class="regular-text" value="<?php echo esc_attr( $view_profile ? $view_profile->cell_phone : '' ); ?>" placeholder="<?php esc_attr_e( '+18055551212', 'remember' ); ?>" required>
+				<p class="description"><?php esc_html_e( 'Include a leading + and country code. Examples: +18055551212 (USA/Canada), +447700900123 (UK).', 'remember' ); ?></p>
 			</td>
 		</tr>
 		<tr>
@@ -257,9 +258,9 @@ $max_image_size = isset( $options['photo_max_dimensions'] ) ? absint( $options['
 			</td>
 		</tr>
 		<tr>
-			<th><label for="emergency_contact_phone"><?php esc_html_e( 'Phone', 'remember' ); ?> <span class="description">(required)</span></label></th>
+			<th><label for="emergency_contact_phone"><?php esc_html_e( 'Phone', 'remember' ); ?></label></th>
 			<td>
-				<input type="text" id="emergency_contact_phone" name="emergency_contact_phone" class="regular-text" value="<?php echo esc_attr( $view_profile ? $view_profile->emergency_contact_phone : '' ); ?>" required>
+				<input type="text" id="emergency_contact_phone" name="emergency_contact_phone" class="regular-text" value="<?php echo esc_attr( $view_profile ? $view_profile->emergency_contact_phone : '' ); ?>">
 			</td>
 		</tr>
 		<tr>

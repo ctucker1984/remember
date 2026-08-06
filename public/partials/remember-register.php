@@ -79,6 +79,22 @@ if ( $remember_pw_min < 1 ) {
 			</div>
 
 			<div class="remember-register-row">
+				<label for="remember_reg_cell_phone"><?php esc_html_e( 'Cell Phone', 'remember' ); ?> <span class="required">*</span></label>
+				<input type="tel" name="remember_reg_cell_phone" id="remember_reg_cell_phone" required autocomplete="tel" class="remember-register-input" value="<?php echo isset( $_POST['remember_reg_cell_phone'] ) ? esc_attr( sanitize_text_field( wp_unslash( $_POST['remember_reg_cell_phone'] ) ) ) : ''; ?>" placeholder="<?php esc_attr_e( '+18055551212', 'remember' ); ?>" />
+				<p class="remember-register-help"><?php esc_html_e( 'Include a leading + and country code. Examples: +18055551212 (USA/Canada), +447700900123 (UK).', 'remember' ); ?></p>
+			</div>
+
+			<?php
+			require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-timezone.php';
+			$remember_reg_timezone = isset( $_POST['remember_reg_timezone'] ) ? sanitize_text_field( wp_unslash( $_POST['remember_reg_timezone'] ) ) : 'America/Los_Angeles';
+			?>
+			<div class="remember-register-row">
+				<label for="remember_reg_timezone"><?php esc_html_e( 'Time Zone', 'remember' ); ?> <span class="required">*</span></label>
+				<?php echo Remember_Timezone::dropdown( $remember_reg_timezone, 'remember_reg_timezone', 'remember_reg_timezone', true, 'remember-register-input' ); ?>
+				<p class="remember-register-help"><?php esc_html_e( 'Used to display scheduled times in your local time.', 'remember' ); ?></p>
+			</div>
+
+			<div class="remember-register-row">
 				<label for="remember_reg_password"><?php esc_html_e( 'Password', 'remember' ); ?> <span class="required">*</span></label>
 				<input type="password" name="remember_reg_password" id="remember_reg_password" required autocomplete="new-password" class="remember-register-input" minlength="<?php echo esc_attr( (string) $remember_pw_min ); ?>" />
 			</div>

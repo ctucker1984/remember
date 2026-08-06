@@ -145,17 +145,19 @@ class Remember_Timezone {
 	 * @param string $name     Field name.
 	 * @param string $id       Field ID.
 	 * @param bool   $required Whether field is required.
+	 * @param string $class    CSS class for the select element.
 	 * @return string HTML for dropdown.
 	 */
-	public static function dropdown( $selected = '', $name = 'timezone_string', $id = 'timezone_string', $required = false ) {
+	public static function dropdown( $selected = '', $name = 'timezone_string', $id = 'timezone_string', $required = false, $class = 'regular-text' ) {
 		if ( empty( $selected ) ) {
 			$selected = 'America/Los_Angeles'; // Default
 		}
 		
 		$html = sprintf(
-			'<select name="%s" id="%s" class="regular-text"%s>',
+			'<select name="%s" id="%s" class="%s"%s>',
 			esc_attr( $name ),
 			esc_attr( $id ),
+			esc_attr( $class ),
 			$required ? ' required' : ''
 		);
 		
@@ -165,6 +167,26 @@ class Remember_Timezone {
 		$html .= '</select>';
 		
 		return $html;
+	}
+
+	/**
+	 * Whether a timezone string is usable (IANA id or WP UTC± offset choice).
+	 *
+	 * @param string $timezone Timezone string.
+	 * @return bool
+	 */
+	public static function is_valid_timezone( $timezone ) {
+		$timezone = is_string( $timezone ) ? trim( $timezone ) : '';
+		if ( '' === $timezone ) {
+			return false;
+		}
+
+		try {
+			new DateTimeZone( $timezone );
+			return true;
+		} catch ( Exception $e ) {
+			return (bool) preg_match( '/^UTC[+-]/', $timezone );
+		}
 	}
 
 	/**

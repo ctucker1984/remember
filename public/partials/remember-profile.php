@@ -46,6 +46,12 @@ if ( ! isset( $is_edit ) ) {
 
 // Handle form submission
 if ( isset( $_POST['remember_profile_action'] ) && check_admin_referer( 'remember_profile_action', 'remember_profile_nonce' ) ) {
+	$cell_phone = isset( $_POST['cell_phone'] ) ? sanitize_text_field( wp_unslash( $_POST['cell_phone'] ) ) : '';
+	if ( '' === $cell_phone ) {
+		wp_safe_redirect( add_query_arg( array( 'edit' => '1', 'remember_profile_error' => 'cell_phone' ) ) );
+		exit;
+	}
+
 	$photo_error   = '';
 	$has_new_photo = ! empty( $_FILES['photo_file']['name'] );
 
@@ -87,7 +93,7 @@ if ( isset( $_POST['remember_profile_action'] ) && check_admin_referer( 'remembe
 		'address_state'               => isset( $_POST['address_state'] ) ? sanitize_text_field( wp_unslash( $_POST['address_state'] ) ) : '',
 		'address_postal'              => isset( $_POST['address_postal'] ) ? sanitize_text_field( wp_unslash( $_POST['address_postal'] ) ) : '',
 		'address_country'             => isset( $_POST['address_country'] ) ? sanitize_text_field( wp_unslash( $_POST['address_country'] ) ) : 'US',
-		'cell_phone'                  => isset( $_POST['cell_phone'] ) ? sanitize_text_field( wp_unslash( $_POST['cell_phone'] ) ) : '',
+		'cell_phone'                  => $cell_phone,
 		'im_handle'                   => isset( $_POST['im_handle'] ) ? sanitize_text_field( wp_unslash( $_POST['im_handle'] ) ) : '',
 		'im_type'                     => isset( $_POST['im_type'] ) ? sanitize_text_field( wp_unslash( $_POST['im_type'] ) ) : 'telegram',
 		'interests'                   => isset( $_POST['interests'] ) ? sanitize_textarea_field( wp_unslash( $_POST['interests'] ) ) : '',
@@ -373,12 +379,18 @@ if ( ! empty( $selected_allergy_ids ) ) {
 		if ( $photo_error_notice ) {
 			delete_transient( 'remember_profile_photo_error_' . $user->ID );
 		}
+		$profile_error = isset( $_GET['remember_profile_error'] ) ? sanitize_text_field( wp_unslash( $_GET['remember_profile_error'] ) ) : '';
 		// Refresh member so photo preview reflects latest save.
 		$member = $member_model->get( $user->ID );
 		?>
 		<div class="remember-profile-edit-header">
 			<h2><?php esc_html_e( 'Edit Profile', 'remember' ); ?></h2>
 		</div>
+		<?php if ( 'cell_phone' === $profile_error ) : ?>
+			<div class="remember-notice remember-error" role="alert">
+				<p><?php esc_html_e( 'Cell phone is required.', 'remember' ); ?></p>
+			</div>
+		<?php endif; ?>
 		<?php if ( $photo_error_notice ) : ?>
 			<div class="remember-notice remember-error" role="alert">
 				<p><?php echo esc_html( $photo_error_notice ); ?></p>
@@ -494,9 +506,13 @@ if ( ! empty( $selected_allergy_ids ) ) {
 				<h3 class="remember-form-section-title"><?php esc_html_e( 'Contact Information', 'remember' ); ?></h3>
 				<div class="remember-form-row">
 					<div class="remember-form-col">
-						<label for="cell_phone" class="remember-form-label"><?php esc_html_e( 'Cell Phone', 'remember' ); ?></label>
-						<input type="text" id="cell_phone" name="cell_phone" class="remember-form-control" 
-							value="<?php echo esc_attr( $profile ? $profile->cell_phone : '' ); ?>" placeholder="<?php esc_attr_e( 'International format', 'remember' ); ?>">
+						<label for="cell_phone" class="remember-form-label">
+							<?php esc_html_e( 'Cell Phone', 'remember' ); ?>
+							<span class="remember-required">*</span>
+						</label>
+						<input type="text" id="cell_phone" name="cell_phone" class="remember-form-control" required
+							value="<?php echo esc_attr( $profile ? $profile->cell_phone : '' ); ?>" placeholder="<?php esc_attr_e( '+18055551212', 'remember' ); ?>">
+						<p class="remember-form-help"><?php esc_html_e( 'Include a leading + and country code. Examples: +18055551212 (USA/Canada), +447700900123 (UK).', 'remember' ); ?></p>
 					</div>
 					<div class="remember-form-col">
 						<label for="timezone_string" class="remember-form-label">

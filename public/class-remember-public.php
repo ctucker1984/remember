@@ -113,11 +113,19 @@ class Remember_Public {
 		$first_name   = isset( $_POST['remember_reg_first_name'] ) ? sanitize_text_field( wp_unslash( $_POST['remember_reg_first_name'] ) ) : '';
 		$last_name    = isset( $_POST['remember_reg_last_name'] ) ? sanitize_text_field( wp_unslash( $_POST['remember_reg_last_name'] ) ) : '';
 		$email        = isset( $_POST['remember_reg_email'] ) ? sanitize_email( wp_unslash( $_POST['remember_reg_email'] ) ) : '';
+		$cell_phone   = isset( $_POST['remember_reg_cell_phone'] ) ? sanitize_text_field( wp_unslash( $_POST['remember_reg_cell_phone'] ) ) : '';
+		$timezone     = isset( $_POST['remember_reg_timezone'] ) ? sanitize_text_field( wp_unslash( $_POST['remember_reg_timezone'] ) ) : '';
 		$password     = isset( $_POST['remember_reg_password'] ) ? wp_unslash( $_POST['remember_reg_password'] ) : '';
 		$password_confirm = isset( $_POST['remember_reg_password_confirm'] ) ? wp_unslash( $_POST['remember_reg_password_confirm'] ) : '';
 
-		if ( '' === $username || '' === $display_name || '' === $first_name || '' === $last_name || '' === $email || '' === $password || '' === $password_confirm ) {
+		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-timezone.php';
+
+		if ( '' === $username || '' === $display_name || '' === $first_name || '' === $last_name || '' === $email || '' === $cell_phone || '' === $timezone || '' === $password || '' === $password_confirm ) {
 			$this->redirect_member_registration( 'missing_fields' );
+		}
+
+		if ( ! Remember_Timezone::is_valid_timezone( $timezone ) ) {
+			$this->redirect_member_registration( 'invalid_timezone' );
 		}
 
 		if ( $password !== $password_confirm ) {
@@ -162,6 +170,7 @@ class Remember_Public {
 		update_user_meta( $user_id, 'first_name', $first_name );
 		update_user_meta( $user_id, 'last_name', $last_name );
 		update_user_meta( $user_id, 'nickname', $display_name );
+		update_user_meta( $user_id, 'timezone_string', $timezone );
 		wp_update_user(
 			array(
 				'ID'           => $user_id,
@@ -193,6 +202,7 @@ class Remember_Public {
 				'member_id'                       => $user_id,
 				'legal_first_name'                => $first_name,
 				'legal_last_name'                 => $last_name,
+				'cell_phone'                      => $cell_phone,
 				'emergency_contact_first'         => $first_name,
 				'emergency_contact_last'          => $last_name,
 				'emergency_contact_phone'         => '',
@@ -200,7 +210,7 @@ class Remember_Public {
 				'created_at'                      => current_time( 'mysql' ),
 				'updated_at'                      => current_time( 'mysql' ),
 			),
-			array( '%d', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s' )
+			array( '%d', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s' )
 		);
 
 		if ( ! $profile_inserted ) {
@@ -261,6 +271,7 @@ class Remember_Public {
 			'missing_fields'   => __( 'Please fill in all required fields.', 'remember' ),
 			'invalid_email'    => __( 'Please enter a valid email address.', 'remember' ),
 			'invalid_username' => __( 'That username is not allowed. Please choose another.', 'remember' ),
+			'invalid_timezone' => __( 'Please select a valid time zone.', 'remember' ),
 			'weak_password'    => __( 'Please choose a stronger password (at least eight characters).', 'remember' ),
 			'password_mismatch' => __( 'Password and confirm password do not match.', 'remember' ),
 			'username_exists'  => __( 'That username is already taken.', 'remember' ),
