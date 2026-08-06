@@ -2,7 +2,7 @@
 
 A WordPress plugin for membership-style communities: **members**, **events**, **locations**, **applications**, **vetting**, **billing** (including **QuickBooks Online**), and **role-based access**. It extends WordPress users with custom tables, an admin UI under **reMember**, and front-end templates (shortcodes and block patterns).
 
-**Version:** 1.0.0  
+**Version:** 1.0.1  
 **Requires:** WordPress 5.0 or higher  
 **License:** GPL v2 or later
 
@@ -30,8 +30,9 @@ For **database table and column detail**, see `ARCHITECTURE.md` in this folder.
 
 1. Copy the `remember` folder into `wp-content/plugins/`.
 2. In **Plugins → Installed Plugins**, activate **reMember**.
-3. On activation, the plugin creates database tables, seeds initial data (including default roles), assigns **reMember capabilities** to the user who activated the plugin, and may create a **member** record for that user.
+3. On activation, the plugin creates database tables, seeds initial data (including default roles), and grants **reMember capabilities** to the WordPress **Administrator** role (and to the user who activated the plugin). It does **not** assume any WordPress user is a member—no member row, profile, or System Administrator role is auto-assigned.
 4. You are redirected to the **setup wizard** (for a limited time) to map shortcodes to pages; you can also open it anytime from **reMember → Getting Started** or **Settings**.
+5. When you are ready, add members via **Members → Add New**, **Members → Convert WP User** (existing accounts), or the public **member registration** shortcode.
 
 ---
 
@@ -56,7 +57,7 @@ This order is also explained in **reMember → Getting Started** (always availab
 |------|---------|
 | **Dashboard** | Summary and quick access for administrators. |
 | **Getting Started** | Step-by-step static data setup and links to the setup wizard and shortcode docs. |
-| **Members** | Member records tied to WordPress users; status, profile, roles. |
+| **Members** | Member records tied to WordPress users; status, profile, roles. **Add New** creates a WP user + member. **Convert WP User** turns an existing non-member WP account into a member (affirmative confirmation required). |
 | **Events** | Events with locations, privacy, dates, role slots, and merchandise. |
 | **Applications** | Application workflow for joining or participating in events. |
 | **Waitlist** | Waitlisted applications. |
@@ -72,11 +73,23 @@ This order is also explained in **reMember → Getting Started** (always availab
 
 ## Typical member and staff flows
 
-1. **Join / register** — Users register or are invited; a **member** row and profile are created according to your configuration.
+1. **Become a member** — Public registration (`[remember_register]` / `[remember_registration]`), **Members → Add New**, or **Members → Convert WP User**. Site admins and other WP users are **not** members until one of these paths is used.
 2. **Vetting** — If enabled, staff review the member in **Vetting** until **vetted** (or rejected).
-3. **Events & applications** — Members browse events (front end) and submit **applications** for specific event roles (and optional add-ons).
-4. **Staff** — Accept or decline applications in **Applications**; waitlist as needed.
-5. **Billing** — For accepted applications, payments may be created and synced with **QuickBooks** invoices; staff can reconcile in **Billing** (amounts shown in reMember are subtotals; **DocNumber** is the human-friendly QB invoice number).
+3. **Profile** — Members maintain legal name (private), public nickname / display name, contact info, dietary / medical / allergy selections, photo, and **Share with Event Members** privacy toggles on the front-end profile.
+4. **Events & applications** — Members browse events (front end) and submit **applications** for specific event roles (and optional add-ons).
+5. **Staff** — Accept or decline applications in **Applications**; waitlist as needed.
+6. **Billing** — For accepted applications, payments may be created and synced with **QuickBooks** invoices; staff can reconcile in **Billing** (amounts shown in reMember are subtotals; **DocNumber** is the human-friendly QB invoice number).
+
+---
+
+## Names and privacy (members)
+
+- **Username** — WordPress login; cannot be changed later.
+- **Display name** — Required at registration; how the member appears publicly. Never auto-derived from legal name.
+- **Nickname** — WordPress nickname; editable on the profile; available as a display-name choice (same idea as WP core).
+- **Legal name** — Stored on the member profile for admin / vetting; labeled private on the member’s own dashboard and profile view. Not shown in the event attendee directory.
+- **Share with Event Members** — Opt-in toggles (email, phone, location, IM, interests, **profile photo**). The event directory only shows what the member enabled.
+- **Dietary restrictions / medical accommodations / allergies** — Editable by the member on the front-end profile and by staff in admin; for organizers, not shared in the public directory.
 
 ---
 
@@ -93,6 +106,7 @@ This order is also explained in **reMember → Getting Started** (always availab
 
 - Shortcodes are documented under **Settings** (Shortcodes tab / anchor `#shortcodes`).
 - Block patterns may be included in the plugin for common layouts; shortcodes remain the primary integration surface.
+- **Profile edit** includes public identity (nickname + display name), health/accommodation checklists, privacy toggles, and **profile photo** upload with circular preview, zoom, and drag-to-recenter before save.
 
 ---
 
@@ -111,11 +125,31 @@ reMember adds granular capabilities (`remember_read_events`, `remember_create_me
 | `admin/class-remember-admin.php` | Admin menu, pages, AJAX, QuickBooks OAuth handlers, setup wizard. |
 | `admin/views/` | Admin screens (including `setup-wizard.php`, `getting-started.php`, `partials/`). |
 | `public/class-remember-public.php` | Front-end assets and shortcode handlers. |
+| `public/partials/` | Front-end templates (dashboard, profile, register, event directory, etc.). |
 | `includes/models/` | Data models (members, events, payments, etc.). |
 | `includes/database/` | Table creation, migrations (`Remember_Database_Updater`), seeding. |
 | `includes/integrations/` | QuickBooks API and sync helpers. |
 
 Enable `WP_DEBUG` as needed; logging uses `Remember_Logger`.
+
+**Branching note:** Release work for this line lives on branch `v1.0.1` (tag `v1.0.0` remains the 1.0 baseline). Prefer clear conventional commits on that branch so the changelog below stays easy to inventory across machines.
+
+---
+
+## Changelog
+
+### 1.0.1 (in progress)
+
+- **Version** bumped to `1.0.1` (`REMEMBER_VERSION`).
+- **Registration:** Required **Display Name**; legal first/last labeled as legal/private; username help text (login; not changeable). New accounts never default `display_name` from legal name; nickname is seeded from the chosen display name.
+- **Profile (front end):** Edit nickname and “Display name publicly as” (WP-style choices). Dietary restrictions, medical accommodations, and known allergies (always shown on view with **None Selected** when empty). Profile photo upload/replace/delete with circular live preview, zoom, and drag-to-recenter; crop applied on save.
+- **Privacy:** `share_photo_with_events` column (DB `1.15.0`); Share Profile Photo toggle in admin and front-end profile; event directory respects photo sharing. Legal name no longer resolved from `display_name` in list/import helpers.
+- **Membership on install:** Activation no longer creates a member/profile/System Administrator role for the activating user. **Members → Convert WP User** converts an existing non-member WP account with explicit confirmation.
+- **Admin Add Member:** New WP users created from Add New get display name/nickname from username (not legal name).
+
+### 1.0.0
+
+- Initial baseline release: members, events, applications, vetting, billing/QuickBooks, roles, locations, products, shortcodes, and admin UI.
 
 ---
 
