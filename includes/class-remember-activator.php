@@ -88,97 +88,32 @@ class Remember_Activator {
 		Remember_Capabilities::setup_capabilities();
 		Remember_Logger::activation_debug( 'after setup_capabilities' );
 
-		// Assign current user as first admin (all capabilities)
+		// Grant plugin capabilities to the activating user (admin access).
+		// Do NOT create a reMember member, profile, or role assignment — membership
+		// must be an affirmative admin action (or public registration), not an install assumption.
 		require_once plugin_dir_path( __FILE__ ) . 'utilities/class-remember-capabilities.php';
-		require_once plugin_dir_path( __FILE__ ) . 'models/class-member.php';
-		require_once plugin_dir_path( __FILE__ ) . 'models/class-role.php';
-		
-		Remember_Logger::activation_debug( 'before assign_current_user_caps_and_member' );
+
+		Remember_Logger::activation_debug( 'before assign_activating_user_caps' );
 		$current_user = wp_get_current_user();
 		if ( $current_user && $current_user->ID > 0 ) {
-			// Assign all capabilities to WordPress admin
 			$all_capabilities = Remember_Capabilities::get_all_capabilities();
 			foreach ( array_keys( $all_capabilities ) as $cap ) {
 				$current_user->add_cap( $cap );
 			}
-			Remember_Logger::activation_debug( 'after add_cap loop', array( 'cap_count' => count( $all_capabilities ) ) );
-			
-			// Create member record for WordPress admin
-			$member_model = new Remember_Member();
-			$existing_member = $member_model->get( $current_user->ID );
-			if ( ! $existing_member ) {
-				// Create member record
-				$member_model->create( $current_user->ID, 'vetted' );
-				Remember_Logger::debug( 'Member record created for WordPress admin', array( 'user_id' => $current_user->ID ) );
-				
-				// Create initial profile record with WP user data
-				global $wpdb;
-				$first_name = get_user_meta( $current_user->ID, 'first_name', true );
-				$last_name = get_user_meta( $current_user->ID, 'last_name', true );
-				
-				// Use display name parts if first/last name aren't set
-				if ( empty( $first_name ) && empty( $last_name ) && ! empty( $current_user->display_name ) ) {
-					$name_parts = explode( ' ', $current_user->display_name, 2 );
-					$first_name = $name_parts[0];
-					$last_name = isset( $name_parts[1] ) ? $name_parts[1] : '';
-				}
-				
-				// Set default emergency contact if we have names
-				$emergency_first = ! empty( $first_name ) ? $first_name : '';
-				$emergency_last = ! empty( $last_name ) ? $last_name : '';
-				
-				$wpdb->insert(
-					$wpdb->prefix . 'remember_member_profiles',
-					array(
-						'member_id'                    => $current_user->ID,
-						'legal_first_name'            => $first_name,
-						'legal_last_name'             => $last_name,
-						'emergency_contact_first'     => $emergency_first,
-						'emergency_contact_last'      => $emergency_last,
-						'emergency_contact_phone'     => '',
-						'emergency_contact_relationship' => '',
-						'created_at'                  => current_time( 'mysql' ),
-						'updated_at'                  => current_time( 'mysql' ),
-					)
-				);
-				Remember_Logger::debug( 'Member profile created for WordPress admin with WP user data', array( 'user_id' => $current_user->ID ) );
-			}
-			
-			// Get System Administrator role ID
-			$role_model = new Remember_Role();
-			global $wpdb;
-			$system_admin_role_id = $wpdb->get_var( $wpdb->prepare(
-				"SELECT role_id FROM {$wpdb->prefix}remember_roles WHERE role_name = %s",
-				'System Administrator'
-			) );
-			
-			if ( $system_admin_role_id ) {
-				// Check if role is already assigned
-				$existing_role = $wpdb->get_var( $wpdb->prepare(
-					"SELECT member_role_id FROM {$wpdb->prefix}remember_member_roles WHERE member_id = %d AND role_id = %d",
-					$current_user->ID,
-					$system_admin_role_id
-				) );
-				
-				if ( ! $existing_role ) {
-					// Assign System Administrator role to member
-					$wpdb->insert(
-						$wpdb->prefix . 'remember_member_roles',
-						array(
-							'member_id'  => $current_user->ID,
-							'role_id'    => $system_admin_role_id,
-							'approved_at' => current_time( 'mysql' ),
-							'approved_by' => $current_user->ID,
-							'created_at' => current_time( 'mysql' ),
-						),
-						array( '%d', '%d', '%s', '%d', '%s' )
-					);
-					Remember_Logger::debug( 'System Administrator role assigned to WordPress admin', array( 'user_id' => $current_user->ID, 'role_id' => $system_admin_role_id ) );
-				}
-			}
+			Remember_Logger::activation_debug(
+				'after add_cap loop',
+				array(
+					'user_id'   => $current_user->ID,
+					'cap_count' => count( $all_capabilities ),
+				)
+			);
+			Remember_Logger::debug(
+				'Granted reMember capabilities to activating user (no member record created)',
+				array( 'user_id' => $current_user->ID )
+			);
 		}
 
-		Remember_Logger::activation_debug( 'after assign_current_user_caps_and_member' );
+		Remember_Logger::activation_debug( 'after assign_activating_user_caps' );
 
 		// Store plugin version
 		update_option( 'remember_version', REMEMBER_VERSION );

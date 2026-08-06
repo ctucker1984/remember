@@ -98,7 +98,7 @@ This order is also explained in **reMember → Getting Started** (always availab
 
 ## Capabilities
 
-reMember adds granular capabilities (`remember_read_events`, `remember_create_members`, `remember_access_settings`, etc.). WordPress users receive capabilities from **reMember roles** stored in the database (`Remember_Capabilities::sync_user_capabilities_from_roles` on login and when roles change). The **System Administrator** role (seeded) is typically assigned to the first admin user on activation.
+reMember adds granular capabilities (`remember_read_events`, `remember_create_members`, `remember_access_settings`, etc.). The WordPress **Administrator** role receives these capabilities on activation so staff can manage the plugin without becoming members. Users can also receive capabilities from **reMember roles** (`Remember_Capabilities::sync_user_capabilities_from_roles` on login and when roles change). Activation does **not** auto-create a reMember member for the installing user—convert an existing WP user via **Members → Convert WP User**, create a new member with **Add New**, or use public registration.
 
 ---
 

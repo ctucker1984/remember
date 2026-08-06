@@ -54,6 +54,82 @@ class Remember_Member extends Remember_Base_Model {
 	}
 
 	/**
+	 * Create a member (and stub profile if missing) from an existing WordPress user.
+	 *
+	 * Does not change display_name / nickname. Legal name fields are seeded from
+	 * WP first_name / last_name meta only (never from display_name).
+	 *
+	 * @param int    $user_id WordPress user ID.
+	 * @param string $status  Initial member status.
+	 * @return int|false Member ID on success, false on failure.
+	 */
+	public function create_from_wp_user( $user_id, $status = 'pending_vetting' ) {
+		$user_id = absint( $user_id );
+		if ( $user_id < 1 || ! get_userdata( $user_id ) ) {
+			return false;
+		}
+
+		if ( $this->get( $user_id ) ) {
+			return false;
+		}
+
+		$member_id = $this->create( $user_id, $status );
+		if ( ! $member_id ) {
+			return false;
+		}
+
+		global $wpdb;
+		$profiles_table = $wpdb->prefix . 'remember_member_profiles';
+		$existing_profile = $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT profile_id FROM {$profiles_table} WHERE member_id = %d",
+				$user_id
+			)
+		);
+
+		if ( ! $existing_profile ) {
+			$first_name = trim( (string) get_user_meta( $user_id, 'first_name', true ) );
+			$last_name  = trim( (string) get_user_meta( $user_id, 'last_name', true ) );
+
+			$wpdb->insert(
+				$profiles_table,
+				array(
+					'member_id'                      => $user_id,
+					'legal_first_name'               => $first_name,
+					'legal_last_name'                => $last_name,
+					'emergency_contact_first'        => $first_name,
+					'emergency_contact_last'         => $last_name,
+					'emergency_contact_phone'        => '',
+					'emergency_contact_relationship' => '',
+					'created_at'                     => current_time( 'mysql' ),
+					'updated_at'                     => current_time( 'mysql' ),
+				),
+				array( '%d', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s' )
+			);
+		}
+
+		return $user_id;
+	}
+
+	/**
+	 * WordPress users who do not yet have a reMember member row.
+	 *
+	 * @return array List of WP_User-like objects with ID, user_login, display_name, user_email.
+	 */
+	public function get_non_member_wp_users() {
+		global $wpdb;
+		$members_table = $this->get_table();
+
+		return $wpdb->get_results(
+			"SELECT u.ID, u.user_login, u.display_name, u.user_email
+			FROM {$wpdb->users} u
+			LEFT JOIN {$members_table} m ON u.ID = m.member_id
+			WHERE m.member_id IS NULL
+			ORDER BY u.user_login ASC"
+		);
+	}
+
+	/**
 	 * Update member status.
 	 *
 	 * @param int    $member_id Member ID.

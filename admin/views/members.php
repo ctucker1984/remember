@@ -29,6 +29,24 @@ $payment_model = new Remember_Payment();
 $application_model = new Remember_Application();
 $event_model = new Remember_Event();
 
+// Status labels and colors (needed before form handlers).
+$status_labels = array(
+	'pending_vetting' => __( 'Pending Vetting', 'remember' ),
+	'unvetted'        => __( 'Unvetted', 'remember' ),
+	'in_vetting'      => __( 'In Vetting', 'remember' ),
+	'vetted'          => __( 'Vetted', 'remember' ),
+	'rejected'        => __( 'Rejected', 'remember' ),
+	'inactive'        => __( 'Inactive', 'remember' ),
+);
+$status_colors = array(
+	'pending_vetting' => '#f0b849',
+	'unvetted'        => '#72777c',
+	'in_vetting'      => '#00a0d2',
+	'vetted'          => '#46b450',
+	'rejected'        => '#dc3232',
+	'inactive'        => '#72777c',
+);
+
 // Check if viewing a specific member
 $view_member_id = isset( $_GET['view'] ) ? absint( $_GET['view'] ) : 0;
 
@@ -72,10 +90,14 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 					if ( ! empty( $last_name ) ) {
 						update_user_meta( $user_id, 'last_name', $last_name );
 					}
-					wp_update_user( array(
-						'ID' => $user_id,
-						'display_name' => trim( $first_name . ' ' . $last_name ),
-					) );
+					// Public display name defaults to username — never auto-set from legal name.
+					wp_update_user(
+						array(
+							'ID'           => $user_id,
+							'display_name' => $username,
+							'nickname'     => $username,
+						)
+					);
 					
 					// Determine initial status based on vetting workflow
 					$vetting_workflow = Remember_Vetting_Workflow::get_workflow();
@@ -141,6 +163,57 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 						echo '<div class="notice notice-error is-dismissible"><p>' . $error_message . '</p></div>';
 					}
 				}
+			}
+		}
+	} elseif ( 'convert_wp_user' === $action ) {
+		if ( ! current_user_can( 'remember_create_members' ) ) {
+			wp_die( __( 'You do not have sufficient permissions to perform this action.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+		}
+
+		$wp_user_id = isset( $_POST['wp_user_id'] ) ? absint( $_POST['wp_user_id'] ) : 0;
+		$status     = isset( $_POST['convert_status'] ) ? sanitize_text_field( wp_unslash( $_POST['convert_status'] ) ) : 'pending_vetting';
+		$confirmed  = ! empty( $_POST['confirm_convert_member'] );
+
+		if ( ! $confirmed ) {
+			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Please confirm that you intend to make this WordPress user a reMember member.', 'remember' ) . '</p></div>';
+		} elseif ( $wp_user_id < 1 || ! get_userdata( $wp_user_id ) ) {
+			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Select a valid WordPress user.', 'remember' ) . '</p></div>';
+		} elseif ( $member_model->get( $wp_user_id ) ) {
+			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'That WordPress user is already a reMember member.', 'remember' ) . '</p></div>';
+		} else {
+			if ( ! array_key_exists( $status, $status_labels ) ) {
+				$vetting_workflow = Remember_Vetting_Workflow::get_workflow();
+				$status = ( 'first_application' === $vetting_workflow ) ? 'unvetted' : 'pending_vetting';
+			}
+
+			$created = $member_model->create_from_wp_user( $wp_user_id, $status );
+			if ( $created ) {
+				if ( Remember_Vetting_Workflow::should_vet_on_join() && 'pending_vetting' === $status ) {
+					$vetting_result = Remember_Vetting_Workflow::create_vetting_case( $wp_user_id );
+					if ( ! $vetting_result ) {
+						Remember_Logger::warning( 'Converted WP user but vetting case creation failed', array( 'member_id' => $wp_user_id ) );
+					}
+				}
+
+				$wp_user = get_userdata( $wp_user_id );
+				Remember_Logger::info(
+					'WP user converted to reMember member by admin',
+					array(
+						'member_id'  => $wp_user_id,
+						'status'     => $status,
+						'by_user_id' => get_current_user_id(),
+					)
+				);
+				echo '<div class="notice notice-success is-dismissible"><p>' . esc_html(
+					sprintf(
+						/* translators: 1: display name or login, 2: status label */
+						__( '%1$s is now a reMember member (%2$s). Edit their profile and roles as needed.', 'remember' ),
+						$wp_user ? $wp_user->display_name : (string) $wp_user_id,
+						isset( $status_labels[ $status ] ) ? $status_labels[ $status ] : $status
+					)
+				) . '</p></div>';
+			} else {
+				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Could not create the member record. Check the logs for details.', 'remember' ) . '</p></div>';
 			}
 		}
 	} elseif ( $member_id > 0 && 'update_status' === $action ) {
@@ -471,23 +544,7 @@ if ( $is_attendees_only ) {
 	$members = $member_model->get_all();
 }
 
-// Status labels and colors
-$status_labels = array(
-	'pending_vetting' => __( 'Pending Vetting', 'remember' ),
-	'unvetted'        => __( 'Unvetted', 'remember' ),
-	'in_vetting'      => __( 'In Vetting', 'remember' ),
-	'vetted'          => __( 'Vetted', 'remember' ),
-	'rejected'        => __( 'Rejected', 'remember' ),
-	'inactive'        => __( 'Inactive', 'remember' ),
-);
-$status_colors = array(
-	'pending_vetting' => '#f0b849',
-	'unvetted'        => '#72777c',
-	'in_vetting'      => '#00a0d2',
-	'vetted'          => '#46b450',
-	'rejected'        => '#dc3232',
-	'inactive'        => '#72777c',
-);
+// Status labels and colors defined earlier (before form handlers).
 
 // If viewing a specific member, show detail view
 if ( $view_member_id > 0 ) {
@@ -787,7 +844,8 @@ if ( $view_member_id > 0 ) {
 	<?php if ( $view_member_id > 0 ) : ?>
 		<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-members' ) ); ?>" class="page-title-action"><?php esc_html_e( '← Back to Members', 'remember' ); ?></a>
 	<?php elseif ( ! isset( $_GET['add'] ) ) : ?>
-		<button type="button" class="page-title-action" onclick="document.getElementById('remember-add-member').style.display='block'; this.style.display='none';"><?php esc_html_e( 'Add New', 'remember' ); ?></button>
+		<button type="button" class="page-title-action" onclick="document.getElementById('remember-add-member').style.display='block'; document.getElementById('remember-convert-wp-user').style.display='none'; this.style.display='none'; var c=document.getElementById('remember-convert-toggle'); if(c){c.style.display='inline-block';}"><?php esc_html_e( 'Add New', 'remember' ); ?></button>
+		<button type="button" class="page-title-action" id="remember-convert-toggle" onclick="document.getElementById('remember-convert-wp-user').style.display='block'; document.getElementById('remember-add-member').style.display='none'; this.style.display='none'; var a=document.querySelector('.remember-members .page-title-action'); if(a){a.style.display='inline-block';}"><?php esc_html_e( 'Convert WP User', 'remember' ); ?></button>
 	<?php endif; ?>
 	<hr class="wp-header-end">
 	
@@ -846,9 +904,77 @@ if ( $view_member_id > 0 ) {
 			
 			<p class="submit">
 				<input type="submit" class="button button-primary" value="<?php esc_attr_e( 'Add Member', 'remember' ); ?>">
-				<button type="button" class="button" onclick="document.getElementById('remember-add-member').style.display='none'; document.querySelector('.page-title-action').style.display='inline-block';"><?php esc_html_e( 'Cancel', 'remember' ); ?></button>
+				<button type="button" class="button" onclick="document.getElementById('remember-add-member').style.display='none'; document.querySelectorAll('.remember-members .page-title-action').forEach(function(b){b.style.display='inline-block';});"><?php esc_html_e( 'Cancel', 'remember' ); ?></button>
 			</p>
 		</form>
+	</div>
+
+	<?php
+	$non_member_wp_users = $member_model->get_non_member_wp_users();
+	?>
+	<div id="remember-convert-wp-user" style="display:none; margin: 20px 0; padding: 20px; background: #fff; border: 1px solid #ccd0d4; border-radius: 4px;">
+		<h2><?php esc_html_e( 'Convert WordPress User to Member', 'remember' ); ?></h2>
+		<p class="description"><?php esc_html_e( 'Existing WordPress users (including site admins) are not members until you convert them here, or until they register via the public member form. This does not change their WordPress login or display name.', 'remember' ); ?></p>
+		<?php if ( empty( $non_member_wp_users ) ) : ?>
+			<p><?php esc_html_e( 'Every WordPress user on this site already has a reMember member record.', 'remember' ); ?></p>
+			<p>
+				<button type="button" class="button" onclick="document.getElementById('remember-convert-wp-user').style.display='none'; document.querySelectorAll('.remember-members .page-title-action').forEach(function(b){b.style.display='inline-block';});"><?php esc_html_e( 'Close', 'remember' ); ?></button>
+			</p>
+		<?php else : ?>
+			<form method="post" action="">
+				<?php wp_nonce_field( 'remember_member_action', 'remember_member_nonce' ); ?>
+				<input type="hidden" name="remember_member_action" value="convert_wp_user">
+				<table class="form-table">
+					<tr>
+						<th><label for="wp_user_id"><?php esc_html_e( 'WordPress User', 'remember' ); ?> <span class="description">(required)</span></label></th>
+						<td>
+							<select id="wp_user_id" name="wp_user_id" class="regular-text" required>
+								<option value=""><?php esc_html_e( '— Select a user —', 'remember' ); ?></option>
+								<?php foreach ( $non_member_wp_users as $wp_user_row ) : ?>
+									<option value="<?php echo esc_attr( $wp_user_row->ID ); ?>">
+										<?php
+										echo esc_html(
+											sprintf(
+												'%1$s (%2$s) — %3$s',
+												$wp_user_row->display_name ? $wp_user_row->display_name : $wp_user_row->user_login,
+												$wp_user_row->user_login,
+												$wp_user_row->user_email
+											)
+										);
+										?>
+									</option>
+								<?php endforeach; ?>
+							</select>
+						</td>
+					</tr>
+					<tr>
+						<th><label for="convert_status"><?php esc_html_e( 'Initial Status', 'remember' ); ?></label></th>
+						<td>
+							<select id="convert_status" name="convert_status" class="regular-text">
+								<?php foreach ( $status_labels as $status => $label ) : ?>
+									<option value="<?php echo esc_attr( $status ); ?>" <?php selected( 'pending_vetting', $status ); ?>>
+										<?php echo esc_html( $label ); ?>
+									</option>
+								<?php endforeach; ?>
+							</select>
+						</td>
+					</tr>
+					<tr>
+						<th><?php esc_html_e( 'Confirmation', 'remember' ); ?></th>
+						<td>
+							<label for="confirm_convert_member">
+								<input type="checkbox" name="confirm_convert_member" id="confirm_convert_member" value="1" required>
+								<?php esc_html_e( 'I intentionally want to make this WordPress user a reMember member.', 'remember' ); ?>
+							</label>
+						</td>
+					</tr>
+				</table>
+				<p class="submit">
+					<input type="submit" class="button button-primary" value="<?php esc_attr_e( 'Make Member', 'remember' ); ?>">
+					<button type="button" class="button" onclick="document.getElementById('remember-convert-wp-user').style.display='none'; document.querySelectorAll('.remember-members .page-title-action').forEach(function(b){b.style.display='inline-block';});"><?php esc_html_e( 'Cancel', 'remember' ); ?></button>
+				</p>
+			</form>
+		<?php endif; ?>
 	</div>
 
 	<?php if ( ! $is_attendees_only ) : ?>
