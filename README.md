@@ -128,11 +128,13 @@ reMember adds granular capabilities (`remember_read_events`, `remember_create_me
 | `public/partials/` | Front-end templates (dashboard, profile, register, event directory, etc.). |
 | `includes/models/` | Data models (members, events, payments, etc.). |
 | `includes/database/` | Table creation, migrations (`Remember_Database_Updater`), seeding. |
-| `includes/integrations/` | QuickBooks API and sync helpers. |
+| `includes/integrations/` | QuickBooks API and sync helpers; Xero planned (see `XERO_PLAN.md`). |
 
 Enable `WP_DEBUG` as needed; logging uses `Remember_Logger`.
 
 **Branching note:** Release work for this line lives on branch `v1.0.1` (tag `v1.0.0` remains the 1.0 baseline). Prefer clear conventional commits on that branch so the changelog below stays easy to inventory across machines.
+
+**Accounting providers:** One active billing provider per site (`quickbooks` or `xero`). QBO remains as implemented; Xero is planned as a parallel stack — details in [`XERO_PLAN.md`](XERO_PLAN.md).
 
 ---
 
@@ -146,6 +148,7 @@ Enable `WP_DEBUG` as needed; logging uses `Remember_Logger`.
 - **Privacy:** `share_photo_with_events` column (DB `1.15.0`); Share Profile Photo toggle in admin and front-end profile; event directory respects photo sharing. Legal name no longer resolved from `display_name` in list/import helpers.
 - **Membership on install:** Activation no longer creates a member/profile/System Administrator role for the activating user. **Members → Convert WP User** converts an existing non-member WP account with explicit confirmation.
 - **Admin Add Member:** New WP users created from Add New get display name/nickname from username (not legal name).
+- **Xero (planned):** Parallel billing provider (one active provider per site); see `XERO_PLAN.md`.
 
 ### 1.0.0
 
