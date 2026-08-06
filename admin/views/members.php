@@ -257,6 +257,7 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 			'share_location_with_events' => isset( $_POST['share_location_with_events'] ) ? 1 : 0,
 			'share_im_with_events' => isset( $_POST['share_im_with_events'] ) ? 1 : 0,
 			'share_interests_with_events' => isset( $_POST['share_interests_with_events'] ) ? 1 : 0,
+			'share_photo_with_events' => isset( $_POST['share_photo_with_events'] ) ? 1 : 0,
 			'updated_at' => current_time( 'mysql' ),
 		);
 		

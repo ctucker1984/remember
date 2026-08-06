@@ -438,6 +438,20 @@ $max_image_size = isset( $options['photo_max_dimensions'] ) ? absint( $options['
 					<p>
 						<label class="remember-toggle-switch">
 							<input type="checkbox" 
+								   name="share_photo_with_events" 
+								   value="1" 
+								   <?php checked( $view_profile && isset( $view_profile->share_photo_with_events ) ? $view_profile->share_photo_with_events : 0, 1 ); ?>>
+							<span class="remember-toggle-slider"></span>
+						</label>
+						<label for="share_photo_with_events" style="margin-left: 10px; cursor: pointer;">
+							<strong><?php esc_html_e( 'Profile Photo', 'remember' ); ?></strong>
+							<span class="description" style="margin-left: 5px;"><?php esc_html_e( 'Share your profile photo with other members in events you\'re accepted to.', 'remember' ); ?></span>
+						</label>
+					</p>
+
+					<p>
+						<label class="remember-toggle-switch">
+							<input type="checkbox" 
 								   name="share_email_with_events" 
 								   value="1" 
 								   <?php checked( $view_profile && isset( $view_profile->share_email_with_events ) ? $view_profile->share_email_with_events : 0, 1 ); ?>>

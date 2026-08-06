@@ -152,6 +152,7 @@ class Remember_Database {
 			share_location_with_events TINYINT(1) DEFAULT 0,
 			share_im_with_events TINYINT(1) DEFAULT 0,
 			share_interests_with_events TINYINT(1) DEFAULT 0,
+			share_photo_with_events TINYINT(1) DEFAULT 0,
 			created_at DATETIME NOT NULL,
 			updated_at DATETIME NOT NULL,
 			PRIMARY KEY (profile_id),

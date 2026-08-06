@@ -119,9 +119,10 @@ foreach ( $event_roles as $event_role ) {
 
 			$role_name = isset( $role_map[ $app->event_role_id ] ) ? $role_map[ $app->event_role_id ] : __( 'Unknown Role', 'remember' );
 			
-			// Get member photo or use avatar
+			// Get member photo or use avatar — only show uploaded photo when sharing is enabled.
 			$member = $member_model->get( $app->member_id );
-			$photo_url = $member && ! empty( $member->photo_url ) ? $member->photo_url : null;
+			$share_photo = $profile && ! empty( $profile->share_photo_with_events );
+			$photo_url = ( $share_photo && $member && ! empty( $member->photo_url ) ) ? $member->photo_url : null;
 		?>
 			<article class="remember-member-card">
 				<div class="remember-member-card-header">
@@ -191,7 +192,16 @@ foreach ( $event_roles as $event_role ) {
 						<?php endif; ?>
 					<?php endif; ?>
 
-					<?php if ( ! $profile || ( empty( $profile->share_email_with_events ) && empty( $profile->share_phone_with_events ) && empty( $profile->share_location_with_events ) && empty( $profile->share_im_with_events ) && empty( $profile->share_interests_with_events ) ) ) : ?>
+					<?php
+					$has_shared_contact = $profile && (
+						! empty( $profile->share_email_with_events ) ||
+						! empty( $profile->share_phone_with_events ) ||
+						! empty( $profile->share_location_with_events ) ||
+						! empty( $profile->share_im_with_events ) ||
+						! empty( $profile->share_interests_with_events )
+					);
+					if ( ! $has_shared_contact ) :
+					?>
 						<p class="remember-description"><?php esc_html_e( 'No contact information shared.', 'remember' ); ?></p>
 					<?php endif; ?>
 				</div>

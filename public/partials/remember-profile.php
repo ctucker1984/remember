@@ -14,10 +14,21 @@ if ( ! defined( 'WPINC' ) ) {
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-member.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-countries.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-import-export.php';
+require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-image-uploader.php';
 
 $user = wp_get_current_user();
 $member_model = new Remember_Member();
 $member = $member_model->get( $user->ID );
+
+$remember_options     = get_option( 'remember_options', array() );
+$photo_max_dimensions = isset( $remember_options['photo_max_dimensions'] ) ? absint( $remember_options['photo_max_dimensions'] ) : 800;
+$photo_max_bytes      = isset( $remember_options['photo_max_size'] ) ? absint( $remember_options['photo_max_size'] ) : 2097152;
+if ( $photo_max_dimensions < 1 ) {
+	$photo_max_dimensions = 800;
+}
+if ( $photo_max_bytes < 1 ) {
+	$photo_max_bytes = 2097152;
+}
 
 // Get profile
 global $wpdb;
@@ -35,6 +46,39 @@ if ( ! isset( $is_edit ) ) {
 
 // Handle form submission
 if ( isset( $_POST['remember_profile_action'] ) && check_admin_referer( 'remember_profile_action', 'remember_profile_nonce' ) ) {
+	$photo_error   = '';
+	$has_new_photo = ! empty( $_FILES['photo_file']['name'] );
+
+	// Upload / replace photo (takes precedence over delete).
+	if ( $has_new_photo ) {
+		$file_size = isset( $_FILES['photo_file']['size'] ) ? absint( $_FILES['photo_file']['size'] ) : 0;
+		if ( $file_size > 0 && $file_size > $photo_max_bytes ) {
+			$photo_error = sprintf(
+				/* translators: %d: max size in MB */
+				__( 'Photo is too large. Maximum size is %d MB.', 'remember' ),
+				(int) max( 1, round( $photo_max_bytes / 1024 / 1024 ) )
+			);
+		} else {
+			$current_member = $member_model->get( $user->ID );
+			if ( $current_member && ! empty( $current_member->photo_url ) ) {
+				Remember_Image_Uploader::delete_image( $current_member->photo_url );
+			}
+
+			$upload_result = Remember_Image_Uploader::upload_square_image( $_FILES['photo_file'], $photo_max_dimensions );
+			if ( is_wp_error( $upload_result ) ) {
+				$photo_error = $upload_result->get_error_message();
+			} else {
+				$member_model->update_photo( $user->ID, $upload_result['url'] );
+			}
+		}
+	} elseif ( isset( $_POST['delete_photo'] ) && '1' === (string) wp_unslash( $_POST['delete_photo'] ) ) {
+		$current_member = $member_model->get( $user->ID );
+		if ( $current_member && ! empty( $current_member->photo_url ) ) {
+			Remember_Image_Uploader::delete_image( $current_member->photo_url );
+			$member_model->update_photo( $user->ID, null );
+		}
+	}
+
 	$profile_data = array(
 		'legal_first_name'            => isset( $_POST['legal_first_name'] ) ? sanitize_text_field( wp_unslash( $_POST['legal_first_name'] ) ) : '',
 		'legal_last_name'             => isset( $_POST['legal_last_name'] ) ? sanitize_text_field( wp_unslash( $_POST['legal_last_name'] ) ) : '',
@@ -56,6 +100,7 @@ if ( isset( $_POST['remember_profile_action'] ) && check_admin_referer( 'remembe
 		'share_location_with_events'  => isset( $_POST['share_location_with_events'] ) ? 1 : 0,
 		'share_im_with_events'        => isset( $_POST['share_im_with_events'] ) ? 1 : 0,
 		'share_interests_with_events' => isset( $_POST['share_interests_with_events'] ) ? 1 : 0,
+		'share_photo_with_events'     => isset( $_POST['share_photo_with_events'] ) ? 1 : 0,
 		'updated_at'                  => current_time( 'mysql' ),
 	);
 
@@ -139,10 +184,68 @@ if ( isset( $_POST['remember_profile_action'] ) && check_admin_referer( 'remembe
 		}
 	}
 
+	// Dietary restrictions / medical accommodations / allergies (junction tables).
+	$wpdb->delete( $wpdb->prefix . 'remember_member_dietary_restrictions', array( 'member_id' => $user->ID ), array( '%d' ) );
+	if ( isset( $_POST['dietary_restrictions'] ) && is_array( $_POST['dietary_restrictions'] ) ) {
+		foreach ( $_POST['dietary_restrictions'] as $restriction_id ) {
+			$restriction_id = absint( $restriction_id );
+			if ( $restriction_id > 0 ) {
+				$wpdb->insert(
+					$wpdb->prefix . 'remember_member_dietary_restrictions',
+					array(
+						'member_id'      => $user->ID,
+						'restriction_id' => $restriction_id,
+					),
+					array( '%d', '%d' )
+				);
+			}
+		}
+	}
+
+	$wpdb->delete( $wpdb->prefix . 'remember_member_medical_accommodations', array( 'member_id' => $user->ID ), array( '%d' ) );
+	if ( isset( $_POST['medical_accommodations'] ) && is_array( $_POST['medical_accommodations'] ) ) {
+		foreach ( $_POST['medical_accommodations'] as $accommodation_id ) {
+			$accommodation_id = absint( $accommodation_id );
+			if ( $accommodation_id > 0 ) {
+				$wpdb->insert(
+					$wpdb->prefix . 'remember_member_medical_accommodations',
+					array(
+						'member_id'        => $user->ID,
+						'accommodation_id' => $accommodation_id,
+					),
+					array( '%d', '%d' )
+				);
+			}
+		}
+	}
+
+	$wpdb->delete( $wpdb->prefix . 'remember_member_allergies', array( 'member_id' => $user->ID ), array( '%d' ) );
+	if ( isset( $_POST['allergies'] ) && is_array( $_POST['allergies'] ) ) {
+		foreach ( $_POST['allergies'] as $allergy_id ) {
+			$allergy_id = absint( $allergy_id );
+			if ( $allergy_id > 0 ) {
+				$wpdb->insert(
+					$wpdb->prefix . 'remember_member_allergies',
+					array(
+						'member_id'  => $user->ID,
+						'allergy_id' => $allergy_id,
+					),
+					array( '%d', '%d' )
+				);
+			}
+		}
+	}
+
 	do_action( 'remember_member_profile_saved', $user->ID );
 
-	// Redirect to view mode
-	wp_safe_redirect( remove_query_arg( 'edit' ) );
+	// Redirect: stay on edit if photo failed so the member can retry.
+	if ( ! empty( $photo_error ) ) {
+		set_transient( 'remember_profile_photo_error_' . $user->ID, $photo_error, MINUTE_IN_SECONDS );
+		wp_safe_redirect( add_query_arg( 'edit', '1' ) );
+		exit;
+	}
+
+	wp_safe_redirect( remove_query_arg( array( 'edit', 'remember_photo_error' ) ) );
 	exit;
 }
 
@@ -191,16 +294,148 @@ $current_display = $user->display_name;
 if ( $current_display && ! in_array( $current_display, $display_choices, true ) ) {
 	$display_choices[] = $current_display;
 }
+
+// Health / accommodation lookup lists for edit + view.
+$dietary_restrictions = $wpdb->get_results(
+	"SELECT * FROM {$wpdb->prefix}remember_dietary_restrictions WHERE is_active = 1 ORDER BY sort_order ASC, restriction_name ASC"
+);
+$medical_accommodations = $wpdb->get_results(
+	"SELECT * FROM {$wpdb->prefix}remember_medical_accommodations WHERE is_active = 1 ORDER BY sort_order ASC, accommodation_name ASC"
+);
+$allergies = $wpdb->get_results(
+	"SELECT * FROM {$wpdb->prefix}remember_allergies WHERE is_active = 1 ORDER BY sort_order ASC, allergy_name ASC"
+);
+
+$selected_dietary_ids = $wpdb->get_col(
+	$wpdb->prepare(
+		"SELECT restriction_id FROM {$wpdb->prefix}remember_member_dietary_restrictions WHERE member_id = %d",
+		$user->ID
+	)
+);
+$selected_medical_ids = $wpdb->get_col(
+	$wpdb->prepare(
+		"SELECT accommodation_id FROM {$wpdb->prefix}remember_member_medical_accommodations WHERE member_id = %d",
+		$user->ID
+	)
+);
+$selected_allergy_ids = $wpdb->get_col(
+	$wpdb->prepare(
+		"SELECT allergy_id FROM {$wpdb->prefix}remember_member_allergies WHERE member_id = %d",
+		$user->ID
+	)
+);
+
+$selected_dietary_names = array();
+$selected_medical_names = array();
+$selected_allergy_names = array();
+if ( ! empty( $selected_dietary_ids ) ) {
+	$selected_dietary_names = $wpdb->get_col(
+		$wpdb->prepare(
+			"SELECT dr.restriction_name
+			FROM {$wpdb->prefix}remember_dietary_restrictions dr
+			INNER JOIN {$wpdb->prefix}remember_member_dietary_restrictions mdr ON dr.restriction_id = mdr.restriction_id
+			WHERE mdr.member_id = %d
+			ORDER BY dr.sort_order ASC, dr.restriction_name ASC",
+			$user->ID
+		)
+	);
+}
+if ( ! empty( $selected_medical_ids ) ) {
+	$selected_medical_names = $wpdb->get_col(
+		$wpdb->prepare(
+			"SELECT ma.accommodation_name
+			FROM {$wpdb->prefix}remember_medical_accommodations ma
+			INNER JOIN {$wpdb->prefix}remember_member_medical_accommodations mma ON ma.accommodation_id = mma.accommodation_id
+			WHERE mma.member_id = %d
+			ORDER BY ma.sort_order ASC, ma.accommodation_name ASC",
+			$user->ID
+		)
+	);
+}
+if ( ! empty( $selected_allergy_ids ) ) {
+	$selected_allergy_names = $wpdb->get_col(
+		$wpdb->prepare(
+			"SELECT a.allergy_name
+			FROM {$wpdb->prefix}remember_allergies a
+			INNER JOIN {$wpdb->prefix}remember_member_allergies ma ON a.allergy_id = ma.allergy_id
+			WHERE ma.member_id = %d
+			ORDER BY a.sort_order ASC, a.allergy_name ASC",
+			$user->ID
+		)
+	);
+}
 ?>
 
 <div class="remember-profile">
 	<?php if ( $is_edit ) : ?>
+		<?php
+		$photo_error_notice = get_transient( 'remember_profile_photo_error_' . $user->ID );
+		if ( $photo_error_notice ) {
+			delete_transient( 'remember_profile_photo_error_' . $user->ID );
+		}
+		// Refresh member so photo preview reflects latest save.
+		$member = $member_model->get( $user->ID );
+		?>
 		<div class="remember-profile-edit-header">
 			<h2><?php esc_html_e( 'Edit Profile', 'remember' ); ?></h2>
 		</div>
-		<form method="post" action="" class="remember-profile-form-modern">
+		<?php if ( $photo_error_notice ) : ?>
+			<div class="remember-notice remember-error" role="alert">
+				<p><?php echo esc_html( $photo_error_notice ); ?></p>
+			</div>
+		<?php endif; ?>
+		<form method="post" action="" class="remember-profile-form-modern" enctype="multipart/form-data">
 			<?php wp_nonce_field( 'remember_profile_action', 'remember_profile_nonce' ); ?>
 			<input type="hidden" name="remember_profile_action" value="update">
+
+			<div class="remember-form-section">
+				<h3 class="remember-form-section-title"><?php esc_html_e( 'Profile Photo', 'remember' ); ?></h3>
+				<p class="remember-form-help"><?php esc_html_e( 'Shown to other event participants only if you enable Share Profile Photo under Privacy Settings.', 'remember' ); ?></p>
+				<div class="remember-profile-photo-edit" data-output-size="<?php echo esc_attr( (string) $photo_max_dimensions ); ?>">
+					<div class="remember-profile-photo-current"<?php echo ( $member && ! empty( $member->photo_url ) ) ? '' : ' hidden'; ?>>
+						<?php if ( $member && ! empty( $member->photo_url ) ) : ?>
+							<div class="remember-profile-photo-preview">
+								<img src="<?php echo esc_url( $member->photo_url ); ?>" alt="<?php echo esc_attr( $user->display_name ); ?>">
+							</div>
+							<label class="remember-checkbox-label remember-profile-photo-delete">
+								<input type="checkbox" name="delete_photo" value="1" id="delete_photo">
+								<span><?php esc_html_e( 'Delete current photo', 'remember' ); ?></span>
+							</label>
+							<p class="remember-form-help"><?php esc_html_e( 'Upload a new photo to replace the current one.', 'remember' ); ?></p>
+						<?php endif; ?>
+					</div>
+
+					<div class="remember-profile-photo-cropper" hidden>
+						<div class="remember-profile-photo-cropper-viewport" aria-label="<?php esc_attr_e( 'Photo framing preview', 'remember' ); ?>">
+							<img src="" alt="" class="remember-profile-photo-cropper-image" draggable="false">
+						</div>
+						<div class="remember-profile-photo-cropper-controls">
+							<button type="button" class="remember-button remember-button-secondary remember-photo-zoom-out" aria-label="<?php esc_attr_e( 'Zoom out', 'remember' ); ?>">−</button>
+							<input type="range" class="remember-photo-zoom-range" min="1" max="3" step="0.01" value="1" aria-label="<?php esc_attr_e( 'Zoom', 'remember' ); ?>">
+							<button type="button" class="remember-button remember-button-secondary remember-photo-zoom-in" aria-label="<?php esc_attr_e( 'Zoom in', 'remember' ); ?>">+</button>
+						</div>
+						<p class="remember-form-help"><?php esc_html_e( 'Drag to recenter. Use zoom to frame the photo inside the circle. Your framing is saved when you click Save Profile.', 'remember' ); ?></p>
+						<button type="button" class="remember-button remember-button-secondary remember-photo-clear">
+							<?php esc_html_e( 'Clear selected photo', 'remember' ); ?>
+						</button>
+					</div>
+
+					<label for="photo_file" class="remember-form-label"><?php esc_html_e( 'Upload photo', 'remember' ); ?></label>
+					<input type="file" id="photo_file" name="photo_file" class="remember-form-control remember-form-control-file" accept="image/jpeg,image/png,image/gif">
+					<p class="remember-form-help">
+						<?php
+						echo esc_html(
+							sprintf(
+								/* translators: 1: max dimension in px, 2: max file size in MB */
+								__( 'Square crop from your framing, max %1$dpx. Maximum file size %2$d MB. JPEG, PNG, or GIF.', 'remember' ),
+								$photo_max_dimensions,
+								(int) max( 1, round( $photo_max_bytes / 1024 / 1024 ) )
+							)
+						);
+						?>
+					</p>
+				</div>
+			</div>
 
 			<div class="remember-form-section">
 				<h3 class="remember-form-section-title"><?php esc_html_e( 'Public Identity', 'remember' ); ?></h3>
@@ -342,6 +577,56 @@ if ( $current_display && ! in_array( $current_display, $display_choices, true ) 
 				<?php endfor; ?>
 			</div>
 
+			<?php if ( ! empty( $dietary_restrictions ) ) : ?>
+				<div class="remember-form-section">
+					<h3 class="remember-form-section-title"><?php esc_html_e( 'Dietary Restrictions', 'remember' ); ?></h3>
+					<p class="remember-form-help"><?php esc_html_e( 'Select any that apply. Used by event organizers — not shown to other participants.', 'remember' ); ?></p>
+					<div class="remember-checkbox-grid">
+						<?php foreach ( $dietary_restrictions as $restriction ) : ?>
+							<label class="remember-checkbox-label">
+								<input type="checkbox" name="dietary_restrictions[]" value="<?php echo esc_attr( $restriction->restriction_id ); ?>" <?php checked( in_array( (string) $restriction->restriction_id, array_map( 'strval', (array) $selected_dietary_ids ), true ) ); ?>>
+								<span><?php echo esc_html( $restriction->restriction_name ); ?></span>
+							</label>
+						<?php endforeach; ?>
+					</div>
+				</div>
+			<?php endif; ?>
+
+			<?php if ( ! empty( $medical_accommodations ) ) : ?>
+				<div class="remember-form-section">
+					<h3 class="remember-form-section-title"><?php esc_html_e( 'Medical Accommodations', 'remember' ); ?></h3>
+					<p class="remember-form-help"><?php esc_html_e( 'Select any that apply. Used by event organizers — not shown to other participants.', 'remember' ); ?></p>
+					<div class="remember-checkbox-grid">
+						<?php foreach ( $medical_accommodations as $accommodation ) : ?>
+							<label class="remember-checkbox-label">
+								<input type="checkbox" name="medical_accommodations[]" value="<?php echo esc_attr( $accommodation->accommodation_id ); ?>" <?php checked( in_array( (string) $accommodation->accommodation_id, array_map( 'strval', (array) $selected_medical_ids ), true ) ); ?>>
+								<span>
+									<?php echo esc_html( $accommodation->accommodation_name ); ?>
+									<?php if ( ! empty( $accommodation->description ) ) : ?>
+										<span class="remember-form-help" style="display:inline; margin-left:0.35em;">— <?php echo esc_html( $accommodation->description ); ?></span>
+									<?php endif; ?>
+								</span>
+							</label>
+						<?php endforeach; ?>
+					</div>
+				</div>
+			<?php endif; ?>
+
+			<?php if ( ! empty( $allergies ) ) : ?>
+				<div class="remember-form-section">
+					<h3 class="remember-form-section-title"><?php esc_html_e( 'Known Allergies', 'remember' ); ?></h3>
+					<p class="remember-form-help"><?php esc_html_e( 'Select any that apply. Used by event organizers — not shown to other participants.', 'remember' ); ?></p>
+					<div class="remember-checkbox-grid">
+						<?php foreach ( $allergies as $allergy ) : ?>
+							<label class="remember-checkbox-label">
+								<input type="checkbox" name="allergies[]" value="<?php echo esc_attr( $allergy->allergy_id ); ?>" <?php checked( in_array( (string) $allergy->allergy_id, array_map( 'strval', (array) $selected_allergy_ids ), true ) ); ?>>
+								<span><?php echo esc_html( $allergy->allergy_name ); ?></span>
+							</label>
+						<?php endforeach; ?>
+					</div>
+				</div>
+			<?php endif; ?>
+
 			<div class="remember-form-section">
 				<h3 class="remember-form-section-title"><?php esc_html_e( 'Instant Messenger', 'remember' ); ?></h3>
 				<div class="remember-form-row">
@@ -403,8 +688,12 @@ if ( $current_display && ! in_array( $current_display, $display_choices, true ) 
 
 			<div class="remember-form-section">
 				<h3 class="remember-form-section-title"><?php esc_html_e( 'Privacy Settings', 'remember' ); ?></h3>
-				<p class="remember-form-help"><?php esc_html_e( 'Control what contact information is shared with other members when you are accepted into events.', 'remember' ); ?></p>
+				<p class="remember-form-help"><?php esc_html_e( 'Control what is shared with other members when you are accepted into events.', 'remember' ); ?></p>
 				<div class="remember-privacy-checkboxes">
+					<label class="remember-checkbox-label">
+						<input type="checkbox" name="share_photo_with_events" value="1" <?php checked( $profile && isset( $profile->share_photo_with_events ) ? $profile->share_photo_with_events : 0, 1 ); ?>>
+						<span><?php esc_html_e( 'Share Profile Photo', 'remember' ); ?></span>
+					</label>
 					<label class="remember-checkbox-label">
 						<input type="checkbox" name="share_email_with_events" value="1" <?php checked( $profile && isset( $profile->share_email_with_events ) ? $profile->share_email_with_events : 0, 1 ); ?>>
 						<span><?php esc_html_e( 'Share Email Address', 'remember' ); ?></span>
@@ -438,7 +727,15 @@ if ( $current_display && ! in_array( $current_display, $display_choices, true ) 
 			</div>
 		</form>
 	<?php else : ?>
+		<?php
+		$member = $member_model->get( $user->ID );
+		?>
 		<div class="remember-profile-edit-header">
+			<?php if ( $member && ! empty( $member->photo_url ) ) : ?>
+				<div class="remember-profile-photo-preview remember-profile-photo-preview--header">
+					<img src="<?php echo esc_url( $member->photo_url ); ?>" alt="<?php echo esc_attr( $user->display_name ); ?>">
+				</div>
+			<?php endif; ?>
 			<h2><?php echo esc_html( $user->display_name ); ?></h2>
 			<a href="<?php echo esc_url( add_query_arg( 'edit', '1' ) ); ?>" class="remember-button remember-button-primary">
 				<?php esc_html_e( 'Edit Profile', 'remember' ); ?>
@@ -553,6 +850,27 @@ if ( $current_display && ! in_array( $current_display, $display_choices, true ) 
 						</div>
 					</div>
 				<?php endif; ?>
+
+				<div class="remember-form-section">
+					<h3 class="remember-form-section-title"><?php esc_html_e( 'Dietary Restrictions', 'remember' ); ?></h3>
+					<div class="remember-profile-view-item remember-profile-view-item-full">
+						<span class="remember-profile-view-value"><?php echo esc_html( ! empty( $selected_dietary_names ) ? implode( ', ', $selected_dietary_names ) : __( 'None Selected', 'remember' ) ); ?></span>
+					</div>
+				</div>
+
+				<div class="remember-form-section">
+					<h3 class="remember-form-section-title"><?php esc_html_e( 'Medical Accommodations', 'remember' ); ?></h3>
+					<div class="remember-profile-view-item remember-profile-view-item-full">
+						<span class="remember-profile-view-value"><?php echo esc_html( ! empty( $selected_medical_names ) ? implode( ', ', $selected_medical_names ) : __( 'None Selected', 'remember' ) ); ?></span>
+					</div>
+				</div>
+
+				<div class="remember-form-section">
+					<h3 class="remember-form-section-title"><?php esc_html_e( 'Known Allergies', 'remember' ); ?></h3>
+					<div class="remember-profile-view-item remember-profile-view-item-full">
+						<span class="remember-profile-view-value"><?php echo esc_html( ! empty( $selected_allergy_names ) ? implode( ', ', $selected_allergy_names ) : __( 'None Selected', 'remember' ) ); ?></span>
+					</div>
+				</div>
 
 				<?php if ( ! empty( $profile->im_handle ) ) : ?>
 					<div class="remember-form-section">

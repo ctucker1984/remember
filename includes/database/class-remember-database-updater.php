@@ -487,6 +487,33 @@ class Remember_Database_Updater {
 			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.14.0' ) );
 		}
 
+		// Update to 1.15.0 — share profile photo with event members (privacy toggle).
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.15.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.15.0' ) );
+
+			$profiles_table = $wpdb->prefix . 'remember_member_profiles';
+			$table_exists   = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $profiles_table ) ) === $profiles_table;
+			if ( $table_exists ) {
+				$columns = $wpdb->get_col( "SHOW COLUMNS FROM {$profiles_table}", 0 );
+				if ( is_array( $columns ) && ! in_array( 'share_photo_with_events', $columns, true ) ) {
+					$ok = $wpdb->query(
+						"ALTER TABLE {$profiles_table} ADD COLUMN share_photo_with_events TINYINT(1) DEFAULT 0 AFTER share_interests_with_events"
+					);
+					if ( false === $ok ) {
+						Remember_Logger::error(
+							'Failed to add share_photo_with_events to member_profiles',
+							array( 'error' => $wpdb->last_error )
+						);
+					} else {
+						Remember_Logger::info( 'Added share_photo_with_events to member_profiles' );
+					}
+				}
+			}
+
+			update_option( 'remember_db_version', '1.15.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.15.0' ) );
+		}
+
 		Remember_Logger::activation_debug(
 			'update_schema: exit',
 			array( 'remember_db_version' => get_option( 'remember_db_version', '0.0.0' ) )
