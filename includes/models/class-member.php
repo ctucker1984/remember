@@ -278,4 +278,83 @@ class Remember_Member extends Remember_Base_Model {
 
 		return $this->wpdb->get_results( $query );
 	}
+
+	/**
+	 * Build public display-name choices (mirrors WordPress core profile behavior).
+	 *
+	 * @param WP_User     $user     User object.
+	 * @param string|null $nickname Optional nickname override (defaults to user meta).
+	 * @return array Unique display name strings suitable for a select list.
+	 */
+	public static function get_public_display_name_choices( $user, $nickname = null ) {
+		if ( ! $user instanceof WP_User ) {
+			return array();
+		}
+
+		if ( null === $nickname ) {
+			$nickname = get_user_meta( $user->ID, 'nickname', true );
+		}
+		$nickname   = is_string( $nickname ) ? trim( $nickname ) : '';
+		$first_name = trim( (string) $user->first_name );
+		$last_name  = trim( (string) $user->last_name );
+
+		$choices = array();
+		if ( '' !== $nickname ) {
+			$choices[] = $nickname;
+		}
+		if ( ! empty( $user->user_login ) ) {
+			$choices[] = $user->user_login;
+		}
+		if ( '' !== $first_name ) {
+			$choices[] = $first_name;
+		}
+		if ( '' !== $last_name ) {
+			$choices[] = $last_name;
+		}
+		if ( '' !== $first_name && '' !== $last_name ) {
+			$choices[] = trim( $first_name . ' ' . $last_name );
+			$choices[] = trim( $last_name . ' ' . $first_name );
+		}
+		if ( ! empty( $user->display_name ) ) {
+			$choices[] = $user->display_name;
+		}
+
+		$choices = array_values( array_unique( array_filter( $choices, 'strlen' ) ) );
+
+		/**
+		 * Filter public display name choices for profile editing.
+		 *
+		 * @param array   $choices Display name options.
+		 * @param WP_User $user    User object.
+		 */
+		return apply_filters( 'remember_public_display_name_choices', $choices, $user );
+	}
+
+	/**
+	 * Resolve a submitted display name against allowed public choices.
+	 *
+	 * @param WP_User $user               User object (with updated first/last if already applied).
+	 * @param string  $nickname           Nickname to use when building choices.
+	 * @param string  $requested_display  Requested display name.
+	 * @return string Safe display name.
+	 */
+	public static function resolve_public_display_name( $user, $nickname, $requested_display ) {
+		$choices  = self::get_public_display_name_choices( $user, $nickname );
+		$requested = is_string( $requested_display ) ? trim( $requested_display ) : '';
+
+		if ( '' !== $requested && in_array( $requested, $choices, true ) ) {
+			return $requested;
+		}
+
+		$nickname = is_string( $nickname ) ? trim( $nickname ) : '';
+		if ( '' !== $nickname ) {
+			return $nickname;
+		}
+
+		if ( ! empty( $user->user_login ) ) {
+			return $user->user_login;
+		}
+
+		return ! empty( $user->display_name ) ? $user->display_name : '';
+	}
 }

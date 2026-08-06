@@ -70,6 +70,15 @@
 	outline: 2px solid transparent;
 }
 
+.remember-register-form .remember-register-help {
+	grid-column: 2;
+	margin: 0.25rem 0 0;
+	font-size: 0.875rem;
+	line-height: 1.4;
+	color: #646970;
+	max-width: 28rem;
+}
+
 .remember-register-form .remember-register-row--actions {
 	margin-bottom: 0;
 	margin-top: 0.25rem;
@@ -132,6 +141,11 @@
 	}
 
 	.remember-register-form .remember-register-input {
+		max-width: none;
+	}
+
+	.remember-register-form .remember-register-help {
+		grid-column: 1;
 		max-width: none;
 	}
 }

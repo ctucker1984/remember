@@ -437,23 +437,6 @@ class Remember_Import_Export {
 	}
 
 	/**
-	 * Split a full display string into first + last (first word / remainder).
-	 *
-	 * @param string $display Display name.
-	 * @return array Two strings: first name, last name.
-	 */
-	private static function member_import_split_display_name( $display ) {
-		$display = trim( preg_replace( '/\s+/', ' ', (string) $display ) );
-		if ( '' === $display ) {
-			return array( '', '' );
-		}
-		$parts = explode( ' ', $display, 2 );
-		$first = $parts[0];
-		$last  = isset( $parts[1] ) ? trim( $parts[1] ) : '';
-		return array( $first, $last );
-	}
-
-	/**
 	 * Legal names from CSV + WordPress user when placeholders appear in the sheet.
 	 *
 	 * @param array    $row_data Row keyed by CSV header.
@@ -465,21 +448,12 @@ class Remember_Import_Export {
 		$legal_last  = self::member_import_normalize_csv_name( $row_data['Legal Last Name'] ?? '' );
 		$first       = self::member_import_normalize_csv_name( $row_data['First Name'] ?? '' );
 		$last        = self::member_import_normalize_csv_name( $row_data['Last Name'] ?? '' );
-		$display_raw = isset( $row_data['Display Name'] ) ? trim( (string) $row_data['Display Name'] ) : '';
-		list( $disp_first, $disp_last ) = self::member_import_split_display_name( $display_raw );
 
 		if ( self::member_import_is_placeholder_name( $legal_first ) ) {
 			$legal_first = $first;
 		}
 		if ( self::member_import_is_placeholder_name( $legal_last ) ) {
 			$legal_last = $last;
-		}
-
-		if ( self::member_import_is_placeholder_name( $legal_first ) ) {
-			$legal_first = $disp_first;
-		}
-		if ( self::member_import_is_placeholder_name( $legal_last ) ) {
-			$legal_last = $disp_last;
 		}
 
 		if ( $user_id ) {
@@ -495,20 +469,9 @@ class Remember_Import_Export {
 					$legal_last = $meta_last;
 				}
 			}
-			if ( self::member_import_is_placeholder_name( $legal_first ) || self::member_import_is_placeholder_name( $legal_last ) ) {
-				$ud = get_userdata( $user_id );
-				if ( $ud && ! empty( $ud->display_name ) ) {
-					list( $df, $dl ) = self::member_import_split_display_name( $ud->display_name );
-					if ( self::member_import_is_placeholder_name( $legal_first ) && ! self::member_import_is_placeholder_name( $df ) ) {
-						$legal_first = $df;
-					}
-					if ( self::member_import_is_placeholder_name( $legal_last ) && ! self::member_import_is_placeholder_name( $dl ) ) {
-						$legal_last = $dl;
-					}
-				}
-			}
 		}
 
+		// Never derive legal name from display_name — public identity is separate.
 		if ( self::member_import_is_placeholder_name( $legal_first ) ) {
 			$legal_first = '';
 		}
@@ -542,19 +505,9 @@ class Remember_Import_Export {
 		if ( self::member_import_is_placeholder_name( $last ) ) {
 			$last = trim( (string) get_user_meta( $user_id, 'last_name', true ) );
 		}
-		if ( self::member_import_is_placeholder_name( $first ) || self::member_import_is_placeholder_name( $last ) ) {
-			$ud = get_userdata( $user_id );
-			if ( $ud && ! empty( $ud->display_name ) ) {
-				list( $df, $dl ) = self::member_import_split_display_name( $ud->display_name );
-				if ( self::member_import_is_placeholder_name( $first ) && ! self::member_import_is_placeholder_name( $df ) ) {
-					$first = $df;
-				}
-				if ( self::member_import_is_placeholder_name( $last ) && ! self::member_import_is_placeholder_name( $dl ) ) {
-					$last = $dl;
-				}
-			}
-		}
 
+		// Do not fall back to display_name: that field is the member's public identity
+		// and must not be treated as a legal-name substitute.
 		if ( self::member_import_is_placeholder_name( $first ) ) {
 			$first = '';
 		}

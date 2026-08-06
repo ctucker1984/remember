@@ -108,14 +108,15 @@ class Remember_Public {
 			$this->redirect_member_registration( 'invalid_nonce' );
 		}
 
-		$username   = isset( $_POST['remember_reg_username'] ) ? sanitize_user( wp_unslash( $_POST['remember_reg_username'] ), true ) : '';
-		$first_name = isset( $_POST['remember_reg_first_name'] ) ? sanitize_text_field( wp_unslash( $_POST['remember_reg_first_name'] ) ) : '';
-		$last_name  = isset( $_POST['remember_reg_last_name'] ) ? sanitize_text_field( wp_unslash( $_POST['remember_reg_last_name'] ) ) : '';
-		$email      = isset( $_POST['remember_reg_email'] ) ? sanitize_email( wp_unslash( $_POST['remember_reg_email'] ) ) : '';
-		$password   = isset( $_POST['remember_reg_password'] ) ? wp_unslash( $_POST['remember_reg_password'] ) : '';
+		$username     = isset( $_POST['remember_reg_username'] ) ? sanitize_user( wp_unslash( $_POST['remember_reg_username'] ), true ) : '';
+		$display_name = isset( $_POST['remember_reg_display_name'] ) ? sanitize_text_field( wp_unslash( $_POST['remember_reg_display_name'] ) ) : '';
+		$first_name   = isset( $_POST['remember_reg_first_name'] ) ? sanitize_text_field( wp_unslash( $_POST['remember_reg_first_name'] ) ) : '';
+		$last_name    = isset( $_POST['remember_reg_last_name'] ) ? sanitize_text_field( wp_unslash( $_POST['remember_reg_last_name'] ) ) : '';
+		$email        = isset( $_POST['remember_reg_email'] ) ? sanitize_email( wp_unslash( $_POST['remember_reg_email'] ) ) : '';
+		$password     = isset( $_POST['remember_reg_password'] ) ? wp_unslash( $_POST['remember_reg_password'] ) : '';
 		$password_confirm = isset( $_POST['remember_reg_password_confirm'] ) ? wp_unslash( $_POST['remember_reg_password_confirm'] ) : '';
 
-		if ( '' === $username || '' === $first_name || '' === $last_name || '' === $email || '' === $password || '' === $password_confirm ) {
+		if ( '' === $username || '' === $display_name || '' === $first_name || '' === $last_name || '' === $email || '' === $password || '' === $password_confirm ) {
 			$this->redirect_member_registration( 'missing_fields' );
 		}
 
@@ -160,10 +161,12 @@ class Remember_Public {
 
 		update_user_meta( $user_id, 'first_name', $first_name );
 		update_user_meta( $user_id, 'last_name', $last_name );
+		update_user_meta( $user_id, 'nickname', $display_name );
 		wp_update_user(
 			array(
 				'ID'           => $user_id,
-				'display_name' => trim( $first_name . ' ' . $last_name ),
+				'display_name' => $display_name,
+				'nickname'     => $display_name,
 			)
 		);
 

@@ -100,7 +100,7 @@ class Remember_FSE {
 			'remember/member-register',
 			array(
 				'title'       => __( 'Member registration', 'remember' ),
-				'description' => __( 'Minimal form: username, legal name, email, password. Creates a WordPress user and reMember member record.', 'remember' ),
+				'description' => __( 'Minimal form: username, display name, legal name, email, password. Creates a WordPress user and reMember member record.', 'remember' ),
 				'categories'  => array( 'remember' ),
 				'content'     => '<!-- wp:group {"className":"remember-register-container"} -->
 <div class="wp-block-group remember-register-container"><!-- wp:heading {"level":2} -->

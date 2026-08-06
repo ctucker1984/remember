@@ -71,13 +71,36 @@ if ( isset( $_POST['remember_profile_action'] ) && check_admin_referer( 'remembe
 		$wpdb->insert( $wpdb->prefix . 'remember_member_profiles', $profile_data );
 	}
 
-	// Update WordPress user meta
+	// Update WordPress name meta (legal names feed the public display-name choices).
 	if ( ! empty( $profile_data['legal_first_name'] ) ) {
 		update_user_meta( $user->ID, 'first_name', $profile_data['legal_first_name'] );
 	}
 	if ( ! empty( $profile_data['legal_last_name'] ) ) {
 		update_user_meta( $user->ID, 'last_name', $profile_data['legal_last_name'] );
 	}
+
+	// Nickname (WP user meta) + public display_name — never auto-derived from legal name.
+	$nickname = isset( $_POST['nickname'] ) ? sanitize_text_field( wp_unslash( $_POST['nickname'] ) ) : '';
+	if ( '' === $nickname ) {
+		$nickname = ! empty( $user->user_login ) ? $user->user_login : $user->display_name;
+	}
+	update_user_meta( $user->ID, 'nickname', $nickname );
+
+	// Refresh user object so display-name choices include updated first/last/nickname.
+	$user = new WP_User( $user->ID );
+	$user->first_name = $profile_data['legal_first_name'];
+	$user->last_name  = $profile_data['legal_last_name'];
+
+	$requested_display = isset( $_POST['display_name'] ) ? sanitize_text_field( wp_unslash( $_POST['display_name'] ) ) : '';
+	$safe_display      = Remember_Member::resolve_public_display_name( $user, $nickname, $requested_display );
+
+	wp_update_user(
+		array(
+			'ID'           => $user->ID,
+			'display_name' => $safe_display,
+			'nickname'     => $nickname,
+		)
+	);
 	
 	// Save timezone to WP user meta (not member_profiles)
 	if ( isset( $_POST['timezone_string'] ) ) {
@@ -156,6 +179,18 @@ $social_profiles = array();
 for ( $i = 0; $i < 3; $i++ ) {
 	$social_profiles[ $i ] = isset( $existing_social[ $i ] ) ? $existing_social[ $i ] : null;
 }
+
+// Public identity fields (WordPress nickname + display_name).
+$user            = new WP_User( $user->ID );
+$nickname_value  = get_user_meta( $user->ID, 'nickname', true );
+if ( '' === (string) $nickname_value ) {
+	$nickname_value = $user->user_login;
+}
+$display_choices = Remember_Member::get_public_display_name_choices( $user, $nickname_value );
+$current_display = $user->display_name;
+if ( $current_display && ! in_array( $current_display, $display_choices, true ) ) {
+	$display_choices[] = $current_display;
+}
 ?>
 
 <div class="remember-profile">
@@ -168,7 +203,38 @@ for ( $i = 0; $i < 3; $i++ ) {
 			<input type="hidden" name="remember_profile_action" value="update">
 
 			<div class="remember-form-section">
+				<h3 class="remember-form-section-title"><?php esc_html_e( 'Public Identity', 'remember' ); ?></h3>
+				<p class="remember-form-help"><?php esc_html_e( 'These fields control how you appear to other members. Your legal name is never used here unless you choose it.', 'remember' ); ?></p>
+				<div class="remember-form-row">
+					<div class="remember-form-col">
+						<label for="nickname" class="remember-form-label">
+							<?php esc_html_e( 'Nickname', 'remember' ); ?>
+							<span class="remember-required">*</span>
+						</label>
+						<input type="text" id="nickname" name="nickname" class="remember-form-control" required
+							value="<?php echo esc_attr( $nickname_value ); ?>">
+						<p class="remember-form-help"><?php esc_html_e( 'WordPress nickname — available as a public display option.', 'remember' ); ?></p>
+					</div>
+					<div class="remember-form-col">
+						<label for="display_name" class="remember-form-label">
+							<?php esc_html_e( 'Display name publicly as', 'remember' ); ?>
+							<span class="remember-required">*</span>
+						</label>
+						<select id="display_name" name="display_name" class="remember-form-control" required>
+							<?php foreach ( $display_choices as $choice ) : ?>
+								<option value="<?php echo esc_attr( $choice ); ?>" <?php selected( $current_display, $choice ); ?>>
+									<?php echo esc_html( $choice ); ?>
+								</option>
+							<?php endforeach; ?>
+						</select>
+						<p class="remember-form-help"><?php esc_html_e( 'Shown in directories, dashboards, and other member-facing views.', 'remember' ); ?></p>
+					</div>
+				</div>
+			</div>
+
+			<div class="remember-form-section">
 				<h3 class="remember-form-section-title"><?php esc_html_e( 'Basic Information', 'remember' ); ?></h3>
+				<p class="remember-form-help"><?php esc_html_e( 'Legal name is for admin and vetting only — not shown to other members.', 'remember' ); ?></p>
 				<div class="remember-form-row">
 					<div class="remember-form-col">
 						<label for="legal_first_name" class="remember-form-label">
@@ -384,12 +450,20 @@ for ( $i = 0; $i < 3; $i++ ) {
 				<div class="remember-form-section">
 					<h3 class="remember-form-section-title"><?php esc_html_e( 'Basic Information', 'remember' ); ?></h3>
 					<div class="remember-profile-view-grid">
+						<div class="remember-profile-view-item">
+							<strong class="remember-profile-view-label"><?php esc_html_e( 'Nickname', 'remember' ); ?></strong>
+							<span class="remember-profile-view-value"><?php echo esc_html( $nickname_value ); ?></span>
+						</div>
+						<div class="remember-profile-view-item">
+							<strong class="remember-profile-view-label"><?php esc_html_e( 'Display Name', 'remember' ); ?></strong>
+							<span class="remember-profile-view-value"><?php echo esc_html( $user->display_name ); ?></span>
+						</div>
 						<?php
 						$remember_legal_name_line = trim( Remember_Import_Export::member_list_legal_name_line( $profile, (int) $user->ID ) );
 						if ( ! empty( $remember_legal_name_line ) ) :
 							?>
 							<div class="remember-profile-view-item">
-								<strong class="remember-profile-view-label"><?php esc_html_e( 'Legal Name', 'remember' ); ?></strong>
+								<strong class="remember-profile-view-label"><?php esc_html_e( 'Legal Name (private)', 'remember' ); ?></strong>
 								<span class="remember-profile-view-value"><?php echo esc_html( $remember_legal_name_line ); ?></span>
 							</div>
 						<?php endif; ?>

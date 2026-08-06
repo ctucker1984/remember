@@ -33,7 +33,7 @@ class Remember_Page_Creator {
 				'slug'        => 'member-register',
 				'content'     => '<!-- wp:shortcode -->[remember_register]<!-- /wp:shortcode -->',
 				'shortcode'   => '[remember_register]',
-				'description' => __( 'Sign up for a member account (username, legal name, email, password). Works when Settings → General → Membership is off.', 'remember' ),
+				'description' => __( 'Sign up for a member account (username, display name, legal name, email, password). Works when Settings → General → Membership is off.', 'remember' ),
 			),
 			'member_dashboard' => array(
 				'title'   => __( 'Member Dashboard', 'remember' ),

@@ -318,7 +318,7 @@ foreach ( $selected_application_addons as $selected_addon_row ) {
 						if ( ! empty( $remember_legal_name_line ) ) :
 							?>
 							<span class="remember-header-info-item">
-								<strong><?php esc_html_e( 'Legal Name:', 'remember' ); ?></strong>
+								<strong><?php esc_html_e( 'Legal Name (private):', 'remember' ); ?></strong>
 								<?php echo esc_html( $remember_legal_name_line ); ?>
 							</span>
 						<?php endif; ?>

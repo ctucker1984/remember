@@ -53,16 +53,24 @@ if ( $remember_pw_min < 1 ) {
 			<div class="remember-register-row">
 				<label for="remember_reg_username"><?php esc_html_e( 'Username', 'remember' ); ?> <span class="required">*</span></label>
 				<input type="text" name="remember_reg_username" id="remember_reg_username" required autocomplete="username" class="remember-register-input" value="<?php echo isset( $_POST['remember_reg_username'] ) ? esc_attr( sanitize_text_field( wp_unslash( $_POST['remember_reg_username'] ) ) ) : ''; ?>" />
+				<p class="remember-register-help"><?php esc_html_e( 'Used to log into the website. Usernames cannot be changed later.', 'remember' ); ?></p>
 			</div>
 
 			<div class="remember-register-row">
-				<label for="remember_reg_first_name"><?php esc_html_e( 'First Name', 'remember' ); ?> <span class="required">*</span></label>
+				<label for="remember_reg_display_name"><?php esc_html_e( 'Display Name', 'remember' ); ?> <span class="required">*</span></label>
+				<input type="text" name="remember_reg_display_name" id="remember_reg_display_name" required autocomplete="nickname" class="remember-register-input" value="<?php echo isset( $_POST['remember_reg_display_name'] ) ? esc_attr( sanitize_text_field( wp_unslash( $_POST['remember_reg_display_name'] ) ) ) : ''; ?>" />
+				<p class="remember-register-help"><?php esc_html_e( 'How you appear to other members. This is never set from your legal name unless you manually change it later.', 'remember' ); ?></p>
+			</div>
+
+			<div class="remember-register-row">
+				<label for="remember_reg_first_name"><?php esc_html_e( 'Legal First Name', 'remember' ); ?> <span class="required">*</span></label>
 				<input type="text" name="remember_reg_first_name" id="remember_reg_first_name" required autocomplete="given-name" class="remember-register-input" value="<?php echo isset( $_POST['remember_reg_first_name'] ) ? esc_attr( sanitize_text_field( wp_unslash( $_POST['remember_reg_first_name'] ) ) ) : ''; ?>" />
 			</div>
 
 			<div class="remember-register-row">
-				<label for="remember_reg_last_name"><?php esc_html_e( 'Last Name', 'remember' ); ?> <span class="required">*</span></label>
+				<label for="remember_reg_last_name"><?php esc_html_e( 'Legal Last Name', 'remember' ); ?> <span class="required">*</span></label>
 				<input type="text" name="remember_reg_last_name" id="remember_reg_last_name" required autocomplete="family-name" class="remember-register-input" value="<?php echo isset( $_POST['remember_reg_last_name'] ) ? esc_attr( sanitize_text_field( wp_unslash( $_POST['remember_reg_last_name'] ) ) ) : ''; ?>" />
+				<p class="remember-register-help"><?php esc_html_e( 'Used for admin and vetting only — not shown to other members.', 'remember' ); ?></p>
 			</div>
 
 			<div class="remember-register-row">
