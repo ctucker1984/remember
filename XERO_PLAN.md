@@ -1,6 +1,6 @@
 # Xero Billing Integration Plan
 
-**Status:** Phase 1 complete (OAuth Connect verified on demo) — Phase 2 next (contacts / items / invoices)  
+**Status:** Phase 2 in progress — contact sync + item mapping done; invoices next  
 **Branch:** `v1.1.0`  
 **Decision date:** 2026-08-05  
 **Redirect URI (demo example):** built at runtime with WordPress `admin_url()` — not hard-coded. On each site it becomes  

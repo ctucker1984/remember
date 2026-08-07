@@ -212,6 +212,43 @@ if ( isset( $_POST['remember_settings_action'] ) && 'save_qb_item_mappings' === 
 	echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'QuickBooks mappings saved successfully.', 'remember' ) . '</p></div>';
 }
 
+// Handle Xero item mapping save (roles + catalog products; must run outside nested forms).
+if ( isset( $_POST['remember_settings_action'] ) && 'save_xero_item_mappings' === $_POST['remember_settings_action'] && check_admin_referer( 'remember_settings_action', 'remember_settings_nonce' ) ) {
+	require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-remember-xero-item-mapping.php';
+	require_once plugin_dir_path( __FILE__ ) . '../../includes/integrations/class-remember-xero-api.php';
+	$mapping_model   = new Remember_Xero_Item_Mapping();
+	$xero_items      = Remember_Xero_API::get_items();
+	$xero_names_by_id = array();
+	if ( ! is_wp_error( $xero_items ) ) {
+		foreach ( $xero_items as $item ) {
+			if ( ! empty( $item['ItemID'] ) ) {
+				$xero_names_by_id[ (string) $item['ItemID'] ] = isset( $item['Name'] ) ? (string) $item['Name'] : '';
+			}
+		}
+	}
+	if ( isset( $_POST['role_xero_mappings'] ) && is_array( $_POST['role_xero_mappings'] ) ) {
+		foreach ( $_POST['role_xero_mappings'] as $role_id => $xero_id ) {
+			$role_id = absint( $role_id );
+			$xero_id = isset( $xero_id ) ? sanitize_text_field( wp_unslash( $xero_id ) ) : '';
+			$xero_name = ( '' !== $xero_id && isset( $xero_names_by_id[ $xero_id ] ) ) ? $xero_names_by_id[ $xero_id ] : null;
+			if ( $role_id > 0 ) {
+				$mapping_model->upsert( 'role', $role_id, $xero_id, $xero_name );
+			}
+		}
+	}
+	if ( isset( $_POST['product_xero_mappings'] ) && is_array( $_POST['product_xero_mappings'] ) ) {
+		foreach ( $_POST['product_xero_mappings'] as $product_id => $xero_id ) {
+			$product_id = absint( $product_id );
+			$xero_id    = isset( $xero_id ) ? sanitize_text_field( wp_unslash( $xero_id ) ) : '';
+			$xero_name  = ( '' !== $xero_id && isset( $xero_names_by_id[ $xero_id ] ) ) ? $xero_names_by_id[ $xero_id ] : null;
+			if ( $product_id > 0 ) {
+				$mapping_model->upsert( 'product', $product_id, $xero_id, $xero_name );
+			}
+		}
+	}
+	echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Xero mappings saved successfully.', 'remember' ) . '</p></div>';
+}
+
 // Handle form submissions
 if ( isset( $_POST['remember_settings_action'] ) && check_admin_referer( 'remember_settings_action', 'remember_settings_nonce' ) ) {
 	$action = sanitize_text_field( $_POST['remember_settings_action'] );
@@ -1258,9 +1295,153 @@ $social_platforms = $wpdb->get_results(
 				<?php endif; ?>
 			<?php endif; ?>
 
-			<p class="description" style="margin-top: 2em;">
-				<?php esc_html_e( 'Item mapping, contact sync, and invoice creation will appear here in a later update.', 'remember' ); ?>
-			</p>
+			<?php if ( $xero_connected ) :
+				require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-product.php';
+				require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-role.php';
+				require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-remember-xero-item-mapping.php';
+
+				if ( isset( $_POST['remember_settings_action'] ) && 'sync_xero_items' === $_POST['remember_settings_action'] && check_admin_referer( 'remember_settings_action', 'remember_settings_nonce' ) ) {
+					$xero_items_refresh = Remember_Xero_API::get_items();
+					if ( ! is_wp_error( $xero_items_refresh ) ) {
+						echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Xero items refreshed for mapping dropdowns.', 'remember' ) . '</p></div>';
+					} else {
+						echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to refresh Xero items: ', 'remember' ) . esc_html( $xero_items_refresh->get_error_message() ) . '</p></div>';
+					}
+				}
+
+				$xero_product_model    = new Remember_Product();
+				$xero_role_model       = new Remember_Role();
+				$xero_mapping_model    = new Remember_Xero_Item_Mapping();
+				$xero_event_roles      = $xero_role_model->get_event_roles();
+				$xero_catalog_products = $xero_product_model->get_active();
+				$xero_products         = array();
+				$xero_items_result     = Remember_Xero_API::get_items();
+				if ( ! is_wp_error( $xero_items_result ) ) {
+					$xero_products = $xero_items_result;
+				}
+				?>
+				<form id="remember-xero-mapping-form" method="post" action="" class="screen-reader-text" style="position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;">
+					<?php wp_nonce_field( 'remember_settings_action', 'remember_settings_nonce' ); ?>
+					<input type="hidden" name="remember_settings_action" value="save_xero_item_mappings" />
+				</form>
+				<div class="remember-xero-mapping" style="margin-top: 30px;">
+					<h3><?php esc_html_e( 'Xero line mapping', 'remember' ); ?></h3>
+					<p class="description">
+						<?php esc_html_e( 'Map each event role and each catalog add-on to a Xero Item. Role mapping uses role_id and applies to all events. Add-ons are defined under Products.', 'remember' ); ?>
+					</p>
+					<p>
+						<button type="button" class="button button-secondary" onclick="document.getElementById('sync-xero-items-form').submit();">
+							<?php esc_html_e( 'Refresh Xero item list', 'remember' ); ?>
+						</button>
+					</p>
+
+					<h4 style="margin-top: 18px;"><?php esc_html_e( 'Event roles', 'remember' ); ?></h4>
+					<?php if ( ! empty( $xero_event_roles ) ) : ?>
+						<table class="wp-list-table widefat fixed striped" style="margin-top: 8px;">
+							<thead>
+								<tr>
+									<th><?php esc_html_e( 'Role', 'remember' ); ?></th>
+									<th><?php esc_html_e( 'Xero item', 'remember' ); ?></th>
+									<th style="width: 110px;"><?php esc_html_e( 'Xero item ID', 'remember' ); ?></th>
+								</tr>
+							</thead>
+							<tbody>
+								<?php foreach ( $xero_event_roles as $er ) : ?>
+									<?php
+									$xm  = $xero_mapping_model->get_by_entity( 'role', $er->role_id );
+									$sel = $xm && ! empty( $xm->xero_item_id ) ? $xm->xero_item_id : '';
+									?>
+									<tr>
+										<td><strong><?php echo esc_html( $er->role_name ); ?></strong></td>
+										<td>
+											<select name="role_xero_mappings[<?php echo esc_attr( $er->role_id ); ?>]" class="regular-text" form="remember-xero-mapping-form">
+												<option value=""><?php esc_html_e( '-- Not Mapped --', 'remember' ); ?></option>
+												<?php foreach ( $xero_products as $xero_product ) : ?>
+													<option value="<?php echo esc_attr( $xero_product['ItemID'] ); ?>" <?php selected( $sel, $xero_product['ItemID'] ); ?>>
+														<?php
+														$label = isset( $xero_product['Name'] ) ? (string) $xero_product['Name'] : '';
+														if ( ! empty( $xero_product['Code'] ) ) {
+															$label .= ' [' . $xero_product['Code'] . ']';
+														}
+														echo esc_html( $label );
+														?>
+													</option>
+												<?php endforeach; ?>
+											</select>
+										</td>
+										<td><?php echo $sel ? '<code>' . esc_html( $sel ) . '</code>' : '<span class="description">—</span>'; ?></td>
+									</tr>
+								<?php endforeach; ?>
+							</tbody>
+						</table>
+					<?php else : ?>
+						<p class="description"><?php esc_html_e( 'No event roles found. Create roles under Roles.', 'remember' ); ?></p>
+					<?php endif; ?>
+
+					<h4 style="margin-top: 22px;"><?php esc_html_e( 'Product catalog (add-ons)', 'remember' ); ?></h4>
+					<p class="description">
+						<?php
+						echo wp_kses_post(
+							sprintf(
+								/* translators: %s: Products admin URL */
+								__( 'Manage catalog items on <a href="%s">Products</a>.', 'remember' ),
+								esc_url( admin_url( 'admin.php?page=remember-products' ) )
+							)
+						);
+						?>
+					</p>
+					<?php if ( ! empty( $xero_catalog_products ) ) : ?>
+						<table class="wp-list-table widefat fixed striped" style="margin-top: 8px;">
+							<thead>
+								<tr>
+									<th><?php esc_html_e( 'Product', 'remember' ); ?></th>
+									<th><?php esc_html_e( 'Xero item', 'remember' ); ?></th>
+									<th style="width: 110px;"><?php esc_html_e( 'Xero item ID', 'remember' ); ?></th>
+								</tr>
+							</thead>
+							<tbody>
+								<?php foreach ( $xero_catalog_products as $product ) : ?>
+									<?php
+									$xm  = $xero_mapping_model->get_by_entity( 'product', $product->product_id );
+									$sel = $xm && ! empty( $xm->xero_item_id ) ? $xm->xero_item_id : '';
+									?>
+									<tr>
+										<td><strong><?php echo esc_html( $product->product_name ); ?></strong></td>
+										<td>
+											<select name="product_xero_mappings[<?php echo esc_attr( $product->product_id ); ?>]" class="regular-text" form="remember-xero-mapping-form">
+												<option value=""><?php esc_html_e( '-- Not Mapped --', 'remember' ); ?></option>
+												<?php foreach ( $xero_products as $xero_product ) : ?>
+													<option value="<?php echo esc_attr( $xero_product['ItemID'] ); ?>" <?php selected( $sel, $xero_product['ItemID'] ); ?>>
+														<?php
+														$label = isset( $xero_product['Name'] ) ? (string) $xero_product['Name'] : '';
+														if ( ! empty( $xero_product['Code'] ) ) {
+															$label .= ' [' . $xero_product['Code'] . ']';
+														}
+														echo esc_html( $label );
+														?>
+													</option>
+												<?php endforeach; ?>
+											</select>
+										</td>
+										<td><?php echo $sel ? '<code>' . esc_html( $sel ) . '</code>' : '<span class="description">—</span>'; ?></td>
+									</tr>
+								<?php endforeach; ?>
+							</tbody>
+						</table>
+					<?php else : ?>
+						<p class="description"><?php esc_html_e( 'No active catalog products. Add add-ons under Products.', 'remember' ); ?></p>
+					<?php endif; ?>
+
+					<p class="submit" style="margin-bottom: 1.5em;">
+						<?php submit_button( __( 'Save Xero mappings', 'remember' ), 'primary', 'submit', false, array( 'form' => 'remember-xero-mapping-form' ) ); ?>
+					</p>
+				</div>
+
+				<form id="sync-xero-items-form" method="post" action="" style="display: none;">
+					<?php wp_nonce_field( 'remember_settings_action', 'remember_settings_nonce' ); ?>
+					<input type="hidden" name="remember_settings_action" value="sync_xero_items">
+				</form>
+			<?php endif; ?>
 
 		</div>
 

@@ -17,9 +17,6 @@ require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-logger.p
 /**
  * Xero Accounting API helpers.
  *
- * Phase 1: auth header helpers + organisation display.
- * Contact/invoice/payment methods land in later phases.
- *
  * @package    reMember
  * @subpackage reMember/includes/integrations
  */
@@ -279,5 +276,63 @@ class Remember_Xero_API {
 			return $result['Contacts'][0];
 		}
 		return new WP_Error( 'xero_contact_save_failed', __( 'Xero did not return a contact after save.', 'remember' ), $result );
+	}
+
+	/**
+	 * List Items (products/services) for the connected organisation.
+	 *
+	 * @param array $query Optional query args (e.g. where).
+	 * @return array|WP_Error List of Item arrays, or error.
+	 */
+	public static function get_items( $query = array() ) {
+		$result = self::request( 'GET', 'Items', null, $query );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		if ( empty( $result['Items'] ) || ! is_array( $result['Items'] ) ) {
+			return array();
+		}
+		return array_values( $result['Items'] );
+	}
+
+	/**
+	 * Get one Item by ItemID.
+	 *
+	 * @param string $item_id ItemID.
+	 * @return array|WP_Error Item array or error.
+	 */
+	public static function get_item( $item_id ) {
+		$item_id = trim( (string) $item_id );
+		if ( '' === $item_id ) {
+			return new WP_Error( 'invalid_item_id', __( 'Invalid Xero item ID.', 'remember' ) );
+		}
+		$result = self::request( 'GET', 'Items/' . rawurlencode( $item_id ) );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		if ( ! empty( $result['Items'][0] ) && is_array( $result['Items'][0] ) ) {
+			return $result['Items'][0];
+		}
+		return new WP_Error( 'xero_item_not_found', __( 'Xero item not found.', 'remember' ) );
+	}
+
+	/**
+	 * Find first Item whose Name matches exactly.
+	 *
+	 * @param string $name Item name.
+	 * @return array|null Item or null.
+	 */
+	public static function find_item_by_name( $name ) {
+		$name = trim( (string) $name );
+		if ( '' === $name ) {
+			return null;
+		}
+		$escaped = str_replace( '"', '""', $name );
+		$where   = 'Name=="' . $escaped . '"';
+		$result  = self::get_items( array( 'where' => $where ) );
+		if ( is_wp_error( $result ) || empty( $result[0] ) || ! is_array( $result[0] ) ) {
+			return null;
+		}
+		return $result[0];
 	}
 }
