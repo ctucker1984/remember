@@ -1,6 +1,6 @@
 # Xero Billing Integration Plan
 
-**Status:** Phase 3 in progress — payment/refund sync + register wiring; polish/docs next  
+**Status:** Phase 4 docs done — Xero write/read path verified on demo; ready for 1.1.0 ship polish when you are  
 **Branch:** `v1.1.0`  
 **Decision date:** 2026-08-05  
 **Redirect URI (demo example):** built at runtime with WordPress `admin_url()` — not hard-coded. On each site it becomes  
@@ -215,22 +215,22 @@ Redirect URI pattern (mirror QB):
 
 ### Phase 2 — Write path
 
-- Contact sync (vetted / profile saved / manual).
-- Item mapping.
-- `create_invoice_for_application` for Xero.
-- Wire accept-application dispatch.
+- [x] Contact sync (vetted / profile saved / manual).
+- [x] Item mapping.
+- [x] `create_invoice_for_application` for Xero.
+- [x] Wire accept-application dispatch.
 
 ### Phase 3 — Read / match path
 
-- `sync_payment_status` for Xero (payments + refunds/credit notes).
-- Cron + Billing sync + register display.
-- End-to-end test against sandbox.
+- [x] `sync_payment_status` for Xero (payments + refunds/credit notes).
+- [x] Cron + Billing sync + register display.
+- [x] End-to-end test against sandbox (demo).
 
 ### Phase 4 — Docs / polish
 
-- README changelog + short Settings help text.
-- Switching-provider warning copy.
-- Logging via `Remember_Logger` consistent with QBO.
+- [x] README changelog + Settings help text.
+- [x] Switching-provider warning copy.
+- [x] Logging via `Remember_Logger` consistent with QBO.
 
 ---
 

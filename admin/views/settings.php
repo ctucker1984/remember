@@ -557,7 +557,7 @@ $social_platforms = $wpdb->get_results(
 							</label>
 						</fieldset>
 						<p class="description">
-							<?php esc_html_e( 'Only one accounting provider is active at a time. Switching providers does not delete historical invoice IDs on payment rows; finish open billing cycles before switching.', 'remember' ); ?>
+							<?php esc_html_e( 'Only one accounting provider is active at a time. Switching does not delete historical invoice IDs on payment rows (QuickBooks and Xero columns can coexist). Finish open billing cycles before switching; new invoices use only the selected provider.', 'remember' ); ?>
 						</p>
 					</td>
 				</tr>
