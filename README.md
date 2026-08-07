@@ -149,6 +149,13 @@ Enable `WP_DEBUG` as needed; logging uses `Remember_Logger`.
 
 **Accounting providers:** One active billing provider per site (`quickbooks` or `xero`). Parallel stacks; see [`XERO_PLAN.md`](XERO_PLAN.md).
 
+### Installing / upgrading from a GitHub Release
+
+1. Download **`remember.zip`** (or `remember-x.y.z.zip`) from the release **Assets** — not “Source code (zip)”.
+2. GitHub’s source archive unpacks as `remember-1.1.1/`, which fatals if `remember/` is already installed.
+3. Our release zip always unpacks to **`wp-content/plugins/remember/`**.
+4. Build locally: `bash bin/build-plugin-zip.sh` → `dist/remember.zip`.
+
 ---
 
 ## Changelog
@@ -158,7 +165,7 @@ Enable `WP_DEBUG` as needed; logging uses `Remember_Logger`.
 - **Version** bumped to `1.1.1` (`REMEMBER_VERSION`).
 - **Member billing:** Invoice # links to the **customer** Xero online invoice (`in.xero.com`) when `xero_online_invoice_url` is stored on the payment (schema `1.17.0`, filled on invoice create/sync). Admin deep-links unchanged. QuickBooks member rows stay unlinked.
 - **Fix:** Xero payment sync no longer treats auth errors like “Refresh token not found” as a missing invoice (that was wiping invoice # and amounts on the dashboard). QuickBooks missing-invoice detection tightened the same way.
-- **Install:** Keep a single plugin folder named `remember`. Do not activate a GitHub zip extracted as `remember-1.1.1` alongside an existing install (that causes a fatal from redeclared classes).
+- **Release packaging:** `bin/build-plugin-zip.sh` + GitHub Action attach a WordPress zip with root folder `remember/` (never a versioned folder).
 
 ### 1.1.0
 

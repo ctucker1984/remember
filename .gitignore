@@ -3,6 +3,10 @@
 
 # Editor / IDE
 .idea/
+
+# Built release artifacts
+dist/
+*.zip
 .vscode/
 *.swp
 *.swo
