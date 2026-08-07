@@ -142,8 +142,12 @@ foreach ( $applications as $app ) {
 // Get all vetting cases for this member
 $vetting_cases = $vetting_model->get_all_by_member( $member_id_for_queries );
 
+// Refresh amounts from the active billing provider before rendering.
+require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-provider.php';
+Remember_Billing_Provider::sync_member_payments( $member_id_for_queries );
+
 // Payments for billing table (same data as admin; scoped to this member).
-$payment_model       = new Remember_Payment();
+$payment_model         = new Remember_Payment();
 $member_payments       = $payment_model->get_by_member( $member_id_for_queries );
 $payment_event_names   = array();
 $billing_subtotal_note = Remember_Billing_Messaging::get_subtotal_disclaimer();

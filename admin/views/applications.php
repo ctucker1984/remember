@@ -375,23 +375,41 @@ if ( isset( $_GET['view'] ) ) {
 		// Get payment if exists
 		$viewing_payment = $payment_model->get_by_application( $view_id );
 		$viewing_billing_label = __( 'Not invoiced yet', 'remember' );
+		$viewing_billing_html  = '';
 		$viewing_billing_color = '#72777c';
-		if ( $viewing_payment && ! empty( $viewing_payment->xero_invoice_id ) ) {
-			$viewing_billing_label = sprintf(
-				/* translators: %s: Xero invoice number or ID */
-				__( 'Invoiced in Xero (%s)', 'remember' ),
-				! empty( $viewing_payment->xero_invoice_number )
-					? sprintf( __( 'Invoice #%s', 'remember' ), $viewing_payment->xero_invoice_number )
-					: sprintf( __( 'Invoice ID: %s', 'remember' ), $viewing_payment->xero_invoice_id )
-			);
+		if ( $viewing_payment && ( ! empty( $viewing_payment->xero_invoice_id ) || ! empty( $viewing_payment->quickbooks_invoice_id ) ) ) {
+			require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-template.php';
+			$link_data = Remember_Billing_Template::get_payment_invoice_link_data( $viewing_payment );
 			$viewing_billing_color = '#46b450';
-		} elseif ( $viewing_payment && ! empty( $viewing_payment->quickbooks_invoice_id ) ) {
-			$viewing_billing_label = sprintf(
-				/* translators: %s: QuickBooks invoice ID */
-				__( 'Invoiced in QuickBooks (Invoice ID: %s)', 'remember' ),
-				$viewing_payment->quickbooks_invoice_id
-			);
-			$viewing_billing_color = '#46b450';
+
+			if ( 'xero' === $link_data['provider'] ) {
+				$num_label = ! empty( $link_data['number'] )
+					? sprintf( __( 'Invoice #%s', 'remember' ), $link_data['number'] )
+					: sprintf( __( 'Invoice ID: %s', 'remember' ), $viewing_payment->xero_invoice_id );
+				$viewing_billing_label = sprintf(
+					/* translators: %s: invoice number or ID */
+					__( 'Invoiced in Xero (%s)', 'remember' ),
+					$num_label
+				);
+			} else {
+				$num_label = ! empty( $link_data['number'] )
+					? sprintf( __( 'Invoice #%s', 'remember' ), $link_data['number'] )
+					: sprintf( __( 'Invoice ID: %s', 'remember' ), $viewing_payment->quickbooks_invoice_id );
+				$viewing_billing_label = sprintf(
+					/* translators: %s: invoice number or ID */
+					__( 'Invoiced in QuickBooks (%s)', 'remember' ),
+					$num_label
+				);
+			}
+
+			if ( ! empty( $link_data['url'] ) ) {
+				$viewing_billing_html = sprintf(
+					'<a href="%1$s" target="_blank" rel="noopener noreferrer" style="color: %2$s; font-weight: 600;">%3$s</a>',
+					esc_url( $link_data['url'] ),
+					esc_attr( $viewing_billing_color ),
+					esc_html( $viewing_billing_label )
+				);
+			}
 		}
 
 		// Get selected add-ons/merchandise for this application.

@@ -816,6 +816,15 @@ class Remember_Admin {
 			exit;
 		}
 
+		// Cache org ShortCode for invoice deep links (best-effort).
+		require_once plugin_dir_path( __FILE__ ) . '../includes/integrations/class-remember-xero-api.php';
+		$org = Remember_Xero_API::get_organisation();
+		if ( ! is_wp_error( $org ) && ! empty( $org['ShortCode'] ) ) {
+			$settings                     = Remember_Xero_OAuth::get_settings();
+			$settings['org_shortcode']    = sanitize_text_field( (string) $org['ShortCode'] );
+			Remember_Xero_OAuth::save_settings( $settings );
+		}
+
 		global $wpdb;
 		$wpdb->update(
 			$wpdb->prefix . 'remember_payment_processors',

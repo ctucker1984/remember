@@ -368,7 +368,29 @@ if ( $is_editing && ! current_user_can( 'remember_update_members' ) ) {
 										<span style="color: #00a32a;"><?php esc_html_e( 'Payment', 'remember' ); ?></span>
 									<?php endif; ?>
 								</td>
-								<td><?php echo esc_html( $entry['description'] ); ?></td>
+								<td>
+									<?php if ( 'invoice' === $entry['type'] && ! empty( $entry['invoice_url'] ) && ! empty( $entry['invoice_number'] ) ) : ?>
+										<?php
+										$desc   = (string) $entry['description'];
+										$num    = (string) $entry['invoice_number'];
+										$needle = sprintf( __( '(Invoice #%s)', 'remember' ), $num );
+										$pos    = strpos( $desc, $needle );
+										if ( false !== $pos ) {
+											echo esc_html( substr( $desc, 0, $pos ) );
+											printf(
+												'<a href="%1$s" target="_blank" rel="noopener noreferrer">%2$s</a>',
+												esc_url( $entry['invoice_url'] ),
+												esc_html( $needle )
+											);
+											echo esc_html( substr( $desc, $pos + strlen( $needle ) ) );
+										} else {
+											echo esc_html( $desc );
+										}
+										?>
+									<?php else : ?>
+										<?php echo esc_html( $entry['description'] ); ?>
+									<?php endif; ?>
+								</td>
 								<td style="text-align: right;">
 									<?php if ( $entry['debit'] > 0 ) : ?>
 										<?php echo esc_html( number_format( $entry['debit'], 2 ) ); ?>

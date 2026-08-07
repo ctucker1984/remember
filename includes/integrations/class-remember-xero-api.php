@@ -167,6 +167,51 @@ class Remember_Xero_API {
 	}
 
 	/**
+	 * Deep link into the Xero UI for an ACCREC invoice (staff browser).
+	 *
+	 * @param string $invoice_id Xero InvoiceID.
+	 * @return string Absolute URL, or empty if no id.
+	 */
+	public static function get_invoice_app_url( $invoice_id ) {
+		$invoice_id = trim( (string) $invoice_id );
+		if ( '' === $invoice_id ) {
+			return '';
+		}
+
+		static $resolved_shortcode = null;
+		static $shortcode_attempted = false;
+
+		$settings  = Remember_Xero_OAuth::get_settings();
+		$shortcode = ( is_array( $settings ) && ! empty( $settings['org_shortcode'] ) )
+			? (string) $settings['org_shortcode']
+			: '';
+
+		if ( '' === $shortcode && null !== $resolved_shortcode ) {
+			$shortcode = $resolved_shortcode;
+		}
+
+		if ( '' === $shortcode && ! $shortcode_attempted && is_array( $settings ) && Remember_Xero_OAuth::is_connected( $settings ) ) {
+			$shortcode_attempted = true;
+			$org                 = self::get_organisation();
+			if ( ! is_wp_error( $org ) && ! empty( $org['ShortCode'] ) ) {
+				$shortcode                 = sanitize_text_field( (string) $org['ShortCode'] );
+				$resolved_shortcode        = $shortcode;
+				$settings['org_shortcode'] = $shortcode;
+				Remember_Xero_OAuth::save_settings( $settings );
+			} else {
+				$resolved_shortcode = '';
+			}
+		}
+
+		$path = '/AccountsReceivable/View.aspx?InvoiceID=' . rawurlencode( $invoice_id );
+		if ( '' !== $shortcode ) {
+			return 'https://go.xero.com/organisationlogin/default.aspx?shortcode=' . rawurlencode( $shortcode ) . '&redirecturl=' . rawurlencode( $path );
+		}
+
+		return 'https://go.xero.com' . $path;
+	}
+
+	/**
 	 * Get a Contact by Xero ContactID.
 	 *
 	 * @param string $contact_id ContactID.

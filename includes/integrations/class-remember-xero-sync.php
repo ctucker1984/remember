@@ -718,6 +718,44 @@ class Remember_Xero_Sync {
 	}
 
 	/**
+	 * Sync payment status for one member's Xero-linked payment rows.
+	 *
+	 * @param int $member_id Member ID.
+	 * @return array{success:int,error:int,errors:array}
+	 */
+	public static function sync_member_payments( $member_id ) {
+		$member_id = absint( $member_id );
+		$results   = array(
+			'success' => 0,
+			'error'   => 0,
+			'errors'  => array(),
+		);
+		if ( $member_id <= 0 ) {
+			return $results;
+		}
+
+		$payment_model = new Remember_Payment();
+		$payments      = $payment_model->get_by_member( $member_id );
+		foreach ( $payments as $payment ) {
+			if ( empty( $payment->xero_invoice_id ) ) {
+				continue;
+			}
+			$result = self::sync_payment_status( $payment->payment_id );
+			if ( is_wp_error( $result ) ) {
+				$results['error']++;
+				$results['errors'][] = array(
+					'payment_id' => $payment->payment_id,
+					'error'      => $result->get_error_message(),
+				);
+			} else {
+				$results['success']++;
+			}
+		}
+
+		return $results;
+	}
+
+	/**
 	 * Sync all payments that reference a Xero invoice.
 	 *
 	 * @return array{success:int,error:int,errors:array}

@@ -730,8 +730,12 @@ if ( $view_member_id > 0 ) {
 		
 		// Invoice entry (when payment record created)
 		$invoice_description = $event ? sprintf( __( 'Invoice: %s', 'remember' ), $event->event_name ) : __( 'Invoice', 'remember' );
+		$invoice_url         = '';
 		if ( ! empty( $invoice_number ) ) {
 			$invoice_description .= ' ' . sprintf( __( '(Invoice #%s)', 'remember' ), $invoice_number );
+			require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-template.php';
+			$link_data   = Remember_Billing_Template::get_payment_invoice_link_data( $payment );
+			$invoice_url = ! empty( $link_data['url'] ) ? $link_data['url'] : '';
 		}
 
 		$invoice_sort_ts = $invoice_sort_ts_raw > 0 ? $invoice_sort_ts_raw : strtotime( $payment->created_at );
@@ -744,6 +748,8 @@ if ( $view_member_id > 0 ) {
 			'sort_ts' => $invoice_sort_ts,
 			'type' => 'invoice',
 			'description' => $invoice_description,
+			'invoice_number' => $invoice_number,
+			'invoice_url' => $invoice_url,
 			'debit' => $payment->total_amount,
 			'credit' => 0,
 			'balance' => 0, // Will calculate after sorting

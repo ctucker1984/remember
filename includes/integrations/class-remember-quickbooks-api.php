@@ -435,6 +435,29 @@ class Remember_QuickBooks_API {
 	}
 
 	/**
+	 * Deep link into QuickBooks Online UI for an invoice (staff browser).
+	 *
+	 * @param string $invoice_id QBO Invoice Id (entity Id, not DocNumber).
+	 * @return string Absolute URL, or empty if no id.
+	 */
+	public static function get_invoice_app_url( $invoice_id ) {
+		$invoice_id = trim( (string) $invoice_id );
+		if ( '' === $invoice_id ) {
+			return '';
+		}
+
+		$settings    = Remember_QuickBooks_OAuth::get_settings();
+		$environment = ( is_array( $settings ) && ! empty( $settings['environment'] ) )
+			? (string) $settings['environment']
+			: 'sandbox';
+		$host        = ( 'production' === $environment )
+			? 'https://app.qbo.intuit.com'
+			: 'https://app.sandbox.qbo.intuit.com';
+
+		return $host . '/app/invoice?txnId=' . rawurlencode( $invoice_id );
+	}
+
+	/**
 	 * Get invoice by ID.
 	 *
 	 * @param string $invoice_id Invoice ID.
