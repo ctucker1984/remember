@@ -46,15 +46,16 @@ class Remember_Billing_Template {
 	}
 
 	/**
-	 * Resolve display invoice number and provider deep-link URL for a payment row.
+	 * Resolve display invoice number and provider link URL for a payment row.
 	 *
 	 * Prefers Xero when xero_invoice_id is present; otherwise QuickBooks.
 	 *
-	 * @param object $payment     Payment row.
-	 * @param bool   $include_url Whether to resolve a staff deep-link URL.
+	 * @param object     $payment   Payment row.
+	 * @param bool|string $link_mode false = number only; true|'staff' = accounting UI;
+	 *                               'customer' = payee-facing online invoice (Xero).
 	 * @return array{number:string,url:string,has_external:bool,provider:string}
 	 */
-	public static function get_payment_invoice_link_data( $payment, $include_url = true ) {
+	public static function get_payment_invoice_link_data( $payment, $link_mode = true ) {
 		$out = array(
 			'number'       => '',
 			'url'          => '',
@@ -65,15 +66,29 @@ class Remember_Billing_Template {
 			return $out;
 		}
 
+		if ( true === $link_mode ) {
+			$link_mode = 'staff';
+		} elseif ( false !== $link_mode && 'staff' !== $link_mode && 'customer' !== $link_mode ) {
+			$link_mode = false;
+		}
+
 		if ( ! empty( $payment->xero_invoice_id ) ) {
 			$out['has_external'] = true;
 			$out['provider']     = 'xero';
 			$out['number']       = ! empty( $payment->xero_invoice_number )
 				? (string) $payment->xero_invoice_number
 				: '';
-			if ( $include_url ) {
+			if ( false !== $link_mode ) {
 				require_once plugin_dir_path( __FILE__ ) . '../integrations/class-remember-xero-api.php';
-				$out['url'] = Remember_Xero_API::get_invoice_app_url( $payment->xero_invoice_id );
+				if ( 'customer' === $link_mode ) {
+					// Member front end: only use the stored customer URL (populated on create/sync).
+					// Never live-call Xero here — auth blips must not affect dashboard render.
+					if ( ! empty( $payment->xero_online_invoice_url ) ) {
+						$out['url'] = (string) $payment->xero_online_invoice_url;
+					}
+				} else {
+					$out['url'] = Remember_Xero_API::get_invoice_app_url( $payment->xero_invoice_id );
+				}
 			}
 			return $out;
 		}
@@ -84,7 +99,8 @@ class Remember_Billing_Template {
 			$out['number']       = ! empty( $payment->quickbooks_invoice_number )
 				? (string) $payment->quickbooks_invoice_number
 				: '';
-			if ( $include_url ) {
+			// Staff deep-link only; QBO has no simple public online-invoice URL like Xero.
+			if ( 'staff' === $link_mode ) {
 				require_once plugin_dir_path( __FILE__ ) . '../integrations/class-remember-quickbooks-api.php';
 				$out['url'] = Remember_QuickBooks_API::get_invoice_app_url( $payment->quickbooks_invoice_id );
 			}
@@ -95,24 +111,28 @@ class Remember_Billing_Template {
 	}
 
 	/**
-	 * Echo invoice # cell contents (linked when a provider URL is available and $link is true).
+	 * Echo invoice # cell contents (linked when a provider URL is available).
 	 *
-	 * @param object $payment      Payment row.
-	 * @param string $pending_text Message when external id exists but number not synced yet.
-	 * @param string $empty_class  Class for empty / pending spans.
-	 * @param bool   $link         Whether to deep-link into the accounting UI (admin only).
+	 * @param object      $payment      Payment row.
+	 * @param string      $pending_text Message when external id exists but number not synced yet.
+	 * @param string      $empty_class  Class for empty / pending spans.
+	 * @param bool|string $link_mode    false | true/'staff' | 'customer'.
 	 */
-	public static function render_invoice_number_cell( $payment, $pending_text = '', $empty_class = 'description', $link = true ) {
-		$data = self::get_payment_invoice_link_data( $payment, $link );
+	public static function render_invoice_number_cell( $payment, $pending_text = '', $empty_class = 'description', $link_mode = true ) {
+		$data = self::get_payment_invoice_link_data( $payment, $link_mode );
 		if ( '' === $pending_text ) {
 			$pending_text = __( 'Sync payments to load invoice #', 'remember' );
 		}
 
 		if ( '' !== $data['number'] ) {
-			if ( $link && '' !== $data['url'] ) {
-				$label = ( 'xero' === $data['provider'] )
-					? __( 'Open invoice in Xero', 'remember' )
-					: __( 'Open invoice in QuickBooks', 'remember' );
+			if ( '' !== $data['url'] ) {
+				if ( 'customer' === $link_mode ) {
+					$label = __( 'View invoice online', 'remember' );
+				} elseif ( 'xero' === $data['provider'] ) {
+					$label = __( 'Open invoice in Xero', 'remember' );
+				} else {
+					$label = __( 'Open invoice in QuickBooks', 'remember' );
+				}
 				printf(
 					'<a href="%1$s" target="_blank" rel="noopener noreferrer" title="%2$s"><strong>%3$s</strong></a>',
 					esc_url( $data['url'] ),
@@ -295,7 +315,7 @@ class Remember_Billing_Template {
 								$payment,
 								__( 'Invoice # pending sync', 'remember' ),
 								'remember-billing-mt-muted',
-								false
+								'customer'
 							);
 							?>
 						</td>
