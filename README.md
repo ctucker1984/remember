@@ -2,7 +2,7 @@
 
 A WordPress plugin for membership-style communities: **members**, **events**, **locations**, **applications**, **vetting**, **billing** (including **QuickBooks Online**), and **role-based access**. It extends WordPress users with custom tables, an admin UI under **reMember**, and front-end templates (shortcodes and block patterns).
 
-**Version:** 1.0.1  
+**Version:** 1.1.0  
 **Requires:** WordPress 5.0 or higher  
 **License:** GPL v2 or later
 
@@ -132,15 +132,19 @@ reMember adds granular capabilities (`remember_read_events`, `remember_create_me
 
 Enable `WP_DEBUG` as needed; logging uses `Remember_Logger`.
 
-**Branching note:** Release work for this line lives on branch `v1.0.1` (tag `v1.0.0` remains the 1.0 baseline). Prefer clear conventional commits on that branch so the changelog below stays easy to inventory across machines.
+**Branching note:** Release work for this line lives on branch `v1.1.0`. Prefer clear conventional commits so the changelog below stays easy to inventory across machines.
 
-**Accounting providers:** One active billing provider per site (`quickbooks` or `xero`). QBO remains as implemented; Xero is planned as a parallel stack — details in [`XERO_PLAN.md`](XERO_PLAN.md).
+**Accounting providers:** One active billing provider per site (`quickbooks` or `xero`). QBO remains as implemented; Xero is a parallel stack in progress — details in [`XERO_PLAN.md`](XERO_PLAN.md).
 
 ---
 
 ## Changelog
 
-### 1.0.1 (in progress)
+### 1.1.0 (in progress)
+
+- **Version** bumped to `1.1.0` (`REMEMBER_VERSION`).
+
+### 1.0.1
 
 - **Version** bumped to `1.0.1` (`REMEMBER_VERSION`).
 - **Registration:** Required **Display Name**; legal first/last labeled as legal/private; username help text (login; not changeable). New accounts never default `display_name` from legal name; nickname is seeded from the chosen display name.

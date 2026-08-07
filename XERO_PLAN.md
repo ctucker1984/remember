@@ -1,8 +1,9 @@
-# Xero Billing Integration Plan (v1.0.1)
+# Xero Billing Integration Plan
 
-**Status:** Planned — not implemented yet  
-**Branch:** `v1.0.1` (optional child: `feature/xero-billing`)  
-**Decision date:** 2026-08-05
+**Status:** Phase 1 starting (credentials + OAuth + Settings shell)  
+**Branch:** `v1.1.0`  
+**Decision date:** 2026-08-05  
+**Redirect URI (demo):** `https://remember.teamautomation.ddns.net/wp-admin/admin.php?page=remember-settings&tab=xero&xero_oauth_callback=1`
 
 ---
 
