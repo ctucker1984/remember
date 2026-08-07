@@ -584,6 +584,32 @@ class Remember_Database_Updater {
 			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.16.0' ) );
 		}
 
+		// Update to 1.17.0 — store Xero customer online-invoice URL on payment rows.
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.17.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.17.0' ) );
+
+			$payments_table = $wpdb->prefix . 'remember_payments';
+			if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $payments_table ) ) === $payments_table ) {
+				$cols = $wpdb->get_col( "SHOW COLUMNS FROM {$payments_table}", 0 );
+				if ( is_array( $cols ) && ! in_array( 'xero_online_invoice_url', $cols, true ) ) {
+					$ok = $wpdb->query(
+						"ALTER TABLE {$payments_table} ADD COLUMN xero_online_invoice_url VARCHAR(500) DEFAULT NULL AFTER xero_invoice_number"
+					);
+					if ( false === $ok ) {
+						Remember_Logger::error(
+							'Failed to add xero_online_invoice_url to remember_payments',
+							array( 'error' => $wpdb->last_error )
+						);
+					} else {
+						Remember_Logger::info( 'Added xero_online_invoice_url to remember_payments' );
+					}
+				}
+			}
+
+			update_option( 'remember_db_version', '1.17.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.17.0' ) );
+		}
+
 		Remember_Logger::activation_debug(
 			'update_schema: exit',
 			array( 'remember_db_version' => get_option( 'remember_db_version', '0.0.0' ) )
