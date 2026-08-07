@@ -141,7 +141,6 @@ class Remember {
 		$plugin_admin = new Remember_Admin( $this->get_plugin_name(), $this->get_version() );
 		$this->loader->add_action( 'admin_enqueue_scripts', $plugin_admin, 'enqueue_styles' );
 		$this->loader->add_action( 'admin_enqueue_scripts', $plugin_admin, 'enqueue_scripts' );
-		$this->loader->add_filter( 'update_footer', $plugin_admin, 'filter_admin_footer_version', 11 );
 		$this->loader->add_action( 'wp_ajax_remember_get_event_roles', $plugin_admin, 'ajax_get_event_roles' );
 		$this->loader->add_action( 'wp_ajax_remember_get_event_addons', $plugin_admin, 'ajax_get_event_addons' );
 		$this->loader->add_action( 'admin_menu', $plugin_admin, 'add_admin_menu' );

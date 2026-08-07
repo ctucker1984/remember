@@ -163,7 +163,6 @@ Enable `WP_DEBUG` as needed; logging uses `Remember_Logger`.
 ### 1.1.2 (in progress)
 
 - **Registration photo:** Optional profile photo on member register with the same circular **zoom** + **drag-to-recenter** cropper as profile edit.
-- **Admin footer:** reMember version shown next to the WordPress version on reMember admin screens.
 - See [`TODO_1.1.2.md`](TODO_1.1.2.md).
 
 ### 1.1.1
