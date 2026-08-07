@@ -665,7 +665,6 @@ class Remember_Database {
 			quickbooks_refund_lines LONGTEXT DEFAULT NULL,
 			xero_invoice_id VARCHAR(100) DEFAULT NULL,
 			xero_invoice_number VARCHAR(50) DEFAULT NULL,
-			xero_online_invoice_url VARCHAR(500) DEFAULT NULL,
 			xero_invoice_sort_ts BIGINT(20) UNSIGNED DEFAULT NULL,
 			xero_payment_lines LONGTEXT DEFAULT NULL,
 			xero_refund_lines LONGTEXT DEFAULT NULL,

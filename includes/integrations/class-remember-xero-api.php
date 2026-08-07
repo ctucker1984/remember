@@ -212,52 +212,6 @@ class Remember_Xero_API {
 	}
 
 	/**
-	 * Customer-facing online invoice URL (view / pay), not the staff Xero UI.
-	 *
-	 * Uses GET Invoices/{InvoiceID}/OnlineInvoice. Unavailable for drafts.
-	 * Prefer the stored payment column (`xero_online_invoice_url`) at render time;
-	 * call this during invoice create/sync to populate that column.
-	 *
-	 * @param string $invoice_id Xero InvoiceID.
-	 * @return string Absolute URL, or empty if unavailable.
-	 */
-	public static function get_online_invoice_url( $invoice_id ) {
-		$invoice_id = trim( (string) $invoice_id );
-		if ( '' === $invoice_id ) {
-			return '';
-		}
-
-		$result = self::request( 'GET', 'Invoices/' . rawurlencode( $invoice_id ) . '/OnlineInvoice' );
-		if ( is_wp_error( $result ) ) {
-			Remember_Logger::warning(
-				'Xero online invoice URL unavailable',
-				array(
-					'invoice_id' => $invoice_id,
-					'error'      => $result->get_error_message(),
-				)
-			);
-			return '';
-		}
-
-		if ( ! empty( $result['OnlineInvoices'][0]['OnlineInvoiceUrl'] ) ) {
-			return esc_url_raw( (string) $result['OnlineInvoices'][0]['OnlineInvoiceUrl'] );
-		}
-		if ( ! empty( $result['OnlineInvoices']['OnlineInvoice']['OnlineInvoiceUrl'] ) ) {
-			// Legacy nested shape seen in older Xero docs.
-			return esc_url_raw( (string) $result['OnlineInvoices']['OnlineInvoice']['OnlineInvoiceUrl'] );
-		}
-
-		Remember_Logger::warning(
-			'Xero OnlineInvoice response missing OnlineInvoiceUrl',
-			array(
-				'invoice_id' => $invoice_id,
-				'keys'       => is_array( $result ) ? array_keys( $result ) : array(),
-			)
-		);
-		return '';
-	}
-
-	/**
 	 * Get a Contact by Xero ContactID.
 	 *
 	 * @param string $contact_id ContactID.

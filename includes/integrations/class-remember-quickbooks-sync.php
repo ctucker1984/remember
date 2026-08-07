@@ -564,19 +564,13 @@ class Remember_QuickBooks_Sync {
 		if ( ! is_wp_error( $error ) ) {
 			return false;
 		}
-		// Avoid matching auth errors whose messages contain "not found".
-		$code = $error->get_error_code();
-		if ( in_array( $code, array( 'qb_reauth_required', 'qb_not_configured', 'qb_token_refresh_failed' ), true ) ) {
-			return false;
-		}
-		$data   = $error->get_error_data();
+		$data = $error->get_error_data();
 		$status = ( is_array( $data ) && isset( $data['status'] ) ) ? (int) $data['status'] : 0;
 		if ( 404 === $status ) {
 			return true;
 		}
-		// Intuit object-not-found Fault often returns 400 with a specific message.
 		$msg = strtolower( $error->get_error_message() );
-		if ( false !== strpos( $msg, 'object not found' ) || false !== strpos( $msg, 'does not exist' ) ) {
+		if ( false !== strpos( $msg, 'not found' ) || false !== strpos( $msg, 'does not exist' ) ) {
 			return true;
 		}
 		return false;
