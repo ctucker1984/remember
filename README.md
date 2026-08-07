@@ -158,6 +158,7 @@ Enable `WP_DEBUG` as needed; logging uses `Remember_Logger`.
 - **Version** bumped to `1.1.1` (`REMEMBER_VERSION`).
 - **Member billing:** Invoice # links to the **customer** Xero online invoice (`in.xero.com`) when `xero_online_invoice_url` is stored on the payment (schema `1.17.0`, filled on invoice create/sync). Admin deep-links unchanged. QuickBooks member rows stay unlinked.
 - **Fix:** Xero payment sync no longer treats auth errors like “Refresh token not found” as a missing invoice (that was wiping invoice # and amounts on the dashboard). QuickBooks missing-invoice detection tightened the same way.
+- **Install:** Keep a single plugin folder named `remember`. Do not activate a GitHub zip extracted as `remember-1.1.1` alongside an existing install (that causes a fatal from redeclared classes).
 
 ### 1.1.0
 

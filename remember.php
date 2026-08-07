@@ -19,6 +19,33 @@ if ( ! defined( 'WPINC' ) ) {
 	die;
 }
 
+/*
+ * Guard against a second copy of the plugin (e.g. GitHub zip extracted as
+ * remember-1.1.1/ while remember/ is still active). Loading both fatals on
+ * redeclared functions/classes/constants.
+ */
+if ( defined( 'REMEMBER_LOADED' ) ) {
+	if ( is_admin() ) {
+		add_action(
+			'admin_notices',
+			static function () {
+				$active = defined( 'REMEMBER_PLUGIN_DIR' ) ? REMEMBER_PLUGIN_DIR : '';
+				echo '<div class="notice notice-error"><p>';
+				echo esc_html__(
+					'reMember is already loaded from another folder. Delete the duplicate plugin directory (for example remember-1.1.1) and keep a single install at wp-content/plugins/remember/.',
+					'remember'
+				);
+				if ( $active ) {
+					echo ' <code>' . esc_html( $active ) . '</code>';
+				}
+				echo '</p></div>';
+			}
+		);
+	}
+	return;
+}
+define( 'REMEMBER_LOADED', true );
+
 /**
  * Currently plugin version.
  */
