@@ -82,6 +82,16 @@ if ( $is_editing && ! current_user_can( 'remember_update_members' ) ) {
 							</button>
 						</form>
 					<?php endif; ?>
+					<?php if ( ! empty( $remember_xero_show_sync_contact ) ) : ?>
+						<form method="post" action="" style="display: inline-block; margin: 0;">
+							<?php wp_nonce_field( 'remember_member_action', 'remember_member_nonce' ); ?>
+							<input type="hidden" name="remember_member_action" value="sync_xero_contact" />
+							<input type="hidden" name="member_id" value="<?php echo esc_attr( $view_member_id ); ?>" />
+							<button type="submit" class="button" title="<?php esc_attr_e( 'Update the linked Xero contact with this member’s name, email, phone, and billing address.', 'remember' ); ?>">
+								<?php esc_html_e( 'Sync to Xero', 'remember' ); ?>
+							</button>
+						</form>
+					<?php endif; ?>
 				<?php else : ?>
 					<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-members&view=' . $view_member_id ) ); ?>" class="button">
 						<?php esc_html_e( 'Cancel', 'remember' ); ?>
@@ -358,7 +368,29 @@ if ( $is_editing && ! current_user_can( 'remember_update_members' ) ) {
 										<span style="color: #00a32a;"><?php esc_html_e( 'Payment', 'remember' ); ?></span>
 									<?php endif; ?>
 								</td>
-								<td><?php echo esc_html( $entry['description'] ); ?></td>
+								<td>
+									<?php if ( 'invoice' === $entry['type'] && ! empty( $entry['invoice_url'] ) && ! empty( $entry['invoice_number'] ) ) : ?>
+										<?php
+										$desc   = (string) $entry['description'];
+										$num    = (string) $entry['invoice_number'];
+										$needle = sprintf( __( '(Invoice #%s)', 'remember' ), $num );
+										$pos    = strpos( $desc, $needle );
+										if ( false !== $pos ) {
+											echo esc_html( substr( $desc, 0, $pos ) );
+											printf(
+												'<a href="%1$s" target="_blank" rel="noopener noreferrer">%2$s</a>',
+												esc_url( $entry['invoice_url'] ),
+												esc_html( $needle )
+											);
+											echo esc_html( substr( $desc, $pos + strlen( $needle ) ) );
+										} else {
+											echo esc_html( $desc );
+										}
+										?>
+									<?php else : ?>
+										<?php echo esc_html( $entry['description'] ); ?>
+									<?php endif; ?>
+								</td>
 								<td style="text-align: right;">
 									<?php if ( $entry['debit'] > 0 ) : ?>
 										<?php echo esc_html( number_format( $entry['debit'], 2 ) ); ?>

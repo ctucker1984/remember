@@ -433,5 +433,21 @@ class Remember_Seeder {
 				)
 			);
 		}
+
+		// Xero processor (inactive by default)
+		$xero = $this->wpdb->get_var( $this->wpdb->prepare( "SELECT processor_id FROM $table_name WHERE processor_type = %s", 'xero' ) );
+		if ( ! $xero ) {
+			$this->wpdb->insert(
+				$table_name,
+				array(
+					'processor_type' => 'xero',
+					'processor_name' => __( 'Xero', 'remember' ),
+					'is_active'      => 0,
+					'settings'       => '',
+					'created_at'     => current_time( 'mysql' ),
+					'updated_at'     => current_time( 'mysql' ),
+				)
+			);
+		}
 	}
 }

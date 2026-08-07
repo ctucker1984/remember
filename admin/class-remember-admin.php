@@ -389,12 +389,21 @@ class Remember_Admin {
 			wp_die( __( 'You do not have sufficient permissions to access this page.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
 		}
 
-		// Refresh payment rows from QuickBooks so the table shows current amounts and invoice numbers.
-		require_once plugin_dir_path( __FILE__ ) . '../includes/integrations/class-remember-quickbooks-oauth.php';
-		$qb_settings = Remember_QuickBooks_OAuth::get_settings();
-		if ( $qb_settings && ! empty( $qb_settings['access_token'] ) && ! empty( $qb_settings['realm_id'] ) ) {
-			require_once plugin_dir_path( __FILE__ ) . '../includes/integrations/class-remember-quickbooks-sync.php';
-			Remember_QuickBooks_Sync::sync_all_payments();
+		// Refresh payment rows from the active accounting provider.
+		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-billing-provider.php';
+		if ( Remember_Billing_Provider::is_xero() ) {
+			require_once plugin_dir_path( __FILE__ ) . '../includes/integrations/class-remember-xero-oauth.php';
+			if ( Remember_Xero_OAuth::is_connected() ) {
+				require_once plugin_dir_path( __FILE__ ) . '../includes/integrations/class-remember-xero-sync.php';
+				Remember_Xero_Sync::sync_all_payments();
+			}
+		} elseif ( Remember_Billing_Provider::is_quickbooks() ) {
+			require_once plugin_dir_path( __FILE__ ) . '../includes/integrations/class-remember-quickbooks-oauth.php';
+			$qb_settings = Remember_QuickBooks_OAuth::get_settings();
+			if ( $qb_settings && ! empty( $qb_settings['access_token'] ) && ! empty( $qb_settings['realm_id'] ) ) {
+				require_once plugin_dir_path( __FILE__ ) . '../includes/integrations/class-remember-quickbooks-sync.php';
+				Remember_QuickBooks_Sync::sync_all_payments();
+			}
 		}
 
 		require_once plugin_dir_path( __FILE__ ) . '../includes/models/class-payment.php';
@@ -657,6 +666,187 @@ class Remember_Admin {
 		);
 
 		set_transient( $notice, array( 'type' => 'success', 'message' => __( 'QuickBooks connected successfully!', 'remember' ) ), 60 );
+		wp_safe_redirect( $redirect );
+		exit;
+	}
+
+	/**
+	 * Xero OAuth: redirect to Xero and handle callback before admin HTML output.
+	 *
+	 * @since 1.1.0
+	 */
+	public function handle_xero_oauth() {
+		if ( ! is_admin() ) {
+			return;
+		}
+
+		require_once plugin_dir_path( __FILE__ ) . '../includes/integrations/class-remember-xero-oauth.php';
+
+		// Start OAuth (POST).
+		if ( isset( $_POST['remember_settings_action'] ) && 'start_xero_oauth' === $_POST['remember_settings_action'] ) {
+			if ( ! current_user_can( 'remember_access_settings' ) ) {
+				return;
+			}
+			if ( ! check_admin_referer( 'remember_settings_action', 'remember_settings_nonce' ) ) {
+				return;
+			}
+
+			$xero = Remember_Xero_OAuth::get_settings();
+			if ( empty( $xero['client_id'] ) || empty( $xero['client_secret'] ) ) {
+				wp_safe_redirect( admin_url( 'admin.php?page=remember-settings&xero_oauth_error=nocreds#xero' ) );
+				exit;
+			}
+
+			$auth_url = Remember_Xero_OAuth::get_authorization_url(
+				$xero['client_id'],
+				Remember_Xero_OAuth::get_redirect_uri()
+			);
+			wp_redirect( $auth_url ); // phpcs:ignore WordPress.Security.SafeRedirect.wp_redirect_wp_redirect -- External Xero URL.
+			exit;
+		}
+
+		// OAuth callback (GET).
+		if ( ! isset( $_GET['page'] ) || 'remember-settings' !== $_GET['page'] ) {
+			return;
+		}
+		if ( ! isset( $_GET['xero_oauth_callback'] ) ) {
+			return;
+		}
+		if ( ! current_user_can( 'remember_access_settings' ) ) {
+			return;
+		}
+
+		$uid      = get_current_user_id();
+		$notice   = 'remember_xero_oauth_notice_' . $uid;
+		$redirect = admin_url( 'admin.php?page=remember-settings#xero' );
+
+		if ( ! empty( $_GET['error'] ) ) {
+			$error_desc = isset( $_GET['error_description'] ) ? sanitize_text_field( wp_unslash( $_GET['error_description'] ) ) : sanitize_text_field( wp_unslash( $_GET['error'] ) );
+			set_transient(
+				$notice,
+				array(
+					'type'    => 'error',
+					'message' => sprintf(
+						/* translators: %s: Xero error message */
+						__( 'Xero authorization failed: %s', 'remember' ),
+						$error_desc
+					),
+				),
+				60
+			);
+			wp_safe_redirect( $redirect );
+			exit;
+		}
+
+		if ( empty( $_GET['code'] ) ) {
+			set_transient(
+				$notice,
+				array(
+					'type'    => 'error',
+					'message' => __( 'Xero did not return an authorization code. If an organisation shows “Already connected”, disconnect reMember for WordPress under that org’s Settings → Connected apps, then try Connect again.', 'remember' ),
+				),
+				60
+			);
+			wp_safe_redirect( $redirect );
+			exit;
+		}
+
+		$code  = sanitize_text_field( wp_unslash( $_GET['code'] ) );
+		$state = isset( $_GET['state'] ) ? sanitize_text_field( wp_unslash( $_GET['state'] ) ) : '';
+
+		if ( ! wp_verify_nonce( $state, 'remember_xero_oauth' ) ) {
+			set_transient( $notice, array( 'type' => 'error', 'message' => __( 'Invalid OAuth state. Please try again.', 'remember' ) ), 60 );
+			wp_safe_redirect( $redirect );
+			exit;
+		}
+
+		$settings = Remember_Xero_OAuth::get_settings();
+		if ( ! $settings || empty( $settings['client_id'] ) || empty( $settings['client_secret'] ) ) {
+			set_transient( $notice, array( 'type' => 'error', 'message' => __( 'Xero credentials not configured. Please enter Client ID and Client Secret first.', 'remember' ) ), 60 );
+			wp_safe_redirect( $redirect );
+			exit;
+		}
+
+		$redirect_uri = Remember_Xero_OAuth::get_redirect_uri();
+		$token_data   = Remember_Xero_OAuth::exchange_code_for_token(
+			$code,
+			$settings['client_id'],
+			$settings['client_secret'],
+			$redirect_uri
+		);
+
+		if ( is_wp_error( $token_data ) ) {
+			set_transient( $notice, array( 'type' => 'error', 'message' => wp_strip_all_tags( $token_data->get_error_message() ) ), 60 );
+			wp_safe_redirect( $redirect );
+			exit;
+		}
+
+		$settings['access_token']  = isset( $token_data['access_token'] ) ? $token_data['access_token'] : '';
+		$settings['refresh_token'] = isset( $token_data['refresh_token'] ) ? $token_data['refresh_token'] : '';
+		$expires_in                = isset( $token_data['expires_in'] ) ? (int) $token_data['expires_in'] : 1800;
+		if ( $expires_in < 60 ) {
+			$expires_in = 1800;
+		}
+		$settings['expires_at'] = time() + $expires_in;
+
+		// Persist tokens before connections call so a connections failure is recoverable.
+		Remember_Xero_OAuth::save_settings( $settings );
+
+		$connections = Remember_Xero_OAuth::get_connections( $settings['access_token'] );
+		if ( is_wp_error( $connections ) ) {
+			set_transient( $notice, array( 'type' => 'error', 'message' => wp_strip_all_tags( $connections->get_error_message() ) ), 60 );
+			wp_safe_redirect( $redirect );
+			exit;
+		}
+
+		if ( empty( $connections[0]['tenantId'] ) ) {
+			set_transient( $notice, array( 'type' => 'error', 'message' => __( 'No Xero organisation was available to connect. Authorize at least one organisation.', 'remember' ) ), 60 );
+			wp_safe_redirect( $redirect );
+			exit;
+		}
+
+		// Phase 1: use the first authorised tenant (multi-tenant picker can come later).
+		$settings['tenant_id']     = sanitize_text_field( $connections[0]['tenantId'] );
+		$settings['tenant_name']   = ! empty( $connections[0]['tenantName'] ) ? sanitize_text_field( $connections[0]['tenantName'] ) : '';
+		$settings['connection_id'] = ! empty( $connections[0]['id'] ) ? sanitize_text_field( $connections[0]['id'] ) : '';
+
+		if ( ! Remember_Xero_OAuth::save_settings( $settings ) ) {
+			set_transient( $notice, array( 'type' => 'error', 'message' => __( 'Failed to save Xero connection.', 'remember' ) ), 60 );
+			wp_safe_redirect( $redirect );
+			exit;
+		}
+
+		// Cache org ShortCode for invoice deep links (best-effort).
+		require_once plugin_dir_path( __FILE__ ) . '../includes/integrations/class-remember-xero-api.php';
+		$org = Remember_Xero_API::get_organisation();
+		if ( ! is_wp_error( $org ) && ! empty( $org['ShortCode'] ) ) {
+			$settings                     = Remember_Xero_OAuth::get_settings();
+			$settings['org_shortcode']    = sanitize_text_field( (string) $org['ShortCode'] );
+			Remember_Xero_OAuth::save_settings( $settings );
+		}
+
+		global $wpdb;
+		$wpdb->update(
+			$wpdb->prefix . 'remember_payment_processors',
+			array( 'is_active' => 1 ),
+			array( 'processor_type' => 'xero' ),
+			array( '%d' ),
+			array( '%s' )
+		);
+
+		$org_label = $settings['tenant_name'] ? $settings['tenant_name'] : $settings['tenant_id'];
+		set_transient(
+			$notice,
+			array(
+				'type'    => 'success',
+				'message' => sprintf(
+					/* translators: %s: Xero organisation name */
+					__( 'Xero connected successfully (%s).', 'remember' ),
+					$org_label
+				),
+			),
+			60
+		);
 		wp_safe_redirect( $redirect );
 		exit;
 	}

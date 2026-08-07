@@ -514,6 +514,76 @@ class Remember_Database_Updater {
 			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.15.0' ) );
 		}
 
+		// Update to 1.16.0 — Xero billing plumbing (parallel columns, mappings, processor).
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.16.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.16.0' ) );
+
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-database.php';
+			$db = new Remember_Database();
+			$db->create_xero_item_mappings_table();
+
+			$processors_table = $wpdb->prefix . 'remember_payment_processors';
+			if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $processors_table ) ) === $processors_table ) {
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is plugin-controlled.
+				$wpdb->query( "ALTER TABLE {$processors_table} MODIFY processor_type ENUM('manual','quickbooks','xero') NOT NULL" );
+
+				$xero_exists = $wpdb->get_var( $wpdb->prepare( "SELECT processor_id FROM {$processors_table} WHERE processor_type = %s", 'xero' ) );
+				if ( ! $xero_exists ) {
+					$wpdb->insert(
+						$processors_table,
+						array(
+							'processor_type' => 'xero',
+							'processor_name' => 'Xero',
+							'is_active'      => 0,
+							'settings'       => '',
+							'created_at'     => current_time( 'mysql' ),
+							'updated_at'     => current_time( 'mysql' ),
+						)
+					);
+				}
+			}
+
+			$payments_table = $wpdb->prefix . 'remember_payments';
+			if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $payments_table ) ) === $payments_table ) {
+				$cols = $wpdb->get_col( "SHOW COLUMNS FROM {$payments_table}", 0 );
+				if ( is_array( $cols ) ) {
+					$xero_cols = array(
+						'xero_invoice_id'         => "ADD COLUMN xero_invoice_id VARCHAR(100) DEFAULT NULL AFTER quickbooks_refund_lines",
+						'xero_invoice_number'     => "ADD COLUMN xero_invoice_number VARCHAR(50) DEFAULT NULL AFTER xero_invoice_id",
+						'xero_invoice_sort_ts'    => "ADD COLUMN xero_invoice_sort_ts BIGINT(20) UNSIGNED DEFAULT NULL AFTER xero_invoice_number",
+						'xero_payment_lines'      => "ADD COLUMN xero_payment_lines LONGTEXT DEFAULT NULL AFTER xero_invoice_sort_ts",
+						'xero_refund_lines'       => "ADD COLUMN xero_refund_lines LONGTEXT DEFAULT NULL AFTER xero_payment_lines",
+					);
+					foreach ( $xero_cols as $col_name => $alter_sql ) {
+						if ( ! in_array( $col_name, $cols, true ) ) {
+							$ok = $wpdb->query( "ALTER TABLE {$payments_table} {$alter_sql}" );
+							if ( false === $ok ) {
+								Remember_Logger::error(
+									"Failed to add {$col_name} to remember_payments",
+									array( 'error' => $wpdb->last_error )
+								);
+							} else {
+								Remember_Logger::info( "Added {$col_name} to remember_payments" );
+								$cols[] = $col_name;
+							}
+						}
+					}
+				}
+			}
+
+			$options = get_option( 'remember_options', array() );
+			if ( ! is_array( $options ) ) {
+				$options = array();
+			}
+			if ( empty( $options['billing_provider'] ) ) {
+				$options['billing_provider'] = 'none';
+				update_option( 'remember_options', $options );
+			}
+
+			update_option( 'remember_db_version', '1.16.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.16.0' ) );
+		}
+
 		Remember_Logger::activation_debug(
 			'update_schema: exit',
 			array( 'remember_db_version' => get_option( 'remember_db_version', '0.0.0' ) )

@@ -89,7 +89,23 @@ $status_colors = array(
 				<p style="margin: 5px 0;">
 					<strong><?php esc_html_e( 'Billing:', 'remember' ); ?></strong>
 					<span style="color: <?php echo esc_attr( isset( $viewing_billing_color ) ? $viewing_billing_color : '#72777c' ); ?>;">
-						<?php echo esc_html( isset( $viewing_billing_label ) ? $viewing_billing_label : __( 'Not invoiced yet', 'remember' ) ); ?>
+						<?php
+						if ( ! empty( $viewing_billing_html ) ) {
+							echo wp_kses(
+								$viewing_billing_html,
+								array(
+									'a' => array(
+										'href'   => true,
+										'target' => true,
+										'rel'    => true,
+										'style'  => true,
+									),
+								)
+							);
+						} else {
+							echo esc_html( isset( $viewing_billing_label ) ? $viewing_billing_label : __( 'Not invoiced yet', 'remember' ) );
+						}
+						?>
 					</span>
 				</p>
 				</div>

@@ -510,6 +510,31 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 			}
 		}
 		$view_member_id = $member_id;
+	} elseif ( $member_id > 0 && 'sync_xero_contact' === $action ) {
+		if ( ! current_user_can( 'remember_update_members' ) ) {
+			wp_die( __( 'You do not have sufficient permissions to perform this action.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+		}
+		require_once plugin_dir_path( __FILE__ ) . '../../includes/integrations/class-remember-xero-oauth.php';
+		if ( ! Remember_Xero_OAuth::is_connected() ) {
+			echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html__( 'Xero is not connected. Connect under Settings → Xero.', 'remember' ) . '</p></div>';
+		} else {
+			require_once plugin_dir_path( __FILE__ ) . '../../includes/integrations/class-remember-xero-sync.php';
+			$result = Remember_Xero_Sync::sync_member_to_contact( $member_id );
+			if ( is_wp_error( $result ) ) {
+				Remember_Logger::error(
+					'Manual Xero contact sync failed',
+					array(
+						'member_id' => $member_id,
+						'error'     => $result->get_error_message(),
+					)
+				);
+				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html( $result->get_error_message() ) . '</p></div>';
+			} else {
+				Remember_Logger::info( 'Manual Xero contact sync succeeded', array( 'member_id' => $member_id ) );
+				echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Contact updated in Xero.', 'remember' ) . '</p></div>';
+			}
+		}
+		$view_member_id = $member_id;
 	}
 }
 
@@ -659,20 +684,61 @@ if ( $view_member_id > 0 ) {
 	$billing_register = array();
 	
 	// Build chronological register (invoices and payments)
+	require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-provider.php';
+	$billing_use_xero = Remember_Billing_Provider::is_xero();
+
 	foreach ( $view_payments as $payment ) {
 		// Get application and event info
 		$application = $application_model->get( $payment->event_application_id );
 		$event = $application ? $event_model->get( $application->event_id ) : null;
+
+		// Prefer active-provider columns; fall back to the other provider for historical rows.
+		$invoice_number = '';
+		$invoice_sort_ts_raw = 0;
+		$payment_lines_json = '';
+		$refund_lines_json = '';
+		$provider_label = __( 'QuickBooks', 'remember' );
+
+		if ( $billing_use_xero ) {
+			$provider_label = __( 'Xero', 'remember' );
+			if ( ! empty( $payment->xero_invoice_number ) || ! empty( $payment->xero_invoice_id ) ) {
+				$invoice_number      = ! empty( $payment->xero_invoice_number ) ? $payment->xero_invoice_number : '';
+				$invoice_sort_ts_raw = ! empty( $payment->xero_invoice_sort_ts ) ? (int) $payment->xero_invoice_sort_ts : 0;
+				$payment_lines_json  = ! empty( $payment->xero_payment_lines ) ? $payment->xero_payment_lines : '';
+				$refund_lines_json   = ! empty( $payment->xero_refund_lines ) ? $payment->xero_refund_lines : '';
+			} else {
+				$invoice_number      = ! empty( $payment->quickbooks_invoice_number ) ? $payment->quickbooks_invoice_number : '';
+				$invoice_sort_ts_raw = ! empty( $payment->quickbooks_invoice_sort_ts ) ? (int) $payment->quickbooks_invoice_sort_ts : 0;
+				$payment_lines_json  = ! empty( $payment->quickbooks_payment_lines ) ? $payment->quickbooks_payment_lines : '';
+				$refund_lines_json   = ! empty( $payment->quickbooks_refund_lines ) ? $payment->quickbooks_refund_lines : '';
+				$provider_label      = __( 'QuickBooks', 'remember' );
+			}
+		} else {
+			if ( ! empty( $payment->quickbooks_invoice_number ) || ! empty( $payment->quickbooks_invoice_id ) ) {
+				$invoice_number      = ! empty( $payment->quickbooks_invoice_number ) ? $payment->quickbooks_invoice_number : '';
+				$invoice_sort_ts_raw = ! empty( $payment->quickbooks_invoice_sort_ts ) ? (int) $payment->quickbooks_invoice_sort_ts : 0;
+				$payment_lines_json  = ! empty( $payment->quickbooks_payment_lines ) ? $payment->quickbooks_payment_lines : '';
+				$refund_lines_json   = ! empty( $payment->quickbooks_refund_lines ) ? $payment->quickbooks_refund_lines : '';
+			} elseif ( ! empty( $payment->xero_invoice_id ) || ! empty( $payment->xero_invoice_number ) ) {
+				$provider_label      = __( 'Xero', 'remember' );
+				$invoice_number      = ! empty( $payment->xero_invoice_number ) ? $payment->xero_invoice_number : '';
+				$invoice_sort_ts_raw = ! empty( $payment->xero_invoice_sort_ts ) ? (int) $payment->xero_invoice_sort_ts : 0;
+				$payment_lines_json  = ! empty( $payment->xero_payment_lines ) ? $payment->xero_payment_lines : '';
+				$refund_lines_json   = ! empty( $payment->xero_refund_lines ) ? $payment->xero_refund_lines : '';
+			}
+		}
 		
 		// Invoice entry (when payment record created)
 		$invoice_description = $event ? sprintf( __( 'Invoice: %s', 'remember' ), $event->event_name ) : __( 'Invoice', 'remember' );
-		if ( ! empty( $payment->quickbooks_invoice_number ) ) {
-			$invoice_description .= ' ' . sprintf( __( '(Invoice #%s)', 'remember' ), $payment->quickbooks_invoice_number );
+		$invoice_url         = '';
+		if ( ! empty( $invoice_number ) ) {
+			$invoice_description .= ' ' . sprintf( __( '(Invoice #%s)', 'remember' ), $invoice_number );
+			require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-template.php';
+			$link_data   = Remember_Billing_Template::get_payment_invoice_link_data( $payment );
+			$invoice_url = ! empty( $link_data['url'] ) ? $link_data['url'] : '';
 		}
 
-		$invoice_sort_ts = ! empty( $payment->quickbooks_invoice_sort_ts )
-			? (int) $payment->quickbooks_invoice_sort_ts
-			: strtotime( $payment->created_at );
+		$invoice_sort_ts = $invoice_sort_ts_raw > 0 ? $invoice_sort_ts_raw : strtotime( $payment->created_at );
 		if ( $invoice_sort_ts <= 0 ) {
 			$invoice_sort_ts = strtotime( $payment->created_at );
 		}
@@ -682,6 +748,8 @@ if ( $view_member_id > 0 ) {
 			'sort_ts' => $invoice_sort_ts,
 			'type' => 'invoice',
 			'description' => $invoice_description,
+			'invoice_number' => $invoice_number,
+			'invoice_url' => $invoice_url,
 			'debit' => $payment->total_amount,
 			'credit' => 0,
 			'balance' => 0, // Will calculate after sorting
@@ -690,10 +758,10 @@ if ( $view_member_id > 0 ) {
 			'application_id' => $payment->event_application_id,
 		);
 		
-		// Payment row(s): one line per QuickBooks Payment when synced; otherwise one aggregated line.
+		// Payment row(s): one line per external Payment when synced; otherwise one aggregated line.
 		$qb_payment_lines = array();
-		if ( ! empty( $payment->quickbooks_payment_lines ) ) {
-			$decoded = json_decode( $payment->quickbooks_payment_lines, true );
+		if ( ! empty( $payment_lines_json ) ) {
+			$decoded = json_decode( $payment_lines_json, true );
 			if ( is_array( $decoded ) && ! empty( $decoded ) ) {
 				$qb_payment_lines = $decoded;
 			}
@@ -708,10 +776,10 @@ if ( $view_member_id > 0 ) {
 				$method = isset( $qb_line['payment_method'] ) ? $qb_line['payment_method'] : '';
 				$desc   = sprintf(
 					__( 'Payment - %s', 'remember' ),
-					$method !== '' ? $method : __( 'QuickBooks', 'remember' )
+					$method !== '' ? $method : $provider_label
 				);
 				if ( ! empty( $qb_line['qb_payment_id'] ) ) {
-					$desc .= ' ' . sprintf( __( '(QB #%s)', 'remember' ), $qb_line['qb_payment_id'] );
+					$desc .= ' ' . sprintf( __( '(#%s)', 'remember' ), $qb_line['qb_payment_id'] );
 				}
 				$line_sort_ts = isset( $qb_line['sort_ts'] ) ? (int) $qb_line['sort_ts'] : 0;
 				if ( $line_sort_ts <= 0 ) {
@@ -752,10 +820,10 @@ if ( $view_member_id > 0 ) {
 			);
 		}
 
-		// QuickBooks refund receipt row(s), chronological with payments.
+		// Refund / credit note row(s), chronological with payments.
 		$qb_refund_lines = array();
-		if ( ! empty( $payment->quickbooks_refund_lines ) ) {
-			$decoded = json_decode( $payment->quickbooks_refund_lines, true );
+		if ( ! empty( $refund_lines_json ) ) {
+			$decoded = json_decode( $refund_lines_json, true );
 			if ( is_array( $decoded ) && ! empty( $decoded ) ) {
 				$qb_refund_lines = $decoded;
 			}
@@ -768,12 +836,12 @@ if ( $view_member_id > 0 ) {
 			$method = isset( $rf_line['payment_method'] ) ? $rf_line['payment_method'] : '';
 			$desc   = sprintf(
 				__( 'Refund - %s', 'remember' ),
-				$method !== '' ? $method : __( 'QuickBooks', 'remember' )
+				$method !== '' ? $method : $provider_label
 			);
 			if ( ! empty( $rf_line['doc_number'] ) ) {
 				$desc .= ' ' . sprintf( __( '(Receipt #%s)', 'remember' ), $rf_line['doc_number'] );
 			} elseif ( ! empty( $rf_line['qb_refund_id'] ) ) {
-				$desc .= ' ' . sprintf( __( '(QB #%s)', 'remember' ), $rf_line['qb_refund_id'] );
+				$desc .= ' ' . sprintf( __( '(#%s)', 'remember' ), $rf_line['qb_refund_id'] );
 			}
 			$rf_sort_ts = isset( $rf_line['sort_ts'] ) ? (int) $rf_line['sort_ts'] : 0;
 			if ( $rf_sort_ts <= 0 ) {
@@ -837,11 +905,19 @@ if ( $view_member_id > 0 ) {
 	}
 	unset( $entry );
 
+	require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-provider.php';
 	require_once plugin_dir_path( __FILE__ ) . '../../includes/integrations/class-remember-quickbooks-oauth.php';
+	require_once plugin_dir_path( __FILE__ ) . '../../includes/integrations/class-remember-xero-oauth.php';
+
 	$remember_qb_settings           = Remember_QuickBooks_OAuth::get_settings();
-	$remember_qb_show_sync_customer = current_user_can( 'remember_update_members' )
+	$remember_qb_show_sync_customer = Remember_Billing_Provider::is_quickbooks()
+		&& current_user_can( 'remember_update_members' )
 		&& ! empty( $remember_qb_settings['access_token'] )
 		&& ! empty( $remember_qb_settings['realm_id'] );
+
+	$remember_xero_show_sync_contact = Remember_Billing_Provider::is_xero()
+		&& current_user_can( 'remember_update_members' )
+		&& Remember_Xero_OAuth::is_connected();
 }
 ?>
 

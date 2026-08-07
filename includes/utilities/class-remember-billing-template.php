@@ -46,6 +46,94 @@ class Remember_Billing_Template {
 	}
 
 	/**
+	 * Resolve display invoice number and provider deep-link URL for a payment row.
+	 *
+	 * Prefers Xero when xero_invoice_id is present; otherwise QuickBooks.
+	 *
+	 * @param object $payment     Payment row.
+	 * @param bool   $include_url Whether to resolve a staff deep-link URL.
+	 * @return array{number:string,url:string,has_external:bool,provider:string}
+	 */
+	public static function get_payment_invoice_link_data( $payment, $include_url = true ) {
+		$out = array(
+			'number'       => '',
+			'url'          => '',
+			'has_external' => false,
+			'provider'     => '',
+		);
+		if ( ! is_object( $payment ) ) {
+			return $out;
+		}
+
+		if ( ! empty( $payment->xero_invoice_id ) ) {
+			$out['has_external'] = true;
+			$out['provider']     = 'xero';
+			$out['number']       = ! empty( $payment->xero_invoice_number )
+				? (string) $payment->xero_invoice_number
+				: '';
+			if ( $include_url ) {
+				require_once plugin_dir_path( __FILE__ ) . '../integrations/class-remember-xero-api.php';
+				$out['url'] = Remember_Xero_API::get_invoice_app_url( $payment->xero_invoice_id );
+			}
+			return $out;
+		}
+
+		if ( ! empty( $payment->quickbooks_invoice_id ) ) {
+			$out['has_external'] = true;
+			$out['provider']     = 'quickbooks';
+			$out['number']       = ! empty( $payment->quickbooks_invoice_number )
+				? (string) $payment->quickbooks_invoice_number
+				: '';
+			if ( $include_url ) {
+				require_once plugin_dir_path( __FILE__ ) . '../integrations/class-remember-quickbooks-api.php';
+				$out['url'] = Remember_QuickBooks_API::get_invoice_app_url( $payment->quickbooks_invoice_id );
+			}
+			return $out;
+		}
+
+		return $out;
+	}
+
+	/**
+	 * Echo invoice # cell contents (linked when a provider URL is available and $link is true).
+	 *
+	 * @param object $payment      Payment row.
+	 * @param string $pending_text Message when external id exists but number not synced yet.
+	 * @param string $empty_class  Class for empty / pending spans.
+	 * @param bool   $link         Whether to deep-link into the accounting UI (admin only).
+	 */
+	public static function render_invoice_number_cell( $payment, $pending_text = '', $empty_class = 'description', $link = true ) {
+		$data = self::get_payment_invoice_link_data( $payment, $link );
+		if ( '' === $pending_text ) {
+			$pending_text = __( 'Sync payments to load invoice #', 'remember' );
+		}
+
+		if ( '' !== $data['number'] ) {
+			if ( $link && '' !== $data['url'] ) {
+				$label = ( 'xero' === $data['provider'] )
+					? __( 'Open invoice in Xero', 'remember' )
+					: __( 'Open invoice in QuickBooks', 'remember' );
+				printf(
+					'<a href="%1$s" target="_blank" rel="noopener noreferrer" title="%2$s"><strong>%3$s</strong></a>',
+					esc_url( $data['url'] ),
+					esc_attr( $label ),
+					esc_html( $data['number'] )
+				);
+				return;
+			}
+			echo '<strong>' . esc_html( $data['number'] ) . '</strong>';
+			return;
+		}
+
+		if ( $data['has_external'] ) {
+			printf( '<span class="%1$s">%2$s</span>', esc_attr( $empty_class ), esc_html( $pending_text ) );
+			return;
+		}
+
+		printf( '<span class="%1$s">—</span>', esc_attr( $empty_class ) );
+	}
+
+	/**
 	 * Output a payments table.
 	 *
 	 * @param array $args {
@@ -95,7 +183,7 @@ class Remember_Billing_Template {
 			<thead>
 				<tr>
 					<th class="column-member"><?php esc_html_e( 'Member', 'remember' ); ?></th>
-					<th class="column-qb-invoice"><?php esc_html_e( 'QB Invoice #', 'remember' ); ?></th>
+					<th class="column-qb-invoice"><?php esc_html_e( 'Invoice #', 'remember' ); ?></th>
 					<th class="column-amount"><?php esc_html_e( 'Subtotal Amount', 'remember' ); ?></th>
 					<th class="column-paid"><?php esc_html_e( 'Amount Paid', 'remember' ); ?></th>
 					<th class="column-due"><?php esc_html_e( 'Amount Due', 'remember' ); ?></th>
@@ -124,13 +212,7 @@ class Remember_Billing_Template {
 							<?php endif; ?>
 						</td>
 						<td class="column-qb-invoice">
-							<?php if ( ! empty( $payment->quickbooks_invoice_number ) ) : ?>
-								<strong><?php echo esc_html( $payment->quickbooks_invoice_number ); ?></strong>
-							<?php elseif ( ! empty( $payment->quickbooks_invoice_id ) ) : ?>
-								<span class="description"><?php echo esc_html( __( 'Sync payments to load invoice #', 'remember' ) ); ?></span>
-							<?php else : ?>
-								<span class="description">—</span>
-							<?php endif; ?>
+							<?php self::render_invoice_number_cell( $payment ); ?>
 						</td>
 						<td class="column-amount">
 							<strong>$<?php echo esc_html( number_format( (float) $payment->total_amount, 2 ) ); ?></strong>
@@ -188,7 +270,7 @@ class Remember_Billing_Template {
 			<thead>
 				<tr>
 					<th scope="col"><?php esc_html_e( 'Event', 'remember' ); ?></th>
-					<th scope="col"><?php esc_html_e( 'QB Invoice #', 'remember' ); ?></th>
+					<th scope="col"><?php esc_html_e( 'Invoice #', 'remember' ); ?></th>
 					<th scope="col" class="remember-billing-mt-num"><?php esc_html_e( 'Subtotal Amount', 'remember' ); ?></th>
 					<th scope="col" class="remember-billing-mt-num"><?php esc_html_e( 'Amount Paid', 'remember' ); ?></th>
 					<th scope="col" class="remember-billing-mt-num"><?php esc_html_e( 'Amount Due', 'remember' ); ?></th>
@@ -208,13 +290,14 @@ class Remember_Billing_Template {
 					<tr>
 						<td><?php echo esc_html( $ename ); ?></td>
 						<td>
-							<?php if ( ! empty( $payment->quickbooks_invoice_number ) ) : ?>
-								<strong><?php echo esc_html( $payment->quickbooks_invoice_number ); ?></strong>
-							<?php elseif ( ! empty( $payment->quickbooks_invoice_id ) ) : ?>
-								<span class="remember-billing-mt-muted"><?php echo esc_html( __( 'Invoice # pending sync', 'remember' ) ); ?></span>
-							<?php else : ?>
-								<span class="remember-billing-mt-muted">—</span>
-							<?php endif; ?>
+							<?php
+							self::render_invoice_number_cell(
+								$payment,
+								__( 'Invoice # pending sync', 'remember' ),
+								'remember-billing-mt-muted',
+								false
+							);
+							?>
 						</td>
 						<td class="remember-billing-mt-num"><strong>$<?php echo esc_html( number_format( (float) $payment->total_amount, 2 ) ); ?></strong></td>
 						<td class="remember-billing-mt-num">$<?php echo esc_html( number_format( (float) $payment->amount_paid, 2 ) ); ?></td>

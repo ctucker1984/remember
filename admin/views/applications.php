@@ -166,23 +166,52 @@ if ( isset( $_POST['remember_application_action'] ) && check_admin_referer( 'rem
 					$result = $application_model->update_status( $application_id, 'accepted', get_current_user_id() );
 					if ( $result !== false ) {
 				Remember_Logger::info( 'Application accepted', array( 'application_id' => $application_id ) );
-				
-				// Create QuickBooks invoice if connected
-				require_once plugin_dir_path( __FILE__ ) . '../../includes/integrations/class-remember-quickbooks-oauth.php';
-				$qb_settings = Remember_QuickBooks_OAuth::get_settings();
-				if ( $qb_settings && ! empty( $qb_settings['access_token'] ) && ! empty( $qb_settings['realm_id'] ) ) {
-					require_once plugin_dir_path( __FILE__ ) . '../../includes/integrations/class-remember-quickbooks-sync.php';
-					$invoice_result = Remember_QuickBooks_Sync::create_invoice_for_application( $application_id );
-					if ( is_wp_error( $invoice_result ) ) {
-						Remember_Logger::warning( 'Failed to create QuickBooks invoice for accepted application', array(
-							'application_id' => $application_id,
-							'error'          => $invoice_result->get_error_message(),
-						) );
-						echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html__( 'Application accepted, but QuickBooks invoice creation failed: ', 'remember' ) . esc_html( $invoice_result->get_error_message() ) . '</p></div>';
-					} else {
-						echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Application accepted and QuickBooks invoice created successfully.', 'remember' ) . '</p></div>';
+
+				require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-provider.php';
+				$invoice_notice_shown = false;
+
+				if ( Remember_Billing_Provider::is_xero() ) {
+					require_once plugin_dir_path( __FILE__ ) . '../../includes/integrations/class-remember-xero-oauth.php';
+					if ( Remember_Xero_OAuth::is_connected() ) {
+						require_once plugin_dir_path( __FILE__ ) . '../../includes/integrations/class-remember-xero-sync.php';
+						$invoice_result = Remember_Xero_Sync::create_invoice_for_application( $application_id );
+						if ( is_wp_error( $invoice_result ) ) {
+							Remember_Logger::warning(
+								'Failed to create Xero invoice for accepted application',
+								array(
+									'application_id' => $application_id,
+									'error'          => $invoice_result->get_error_message(),
+								)
+							);
+							echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html__( 'Application accepted, but Xero invoice creation failed: ', 'remember' ) . esc_html( $invoice_result->get_error_message() ) . '</p></div>';
+						} else {
+							echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Application accepted and Xero invoice created successfully.', 'remember' ) . '</p></div>';
+						}
+						$invoice_notice_shown = true;
 					}
-				} else {
+				} elseif ( Remember_Billing_Provider::is_quickbooks() ) {
+					require_once plugin_dir_path( __FILE__ ) . '../../includes/integrations/class-remember-quickbooks-oauth.php';
+					$qb_settings = Remember_QuickBooks_OAuth::get_settings();
+					if ( $qb_settings && ! empty( $qb_settings['access_token'] ) && ! empty( $qb_settings['realm_id'] ) ) {
+						require_once plugin_dir_path( __FILE__ ) . '../../includes/integrations/class-remember-quickbooks-sync.php';
+						$invoice_result = Remember_QuickBooks_Sync::create_invoice_for_application( $application_id );
+						if ( is_wp_error( $invoice_result ) ) {
+							Remember_Logger::warning(
+								'Failed to create QuickBooks invoice for accepted application',
+								array(
+									'application_id' => $application_id,
+									'error'          => $invoice_result->get_error_message(),
+								)
+							);
+							echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html__( 'Application accepted, but QuickBooks invoice creation failed: ', 'remember' ) . esc_html( $invoice_result->get_error_message() ) . '</p></div>';
+						} else {
+							echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Application accepted and QuickBooks invoice created successfully.', 'remember' ) . '</p></div>';
+						}
+						$invoice_notice_shown = true;
+					}
+				}
+
+				if ( ! $invoice_notice_shown ) {
 					echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Application accepted successfully.', 'remember' ) . '</p></div>';
 				}
 					} else {
@@ -266,18 +295,37 @@ if ( isset( $_POST['remember_application_action'] ) && check_admin_referer( 'rem
 			if ( ! $application || 'accepted' !== $application->status ) {
 				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Only accepted applications can be reprocessed for billing.', 'remember' ) . '</p></div>';
 			} else {
-				require_once plugin_dir_path( __FILE__ ) . '../../includes/integrations/class-remember-quickbooks-oauth.php';
-				$qb_settings = Remember_QuickBooks_OAuth::get_settings();
-				if ( $qb_settings && ! empty( $qb_settings['access_token'] ) && ! empty( $qb_settings['realm_id'] ) ) {
-					require_once plugin_dir_path( __FILE__ ) . '../../includes/integrations/class-remember-quickbooks-sync.php';
-					$invoice_result = Remember_QuickBooks_Sync::create_invoice_for_application( $application_id );
-					if ( is_wp_error( $invoice_result ) ) {
-						echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html__( 'Billing reprocess failed: ', 'remember' ) . esc_html( $invoice_result->get_error_message() ) . '</p></div>';
+				require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-provider.php';
+
+				if ( Remember_Billing_Provider::is_xero() ) {
+					require_once plugin_dir_path( __FILE__ ) . '../../includes/integrations/class-remember-xero-oauth.php';
+					if ( Remember_Xero_OAuth::is_connected() ) {
+						require_once plugin_dir_path( __FILE__ ) . '../../includes/integrations/class-remember-xero-sync.php';
+						$invoice_result = Remember_Xero_Sync::create_invoice_for_application( $application_id );
+						if ( is_wp_error( $invoice_result ) ) {
+							echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html__( 'Billing reprocess failed: ', 'remember' ) . esc_html( $invoice_result->get_error_message() ) . '</p></div>';
+						} else {
+							echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Billing reprocess succeeded. Xero invoice created.', 'remember' ) . '</p></div>';
+						}
 					} else {
-						echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Billing reprocess succeeded. QuickBooks invoice created.', 'remember' ) . '</p></div>';
+						echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html__( 'Xero is not connected. Connect Xero in Settings to reprocess billing.', 'remember' ) . '</p></div>';
+					}
+				} elseif ( Remember_Billing_Provider::is_quickbooks() ) {
+					require_once plugin_dir_path( __FILE__ ) . '../../includes/integrations/class-remember-quickbooks-oauth.php';
+					$qb_settings = Remember_QuickBooks_OAuth::get_settings();
+					if ( $qb_settings && ! empty( $qb_settings['access_token'] ) && ! empty( $qb_settings['realm_id'] ) ) {
+						require_once plugin_dir_path( __FILE__ ) . '../../includes/integrations/class-remember-quickbooks-sync.php';
+						$invoice_result = Remember_QuickBooks_Sync::create_invoice_for_application( $application_id );
+						if ( is_wp_error( $invoice_result ) ) {
+							echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html__( 'Billing reprocess failed: ', 'remember' ) . esc_html( $invoice_result->get_error_message() ) . '</p></div>';
+						} else {
+							echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Billing reprocess succeeded. QuickBooks invoice created.', 'remember' ) . '</p></div>';
+						}
+					} else {
+						echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html__( 'QuickBooks is not connected. Connect QuickBooks in Settings to reprocess billing.', 'remember' ) . '</p></div>';
 					}
 				} else {
-					echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html__( 'QuickBooks is not connected. Connect QuickBooks in Settings to reprocess billing.', 'remember' ) . '</p></div>';
+					echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html__( 'No billing provider is selected. Choose QuickBooks or Xero under Settings → General.', 'remember' ) . '</p></div>';
 				}
 			}
 		}
@@ -327,14 +375,41 @@ if ( isset( $_GET['view'] ) ) {
 		// Get payment if exists
 		$viewing_payment = $payment_model->get_by_application( $view_id );
 		$viewing_billing_label = __( 'Not invoiced yet', 'remember' );
+		$viewing_billing_html  = '';
 		$viewing_billing_color = '#72777c';
-		if ( $viewing_payment && ! empty( $viewing_payment->quickbooks_invoice_id ) ) {
-			$viewing_billing_label = sprintf(
-				/* translators: %s: QuickBooks invoice ID */
-				__( 'Invoiced in QuickBooks (Invoice ID: %s)', 'remember' ),
-				$viewing_payment->quickbooks_invoice_id
-			);
+		if ( $viewing_payment && ( ! empty( $viewing_payment->xero_invoice_id ) || ! empty( $viewing_payment->quickbooks_invoice_id ) ) ) {
+			require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-template.php';
+			$link_data = Remember_Billing_Template::get_payment_invoice_link_data( $viewing_payment );
 			$viewing_billing_color = '#46b450';
+
+			if ( 'xero' === $link_data['provider'] ) {
+				$num_label = ! empty( $link_data['number'] )
+					? sprintf( __( 'Invoice #%s', 'remember' ), $link_data['number'] )
+					: sprintf( __( 'Invoice ID: %s', 'remember' ), $viewing_payment->xero_invoice_id );
+				$viewing_billing_label = sprintf(
+					/* translators: %s: invoice number or ID */
+					__( 'Invoiced in Xero (%s)', 'remember' ),
+					$num_label
+				);
+			} else {
+				$num_label = ! empty( $link_data['number'] )
+					? sprintf( __( 'Invoice #%s', 'remember' ), $link_data['number'] )
+					: sprintf( __( 'Invoice ID: %s', 'remember' ), $viewing_payment->quickbooks_invoice_id );
+				$viewing_billing_label = sprintf(
+					/* translators: %s: invoice number or ID */
+					__( 'Invoiced in QuickBooks (%s)', 'remember' ),
+					$num_label
+				);
+			}
+
+			if ( ! empty( $link_data['url'] ) ) {
+				$viewing_billing_html = sprintf(
+					'<a href="%1$s" target="_blank" rel="noopener noreferrer" style="color: %2$s; font-weight: 600;">%3$s</a>',
+					esc_url( $link_data['url'] ),
+					esc_attr( $viewing_billing_color ),
+					esc_html( $viewing_billing_label )
+				);
+			}
 		}
 
 		// Get selected add-ons/merchandise for this application.
@@ -529,7 +604,7 @@ $status_colors = array(
 					$application_payment = $payment_model->get_by_application( $application->application_id );
 					$billing_label = __( 'Not invoiced', 'remember' );
 					$billing_color = '#72777c';
-					if ( $application_payment && ! empty( $application_payment->quickbooks_invoice_id ) ) {
+					if ( $application_payment && ( ! empty( $application_payment->xero_invoice_id ) || ! empty( $application_payment->quickbooks_invoice_id ) ) ) {
 						$billing_label = __( 'Invoiced', 'remember' );
 						$billing_color = '#46b450';
 					}

@@ -32,6 +32,16 @@
 			if ($tab.length) {
 				$tab.trigger('click');
 			}
+		} else {
+			// Support ?tab=xero (and similar) from OAuth redirect URIs.
+			var params = new URLSearchParams(window.location.search);
+			var tabParam = params.get('tab');
+			if (tabParam) {
+				var $tabFromQuery = $('.nav-tab-wrapper a[href="#' + tabParam + '"]');
+				if ($tabFromQuery.length) {
+					$tabFromQuery.trigger('click');
+				}
+			}
 		}
 		
 		// Copy shortcode to clipboard

@@ -2,7 +2,7 @@
 
 A WordPress plugin for membership-style communities: **members**, **events**, **locations**, **applications**, **vetting**, **billing** (including **QuickBooks Online**), and **role-based access**. It extends WordPress users with custom tables, an admin UI under **reMember**, and front-end templates (shortcodes and block patterns).
 
-**Version:** 1.0.1  
+**Version:** 1.1.0  
 **Requires:** WordPress 5.0 or higher  
 **License:** GPL v2 or later
 
@@ -78,7 +78,7 @@ This order is also explained in **reMember → Getting Started** (always availab
 3. **Profile** — Members maintain legal name (private), public nickname / display name, contact info, dietary / medical / allergy selections, photo, and **Share with Event Members** privacy toggles on the front-end profile.
 4. **Events & applications** — Members browse events (front end) and submit **applications** for specific event roles (and optional add-ons).
 5. **Staff** — Accept or decline applications in **Applications**; waitlist as needed.
-6. **Billing** — For accepted applications, payments may be created and synced with **QuickBooks** invoices; staff can reconcile in **Billing** (amounts shown in reMember are subtotals; **DocNumber** is the human-friendly QB invoice number).
+6. **Billing** — For accepted applications, payments may be created and synced with the active accounting provider (**QuickBooks** or **Xero**); staff can reconcile in **Billing** (amounts shown in reMember are subtotals; invoice numbers come from the provider).
 
 ---
 
@@ -87,18 +87,31 @@ This order is also explained in **reMember → Getting Started** (always availab
 - **Username** — WordPress login; cannot be changed later.
 - **Display name** — Required at registration; how the member appears publicly. Never auto-derived from legal name.
 - **Nickname** — WordPress nickname; editable on the profile; available as a display-name choice (same idea as WP core).
-- **Legal name** — Stored on the member profile for admin / vetting; labeled private on the member’s own dashboard and profile view. Not shown in the event attendee directory.
+- **Legal name** — Stored on the member profile for admin / vetting / billing contacts; labeled private on the member’s own dashboard and profile view. Not shown in the event attendee directory.
 - **Share with Event Members** — Opt-in toggles (email, phone, location, IM, interests, **profile photo**). The event directory only shows what the member enabled.
 - **Dietary restrictions / medical accommodations / allergies** — Editable by the member on the front-end profile and by staff in admin; for organizers, not shared in the public directory.
 
 ---
 
-## Billing and QuickBooks Online
+## Billing and accounting providers
 
-- Connect QuickBooks under **reMember → Settings** (OAuth credentials from the Intuit developer console).
-- The plugin can create invoices, sync payment totals from QuickBooks **Payment** entities linked to invoices, and store **invoice numbers** (`DocNumber`) for reference in **Billing**.
-- **Scheduled sync** runs on the `remember_qb_sync` cron (hourly schedule; interval preferences may be applied in code). **Billing** can also refresh from QuickBooks when that screen loads (when connected).
-- **Accounting note:** Displayed amounts in reMember are **subtotal-oriented**; taxes and final totals are authoritative in QuickBooks and customer-facing emails from QuickBooks.
+Choose **one** active provider under **reMember → Settings → General** (`none`, **QuickBooks Online**, or **Xero**). Switching does not delete historical invoice IDs on payment rows; finish open cycles before switching.
+
+### QuickBooks Online
+
+- Connect under **Settings → QuickBooks** (OAuth credentials from the Intuit developer console).
+- Create invoices on application accept, sync payment/refund lines, store invoice numbers (`DocNumber`) for **Billing** and the member register.
+- Scheduled sync uses the shared `remember_qb_sync` cron; **Billing** can also refresh when that screen loads (when QBO is active and connected).
+
+### Xero
+
+- Connect under **Settings → Xero** (OAuth app redirect URI is built from `admin_url()`; register each site hostname in the Xero app).
+- Parallel to QBO: contact sync (legal name, email/phone/address, nickname in Notes, WP user ID as AccountNumber), role/product item mapping, invoices on accept, payment + credit-note sync into the register.
+- Plan and phase notes: [`XERO_PLAN.md`](XERO_PLAN.md).
+
+### Shared accounting note
+
+Displayed amounts in reMember are **subtotal-oriented**; taxes and final totals are authoritative in the active provider and its customer-facing emails.
 
 ---
 
@@ -128,19 +141,26 @@ reMember adds granular capabilities (`remember_read_events`, `remember_create_me
 | `public/partials/` | Front-end templates (dashboard, profile, register, event directory, etc.). |
 | `includes/models/` | Data models (members, events, payments, etc.). |
 | `includes/database/` | Table creation, migrations (`Remember_Database_Updater`), seeding. |
-| `includes/integrations/` | QuickBooks API and sync helpers; Xero planned (see `XERO_PLAN.md`). |
+| `includes/integrations/` | QuickBooks and Xero OAuth/API/sync helpers (one active provider at a time). |
 
 Enable `WP_DEBUG` as needed; logging uses `Remember_Logger`.
 
-**Branching note:** Release work for this line lives on branch `v1.0.1` (tag `v1.0.0` remains the 1.0 baseline). Prefer clear conventional commits on that branch so the changelog below stays easy to inventory across machines.
+**Branching note:** Release work for this line lives on branch `v1.1.0`. Prefer clear conventional commits so the changelog below stays easy to inventory across machines.
 
-**Accounting providers:** One active billing provider per site (`quickbooks` or `xero`). QBO remains as implemented; Xero is planned as a parallel stack — details in [`XERO_PLAN.md`](XERO_PLAN.md).
+**Accounting providers:** One active billing provider per site (`quickbooks` or `xero`). Parallel stacks; see [`XERO_PLAN.md`](XERO_PLAN.md).
 
 ---
 
 ## Changelog
 
-### 1.0.1 (in progress)
+### 1.1.0 (in progress)
+
+- **Version** bumped to `1.1.0` (`REMEMBER_VERSION`).
+- **Billing provider:** Settings → General radio (`none` / QuickBooks / Xero). Subtotal disclaimer follows the active provider.
+- **Xero:** Full parallel path to QBO — OAuth (granular scopes), contact sync, item mapping, invoices on accept / reprocess (clears voided links), payment + credit-note sync into Billing / member register, Settings sync controls. Schema `1.16.0` (`xero_*` columns, item mappings, processor). See `XERO_PLAN.md`.
+- **QuickBooks:** Unchanged operationally; gated to the QuickBooks provider selection where dispatch was updated.
+
+### 1.0.1
 
 - **Version** bumped to `1.0.1` (`REMEMBER_VERSION`).
 - **Registration:** Required **Display Name**; legal first/last labeled as legal/private; username help text (login; not changeable). New accounts never default `display_name` from legal name; nickname is seeded from the chosen display name.

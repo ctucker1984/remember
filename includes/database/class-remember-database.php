@@ -73,6 +73,7 @@ class Remember_Database {
 			'application_merchandise'        => 'create_application_merchandise_table',
 			'products'                       => 'create_products_table',
 			'qb_item_mappings'               => 'create_qb_item_mappings_table',
+			'xero_item_mappings'             => 'create_xero_item_mappings_table',
 			'payment_processors'             => 'create_payment_processors_table',
 			'payments'                       => 'create_payments_table',
 			'vetting'                        => 'create_vetting_table',
@@ -590,6 +591,30 @@ class Remember_Database {
 	}
 
 	/**
+	 * Create Xero item mappings table (roles + catalog products).
+	 */
+	public function create_xero_item_mappings_table() {
+		$table_name      = $this->prefix . 'xero_item_mappings';
+		$charset_collate = $this->wpdb->get_charset_collate();
+
+		$sql = "CREATE TABLE $table_name (
+			mapping_id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+			entity_type ENUM('role','product') NOT NULL,
+			entity_id BIGINT(20) UNSIGNED NOT NULL,
+			xero_item_id VARCHAR(100) DEFAULT NULL,
+			xero_item_name VARCHAR(255) DEFAULT NULL,
+			last_sync_at DATETIME DEFAULT NULL,
+			created_at DATETIME NOT NULL,
+			updated_at DATETIME NOT NULL,
+			PRIMARY KEY (mapping_id),
+			UNIQUE KEY entity (entity_type, entity_id),
+			KEY idx_xero_item_id (xero_item_id)
+		) $charset_collate;";
+
+		dbDelta( $sql );
+	}
+
+	/**
 	 * Create payment processors table.
 	 */
 	private function create_payment_processors_table() {
@@ -598,7 +623,7 @@ class Remember_Database {
 
 		$sql = "CREATE TABLE $table_name (
 			processor_id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
-			processor_type ENUM('manual', 'quickbooks') NOT NULL,
+			processor_type ENUM('manual', 'quickbooks', 'xero') NOT NULL,
 			processor_name VARCHAR(100) NOT NULL,
 			is_active BOOLEAN DEFAULT 0,
 			settings TEXT DEFAULT NULL,
@@ -638,6 +663,11 @@ class Remember_Database {
 			quickbooks_invoice_sort_ts BIGINT(20) UNSIGNED DEFAULT NULL,
 			quickbooks_payment_lines LONGTEXT DEFAULT NULL,
 			quickbooks_refund_lines LONGTEXT DEFAULT NULL,
+			xero_invoice_id VARCHAR(100) DEFAULT NULL,
+			xero_invoice_number VARCHAR(50) DEFAULT NULL,
+			xero_invoice_sort_ts BIGINT(20) UNSIGNED DEFAULT NULL,
+			xero_payment_lines LONGTEXT DEFAULT NULL,
+			xero_refund_lines LONGTEXT DEFAULT NULL,
 			notes TEXT DEFAULT NULL,
 			created_at DATETIME NOT NULL,
 			updated_at DATETIME NOT NULL,
