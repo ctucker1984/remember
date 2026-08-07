@@ -335,4 +335,73 @@ class Remember_Xero_API {
 		}
 		return $result[0];
 	}
+
+	/**
+	 * Create an ACCREC (sales) invoice in Xero.
+	 *
+	 * @param array $invoice_data Keys: contact_id, line_items[{item_code, quantity, unit_amount, description, tax_type?}], reference?, date?, due_date?.
+	 * @return array|WP_Error Invoice entity or error.
+	 */
+	public static function create_invoice( $invoice_data ) {
+		if ( empty( $invoice_data['contact_id'] ) ) {
+			return new WP_Error( 'xero_invoice_no_contact', __( 'Xero invoice requires a contact.', 'remember' ) );
+		}
+		if ( empty( $invoice_data['line_items'] ) || ! is_array( $invoice_data['line_items'] ) ) {
+			return new WP_Error( 'xero_invoice_no_lines', __( 'Xero invoice requires at least one line item.', 'remember' ) );
+		}
+
+		$line_items = array();
+		foreach ( $invoice_data['line_items'] as $item ) {
+			$qty = isset( $item['quantity'] ) ? floatval( $item['quantity'] ) : 1.0;
+			if ( $qty <= 0 ) {
+				$qty = 1.0;
+			}
+			$line = array(
+				'Description' => ! empty( $item['description'] ) ? (string) $item['description'] : '',
+				'Quantity'    => $qty,
+				'UnitAmount'  => isset( $item['unit_amount'] ) ? floatval( $item['unit_amount'] ) : 0.0,
+			);
+			if ( ! empty( $item['item_code'] ) ) {
+				$line['ItemCode'] = (string) $item['item_code'];
+			}
+			if ( ! empty( $item['tax_type'] ) ) {
+				$line['TaxType'] = (string) $item['tax_type'];
+			}
+			if ( ! empty( $item['account_code'] ) ) {
+				$line['AccountCode'] = (string) $item['account_code'];
+			}
+			$line_items[] = $line;
+		}
+
+		$today = gmdate( 'Y-m-d' );
+		$invoice = array(
+			'Type'            => 'ACCREC',
+			'Contact'         => array(
+				'ContactID' => (string) $invoice_data['contact_id'],
+			),
+			'LineItems'       => $line_items,
+			'Date'            => ! empty( $invoice_data['date'] ) ? (string) $invoice_data['date'] : $today,
+			'DueDate'         => ! empty( $invoice_data['due_date'] ) ? (string) $invoice_data['due_date'] : gmdate( 'Y-m-d', strtotime( '+30 days' ) ),
+			'LineAmountTypes' => 'NoTax',
+			'Status'          => ! empty( $invoice_data['status'] ) ? (string) $invoice_data['status'] : 'AUTHORISED',
+		);
+		if ( ! empty( $invoice_data['reference'] ) ) {
+			$invoice['Reference'] = (string) $invoice_data['reference'];
+		}
+
+		$result = self::request(
+			'POST',
+			'Invoices',
+			array(
+				'Invoices' => array( $invoice ),
+			)
+		);
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		if ( ! empty( $result['Invoices'][0] ) && is_array( $result['Invoices'][0] ) ) {
+			return $result['Invoices'][0];
+		}
+		return new WP_Error( 'xero_invoice_save_failed', __( 'Xero did not return an invoice after save.', 'remember' ), $result );
+	}
 }
