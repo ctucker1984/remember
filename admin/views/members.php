@@ -684,20 +684,57 @@ if ( $view_member_id > 0 ) {
 	$billing_register = array();
 	
 	// Build chronological register (invoices and payments)
+	require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-provider.php';
+	$billing_use_xero = Remember_Billing_Provider::is_xero();
+
 	foreach ( $view_payments as $payment ) {
 		// Get application and event info
 		$application = $application_model->get( $payment->event_application_id );
 		$event = $application ? $event_model->get( $application->event_id ) : null;
+
+		// Prefer active-provider columns; fall back to the other provider for historical rows.
+		$invoice_number = '';
+		$invoice_sort_ts_raw = 0;
+		$payment_lines_json = '';
+		$refund_lines_json = '';
+		$provider_label = __( 'QuickBooks', 'remember' );
+
+		if ( $billing_use_xero ) {
+			$provider_label = __( 'Xero', 'remember' );
+			if ( ! empty( $payment->xero_invoice_number ) || ! empty( $payment->xero_invoice_id ) ) {
+				$invoice_number      = ! empty( $payment->xero_invoice_number ) ? $payment->xero_invoice_number : '';
+				$invoice_sort_ts_raw = ! empty( $payment->xero_invoice_sort_ts ) ? (int) $payment->xero_invoice_sort_ts : 0;
+				$payment_lines_json  = ! empty( $payment->xero_payment_lines ) ? $payment->xero_payment_lines : '';
+				$refund_lines_json   = ! empty( $payment->xero_refund_lines ) ? $payment->xero_refund_lines : '';
+			} else {
+				$invoice_number      = ! empty( $payment->quickbooks_invoice_number ) ? $payment->quickbooks_invoice_number : '';
+				$invoice_sort_ts_raw = ! empty( $payment->quickbooks_invoice_sort_ts ) ? (int) $payment->quickbooks_invoice_sort_ts : 0;
+				$payment_lines_json  = ! empty( $payment->quickbooks_payment_lines ) ? $payment->quickbooks_payment_lines : '';
+				$refund_lines_json   = ! empty( $payment->quickbooks_refund_lines ) ? $payment->quickbooks_refund_lines : '';
+				$provider_label      = __( 'QuickBooks', 'remember' );
+			}
+		} else {
+			if ( ! empty( $payment->quickbooks_invoice_number ) || ! empty( $payment->quickbooks_invoice_id ) ) {
+				$invoice_number      = ! empty( $payment->quickbooks_invoice_number ) ? $payment->quickbooks_invoice_number : '';
+				$invoice_sort_ts_raw = ! empty( $payment->quickbooks_invoice_sort_ts ) ? (int) $payment->quickbooks_invoice_sort_ts : 0;
+				$payment_lines_json  = ! empty( $payment->quickbooks_payment_lines ) ? $payment->quickbooks_payment_lines : '';
+				$refund_lines_json   = ! empty( $payment->quickbooks_refund_lines ) ? $payment->quickbooks_refund_lines : '';
+			} elseif ( ! empty( $payment->xero_invoice_id ) || ! empty( $payment->xero_invoice_number ) ) {
+				$provider_label      = __( 'Xero', 'remember' );
+				$invoice_number      = ! empty( $payment->xero_invoice_number ) ? $payment->xero_invoice_number : '';
+				$invoice_sort_ts_raw = ! empty( $payment->xero_invoice_sort_ts ) ? (int) $payment->xero_invoice_sort_ts : 0;
+				$payment_lines_json  = ! empty( $payment->xero_payment_lines ) ? $payment->xero_payment_lines : '';
+				$refund_lines_json   = ! empty( $payment->xero_refund_lines ) ? $payment->xero_refund_lines : '';
+			}
+		}
 		
 		// Invoice entry (when payment record created)
 		$invoice_description = $event ? sprintf( __( 'Invoice: %s', 'remember' ), $event->event_name ) : __( 'Invoice', 'remember' );
-		if ( ! empty( $payment->quickbooks_invoice_number ) ) {
-			$invoice_description .= ' ' . sprintf( __( '(Invoice #%s)', 'remember' ), $payment->quickbooks_invoice_number );
+		if ( ! empty( $invoice_number ) ) {
+			$invoice_description .= ' ' . sprintf( __( '(Invoice #%s)', 'remember' ), $invoice_number );
 		}
 
-		$invoice_sort_ts = ! empty( $payment->quickbooks_invoice_sort_ts )
-			? (int) $payment->quickbooks_invoice_sort_ts
-			: strtotime( $payment->created_at );
+		$invoice_sort_ts = $invoice_sort_ts_raw > 0 ? $invoice_sort_ts_raw : strtotime( $payment->created_at );
 		if ( $invoice_sort_ts <= 0 ) {
 			$invoice_sort_ts = strtotime( $payment->created_at );
 		}
@@ -715,10 +752,10 @@ if ( $view_member_id > 0 ) {
 			'application_id' => $payment->event_application_id,
 		);
 		
-		// Payment row(s): one line per QuickBooks Payment when synced; otherwise one aggregated line.
+		// Payment row(s): one line per external Payment when synced; otherwise one aggregated line.
 		$qb_payment_lines = array();
-		if ( ! empty( $payment->quickbooks_payment_lines ) ) {
-			$decoded = json_decode( $payment->quickbooks_payment_lines, true );
+		if ( ! empty( $payment_lines_json ) ) {
+			$decoded = json_decode( $payment_lines_json, true );
 			if ( is_array( $decoded ) && ! empty( $decoded ) ) {
 				$qb_payment_lines = $decoded;
 			}
@@ -733,10 +770,10 @@ if ( $view_member_id > 0 ) {
 				$method = isset( $qb_line['payment_method'] ) ? $qb_line['payment_method'] : '';
 				$desc   = sprintf(
 					__( 'Payment - %s', 'remember' ),
-					$method !== '' ? $method : __( 'QuickBooks', 'remember' )
+					$method !== '' ? $method : $provider_label
 				);
 				if ( ! empty( $qb_line['qb_payment_id'] ) ) {
-					$desc .= ' ' . sprintf( __( '(QB #%s)', 'remember' ), $qb_line['qb_payment_id'] );
+					$desc .= ' ' . sprintf( __( '(#%s)', 'remember' ), $qb_line['qb_payment_id'] );
 				}
 				$line_sort_ts = isset( $qb_line['sort_ts'] ) ? (int) $qb_line['sort_ts'] : 0;
 				if ( $line_sort_ts <= 0 ) {
@@ -777,10 +814,10 @@ if ( $view_member_id > 0 ) {
 			);
 		}
 
-		// QuickBooks refund receipt row(s), chronological with payments.
+		// Refund / credit note row(s), chronological with payments.
 		$qb_refund_lines = array();
-		if ( ! empty( $payment->quickbooks_refund_lines ) ) {
-			$decoded = json_decode( $payment->quickbooks_refund_lines, true );
+		if ( ! empty( $refund_lines_json ) ) {
+			$decoded = json_decode( $refund_lines_json, true );
 			if ( is_array( $decoded ) && ! empty( $decoded ) ) {
 				$qb_refund_lines = $decoded;
 			}
@@ -793,12 +830,12 @@ if ( $view_member_id > 0 ) {
 			$method = isset( $rf_line['payment_method'] ) ? $rf_line['payment_method'] : '';
 			$desc   = sprintf(
 				__( 'Refund - %s', 'remember' ),
-				$method !== '' ? $method : __( 'QuickBooks', 'remember' )
+				$method !== '' ? $method : $provider_label
 			);
 			if ( ! empty( $rf_line['doc_number'] ) ) {
 				$desc .= ' ' . sprintf( __( '(Receipt #%s)', 'remember' ), $rf_line['doc_number'] );
 			} elseif ( ! empty( $rf_line['qb_refund_id'] ) ) {
-				$desc .= ' ' . sprintf( __( '(QB #%s)', 'remember' ), $rf_line['qb_refund_id'] );
+				$desc .= ' ' . sprintf( __( '(#%s)', 'remember' ), $rf_line['qb_refund_id'] );
 			}
 			$rf_sort_ts = isset( $rf_line['sort_ts'] ) ? (int) $rf_line['sort_ts'] : 0;
 			if ( $rf_sort_ts <= 0 ) {

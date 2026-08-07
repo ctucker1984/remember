@@ -95,7 +95,7 @@ class Remember_Billing_Template {
 			<thead>
 				<tr>
 					<th class="column-member"><?php esc_html_e( 'Member', 'remember' ); ?></th>
-					<th class="column-qb-invoice"><?php esc_html_e( 'QB Invoice #', 'remember' ); ?></th>
+					<th class="column-qb-invoice"><?php esc_html_e( 'Invoice #', 'remember' ); ?></th>
 					<th class="column-amount"><?php esc_html_e( 'Subtotal Amount', 'remember' ); ?></th>
 					<th class="column-paid"><?php esc_html_e( 'Amount Paid', 'remember' ); ?></th>
 					<th class="column-due"><?php esc_html_e( 'Amount Due', 'remember' ); ?></th>
@@ -124,9 +124,15 @@ class Remember_Billing_Template {
 							<?php endif; ?>
 						</td>
 						<td class="column-qb-invoice">
-							<?php if ( ! empty( $payment->quickbooks_invoice_number ) ) : ?>
-								<strong><?php echo esc_html( $payment->quickbooks_invoice_number ); ?></strong>
-							<?php elseif ( ! empty( $payment->quickbooks_invoice_id ) ) : ?>
+							<?php
+							$display_invoice_number = ! empty( $payment->xero_invoice_number )
+								? $payment->xero_invoice_number
+								: ( ! empty( $payment->quickbooks_invoice_number ) ? $payment->quickbooks_invoice_number : '' );
+							$has_external_invoice = ! empty( $payment->xero_invoice_id ) || ! empty( $payment->quickbooks_invoice_id );
+							?>
+							<?php if ( ! empty( $display_invoice_number ) ) : ?>
+								<strong><?php echo esc_html( $display_invoice_number ); ?></strong>
+							<?php elseif ( $has_external_invoice ) : ?>
 								<span class="description"><?php echo esc_html( __( 'Sync payments to load invoice #', 'remember' ) ); ?></span>
 							<?php else : ?>
 								<span class="description">—</span>
@@ -188,7 +194,7 @@ class Remember_Billing_Template {
 			<thead>
 				<tr>
 					<th scope="col"><?php esc_html_e( 'Event', 'remember' ); ?></th>
-					<th scope="col"><?php esc_html_e( 'QB Invoice #', 'remember' ); ?></th>
+					<th scope="col"><?php esc_html_e( 'Invoice #', 'remember' ); ?></th>
 					<th scope="col" class="remember-billing-mt-num"><?php esc_html_e( 'Subtotal Amount', 'remember' ); ?></th>
 					<th scope="col" class="remember-billing-mt-num"><?php esc_html_e( 'Amount Paid', 'remember' ); ?></th>
 					<th scope="col" class="remember-billing-mt-num"><?php esc_html_e( 'Amount Due', 'remember' ); ?></th>
@@ -208,9 +214,15 @@ class Remember_Billing_Template {
 					<tr>
 						<td><?php echo esc_html( $ename ); ?></td>
 						<td>
-							<?php if ( ! empty( $payment->quickbooks_invoice_number ) ) : ?>
-								<strong><?php echo esc_html( $payment->quickbooks_invoice_number ); ?></strong>
-							<?php elseif ( ! empty( $payment->quickbooks_invoice_id ) ) : ?>
+							<?php
+							$mt_invoice_number = ! empty( $payment->xero_invoice_number )
+								? $payment->xero_invoice_number
+								: ( ! empty( $payment->quickbooks_invoice_number ) ? $payment->quickbooks_invoice_number : '' );
+							$mt_has_external = ! empty( $payment->xero_invoice_id ) || ! empty( $payment->quickbooks_invoice_id );
+							?>
+							<?php if ( ! empty( $mt_invoice_number ) ) : ?>
+								<strong><?php echo esc_html( $mt_invoice_number ); ?></strong>
+							<?php elseif ( $mt_has_external ) : ?>
 								<span class="remember-billing-mt-muted"><?php echo esc_html( __( 'Invoice # pending sync', 'remember' ) ); ?></span>
 							<?php else : ?>
 								<span class="remember-billing-mt-muted">—</span>

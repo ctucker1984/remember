@@ -1,6 +1,6 @@
 # Xero Billing Integration Plan
 
-**Status:** Phase 2 write path largely done (contacts, item mapping, invoices on accept); Phase 3 payment sync next  
+**Status:** Phase 3 in progress — payment/refund sync + register wiring; polish/docs next  
 **Branch:** `v1.1.0`  
 **Decision date:** 2026-08-05  
 **Redirect URI (demo example):** built at runtime with WordPress `admin_url()` — not hard-coded. On each site it becomes  

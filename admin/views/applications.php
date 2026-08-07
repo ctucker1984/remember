@@ -376,7 +376,16 @@ if ( isset( $_GET['view'] ) ) {
 		$viewing_payment = $payment_model->get_by_application( $view_id );
 		$viewing_billing_label = __( 'Not invoiced yet', 'remember' );
 		$viewing_billing_color = '#72777c';
-		if ( $viewing_payment && ! empty( $viewing_payment->quickbooks_invoice_id ) ) {
+		if ( $viewing_payment && ! empty( $viewing_payment->xero_invoice_id ) ) {
+			$viewing_billing_label = sprintf(
+				/* translators: %s: Xero invoice number or ID */
+				__( 'Invoiced in Xero (%s)', 'remember' ),
+				! empty( $viewing_payment->xero_invoice_number )
+					? sprintf( __( 'Invoice #%s', 'remember' ), $viewing_payment->xero_invoice_number )
+					: sprintf( __( 'Invoice ID: %s', 'remember' ), $viewing_payment->xero_invoice_id )
+			);
+			$viewing_billing_color = '#46b450';
+		} elseif ( $viewing_payment && ! empty( $viewing_payment->quickbooks_invoice_id ) ) {
 			$viewing_billing_label = sprintf(
 				/* translators: %s: QuickBooks invoice ID */
 				__( 'Invoiced in QuickBooks (Invoice ID: %s)', 'remember' ),
@@ -577,7 +586,7 @@ $status_colors = array(
 					$application_payment = $payment_model->get_by_application( $application->application_id );
 					$billing_label = __( 'Not invoiced', 'remember' );
 					$billing_color = '#72777c';
-					if ( $application_payment && ! empty( $application_payment->quickbooks_invoice_id ) ) {
+					if ( $application_payment && ( ! empty( $application_payment->xero_invoice_id ) || ! empty( $application_payment->quickbooks_invoice_id ) ) ) {
 						$billing_label = __( 'Invoiced', 'remember' );
 						$billing_color = '#46b450';
 					}

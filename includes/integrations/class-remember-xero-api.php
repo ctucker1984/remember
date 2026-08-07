@@ -202,16 +202,34 @@ class Remember_Xero_API {
 		$escaped = str_replace( '"', '""', $email );
 		$where   = 'EmailAddress!=null&&EmailAddress=="' . $escaped . '"';
 		$result  = self::request( 'GET', 'Contacts', null, array( 'where' => $where ) );
-		if ( is_wp_error( $result ) || empty( $result['Contacts'][0] ) || ! is_array( $result['Contacts'][0] ) ) {
+		if ( is_wp_error( $result ) || empty( $result['Contacts'] ) || ! is_array( $result['Contacts'] ) ) {
 			return null;
 		}
-		return $result['Contacts'][0];
+
+		$email_l = strtolower( $email );
+		foreach ( $result['Contacts'] as $contact ) {
+			if ( ! is_array( $contact ) ) {
+				continue;
+			}
+			if ( ! empty( $contact['EmailAddress'] ) && strtolower( trim( (string) $contact['EmailAddress'] ) ) === $email_l ) {
+				return $contact;
+			}
+			if ( ! empty( $contact['ContactPersons'] ) && is_array( $contact['ContactPersons'] ) ) {
+				foreach ( $contact['ContactPersons'] as $person ) {
+					if ( ! empty( $person['EmailAddress'] ) && strtolower( trim( (string) $person['EmailAddress'] ) ) === $email_l ) {
+						return $contact;
+					}
+				}
+			}
+		}
+
+		return null;
 	}
 
 	/**
 	 * Create or update a Xero Contact.
 	 *
-	 * @param array $contact_data Keys: name, first_name, last_name, email, phone, address[], contact_id (optional).
+	 * @param array $contact_data Keys: name, first_name, last_name, email, phone, address[], account_number?, notes?, contact_id?.
 	 * @return array|WP_Error Contact entity or error.
 	 */
 	public static function create_or_update_contact( $contact_data ) {
@@ -226,6 +244,12 @@ class Remember_Xero_API {
 		}
 		if ( ! empty( $contact_data['email'] ) ) {
 			$contact['EmailAddress'] = $contact_data['email'];
+		}
+		if ( ! empty( $contact_data['account_number'] ) ) {
+			$contact['AccountNumber'] = (string) $contact_data['account_number'];
+		}
+		if ( isset( $contact_data['notes'] ) ) {
+			$contact['Notes'] = (string) $contact_data['notes'];
 		}
 		if ( ! empty( $contact_data['phone'] ) ) {
 			$contact['Phones'] = array(
@@ -255,7 +279,10 @@ class Remember_Xero_API {
 				ARRAY_FILTER_USE_BOTH
 			);
 			if ( count( $addr ) > 1 ) {
-				$contact['Addresses'] = array( $addr );
+				// STREET + POBOX so invoicing and contact card both show the address.
+				$pobox         = $addr;
+				$pobox['AddressType'] = 'POBOX';
+				$contact['Addresses'] = array( $addr, $pobox );
 			}
 		}
 		if ( ! empty( $contact_data['contact_id'] ) ) {
@@ -403,5 +430,213 @@ class Remember_Xero_API {
 			return $result['Invoices'][0];
 		}
 		return new WP_Error( 'xero_invoice_save_failed', __( 'Xero did not return an invoice after save.', 'remember' ), $result );
+	}
+
+	/**
+	 * Get an invoice by InvoiceID.
+	 *
+	 * @param string $invoice_id InvoiceID.
+	 * @return array|WP_Error Invoice array or error.
+	 */
+	public static function get_invoice( $invoice_id ) {
+		$invoice_id = trim( (string) $invoice_id );
+		if ( '' === $invoice_id ) {
+			return new WP_Error( 'invalid_invoice_id', __( 'Invalid Xero invoice ID.', 'remember' ) );
+		}
+		$result = self::request( 'GET', 'Invoices/' . rawurlencode( $invoice_id ) );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		if ( ! empty( $result['Invoices'][0] ) && is_array( $result['Invoices'][0] ) ) {
+			return $result['Invoices'][0];
+		}
+		return new WP_Error( 'xero_invoice_not_found', __( 'Xero invoice not found.', 'remember' ) );
+	}
+
+	/**
+	 * Payment rows applied to a Xero invoice (register-friendly shape).
+	 *
+	 * Keys match QuickBooks lines for UI reuse: amount, txn_date, payment_method, qb_payment_id, sort_ts.
+	 *
+	 * @param string $invoice_id InvoiceID.
+	 * @return array|WP_Error
+	 */
+	public static function get_invoice_payment_lines( $invoice_id ) {
+		$invoice_id = trim( (string) $invoice_id );
+		if ( '' === $invoice_id ) {
+			return new WP_Error( 'invalid_invoice_id', __( 'Invalid Xero invoice ID.', 'remember' ) );
+		}
+
+		$where  = 'Invoice.InvoiceID=Guid("' . $invoice_id . '")';
+		$result = self::request( 'GET', 'Payments', null, array( 'where' => $where ) );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+
+		$out = array();
+		if ( empty( $result['Payments'] ) || ! is_array( $result['Payments'] ) ) {
+			return $out;
+		}
+
+		foreach ( $result['Payments'] as $payment ) {
+			if ( ! is_array( $payment ) ) {
+				continue;
+			}
+			$status = isset( $payment['Status'] ) ? (string) $payment['Status'] : '';
+			if ( 'DELETED' === strtoupper( $status ) ) {
+				continue;
+			}
+			$amount = isset( $payment['Amount'] ) ? floatval( $payment['Amount'] ) : 0.0;
+			if ( $amount <= 0 ) {
+				continue;
+			}
+			$txn_date = '';
+			if ( ! empty( $payment['Date'] ) ) {
+				$txn_date = self::normalize_xero_date( $payment['Date'] );
+			}
+			$method = '';
+			if ( ! empty( $payment['PaymentType'] ) ) {
+				$method = (string) $payment['PaymentType'];
+			} elseif ( ! empty( $payment['Account']['Name'] ) ) {
+				$method = (string) $payment['Account']['Name'];
+			}
+			$payment_id = isset( $payment['PaymentID'] ) ? (string) $payment['PaymentID'] : '';
+			$out[]      = array(
+				'amount'         => $amount,
+				'txn_date'       => $txn_date,
+				'payment_method' => $method,
+				'qb_payment_id'  => $payment_id,
+				'doc_number'     => '',
+				'sort_ts'        => self::xero_entity_sort_timestamp( $payment ),
+			);
+		}
+
+		return $out;
+	}
+
+	/**
+	 * Credit note allocations against a Xero invoice (refund-like register rows).
+	 *
+	 * Keys match QuickBooks refund lines: amount, txn_date, payment_method, qb_refund_id, doc_number, sort_ts.
+	 *
+	 * @param string      $invoice_id InvoiceID.
+	 * @param string|null $contact_id Optional ContactID to narrow CreditNotes query.
+	 * @return array|WP_Error
+	 */
+	public static function get_invoice_refund_lines( $invoice_id, $contact_id = null ) {
+		$invoice_id = trim( (string) $invoice_id );
+		if ( '' === $invoice_id ) {
+			return new WP_Error( 'invalid_invoice_id', __( 'Invalid Xero invoice ID.', 'remember' ) );
+		}
+
+		$query = array();
+		$contact_id = $contact_id ? trim( (string) $contact_id ) : '';
+		if ( '' !== $contact_id ) {
+			$query['where'] = 'Contact.ContactID=Guid("' . $contact_id . '")&&Type=="ACCRECCREDIT"';
+		}
+
+		$result = self::request( 'GET', 'CreditNotes', null, $query );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+
+		$out = array();
+		if ( empty( $result['CreditNotes'] ) || ! is_array( $result['CreditNotes'] ) ) {
+			return $out;
+		}
+
+		foreach ( $result['CreditNotes'] as $note ) {
+			if ( ! is_array( $note ) ) {
+				continue;
+			}
+			$status = isset( $note['Status'] ) ? strtoupper( (string) $note['Status'] ) : '';
+			if ( in_array( $status, array( 'DELETED', 'VOIDED', 'DRAFT' ), true ) ) {
+				continue;
+			}
+			if ( empty( $note['Allocations'] ) || ! is_array( $note['Allocations'] ) ) {
+				continue;
+			}
+			$allocated = 0.0;
+			foreach ( $note['Allocations'] as $alloc ) {
+				if ( ! is_array( $alloc ) || empty( $alloc['Invoice']['InvoiceID'] ) ) {
+					continue;
+				}
+				if ( (string) $alloc['Invoice']['InvoiceID'] !== $invoice_id ) {
+					continue;
+				}
+				$allocated += isset( $alloc['Amount'] ) ? floatval( $alloc['Amount'] ) : 0.0;
+			}
+			if ( $allocated <= 0 ) {
+				continue;
+			}
+			$txn_date = ! empty( $note['Date'] ) ? self::normalize_xero_date( $note['Date'] ) : '';
+			$out[]    = array(
+				'amount'         => $allocated,
+				'txn_date'       => $txn_date,
+				'payment_method' => __( 'Credit note', 'remember' ),
+				'qb_refund_id'   => isset( $note['CreditNoteID'] ) ? (string) $note['CreditNoteID'] : '',
+				'doc_number'     => isset( $note['CreditNoteNumber'] ) ? sanitize_text_field( (string) $note['CreditNoteNumber'] ) : '',
+				'sort_ts'        => self::xero_entity_sort_timestamp( $note ),
+			);
+		}
+
+		return $out;
+	}
+
+	/**
+	 * Sort timestamp for a Xero entity (UpdatedDateUTC / Date).
+	 *
+	 * @param array $entity Xero entity.
+	 * @return int Unix timestamp (site timezone when possible).
+	 */
+	public static function xero_entity_sort_timestamp( $entity ) {
+		if ( ! is_array( $entity ) ) {
+			return 0;
+		}
+		foreach ( array( 'UpdatedDateUTC', 'FullyPaidOnDate', 'Date' ) as $key ) {
+			if ( empty( $entity[ $key ] ) ) {
+				continue;
+			}
+			$ts = self::parse_xero_datetime( $entity[ $key ] );
+			if ( $ts > 0 ) {
+				return $ts;
+			}
+		}
+		return 0;
+	}
+
+	/**
+	 * Normalize a Xero date field to Y-m-d.
+	 *
+	 * @param mixed $value Raw date.
+	 * @return string
+	 */
+	public static function normalize_xero_date( $value ) {
+		$ts = self::parse_xero_datetime( $value );
+		if ( $ts <= 0 ) {
+			return is_string( $value ) ? sanitize_text_field( substr( $value, 0, 10 ) ) : '';
+		}
+		return gmdate( 'Y-m-d', $ts );
+	}
+
+	/**
+	 * Parse Xero date /Date(ms+0000)/ or ISO string to unix timestamp.
+	 *
+	 * @param mixed $value Raw value.
+	 * @return int
+	 */
+	public static function parse_xero_datetime( $value ) {
+		if ( is_numeric( $value ) ) {
+			$n = (float) $value;
+			return (int) ( $n > 20000000000 ? ( $n / 1000 ) : $n );
+		}
+		if ( ! is_string( $value ) || '' === $value ) {
+			return 0;
+		}
+		if ( preg_match( '/\/Date\((\d+)([+-]\d+)?\)\//', $value, $m ) ) {
+			return (int) floor( ( (float) $m[1] ) / 1000 );
+		}
+		$ts = strtotime( $value );
+		return $ts ? (int) $ts : 0;
 	}
 }

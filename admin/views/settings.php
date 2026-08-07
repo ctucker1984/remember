@@ -82,6 +82,27 @@ if ( isset( $_POST['remember_settings_action'] ) && 'sync_qb_payments' === $_POS
 	}
 }
 
+// Handle Xero manual sync
+if ( isset( $_POST['remember_settings_action'] ) && 'sync_xero_payments' === $_POST['remember_settings_action'] && check_admin_referer( 'remember_settings_action', 'remember_settings_nonce' ) ) {
+	require_once plugin_dir_path( __FILE__ ) . '../../includes/integrations/class-remember-xero-sync.php';
+	$sync_results = Remember_Xero_Sync::sync_all_payments();
+
+	if ( $sync_results['success'] > 0 || $sync_results['error'] > 0 ) {
+		$message = sprintf(
+			__( 'Sync completed: %d successful, %d errors.', 'remember' ),
+			$sync_results['success'],
+			$sync_results['error']
+		);
+		if ( $sync_results['error'] > 0 ) {
+			echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html( $message ) . '</p></div>';
+		} else {
+			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html( $message ) . '</p></div>';
+		}
+	} else {
+		echo '<div class="notice notice-info is-dismissible"><p>' . esc_html__( 'No payments to sync.', 'remember' ) . '</p></div>';
+	}
+}
+
 // Handle QuickBooks disconnect
 if ( isset( $_POST['remember_settings_action'] ) && 'disconnect_qb' === $_POST['remember_settings_action'] && check_admin_referer( 'remember_settings_action', 'remember_settings_nonce' ) ) {
 	$settings = Remember_QuickBooks_OAuth::get_settings();
@@ -563,9 +584,9 @@ $social_platforms = $wpdb->get_results(
 						<label for="subtotal_disclaimer_text"><?php esc_html_e( 'Subtotal Disclaimer', 'remember' ); ?></label>
 					</th>
 					<td>
-						<textarea id="subtotal_disclaimer_text" name="subtotal_disclaimer_text" rows="4" class="large-text"><?php echo esc_textarea( isset( $options['subtotal_disclaimer_text'] ) ? $options['subtotal_disclaimer_text'] : Remember_Billing_Messaging::get_default_subtotal_disclaimer() ); ?></textarea>
+						<textarea id="subtotal_disclaimer_text" name="subtotal_disclaimer_text" rows="4" class="large-text"><?php echo esc_textarea( Remember_Billing_Messaging::get_subtotal_disclaimer() ); ?></textarea>
 						<p class="description">
-							<?php esc_html_e( 'Shown on billing/application pricing touchpoints. Use this to explain that reMember shows subtotal estimates and QuickBooks sends final totals/taxes/payment options.', 'remember' ); ?>
+							<?php esc_html_e( 'Shown on billing/application pricing touchpoints. Explains that reMember shows subtotal estimates and the active billing provider (QuickBooks or Xero) sends final totals/taxes/payment options. Leave the default wording to follow the selected provider automatically.', 'remember' ); ?>
 						</p>
 					</td>
 				</tr>
@@ -1282,6 +1303,50 @@ $social_platforms = $wpdb->get_results(
 						<?php wp_nonce_field( 'remember_settings_action', 'remember_settings_nonce' ); ?>
 						<input type="hidden" name="remember_settings_action" value="disconnect_xero">
 						<?php submit_button( __( 'Disconnect Xero', 'remember' ), 'secondary' ); ?>
+					</form>
+
+					<form method="post" action="" style="margin-bottom: 30px;">
+						<?php wp_nonce_field( 'remember_settings_action', 'remember_settings_nonce' ); ?>
+						<input type="hidden" name="remember_settings_action" value="update">
+						<h3><?php esc_html_e( 'Sync Settings', 'remember' ); ?></h3>
+						<table class="form-table">
+							<tr>
+								<th scope="row">
+									<label for="qb_sync_interval_xero"><?php esc_html_e( 'Sync Interval', 'remember' ); ?></label>
+								</th>
+								<td>
+									<input type="number" id="qb_sync_interval_xero" name="qb_sync_interval" value="<?php echo esc_attr( isset( $options['qb_sync_interval'] ) ? round( $options['qb_sync_interval'] / 3600 ) : 1 ); ?>" min="1" max="24" class="small-text">
+									<span class="description"><?php esc_html_e( 'hours (How often to sync payment status from Xero)', 'remember' ); ?></span>
+								</td>
+							</tr>
+							<tr>
+								<th scope="row">
+									<label><?php esc_html_e( 'Last Sync', 'remember' ); ?></label>
+								</th>
+								<td>
+									<?php
+									global $wpdb;
+									$xero_last_sync = $wpdb->get_var( "SELECT last_sync_at FROM {$wpdb->prefix}remember_payment_processors WHERE processor_type = 'xero' AND is_active = 1 LIMIT 1" );
+									if ( $xero_last_sync ) {
+										echo esc_html( date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), strtotime( $xero_last_sync ) ) );
+									} else {
+										echo '<span class="description">' . esc_html__( 'Never', 'remember' ) . '</span>';
+									}
+									?>
+								</td>
+							</tr>
+						</table>
+						<?php submit_button( __( 'Save Sync Settings', 'remember' ) ); ?>
+					</form>
+
+					<form method="post" action="" style="margin-bottom: 30px;">
+						<?php wp_nonce_field( 'remember_settings_action', 'remember_settings_nonce' ); ?>
+						<input type="hidden" name="remember_settings_action" value="sync_xero_payments">
+						<h3><?php esc_html_e( 'Manual Sync', 'remember' ); ?></h3>
+						<p class="description">
+							<?php esc_html_e( 'Reconcile every payment that has a Xero invoice ID: update amounts/status, and clear the link if the invoice no longer exists in Xero.', 'remember' ); ?>
+						</p>
+						<?php submit_button( __( 'Sync Payments Now', 'remember' ), 'secondary' ); ?>
 					</form>
 				<?php else : ?>
 					<form method="post" action="" style="margin-bottom: 1em;">

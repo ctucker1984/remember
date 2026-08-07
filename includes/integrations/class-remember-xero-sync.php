@@ -36,6 +36,7 @@ class Remember_Xero_Sync {
 	 */
 	public static function sync_member_to_contact( $member_id ) {
 		require_once plugin_dir_path( __FILE__ ) . '../models/class-member.php';
+		require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-import-export.php';
 
 		$member_model = new Remember_Member();
 		$member       = $member_model->get( $member_id );
@@ -56,35 +57,72 @@ class Remember_Xero_Sync {
 			)
 		);
 
-		$first_name = ! empty( $profile->legal_first_name ) ? $profile->legal_first_name : $user->first_name;
-		$last_name  = ! empty( $profile->legal_last_name ) ? $profile->legal_last_name : $user->last_name;
-		$full_name  = trim( $first_name . ' ' . $last_name );
+		// Legal name is the accounting identity (not stage/display name).
+		$legal_parts = Remember_Import_Export::member_resolve_legal_name_parts( $profile, $member_id );
+		$first_name  = trim( (string) $legal_parts[0] );
+		$last_name   = trim( (string) $legal_parts[1] );
+		$full_name   = trim( $first_name . ' ' . $last_name );
 		if ( '' === $full_name ) {
-			$full_name = $user->display_name;
+			// Last resort only — never use nickname/display for Contact.Name.
+			$full_name = sprintf(
+				/* translators: %d: WordPress user ID */
+				__( 'Member #%d', 'remember' ),
+				absint( $member_id )
+			);
+		}
+
+		$nickname = trim( (string) get_user_meta( $member_id, 'nickname', true ) );
+		if ( '' === $nickname && ! empty( $user->display_name ) ) {
+			$nickname = trim( (string) $user->display_name );
 		}
 
 		$contact_data = array(
-			'name'       => $full_name,
-			'first_name' => $first_name,
-			'last_name'  => $last_name,
-			'email'      => $user->user_email,
-			'phone'      => ( $profile && ! empty( $profile->cell_phone ) ) ? $profile->cell_phone : '',
+			'name'           => $full_name,
+			'first_name'     => $first_name,
+			'last_name'      => $last_name,
+			'email'          => $user->user_email,
+			'phone'          => ( $profile && ! empty( $profile->cell_phone ) ) ? $profile->cell_phone : '',
+			'account_number' => (string) absint( $member_id ),
 		);
 
-		if ( $profile && ( ! empty( $profile->address_street ) || ! empty( $profile->address_city ) ) ) {
+		if ( '' !== $nickname ) {
+			$contact_data['notes'] = sprintf(
+				/* translators: %s: member nickname / stage name */
+				__( 'Nickname: %s', 'remember' ),
+				$nickname
+			);
+		}
+
+		if ( $profile && ( ! empty( $profile->address_street ) || ! empty( $profile->address_city ) || ! empty( $profile->address_postal ) ) ) {
 			$contact_data['address'] = array(
-				'street'  => $profile->address_street ?? '',
-				'city'    => $profile->address_city ?? '',
-				'state'   => $profile->address_state ?? '',
-				'postal'  => $profile->address_postal ?? '',
-				'country' => $profile->address_country ?? 'US',
+				'street'  => isset( $profile->address_street ) ? $profile->address_street : '',
+				'city'    => isset( $profile->address_city ) ? $profile->address_city : '',
+				'state'   => isset( $profile->address_state ) ? $profile->address_state : '',
+				'postal'  => isset( $profile->address_postal ) ? $profile->address_postal : '',
+				'country' => ! empty( $profile->address_country ) ? $profile->address_country : 'US',
 			);
 		}
 
 		$xero_contact_id = get_user_meta( $member_id, 'remember_xero_contact_id', true );
+		if ( $xero_contact_id ) {
+			$existing = Remember_Xero_API::get_contact( $xero_contact_id );
+			if ( is_wp_error( $existing ) || ! self::contact_email_matches( $existing, $user->user_email ) ) {
+				Remember_Logger::warning(
+					'Clearing Xero contact link (missing or email mismatch)',
+					array(
+						'member_id'       => $member_id,
+						'xero_contact_id' => $xero_contact_id,
+						'member_email'    => $user->user_email,
+					)
+				);
+				delete_user_meta( $member_id, 'remember_xero_contact_id' );
+				$xero_contact_id = '';
+			}
+		}
+
 		if ( ! $xero_contact_id ) {
 			$by_email = Remember_Xero_API::find_contact_by_email( $user->user_email );
-			if ( is_array( $by_email ) && ! empty( $by_email['ContactID'] ) ) {
+			if ( is_array( $by_email ) && ! empty( $by_email['ContactID'] ) && self::contact_email_matches( $by_email, $user->user_email ) ) {
 				$xero_contact_id = $by_email['ContactID'];
 				update_user_meta( $member_id, 'remember_xero_contact_id', $xero_contact_id );
 			}
@@ -96,13 +134,19 @@ class Remember_Xero_Sync {
 
 		$result = Remember_Xero_API::create_or_update_contact( $contact_data );
 
+		// Name collision on create: retry with email disambiguator.
+		if ( is_wp_error( $result ) && empty( $contact_data['contact_id'] ) && self::is_xero_name_conflict_error( $result ) ) {
+			$contact_data['name'] = $full_name . ' (' . $user->user_email . ')';
+			$result               = Remember_Xero_API::create_or_update_contact( $contact_data );
+		}
+
 		// Stale ContactID: clear and retry once (match-by-email or create).
 		if ( is_wp_error( $result ) && $xero_contact_id ) {
 			delete_user_meta( $member_id, 'remember_xero_contact_id' );
 			unset( $contact_data['contact_id'] );
 
 			$by_email = Remember_Xero_API::find_contact_by_email( $user->user_email );
-			if ( is_array( $by_email ) && ! empty( $by_email['ContactID'] ) ) {
+			if ( is_array( $by_email ) && ! empty( $by_email['ContactID'] ) && self::contact_email_matches( $by_email, $user->user_email ) ) {
 				$contact_data['contact_id'] = $by_email['ContactID'];
 				update_user_meta( $member_id, 'remember_xero_contact_id', $by_email['ContactID'] );
 			}
@@ -127,12 +171,53 @@ class Remember_Xero_Sync {
 		Remember_Logger::info(
 			'Member synced to Xero contact',
 			array(
-				'member_id'        => $member_id,
-				'xero_contact_id'  => isset( $result['ContactID'] ) ? $result['ContactID'] : '',
+				'member_id'       => $member_id,
+				'xero_contact_id' => isset( $result['ContactID'] ) ? $result['ContactID'] : '',
+				'xero_name'       => isset( $result['Name'] ) ? $result['Name'] : '',
+				'expected_name'   => $full_name,
 			)
 		);
 
 		return $result;
+	}
+
+	/**
+	 * Whether a Xero contact's primary email matches the member email.
+	 *
+	 * @param array  $contact Xero contact.
+	 * @param string $email   Member email.
+	 * @return bool
+	 */
+	private static function contact_email_matches( $contact, $email ) {
+		$email = strtolower( trim( (string) $email ) );
+		if ( '' === $email || ! is_array( $contact ) ) {
+			return false;
+		}
+		if ( ! empty( $contact['EmailAddress'] ) && strtolower( trim( (string) $contact['EmailAddress'] ) ) === $email ) {
+			return true;
+		}
+		if ( ! empty( $contact['ContactPersons'] ) && is_array( $contact['ContactPersons'] ) ) {
+			foreach ( $contact['ContactPersons'] as $person ) {
+				if ( ! empty( $person['EmailAddress'] ) && strtolower( trim( (string) $person['EmailAddress'] ) ) === $email ) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Whether an API error is a contact Name uniqueness conflict.
+	 *
+	 * @param WP_Error $error Error.
+	 * @return bool
+	 */
+	private static function is_xero_name_conflict_error( $error ) {
+		if ( ! is_wp_error( $error ) ) {
+			return false;
+		}
+		$message = strtolower( $error->get_error_message() );
+		return ( false !== strpos( $message, 'already assigned' ) || false !== strpos( $message, 'must be unique' ) || false !== strpos( $message, 'name already' ) );
 	}
 
 	/**
@@ -235,7 +320,26 @@ class Remember_Xero_Sync {
 		$payment       = $payment_model->get_by_application( $application_id );
 
 		if ( $payment && ! empty( $payment->xero_invoice_id ) ) {
-			return new WP_Error( 'invoice_exists', __( 'Invoice already exists for this application.', 'remember' ) );
+			// If the remote invoice was voided/deleted, clear the local link and allow recreate.
+			$existing_invoice = Remember_Xero_API::get_invoice( $payment->xero_invoice_id );
+			$remote_gone      = is_wp_error( $existing_invoice )
+				? self::is_xero_invoice_missing_error( $existing_invoice )
+				: self::is_xero_invoice_voided_or_deleted( $existing_invoice );
+
+			if ( $remote_gone ) {
+				Remember_Logger::info(
+					'Clearing voided/missing Xero invoice link before recreate',
+					array(
+						'application_id'  => $application_id,
+						'payment_id'      => $payment->payment_id,
+						'xero_invoice_id' => $payment->xero_invoice_id,
+					)
+				);
+				self::clear_local_xero_invoice_link( $payment->payment_id );
+				$payment = $payment_model->get( $payment->payment_id );
+			} else {
+				return new WP_Error( 'invoice_exists', __( 'Invoice already exists for this application.', 'remember' ) );
+			}
 		}
 
 		$member_id   = $application->member_id;
@@ -352,7 +456,12 @@ class Remember_Xero_Sync {
 			array(
 				'contact_id' => $xero_contact_id,
 				'line_items' => $line_items,
-				'reference'  => sprintf( 'reMember app #%d', absint( $application_id ) ),
+				'reference'  => sprintf(
+					/* translators: 1: event name, 2: application ID */
+					__( '%1$s - Application #%2$d', 'remember' ),
+					$event && ! empty( $event->event_name ) ? $event->event_name : __( 'Event', 'remember' ),
+					absint( $application_id )
+				),
 			)
 		);
 
@@ -455,21 +564,259 @@ class Remember_Xero_Sync {
 	 * @return true|WP_Error
 	 */
 	public static function sync_payment_status( $payment_id ) {
-		return new WP_Error(
-			'xero_not_implemented',
-			__( 'Xero payment sync is not implemented yet.', 'remember' )
+		$payment_model = new Remember_Payment();
+		$payment       = $payment_model->get( $payment_id );
+
+		if ( ! $payment || empty( $payment->xero_invoice_id ) ) {
+			return new WP_Error( 'no_invoice', __( 'No Xero invoice ID found for this payment.', 'remember' ) );
+		}
+
+		$invoice = Remember_Xero_API::get_invoice( $payment->xero_invoice_id );
+		if ( is_wp_error( $invoice ) ) {
+			if ( self::is_xero_invoice_missing_error( $invoice ) ) {
+				Remember_Logger::info(
+					'Xero invoice no longer exists; clearing local invoice link',
+					array(
+						'payment_id'      => $payment_id,
+						'xero_invoice_id' => $payment->xero_invoice_id,
+					)
+				);
+				self::clear_local_xero_invoice_link( $payment_id );
+				return true;
+			}
+			return $invoice;
+		}
+
+		if ( self::is_xero_invoice_voided_or_deleted( $invoice ) ) {
+			Remember_Logger::info(
+				'Xero invoice is voided/deleted; clearing local invoice link',
+				array(
+					'payment_id'      => $payment_id,
+					'xero_invoice_id' => $payment->xero_invoice_id,
+					'status'          => isset( $invoice['Status'] ) ? $invoice['Status'] : '',
+				)
+			);
+			self::clear_local_xero_invoice_link( $payment_id );
+			return true;
+		}
+
+		$detail_lines = Remember_Xero_API::get_invoice_payment_lines( $payment->xero_invoice_id );
+		if ( is_wp_error( $detail_lines ) ) {
+			return $detail_lines;
+		}
+
+		$total_paid = 0;
+		foreach ( $detail_lines as $row ) {
+			$total_paid += floatval( $row['amount'] ?? 0 );
+		}
+
+		$invoice_sort_ts = Remember_Xero_API::xero_entity_sort_timestamp( $invoice );
+
+		// Fallback when Payments list is empty but invoice shows paid.
+		if ( empty( $detail_lines ) ) {
+			$amount_due  = isset( $invoice['AmountDue'] ) ? floatval( $invoice['AmountDue'] ) : null;
+			$amount_paid = isset( $invoice['AmountPaid'] ) ? floatval( $invoice['AmountPaid'] ) : 0.0;
+			if ( null !== $amount_due && $amount_due <= 0.001 && $amount_paid > 0 ) {
+				$total_paid  = $amount_paid;
+				$pay_sort_ts = $invoice_sort_ts > 0 ? $invoice_sort_ts + 1 : strtotime( current_time( 'mysql' ) );
+				$detail_lines = array(
+					array(
+						'amount'         => $amount_paid,
+						'txn_date'       => ! empty( $invoice['FullyPaidOnDate'] )
+							? Remember_Xero_API::normalize_xero_date( $invoice['FullyPaidOnDate'] )
+							: ( ! empty( $invoice['Date'] ) ? Remember_Xero_API::normalize_xero_date( $invoice['Date'] ) : '' ),
+						'payment_method' => '',
+						'qb_payment_id'  => '',
+						'sort_ts'        => $pay_sort_ts,
+					),
+				);
+			}
+		}
+
+		$xero_contact_id = get_user_meta( $payment->member_id, 'remember_xero_contact_id', true );
+		if ( ! $xero_contact_id && ! empty( $invoice['Contact']['ContactID'] ) ) {
+			$xero_contact_id = $invoice['Contact']['ContactID'];
+		}
+		$refund_lines = Remember_Xero_API::get_invoice_refund_lines( $payment->xero_invoice_id, $xero_contact_id );
+		if ( is_wp_error( $refund_lines ) ) {
+			return $refund_lines;
+		}
+
+		$total_refunded = 0;
+		foreach ( $refund_lines as $rrow ) {
+			$total_refunded += floatval( $rrow['amount'] ?? 0 );
+		}
+
+		$net_paid = $total_paid - $total_refunded;
+		if ( $net_paid < 0 ) {
+			$net_paid = 0;
+		}
+
+		$total_amt = floatval( $payment->total_amount );
+
+		if ( $total_refunded > 0 && $net_paid <= 0.001 ) {
+			$payment_status  = 'refunded';
+			$amount_due      = 0;
+			$amount_paid_out = 0;
+		} elseif ( $net_paid >= $total_amt - 0.001 ) {
+			$payment_status  = 'paid';
+			$amount_due      = 0;
+			$amount_paid_out = $net_paid;
+		} elseif ( $net_paid > 0 ) {
+			$payment_status  = 'partial';
+			$amount_due      = max( 0, $total_amt - $net_paid );
+			$amount_paid_out = $net_paid;
+		} else {
+			$payment_status  = 'pending';
+			$amount_due      = $total_amt;
+			$amount_paid_out = 0;
+		}
+
+		$latest_ts = 0;
+		foreach ( $detail_lines as $row ) {
+			$t = isset( $row['sort_ts'] ) ? (int) $row['sort_ts'] : strtotime( $row['txn_date'] ?? '' );
+			if ( $t && $t > $latest_ts ) {
+				$latest_ts = $t;
+			}
+		}
+		foreach ( $refund_lines as $row ) {
+			$t = isset( $row['sort_ts'] ) ? (int) $row['sort_ts'] : strtotime( $row['txn_date'] ?? '' );
+			if ( $t && $t > $latest_ts ) {
+				$latest_ts = $t;
+			}
+		}
+
+		$has_money_activity = $total_paid > 0 || $total_refunded > 0;
+
+		$update_data = array(
+			'amount_paid'          => $amount_paid_out,
+			'amount_due'           => $amount_due,
+			'payment_status'       => $payment_status,
+			'payment_date'         => $has_money_activity
+				? ( $latest_ts > 0 ? date( 'Y-m-d H:i:s', $latest_ts ) : current_time( 'mysql' ) )
+				: null,
+			'xero_payment_lines'   => ! empty( $detail_lines ) ? wp_json_encode( $detail_lines ) : null,
+			'xero_refund_lines'    => ! empty( $refund_lines ) ? wp_json_encode( $refund_lines ) : null,
+			'xero_invoice_sort_ts' => $invoice_sort_ts > 0 ? $invoice_sort_ts : null,
+		);
+		if ( isset( $invoice['InvoiceNumber'] ) ) {
+			$update_data['xero_invoice_number'] = sanitize_text_field( (string) $invoice['InvoiceNumber'] );
+		}
+		$payment_model->update( $payment_id, $update_data );
+
+		Remember_Logger::info(
+			'Payment status synced from Xero',
+			array(
+				'payment_id'     => $payment_id,
+				'amount_paid'    => $amount_paid_out,
+				'total_refunded' => $total_refunded,
+				'payment_status' => $payment_status,
+			)
+		);
+
+		return true;
+	}
+
+	/**
+	 * Sync all payments that reference a Xero invoice.
+	 *
+	 * @return array{success:int,error:int,errors:array}
+	 */
+	public static function sync_all_payments() {
+		global $wpdb;
+
+		$payments = $wpdb->get_results(
+			"SELECT payment_id FROM {$wpdb->prefix}remember_payments
+			WHERE xero_invoice_id IS NOT NULL
+			AND xero_invoice_id != ''
+			ORDER BY payment_id ASC"
+		);
+
+		$results = array(
+			'success' => 0,
+			'error'   => 0,
+			'errors'  => array(),
+		);
+
+		foreach ( $payments as $payment ) {
+			$result = self::sync_payment_status( $payment->payment_id );
+			if ( is_wp_error( $result ) ) {
+				$results['error']++;
+				$results['errors'][] = array(
+					'payment_id' => $payment->payment_id,
+					'error'      => $result->get_error_message(),
+				);
+			} else {
+				$results['success']++;
+			}
+		}
+
+		$wpdb->update(
+			$wpdb->prefix . 'remember_payment_processors',
+			array( 'last_sync_at' => current_time( 'mysql' ) ),
+			array( 'processor_type' => 'xero' ),
+			array( '%s' ),
+			array( '%s' )
+		);
+
+		return $results;
+	}
+
+	/**
+	 * Clear Xero invoice fields on a local payment row.
+	 *
+	 * @param int $payment_id Payment ID.
+	 */
+	private static function clear_local_xero_invoice_link( $payment_id ) {
+		$payment_model = new Remember_Payment();
+		$payment_model->update(
+			$payment_id,
+			array(
+				'xero_invoice_id'      => null,
+				'xero_invoice_number'  => null,
+				'xero_invoice_sort_ts' => null,
+				'xero_payment_lines'   => null,
+				'xero_refund_lines'    => null,
+				'amount_paid'          => 0,
+				'payment_status'       => 'pending',
+				'payment_date'         => null,
+			)
 		);
 	}
 
 	/**
-	 * Sync all open Xero-linked payments.
+	 * Whether a Xero invoice payload is voided or deleted.
 	 *
-	 * @return array{success:int,error:int}
+	 * @param array $invoice Invoice entity.
+	 * @return bool
 	 */
-	public static function sync_all_payments() {
-		return array(
-			'success' => 0,
-			'error'   => 0,
-		);
+	private static function is_xero_invoice_voided_or_deleted( $invoice ) {
+		if ( ! is_array( $invoice ) ) {
+			return false;
+		}
+		$status = isset( $invoice['Status'] ) ? strtoupper( (string) $invoice['Status'] ) : '';
+		return in_array( $status, array( 'VOIDED', 'DELETED' ), true );
+	}
+
+	/**
+	 * Whether a Xero API error means the invoice is missing.
+	 *
+	 * @param WP_Error $error Error from get_invoice().
+	 * @return bool
+	 */
+	private static function is_xero_invoice_missing_error( $error ) {
+		if ( ! is_wp_error( $error ) ) {
+			return false;
+		}
+		$data = $error->get_error_data();
+		if ( is_array( $data ) && isset( $data['status'] ) && (int) $data['status'] === 404 ) {
+			return true;
+		}
+		$code = $error->get_error_code();
+		if ( in_array( $code, array( 'xero_invoice_not_found' ), true ) ) {
+			return true;
+		}
+		$message = strtolower( $error->get_error_message() );
+		return ( false !== strpos( $message, 'not found' ) || false !== strpos( $message, 'was not found' ) );
 	}
 }
