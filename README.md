@@ -2,7 +2,7 @@
 
 A WordPress plugin for membership-style communities: **members**, **events**, **locations**, **applications**, **vetting**, **billing** (including **QuickBooks Online**), and **role-based access**. It extends WordPress users with custom tables, an admin UI under **reMember**, and front-end templates (shortcodes and block patterns).
 
-**Version:** 1.1.0  
+**Version:** 1.1.2  
 **Requires:** WordPress 5.0 or higher  
 **License:** GPL v2 or later
 
@@ -160,11 +160,14 @@ Enable `WP_DEBUG` as needed; logging uses `Remember_Logger`.
 
 ## Changelog
 
-### 1.1.2 (in progress)
+### 1.1.2
 
+- **Version** bumped to `1.1.2` (`REMEMBER_VERSION`).
 - **Registration photo:** Optional profile photo on member register with the same circular **zoom** + **drag-to-recenter** cropper as profile edit.
 - **Admin member edit:** Same photo cropper on Members → Edit Profile.
-- See [`TODO_1.1.2.md`](TODO_1.1.2.md).
+- **Pages:** Install / page creator uses title **Member Registration** (capital R); FSE pattern title aligned.
+- **Repo:** `.github/` ignored / untracked (release zips built locally via `bin/build-plugin-zip.sh`).
+- Printable admission tickets deferred — see [`TODO_TICKETS.md`](TODO_TICKETS.md).
 
 ### 1.1.1
 

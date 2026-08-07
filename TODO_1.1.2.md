@@ -11,6 +11,12 @@
 - [x] Confirm whether controls are absent, CSS-hidden, or JS not binding on the register form — absent markup; JS only bound `#photo_file` inside `.remember-profile-photo-edit`.
 - [x] Restore parity with profile upload behavior — optional photo on register with same cropper (zoom + drag); JS generalized per wrap; form `enctype` + server upload after account create.
 - [x] Admin Members → Edit Profile — same cropper (was plain file input).
-- [ ] Smoke-test register + front-end profile edit + admin member edit on demo
+- [x] Smoke-test register + front-end profile edit + admin member edit on demo — skipped by request; ship without.
 
 **Branch:** `v1.1.2`
+
+---
+
+## Deferred (not 1.1.2)
+
+Printable admission ticket + receipt — decisions locked in `TODO_TICKETS.md`. Implement after 1.1.2 ships.
