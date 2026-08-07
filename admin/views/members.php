@@ -510,6 +510,31 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 			}
 		}
 		$view_member_id = $member_id;
+	} elseif ( $member_id > 0 && 'sync_xero_contact' === $action ) {
+		if ( ! current_user_can( 'remember_update_members' ) ) {
+			wp_die( __( 'You do not have sufficient permissions to perform this action.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+		}
+		require_once plugin_dir_path( __FILE__ ) . '../../includes/integrations/class-remember-xero-oauth.php';
+		if ( ! Remember_Xero_OAuth::is_connected() ) {
+			echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html__( 'Xero is not connected. Connect under Settings → Xero.', 'remember' ) . '</p></div>';
+		} else {
+			require_once plugin_dir_path( __FILE__ ) . '../../includes/integrations/class-remember-xero-sync.php';
+			$result = Remember_Xero_Sync::sync_member_to_contact( $member_id );
+			if ( is_wp_error( $result ) ) {
+				Remember_Logger::error(
+					'Manual Xero contact sync failed',
+					array(
+						'member_id' => $member_id,
+						'error'     => $result->get_error_message(),
+					)
+				);
+				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html( $result->get_error_message() ) . '</p></div>';
+			} else {
+				Remember_Logger::info( 'Manual Xero contact sync succeeded', array( 'member_id' => $member_id ) );
+				echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Contact updated in Xero.', 'remember' ) . '</p></div>';
+			}
+		}
+		$view_member_id = $member_id;
 	}
 }
 
@@ -837,11 +862,19 @@ if ( $view_member_id > 0 ) {
 	}
 	unset( $entry );
 
+	require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-provider.php';
 	require_once plugin_dir_path( __FILE__ ) . '../../includes/integrations/class-remember-quickbooks-oauth.php';
+	require_once plugin_dir_path( __FILE__ ) . '../../includes/integrations/class-remember-xero-oauth.php';
+
 	$remember_qb_settings           = Remember_QuickBooks_OAuth::get_settings();
-	$remember_qb_show_sync_customer = current_user_can( 'remember_update_members' )
+	$remember_qb_show_sync_customer = Remember_Billing_Provider::is_quickbooks()
+		&& current_user_can( 'remember_update_members' )
 		&& ! empty( $remember_qb_settings['access_token'] )
 		&& ! empty( $remember_qb_settings['realm_id'] );
+
+	$remember_xero_show_sync_contact = Remember_Billing_Provider::is_xero()
+		&& current_user_can( 'remember_update_members' )
+		&& Remember_Xero_OAuth::is_connected();
 }
 ?>
 

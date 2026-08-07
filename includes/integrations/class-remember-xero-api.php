@@ -102,14 +102,17 @@ class Remember_Xero_API {
 		}
 
 		$args = array(
-			'method'  => strtoupper( $method ),
-			'headers' => array(
-				'Accept'          => 'application/json',
-				'Content-Type'    => 'application/json',
-				'Authorization'   => 'Bearer ' . $settings['access_token'],
-				'Xero-tenant-id'  => $settings['tenant_id'],
+			'method'     => strtoupper( $method ),
+			'headers'    => array(
+				'Accept'         => 'application/json',
+				'Content-Type'   => 'application/json',
+				'Authorization'  => 'Bearer ' . $settings['access_token'],
+				'Xero-tenant-id' => $settings['tenant_id'],
 			),
-			'timeout' => 45,
+			'user-agent' => 'reMember-WordPress/' . ( defined( 'REMEMBER_VERSION' ) ? REMEMBER_VERSION : '1.1.0' ),
+			'timeout'    => 45,
+			'redirection'=> 0,
+			'sslverify'  => true,
 		);
 
 		if ( null !== $body && in_array( strtoupper( $method ), array( 'POST', 'PUT', 'PATCH' ), true ) ) {
@@ -164,5 +167,117 @@ class Remember_Xero_API {
 			return $result['Organisations'][0];
 		}
 		return $result;
+	}
+
+	/**
+	 * Get a Contact by Xero ContactID.
+	 *
+	 * @param string $contact_id ContactID.
+	 * @return array|WP_Error Contact array or error.
+	 */
+	public static function get_contact( $contact_id ) {
+		$contact_id = trim( (string) $contact_id );
+		if ( '' === $contact_id ) {
+			return new WP_Error( 'invalid_contact_id', __( 'Invalid Xero contact ID.', 'remember' ) );
+		}
+		$result = self::request( 'GET', 'Contacts/' . rawurlencode( $contact_id ) );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		if ( ! empty( $result['Contacts'][0] ) && is_array( $result['Contacts'][0] ) ) {
+			return $result['Contacts'][0];
+		}
+		return new WP_Error( 'xero_contact_not_found', __( 'Xero contact not found.', 'remember' ) );
+	}
+
+	/**
+	 * Find first Contact whose EmailAddress matches.
+	 *
+	 * @param string $email Email address.
+	 * @return array|null Contact or null.
+	 */
+	public static function find_contact_by_email( $email ) {
+		$email = trim( (string) $email );
+		if ( '' === $email || ! is_email( $email ) ) {
+			return null;
+		}
+		// Xero where-clause: EmailAddress=="addr"
+		$escaped = str_replace( '"', '""', $email );
+		$where   = 'EmailAddress!=null&&EmailAddress=="' . $escaped . '"';
+		$result  = self::request( 'GET', 'Contacts', null, array( 'where' => $where ) );
+		if ( is_wp_error( $result ) || empty( $result['Contacts'][0] ) || ! is_array( $result['Contacts'][0] ) ) {
+			return null;
+		}
+		return $result['Contacts'][0];
+	}
+
+	/**
+	 * Create or update a Xero Contact.
+	 *
+	 * @param array $contact_data Keys: name, first_name, last_name, email, phone, address[], contact_id (optional).
+	 * @return array|WP_Error Contact entity or error.
+	 */
+	public static function create_or_update_contact( $contact_data ) {
+		$contact = array(
+			'Name' => ! empty( $contact_data['name'] ) ? $contact_data['name'] : '',
+		);
+		if ( ! empty( $contact_data['first_name'] ) ) {
+			$contact['FirstName'] = $contact_data['first_name'];
+		}
+		if ( ! empty( $contact_data['last_name'] ) ) {
+			$contact['LastName'] = $contact_data['last_name'];
+		}
+		if ( ! empty( $contact_data['email'] ) ) {
+			$contact['EmailAddress'] = $contact_data['email'];
+		}
+		if ( ! empty( $contact_data['phone'] ) ) {
+			$contact['Phones'] = array(
+				array(
+					'PhoneType'   => 'MOBILE',
+					'PhoneNumber' => $contact_data['phone'],
+				),
+			);
+		}
+		if ( ! empty( $contact_data['address'] ) && is_array( $contact_data['address'] ) ) {
+			$addr = array(
+				'AddressType'  => 'STREET',
+				'AddressLine1' => isset( $contact_data['address']['street'] ) ? $contact_data['address']['street'] : '',
+				'City'         => isset( $contact_data['address']['city'] ) ? $contact_data['address']['city'] : '',
+				'Region'       => isset( $contact_data['address']['state'] ) ? $contact_data['address']['state'] : '',
+				'PostalCode'   => isset( $contact_data['address']['postal'] ) ? $contact_data['address']['postal'] : '',
+				'Country'      => isset( $contact_data['address']['country'] ) ? $contact_data['address']['country'] : '',
+			);
+			$addr = array_filter(
+				$addr,
+				static function ( $value, $key ) {
+					if ( 'AddressType' === $key ) {
+						return true;
+					}
+					return '' !== trim( (string) $value );
+				},
+				ARRAY_FILTER_USE_BOTH
+			);
+			if ( count( $addr ) > 1 ) {
+				$contact['Addresses'] = array( $addr );
+			}
+		}
+		if ( ! empty( $contact_data['contact_id'] ) ) {
+			$contact['ContactID'] = $contact_data['contact_id'];
+		}
+
+		$result = self::request(
+			'POST',
+			'Contacts',
+			array(
+				'Contacts' => array( $contact ),
+			)
+		);
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		if ( ! empty( $result['Contacts'][0] ) && is_array( $result['Contacts'][0] ) ) {
+			return $result['Contacts'][0];
+		}
+		return new WP_Error( 'xero_contact_save_failed', __( 'Xero did not return a contact after save.', 'remember' ), $result );
 	}
 }

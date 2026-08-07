@@ -245,14 +245,30 @@ class Remember {
 	}
 
 	/**
-	 * Sync vetted member to QuickBooks customer.
+	 * Sync vetted member to the active accounting provider (QuickBooks or Xero).
 	 *
 	 * @param int $member_id Member ID.
 	 */
 	public function sync_vetted_member_to_qb( $member_id ) {
+		require_once plugin_dir_path( __FILE__ ) . 'utilities/class-remember-billing-provider.php';
+
+		if ( Remember_Billing_Provider::is_xero() ) {
+			require_once plugin_dir_path( __FILE__ ) . 'integrations/class-remember-xero-oauth.php';
+			if ( ! Remember_Xero_OAuth::is_connected() ) {
+				return;
+			}
+			require_once plugin_dir_path( __FILE__ ) . 'integrations/class-remember-xero-sync.php';
+			Remember_Xero_Sync::sync_member_to_contact( $member_id );
+			return;
+		}
+
+		if ( ! Remember_Billing_Provider::is_quickbooks() ) {
+			return;
+		}
+
 		require_once plugin_dir_path( __FILE__ ) . 'integrations/class-remember-quickbooks-oauth.php';
 		$qb_settings = Remember_QuickBooks_OAuth::get_settings();
-		
+
 		if ( $qb_settings && ! empty( $qb_settings['access_token'] ) && ! empty( $qb_settings['realm_id'] ) ) {
 			require_once plugin_dir_path( __FILE__ ) . 'integrations/class-remember-quickbooks-sync.php';
 			Remember_QuickBooks_Sync::sync_member_to_customer( $member_id );
@@ -260,7 +276,7 @@ class Remember {
 	}
 
 	/**
-	 * After member profile is saved (admin or front), push latest data to QuickBooks when connected.
+	 * After member profile is saved (admin or front), push latest data to the active provider.
 	 *
 	 * @param int $member_id Member user ID.
 	 */
@@ -269,6 +285,23 @@ class Remember {
 		if ( $member_id <= 0 ) {
 			return;
 		}
+
+		require_once plugin_dir_path( __FILE__ ) . 'utilities/class-remember-billing-provider.php';
+
+		if ( Remember_Billing_Provider::is_xero() ) {
+			require_once plugin_dir_path( __FILE__ ) . 'integrations/class-remember-xero-oauth.php';
+			if ( ! Remember_Xero_OAuth::is_connected() ) {
+				return;
+			}
+			require_once plugin_dir_path( __FILE__ ) . 'integrations/class-remember-xero-sync.php';
+			Remember_Xero_Sync::sync_member_to_contact( $member_id );
+			return;
+		}
+
+		if ( ! Remember_Billing_Provider::is_quickbooks() ) {
+			return;
+		}
+
 		require_once plugin_dir_path( __FILE__ ) . 'integrations/class-remember-quickbooks-oauth.php';
 		$qb_settings = Remember_QuickBooks_OAuth::get_settings();
 		if ( empty( $qb_settings['access_token'] ) || empty( $qb_settings['realm_id'] ) ) {

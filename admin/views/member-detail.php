@@ -82,6 +82,16 @@ if ( $is_editing && ! current_user_can( 'remember_update_members' ) ) {
 							</button>
 						</form>
 					<?php endif; ?>
+					<?php if ( ! empty( $remember_xero_show_sync_contact ) ) : ?>
+						<form method="post" action="" style="display: inline-block; margin: 0;">
+							<?php wp_nonce_field( 'remember_member_action', 'remember_member_nonce' ); ?>
+							<input type="hidden" name="remember_member_action" value="sync_xero_contact" />
+							<input type="hidden" name="member_id" value="<?php echo esc_attr( $view_member_id ); ?>" />
+							<button type="submit" class="button" title="<?php esc_attr_e( 'Update the linked Xero contact with this member’s name, email, phone, and billing address.', 'remember' ); ?>">
+								<?php esc_html_e( 'Sync to Xero', 'remember' ); ?>
+							</button>
+						</form>
+					<?php endif; ?>
 				<?php else : ?>
 					<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-members&view=' . $view_member_id ) ); ?>" class="button">
 						<?php esc_html_e( 'Cancel', 'remember' ); ?>
