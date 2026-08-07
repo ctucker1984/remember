@@ -77,6 +77,37 @@ class Remember_Admin {
 	}
 
 	/**
+	 * Show reMember version in the admin footer (right side, with WordPress version).
+	 *
+	 * @param string $text Existing footer HTML (usually “Version x.y.z”).
+	 * @return string
+	 */
+	public function filter_admin_footer_version( $text ) {
+		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+		if ( ! $screen || false === strpos( (string) $screen->id, 'remember' ) ) {
+			return $text;
+		}
+
+		$version = defined( 'REMEMBER_VERSION' ) ? REMEMBER_VERSION : $this->version;
+		if ( '' === (string) $version ) {
+			return $text;
+		}
+
+		$remember = sprintf(
+			/* translators: %s: plugin version number */
+			esc_html__( 'reMember %s', 'remember' ),
+			esc_html( $version )
+		);
+
+		$text = (string) $text;
+		if ( '' === trim( wp_strip_all_tags( $text ) ) ) {
+			return $remember;
+		}
+
+		return $remember . ' <span aria-hidden="true">|</span> ' . $text;
+	}
+
+	/**
 	 * Register the administration menu for this plugin into the WordPress Dashboard menu.
 	 *
 	 * @since    1.0.0
