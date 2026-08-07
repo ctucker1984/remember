@@ -102,6 +102,30 @@
 	max-width: 28rem;
 }
 
+.remember-register-form .remember-register-row--photo {
+	align-items: start;
+}
+
+.remember-register-form .remember-register-row--photo .remember-register-label {
+	display: block;
+	margin: 0;
+	font-weight: 600;
+	line-height: 1.35;
+	text-align: right;
+	justify-self: end;
+	max-width: 12.5rem;
+}
+
+.remember-register-form .remember-register-row--photo .remember-profile-photo-edit {
+	grid-column: 2;
+	width: 100%;
+	max-width: 22rem;
+}
+
+.remember-register-form .remember-register-row--photo .remember-register-help {
+	grid-column: 2;
+}
+
 .remember-register-form .remember-register-row--actions {
 	margin-bottom: 0;
 	margin-top: 0.25rem;
@@ -635,7 +659,8 @@
 	margin: 0;
 }
 
-.remember-profile-form-modern.remember-photo-cropping {
+.remember-profile-form-modern.remember-photo-cropping,
+.remember-register-form__inner.remember-photo-cropping {
 	opacity: 0.72;
 	pointer-events: none;
 }

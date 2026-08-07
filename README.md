@@ -154,22 +154,23 @@ Enable `WP_DEBUG` as needed; logging uses `Remember_Logger`.
 1. Download **`remember.zip`** (or `remember-x.y.z.zip`) from the release **Assets** — not “Source code (zip)”.
 2. GitHub’s source archive unpacks as `remember-1.1.1/`, which fatals if `remember/` is already installed.
 3. Our release zip always unpacks to **`wp-content/plugins/remember/`**.
-4. Build locally: `bash bin/build-plugin-zip.sh` → `dist/remember.zip`.
+4. Build locally: `bash bin/build-plugin-zip.sh` → `dist/remember.zip`, then attach that file when publishing a GitHub Release.
 
 ---
 
 ## Changelog
 
-### 1.1.2 (planned)
+### 1.1.2 (in progress)
 
-- See [`TODO_1.1.2.md`](TODO_1.1.2.md) — restore photo upload **zoom** and **drag-to-recenter** on registration (parity with profile).
+- **Registration photo:** Optional profile photo on member register with the same circular **zoom** + **drag-to-recenter** cropper as profile edit.
+- See [`TODO_1.1.2.md`](TODO_1.1.2.md).
 
 ### 1.1.1
 
 - **Version** bumped to `1.1.1` (`REMEMBER_VERSION`).
 - **Member billing:** Invoice # links to the **customer** Xero online invoice (`in.xero.com`) when `xero_online_invoice_url` is stored on the payment (schema `1.17.0`, filled on invoice create/sync). Admin deep-links unchanged. QuickBooks member rows stay unlinked.
 - **Fix:** Xero payment sync no longer treats auth errors like “Refresh token not found” as a missing invoice (that was wiping invoice # and amounts on the dashboard). QuickBooks missing-invoice detection tightened the same way.
-- **Release packaging:** `bin/build-plugin-zip.sh` + GitHub Action attach a WordPress zip with root folder `remember/` (never a versioned folder).
+- **Release packaging:** `bin/build-plugin-zip.sh` builds a WordPress zip with root folder `remember/` (never a versioned folder). Attach `dist/remember.zip` on the GitHub Release.
 
 ### 1.1.0
 
