@@ -29,7 +29,7 @@ class Remember_Page_Creator {
 	public static function get_default_pages() {
 		return array(
 			'member_register' => array(
-				'title'       => __( 'Member registration', 'remember' ),
+				'title'       => __( 'Member Registration', 'remember' ),
 				'slug'        => 'member-register',
 				'content'     => '<!-- wp:shortcode -->[remember_register]<!-- /wp:shortcode -->',
 				'shortcode'   => '[remember_register]',

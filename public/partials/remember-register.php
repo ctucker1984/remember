@@ -19,6 +19,16 @@ if ( $remember_pw_min < 1 ) {
 	$remember_pw_min = 8;
 }
 
+$remember_options      = get_option( 'remember_options', array() );
+$photo_max_dimensions  = isset( $remember_options['photo_max_dimensions'] ) ? absint( $remember_options['photo_max_dimensions'] ) : 800;
+$photo_max_bytes       = isset( $remember_options['photo_max_size'] ) ? absint( $remember_options['photo_max_size'] ) : 2097152;
+if ( $photo_max_dimensions < 1 ) {
+	$photo_max_dimensions = 800;
+}
+if ( $photo_max_bytes < 1 ) {
+	$photo_max_bytes = 2097152;
+}
+
 ?>
 <div class="remember-register remember-register-form">
 	<?php if ( $remember_register_success ) : ?>
@@ -42,7 +52,7 @@ if ( $remember_pw_min < 1 ) {
 			</div>
 		<?php endif; ?>
 
-		<form class="remember-register-form__inner" method="post" action="" autocomplete="on">
+		<form class="remember-register-form__inner" method="post" action="" autocomplete="on" enctype="multipart/form-data">
 			<?php wp_nonce_field( 'remember_register_member', 'remember_register_nonce' ); ?>
 			<input type="hidden" name="remember_register_submit" value="1" />
 
@@ -92,6 +102,41 @@ if ( $remember_pw_min < 1 ) {
 				<label for="remember_reg_timezone"><?php esc_html_e( 'Time Zone', 'remember' ); ?> <span class="required">*</span></label>
 				<?php echo Remember_Timezone::dropdown( $remember_reg_timezone, 'remember_reg_timezone', 'remember_reg_timezone', true, 'remember-register-input' ); ?>
 				<p class="remember-register-help"><?php esc_html_e( 'Used to display scheduled times in your local time.', 'remember' ); ?></p>
+			</div>
+
+			<div class="remember-register-row remember-register-row--photo">
+				<span class="remember-register-label"><?php esc_html_e( 'Profile Photo', 'remember' ); ?></span>
+				<p class="remember-register-help"><?php esc_html_e( 'Optional. Drag to recenter and use zoom to frame the photo. You can change this later in your profile.', 'remember' ); ?></p>
+				<div class="remember-profile-photo-edit" data-output-size="<?php echo esc_attr( (string) $photo_max_dimensions ); ?>">
+					<div class="remember-profile-photo-cropper" hidden>
+						<div class="remember-profile-photo-cropper-viewport" aria-label="<?php esc_attr_e( 'Photo framing preview', 'remember' ); ?>">
+							<img src="" alt="" class="remember-profile-photo-cropper-image" draggable="false">
+						</div>
+						<div class="remember-profile-photo-cropper-controls">
+							<button type="button" class="remember-button remember-button-secondary remember-photo-zoom-out" aria-label="<?php esc_attr_e( 'Zoom out', 'remember' ); ?>">−</button>
+							<input type="range" class="remember-photo-zoom-range" min="1" max="3" step="0.01" value="1" aria-label="<?php esc_attr_e( 'Zoom', 'remember' ); ?>">
+							<button type="button" class="remember-button remember-button-secondary remember-photo-zoom-in" aria-label="<?php esc_attr_e( 'Zoom in', 'remember' ); ?>">+</button>
+						</div>
+						<p class="remember-register-help"><?php esc_html_e( 'Drag to recenter. Use zoom to frame the photo inside the circle.', 'remember' ); ?></p>
+						<button type="button" class="remember-button remember-button-secondary remember-photo-clear">
+							<?php esc_html_e( 'Clear selected photo', 'remember' ); ?>
+						</button>
+					</div>
+					<label for="remember_reg_photo_file" class="remember-form-label"><?php esc_html_e( 'Upload photo', 'remember' ); ?></label>
+					<input type="file" id="remember_reg_photo_file" name="photo_file" class="remember-form-control remember-form-control-file remember-register-input" accept="image/jpeg,image/png,image/gif">
+					<p class="remember-register-help">
+						<?php
+						echo esc_html(
+							sprintf(
+								/* translators: 1: max px, 2: max MB */
+								__( 'Square crop from your framing, max %1$dpx. Maximum file size %2$d MB. JPEG, PNG, or GIF.', 'remember' ),
+								$photo_max_dimensions,
+								(int) max( 1, round( $photo_max_bytes / 1024 / 1024 ) )
+							)
+						);
+						?>
+					</p>
+				</div>
 			</div>
 
 			<div class="remember-register-row">

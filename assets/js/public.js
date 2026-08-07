@@ -54,15 +54,11 @@
 	/**
 	 * Circular photo preview with drag-to-recenter and zoom.
 	 * On form submit, crops the framed square into the file input.
+	 * Works for profile edit and member registration (same markup class).
 	 */
-	function initProfilePhotoCropper() {
-		var $wrap = $('.remember-profile-photo-edit');
-		if (!$wrap.length) {
-			return;
-		}
-
+	function initOnePhotoCropper($wrap) {
 		var $form = $wrap.closest('form');
-		var $file = $wrap.find('#photo_file');
+		var $file = $wrap.find('input[type="file"][name="photo_file"]');
 		var $current = $wrap.find('.remember-profile-photo-current');
 		var $cropper = $wrap.find('.remember-profile-photo-cropper');
 		var $viewport = $wrap.find('.remember-profile-photo-cropper-viewport');
@@ -72,6 +68,10 @@
 		var $zoomOut = $wrap.find('.remember-photo-zoom-out');
 		var $clear = $wrap.find('.remember-photo-clear');
 		var outputSize = parseInt($wrap.data('output-size'), 10) || 800;
+
+		if (!$file.length || !$cropper.length || !$viewport.length || !$img.length) {
+			return;
+		}
 
 		var objectUrl = null;
 		var naturalW = 0;
@@ -146,7 +146,7 @@
 			revokeObjectUrl();
 			$img.attr('src', '');
 			$cropper.prop('hidden', true);
-			if ($current.children().length) {
+			if ($current.length && $current.children().length) {
 				$current.prop('hidden', false);
 			}
 		}
@@ -169,7 +169,9 @@
 				naturalW = this.naturalWidth;
 				naturalH = this.naturalHeight;
 				ready = true;
-				$current.prop('hidden', true);
+				if ($current.length) {
+					$current.prop('hidden', true);
+				}
 				$cropper.prop('hidden', false);
 				applyTransform();
 			});
@@ -321,6 +323,12 @@
 					$form[0].submit();
 				}
 			});
+		});
+	}
+
+	function initProfilePhotoCropper() {
+		$('.remember-profile-photo-edit').each(function() {
+			initOnePhotoCropper($(this));
 		});
 	}
 

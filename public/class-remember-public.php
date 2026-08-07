@@ -153,6 +153,28 @@ class Remember_Public {
 			$this->redirect_member_registration( 'email_exists' );
 		}
 
+		$remember_options     = get_option( 'remember_options', array() );
+		$photo_max_dimensions = isset( $remember_options['photo_max_dimensions'] ) ? absint( $remember_options['photo_max_dimensions'] ) : 800;
+		$photo_max_bytes      = isset( $remember_options['photo_max_size'] ) ? absint( $remember_options['photo_max_size'] ) : 2097152;
+		if ( $photo_max_dimensions < 1 ) {
+			$photo_max_dimensions = 800;
+		}
+		if ( $photo_max_bytes < 1 ) {
+			$photo_max_bytes = 2097152;
+		}
+
+		$has_photo = ! empty( $_FILES['photo_file']['name'] );
+		if ( $has_photo ) {
+			$file_size = isset( $_FILES['photo_file']['size'] ) ? absint( $_FILES['photo_file']['size'] ) : 0;
+			if ( $file_size > 0 && $file_size > $photo_max_bytes ) {
+				$this->redirect_member_registration( 'photo_too_large' );
+			}
+			$upload_err = isset( $_FILES['photo_file']['error'] ) ? (int) $_FILES['photo_file']['error'] : UPLOAD_ERR_NO_FILE;
+			if ( UPLOAD_ERR_OK !== $upload_err && UPLOAD_ERR_NO_FILE !== $upload_err ) {
+				$this->redirect_member_registration( 'photo_failed' );
+			}
+		}
+
 		require_once plugin_dir_path( __FILE__ ) . '../includes/models/class-member.php';
 		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-vetting-workflow.php';
 		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-logger.php';
@@ -230,6 +252,22 @@ class Remember_Public {
 			}
 		}
 
+		if ( $has_photo && isset( $_FILES['photo_file'] ) && UPLOAD_ERR_OK === (int) $_FILES['photo_file']['error'] ) {
+			require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-image-uploader.php';
+			$upload_result = Remember_Image_Uploader::upload_square_image( $_FILES['photo_file'], $photo_max_dimensions );
+			if ( is_wp_error( $upload_result ) ) {
+				Remember_Logger::warning(
+					'Public member registration: photo upload failed (account still created)',
+					array(
+						'user_id' => $user_id,
+						'error'   => $upload_result->get_error_message(),
+					)
+				);
+			} elseif ( ! empty( $upload_result['url'] ) ) {
+				$member_model->update_photo( $user_id, $upload_result['url'] );
+			}
+		}
+
 		Remember_Logger::info( 'Public member registration completed', array( 'user_id' => $user_id ) );
 
 		$this->redirect_member_registration( null, true );
@@ -279,6 +317,8 @@ class Remember_Public {
 			'create_failed'    => __( 'Could not create your account. Please try again or contact support.', 'remember' ),
 			'member_failed'    => __( 'Could not complete member setup. Please contact support.', 'remember' ),
 			'profile_failed'   => __( 'Could not save your profile. Please contact support.', 'remember' ),
+			'photo_too_large'  => __( 'That photo is too large. Please choose a smaller image and try again.', 'remember' ),
+			'photo_failed'     => __( 'That photo could not be uploaded. Please try a different JPEG, PNG, or GIF.', 'remember' ),
 		);
 
 		return isset( $messages[ $code ] ) ? $messages[ $code ] : __( 'Registration could not be completed.', 'remember' );

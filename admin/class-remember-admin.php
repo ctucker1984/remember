@@ -56,6 +56,16 @@ class Remember_Admin {
 		$screen = get_current_screen();
 		if ( $screen && strpos( $screen->id, 'remember' ) !== false ) {
 			wp_enqueue_style( $this->plugin_name, plugin_dir_url( __FILE__ ) . '../assets/css/admin.css', array(), $this->version, 'all' );
+			// Photo cropper styles (shared with front-end) on Members edit.
+			if ( false !== strpos( $screen->id, 'remember-members' ) ) {
+				wp_enqueue_style(
+					$this->plugin_name . '-photo-cropper',
+					plugin_dir_url( __FILE__ ) . '../assets/css/public.css',
+					array(),
+					$this->version,
+					'all'
+				);
+			}
 		}
 	}
 
@@ -73,6 +83,16 @@ class Remember_Admin {
 				'ajaxurl' => admin_url( 'admin-ajax.php' ),
 				'nonce'   => wp_create_nonce( 'remember_ajax_nonce' ),
 			) );
+			// Shared photo cropper (zoom + drag) on Members edit.
+			if ( false !== strpos( $screen->id, 'remember-members' ) ) {
+				wp_enqueue_script(
+					$this->plugin_name . '-photo-cropper',
+					plugin_dir_url( __FILE__ ) . '../assets/js/public.js',
+					array( 'jquery' ),
+					$this->version,
+					true
+				);
+			}
 		}
 	}
 

@@ -2,7 +2,7 @@
 
 A WordPress plugin for membership-style communities: **members**, **events**, **locations**, **applications**, **vetting**, **billing** (including **QuickBooks Online**), and **role-based access**. It extends WordPress users with custom tables, an admin UI under **reMember**, and front-end templates (shortcodes and block patterns).
 
-**Version:** 1.1.0  
+**Version:** 1.1.2  
 **Requires:** WordPress 5.0 or higher  
 **License:** GPL v2 or later
 
@@ -145,7 +145,7 @@ reMember adds granular capabilities (`remember_read_events`, `remember_create_me
 
 Enable `WP_DEBUG` as needed; logging uses `Remember_Logger`.
 
-**Branching note:** Release work for this line lives on branch `v1.1.1`. Prefer clear conventional commits so the changelog below stays easy to inventory across machines.
+**Branching note:** Release work for this line lives on branch `v1.1.2`. Prefer clear conventional commits so the changelog below stays easy to inventory across machines.
 
 **Accounting providers:** One active billing provider per site (`quickbooks` or `xero`). Parallel stacks; see [`XERO_PLAN.md`](XERO_PLAN.md).
 
@@ -154,18 +154,27 @@ Enable `WP_DEBUG` as needed; logging uses `Remember_Logger`.
 1. Download **`remember.zip`** (or `remember-x.y.z.zip`) from the release **Assets** — not “Source code (zip)”.
 2. GitHub’s source archive unpacks as `remember-1.1.1/`, which fatals if `remember/` is already installed.
 3. Our release zip always unpacks to **`wp-content/plugins/remember/`**.
-4. Build locally: `bash bin/build-plugin-zip.sh` → `dist/remember.zip`.
+4. Build locally: `bash bin/build-plugin-zip.sh` → `dist/remember.zip`, then attach that file when publishing a GitHub Release.
 
 ---
 
 ## Changelog
+
+### 1.1.2
+
+- **Version** bumped to `1.1.2` (`REMEMBER_VERSION`).
+- **Registration photo:** Optional profile photo on member register with the same circular **zoom** + **drag-to-recenter** cropper as profile edit.
+- **Admin member edit:** Same photo cropper on Members → Edit Profile.
+- **Pages:** Install / page creator uses title **Member Registration** (capital R); FSE pattern title aligned.
+- **Repo:** `.github/` ignored / untracked (release zips built locally via `bin/build-plugin-zip.sh`).
+- Printable admission tickets deferred — see [`TODO_TICKETS.md`](TODO_TICKETS.md).
 
 ### 1.1.1
 
 - **Version** bumped to `1.1.1` (`REMEMBER_VERSION`).
 - **Member billing:** Invoice # links to the **customer** Xero online invoice (`in.xero.com`) when `xero_online_invoice_url` is stored on the payment (schema `1.17.0`, filled on invoice create/sync). Admin deep-links unchanged. QuickBooks member rows stay unlinked.
 - **Fix:** Xero payment sync no longer treats auth errors like “Refresh token not found” as a missing invoice (that was wiping invoice # and amounts on the dashboard). QuickBooks missing-invoice detection tightened the same way.
-- **Release packaging:** `bin/build-plugin-zip.sh` + GitHub Action attach a WordPress zip with root folder `remember/` (never a versioned folder).
+- **Release packaging:** `bin/build-plugin-zip.sh` builds a WordPress zip with root folder `remember/` (never a versioned folder). Attach `dist/remember.zip` on the GitHub Release.
 
 ### 1.1.0
 
