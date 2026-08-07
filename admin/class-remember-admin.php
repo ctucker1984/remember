@@ -662,6 +662,168 @@ class Remember_Admin {
 	}
 
 	/**
+	 * Xero OAuth: redirect to Xero and handle callback before admin HTML output.
+	 *
+	 * @since 1.1.0
+	 */
+	public function handle_xero_oauth() {
+		if ( ! is_admin() ) {
+			return;
+		}
+
+		// Start OAuth (POST).
+		if ( isset( $_POST['remember_settings_action'] ) && 'start_xero_oauth' === $_POST['remember_settings_action'] ) {
+			if ( ! current_user_can( 'remember_access_settings' ) ) {
+				return;
+			}
+			if ( ! check_admin_referer( 'remember_settings_action', 'remember_settings_nonce' ) ) {
+				return;
+			}
+
+			require_once plugin_dir_path( __FILE__ ) . '../includes/integrations/class-remember-xero-oauth.php';
+
+			$xero = Remember_Xero_OAuth::get_settings();
+			if ( empty( $xero['client_id'] ) || empty( $xero['client_secret'] ) ) {
+				wp_safe_redirect( admin_url( 'admin.php?page=remember-settings&xero_oauth_error=nocreds#xero' ) );
+				exit;
+			}
+
+			$auth_url = Remember_Xero_OAuth::get_authorization_url(
+				$xero['client_id'],
+				Remember_Xero_OAuth::get_redirect_uri()
+			);
+			wp_redirect( $auth_url ); // phpcs:ignore WordPress.Security.SafeRedirect.wp_redirect_wp_redirect -- External Xero URL.
+			exit;
+		}
+
+		// OAuth callback (GET).
+		if ( ! isset( $_GET['page'] ) || 'remember-settings' !== $_GET['page'] ) {
+			return;
+		}
+		if ( ! isset( $_GET['xero_oauth_callback'] ) ) {
+			return;
+		}
+		if ( ! current_user_can( 'remember_access_settings' ) ) {
+			return;
+		}
+
+		require_once plugin_dir_path( __FILE__ ) . '../includes/integrations/class-remember-xero-oauth.php';
+
+		$uid      = get_current_user_id();
+		$notice   = 'remember_xero_oauth_notice_' . $uid;
+		$redirect = admin_url( 'admin.php?page=remember-settings#xero' );
+
+		if ( ! empty( $_GET['error'] ) ) {
+			$error_desc = isset( $_GET['error_description'] ) ? sanitize_text_field( wp_unslash( $_GET['error_description'] ) ) : sanitize_text_field( wp_unslash( $_GET['error'] ) );
+			set_transient(
+				$notice,
+				array(
+					'type'    => 'error',
+					'message' => sprintf(
+						/* translators: %s: Xero error message */
+						__( 'Xero authorization failed: %s', 'remember' ),
+						$error_desc
+					),
+				),
+				60
+			);
+			wp_safe_redirect( $redirect );
+			exit;
+		}
+
+		if ( empty( $_GET['code'] ) ) {
+			return;
+		}
+
+		$code  = sanitize_text_field( wp_unslash( $_GET['code'] ) );
+		$state = isset( $_GET['state'] ) ? sanitize_text_field( wp_unslash( $_GET['state'] ) ) : '';
+
+		if ( ! wp_verify_nonce( $state, 'remember_xero_oauth' ) ) {
+			set_transient( $notice, array( 'type' => 'error', 'message' => __( 'Invalid OAuth state. Please try again.', 'remember' ) ), 60 );
+			wp_safe_redirect( $redirect );
+			exit;
+		}
+
+		$settings = Remember_Xero_OAuth::get_settings();
+		if ( ! $settings || empty( $settings['client_id'] ) || empty( $settings['client_secret'] ) ) {
+			set_transient( $notice, array( 'type' => 'error', 'message' => __( 'Xero credentials not configured. Please enter Client ID and Client Secret first.', 'remember' ) ), 60 );
+			wp_safe_redirect( $redirect );
+			exit;
+		}
+
+		$redirect_uri = Remember_Xero_OAuth::get_redirect_uri();
+		$token_data   = Remember_Xero_OAuth::exchange_code_for_token(
+			$code,
+			$settings['client_id'],
+			$settings['client_secret'],
+			$redirect_uri
+		);
+
+		if ( is_wp_error( $token_data ) ) {
+			set_transient( $notice, array( 'type' => 'error', 'message' => wp_strip_all_tags( $token_data->get_error_message() ) ), 60 );
+			wp_safe_redirect( $redirect );
+			exit;
+		}
+
+		$settings['access_token']  = isset( $token_data['access_token'] ) ? $token_data['access_token'] : '';
+		$settings['refresh_token'] = isset( $token_data['refresh_token'] ) ? $token_data['refresh_token'] : '';
+		$expires_in                = isset( $token_data['expires_in'] ) ? (int) $token_data['expires_in'] : 1800;
+		if ( $expires_in < 60 ) {
+			$expires_in = 1800;
+		}
+		$settings['expires_at'] = time() + $expires_in;
+
+		$connections = Remember_Xero_OAuth::get_connections( $settings['access_token'] );
+		if ( is_wp_error( $connections ) ) {
+			set_transient( $notice, array( 'type' => 'error', 'message' => wp_strip_all_tags( $connections->get_error_message() ) ), 60 );
+			wp_safe_redirect( $redirect );
+			exit;
+		}
+
+		if ( empty( $connections[0]['tenantId'] ) ) {
+			set_transient( $notice, array( 'type' => 'error', 'message' => __( 'No Xero organisation was available to connect. Authorize at least one organisation.', 'remember' ) ), 60 );
+			wp_safe_redirect( $redirect );
+			exit;
+		}
+
+		// Phase 1: use the first authorised tenant (multi-tenant picker can come later).
+		$settings['tenant_id']   = sanitize_text_field( $connections[0]['tenantId'] );
+		$settings['tenant_name'] = ! empty( $connections[0]['tenantName'] ) ? sanitize_text_field( $connections[0]['tenantName'] ) : '';
+		$settings['connection_id'] = ! empty( $connections[0]['id'] ) ? sanitize_text_field( $connections[0]['id'] ) : '';
+
+		if ( ! Remember_Xero_OAuth::save_settings( $settings ) ) {
+			set_transient( $notice, array( 'type' => 'error', 'message' => __( 'Failed to save Xero connection.', 'remember' ) ), 60 );
+			wp_safe_redirect( $redirect );
+			exit;
+		}
+
+		global $wpdb;
+		$wpdb->update(
+			$wpdb->prefix . 'remember_payment_processors',
+			array( 'is_active' => 1 ),
+			array( 'processor_type' => 'xero' ),
+			array( '%d' ),
+			array( '%s' )
+		);
+
+		$org_label = $settings['tenant_name'] ? $settings['tenant_name'] : $settings['tenant_id'];
+		set_transient(
+			$notice,
+			array(
+				'type'    => 'success',
+				'message' => sprintf(
+					/* translators: %s: Xero organisation name */
+					__( 'Xero connected successfully (%s).', 'remember' ),
+					$org_label
+				),
+			),
+			60
+		);
+		wp_safe_redirect( $redirect );
+		exit;
+	}
+
+	/**
 	 * Process setup wizard form submission.
 	 * Called on admin_init to process before any output.
 	 *

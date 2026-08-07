@@ -156,6 +156,9 @@ class Remember {
 		// QuickBooks OAuth (redirect to Intuit + callback) must run before any admin HTML output.
 		$this->loader->add_action( 'admin_init', $plugin_admin, 'handle_quickbooks_oauth', 1 );
 
+		// Xero OAuth (redirect to Xero + callback) must run before any admin HTML output.
+		$this->loader->add_action( 'admin_init', $plugin_admin, 'handle_xero_oauth', 1 );
+
 		// Setup wizard redirect and form processing
 		$this->loader->add_action( 'admin_init', $plugin_admin, 'maybe_show_setup_wizard' );
 		$this->loader->add_action( 'admin_init', $plugin_admin, 'process_setup_wizard' );

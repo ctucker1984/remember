@@ -15,6 +15,8 @@ require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remem
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-notification-setting.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/integrations/class-remember-quickbooks-oauth.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/integrations/class-remember-quickbooks-api.php';
+require_once plugin_dir_path( __FILE__ ) . '../../includes/integrations/class-remember-xero-oauth.php';
+require_once plugin_dir_path( __FILE__ ) . '../../includes/integrations/class-remember-xero-api.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-messaging.php';
 
 Remember_Logger::debug( 'Settings page loaded' );
@@ -39,11 +41,22 @@ if ( isset( $_GET['qb_oauth_error'] ) && 'nocreds' === $_GET['qb_oauth_error'] )
 	echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Save your Client ID and Client Secret before connecting to QuickBooks.', 'remember' ) . '</p></div>';
 }
 
+if ( isset( $_GET['xero_oauth_error'] ) && 'nocreds' === $_GET['xero_oauth_error'] ) {
+	echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Save your Client ID and Client Secret before connecting to Xero.', 'remember' ) . '</p></div>';
+}
+
 $qb_oauth_notice = get_transient( 'remember_qb_oauth_notice_' . get_current_user_id() );
 if ( $qb_oauth_notice && is_array( $qb_oauth_notice ) && ! empty( $qb_oauth_notice['message'] ) ) {
 	delete_transient( 'remember_qb_oauth_notice_' . get_current_user_id() );
 	$notice_class = ( isset( $qb_oauth_notice['type'] ) && 'success' === $qb_oauth_notice['type'] ) ? 'notice-success' : 'notice-error';
 	echo '<div class="notice ' . esc_attr( $notice_class ) . ' is-dismissible"><p>' . esc_html( $qb_oauth_notice['message'] ) . '</p></div>';
+}
+
+$xero_oauth_notice = get_transient( 'remember_xero_oauth_notice_' . get_current_user_id() );
+if ( $xero_oauth_notice && is_array( $xero_oauth_notice ) && ! empty( $xero_oauth_notice['message'] ) ) {
+	delete_transient( 'remember_xero_oauth_notice_' . get_current_user_id() );
+	$notice_class = ( isset( $xero_oauth_notice['type'] ) && 'success' === $xero_oauth_notice['type'] ) ? 'notice-success' : 'notice-error';
+	echo '<div class="notice ' . esc_attr( $notice_class ) . ' is-dismissible"><p>' . esc_html( $xero_oauth_notice['message'] ) . '</p></div>';
 }
 
 $notification_model = new Remember_Notification_Setting();
@@ -115,6 +128,53 @@ if ( isset( $_POST['remember_settings_action'] ) && 'save_qb_credentials' === $_
 	}
 }
 
+// Handle Xero disconnect.
+if ( isset( $_POST['remember_settings_action'] ) && 'disconnect_xero' === $_POST['remember_settings_action'] && check_admin_referer( 'remember_settings_action', 'remember_settings_nonce' ) ) {
+	$settings = Remember_Xero_OAuth::get_settings();
+	if ( $settings && ! empty( $settings['refresh_token'] ) && ! empty( $settings['client_id'] ) && ! empty( $settings['client_secret'] ) ) {
+		Remember_Xero_OAuth::revoke_token(
+			$settings['refresh_token'],
+			$settings['client_id'],
+			$settings['client_secret']
+		);
+	} elseif ( $settings && ! empty( $settings['access_token'] ) && ! empty( $settings['client_id'] ) && ! empty( $settings['client_secret'] ) ) {
+		Remember_Xero_OAuth::revoke_token(
+			$settings['access_token'],
+			$settings['client_id'],
+			$settings['client_secret']
+		);
+	}
+
+	Remember_Xero_OAuth::save_settings( array() );
+
+	global $wpdb;
+	$wpdb->update(
+		$wpdb->prefix . 'remember_payment_processors',
+		array( 'is_active' => 0 ),
+		array( 'processor_type' => 'xero' ),
+		array( '%d' ),
+		array( '%s' )
+	);
+
+	echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Xero disconnected successfully.', 'remember' ) . '</p></div>';
+}
+
+// Handle Xero credentials save.
+if ( isset( $_POST['remember_settings_action'] ) && 'save_xero_credentials' === $_POST['remember_settings_action'] && check_admin_referer( 'remember_settings_action', 'remember_settings_nonce' ) ) {
+	$settings = Remember_Xero_OAuth::get_settings() ?: array();
+	$settings['client_id'] = isset( $_POST['xero_client_id'] ) ? sanitize_text_field( wp_unslash( $_POST['xero_client_id'] ) ) : '';
+
+	if ( ! empty( $_POST['xero_client_secret'] ) ) {
+		$settings['client_secret'] = sanitize_text_field( wp_unslash( $_POST['xero_client_secret'] ) );
+	}
+
+	if ( Remember_Xero_OAuth::save_settings( $settings ) ) {
+		echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Xero credentials saved successfully.', 'remember' ) . '</p></div>';
+	} else {
+		echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to save Xero credentials.', 'remember' ) . '</p></div>';
+	}
+}
+
 // Handle QuickBooks item mapping save (roles + catalog products; must run outside nested forms).
 if ( isset( $_POST['remember_settings_action'] ) && 'save_qb_item_mappings' === $_POST['remember_settings_action'] && check_admin_referer( 'remember_settings_action', 'remember_settings_nonce' ) ) {
 	require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-remember-qb-item-mapping.php';
@@ -170,6 +230,14 @@ if ( isset( $_POST['remember_settings_action'] ) && check_admin_referer( 'rememb
 		// Update QuickBooks sync interval
 		if ( isset( $_POST['qb_sync_interval'] ) ) {
 			$options['qb_sync_interval'] = absint( $_POST['qb_sync_interval'] ) * 3600; // Convert hours to seconds
+		}
+
+		// Active accounting / billing provider (one at a time).
+		if ( isset( $_POST['billing_provider'] ) ) {
+			$provider = sanitize_text_field( wp_unslash( $_POST['billing_provider'] ) );
+			if ( in_array( $provider, array( 'none', 'quickbooks', 'xero' ), true ) ) {
+				$options['billing_provider'] = $provider;
+			}
 		}
 
 		// Update subtotal disclaimer message.
@@ -384,6 +452,7 @@ $social_platforms = $wpdb->get_results(
 			<a href="#shortcodes" class="nav-tab" id="shortcodes-tab-link"><?php esc_html_e( 'Shortcodes', 'remember' ); ?></a>
 			<a href="#social-media" class="nav-tab"><?php esc_html_e( 'Social Media', 'remember' ); ?></a>
 			<a href="#quickbooks" class="nav-tab"><?php esc_html_e( 'QuickBooks', 'remember' ); ?></a>
+			<a href="#xero" class="nav-tab"><?php esc_html_e( 'Xero', 'remember' ); ?></a>
 			<a href="#notifications" class="nav-tab"><?php esc_html_e( 'Notifications', 'remember' ); ?></a>
 			<a href="#logging" class="nav-tab"><?php esc_html_e( 'Logging', 'remember' ); ?></a>
 		</h2>
@@ -407,6 +476,31 @@ $social_platforms = $wpdb->get_results(
 					<td>
 						<input type="number" id="photo_max_dimensions" name="photo_max_dimensions" value="<?php echo esc_attr( isset( $options['photo_max_dimensions'] ) ? $options['photo_max_dimensions'] : 800 ); ?>" min="100" max="2000" class="small-text">
 						<span class="description"><?php esc_html_e( 'px (Maximum width/height for profile photos)', 'remember' ); ?></span>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row">
+						<label for="billing_provider"><?php esc_html_e( 'Billing provider', 'remember' ); ?></label>
+					</th>
+					<td>
+						<?php $billing_provider = isset( $options['billing_provider'] ) ? $options['billing_provider'] : 'none'; ?>
+						<fieldset>
+							<label style="display:block;margin-bottom:0.35em;">
+								<input type="radio" name="billing_provider" value="none" <?php checked( $billing_provider, 'none' ); ?>>
+								<?php esc_html_e( 'None (manual / cash tracking only)', 'remember' ); ?>
+							</label>
+							<label style="display:block;margin-bottom:0.35em;">
+								<input type="radio" name="billing_provider" value="quickbooks" <?php checked( $billing_provider, 'quickbooks' ); ?>>
+								<?php esc_html_e( 'QuickBooks Online', 'remember' ); ?>
+							</label>
+							<label style="display:block;margin-bottom:0.35em;">
+								<input type="radio" name="billing_provider" value="xero" <?php checked( $billing_provider, 'xero' ); ?>>
+								<?php esc_html_e( 'Xero', 'remember' ); ?>
+							</label>
+						</fieldset>
+						<p class="description">
+							<?php esc_html_e( 'Only one accounting provider is active at a time. Switching providers does not delete historical invoice IDs on payment rows; finish open billing cycles before switching.', 'remember' ); ?>
+						</p>
 					</td>
 				</tr>
 				<tr>
@@ -1024,6 +1118,149 @@ $social_platforms = $wpdb->get_results(
 					<input type="hidden" name="remember_settings_action" value="sync_qb_products">
 				</form>
 			<?php endif; ?>
+		</div>
+
+		<!-- Xero Settings -->
+		<div id="xero" class="remember-settings-tab" style="display: none;">
+			<?php
+			$xero_settings  = Remember_Xero_OAuth::get_settings();
+			$xero_connected = Remember_Xero_OAuth::is_connected( $xero_settings );
+			$xero_org       = array();
+			if ( $xero_connected ) {
+				$xero_org_result = Remember_Xero_API::get_organisation();
+				if ( ! is_wp_error( $xero_org_result ) && is_array( $xero_org_result ) ) {
+					$xero_org = $xero_org_result;
+				}
+			}
+			$billing_provider_now = isset( $options['billing_provider'] ) ? $options['billing_provider'] : 'none';
+			?>
+
+			<h2><?php esc_html_e( 'Xero Integration', 'remember' ); ?></h2>
+			<p class="description">
+				<?php esc_html_e( 'Connect Xero to create invoices and sync payment status (mirrors the QuickBooks workflow). Choose Xero as the Billing provider under General when you are ready to use it.', 'remember' ); ?>
+			</p>
+
+			<?php if ( 'xero' !== $billing_provider_now ) : ?>
+				<div class="notice notice-warning inline" style="margin: 0 0 1em;">
+					<p>
+						<?php
+						echo esc_html__( 'Xero is not the active billing provider.', 'remember' );
+						echo ' ';
+						esc_html_e( 'You can still save credentials and connect for testing; invoice automation will follow the General → Billing provider setting.', 'remember' );
+						?>
+					</p>
+				</div>
+			<?php endif; ?>
+
+			<?php if ( $xero_connected ) : ?>
+				<div style="padding: 15px; background: #d4edda; border: 1px solid #c3e6cb; border-radius: 4px; margin-bottom: 20px;">
+					<p style="margin: 0; color: #155724;">
+						<strong><?php esc_html_e( 'Connected', 'remember' ); ?></strong>
+						<?php
+						$display_name = '';
+						if ( ! empty( $xero_org['Name'] ) ) {
+							$display_name = $xero_org['Name'];
+						} elseif ( ! empty( $xero_settings['tenant_name'] ) ) {
+							$display_name = $xero_settings['tenant_name'];
+						}
+						if ( $display_name ) {
+							echo ' — ' . esc_html( $display_name );
+						}
+						?>
+					</p>
+					<?php if ( ! empty( $xero_settings['tenant_id'] ) ) : ?>
+						<p style="margin: 5px 0 0; font-size: 13px;">
+							<?php esc_html_e( 'Tenant ID:', 'remember' ); ?>
+							<code><?php echo esc_html( $xero_settings['tenant_id'] ); ?></code>
+						</p>
+					<?php endif; ?>
+				</div>
+			<?php else : ?>
+				<div style="padding: 15px; background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 4px; margin-bottom: 20px;">
+					<p style="margin: 0; color: #721c24;">
+						<strong><?php esc_html_e( 'Not Connected', 'remember' ); ?></strong>
+					</p>
+				</div>
+			<?php endif; ?>
+
+			<form method="post" action="" style="margin-bottom: 30px;">
+				<?php wp_nonce_field( 'remember_settings_action', 'remember_settings_nonce' ); ?>
+				<input type="hidden" name="remember_settings_action" value="save_xero_credentials">
+
+				<h3><?php esc_html_e( 'Xero Credentials', 'remember' ); ?></h3>
+				<p class="description">
+					<?php esc_html_e( 'Enter your Xero app credentials from the Xero Developer portal.', 'remember' ); ?>
+					<a href="https://developer.xero.com/app/manage" target="_blank" rel="noopener noreferrer"><?php esc_html_e( 'My Apps', 'remember' ); ?></a>
+				</p>
+
+				<table class="form-table">
+					<tr>
+						<th scope="row">
+							<label for="remember_xero_redirect_uri"><?php esc_html_e( 'Redirect URI', 'remember' ); ?></label>
+						</th>
+						<td>
+							<input type="text" id="remember_xero_redirect_uri" class="large-text" readonly
+								value="<?php echo esc_attr( Remember_Xero_OAuth::get_redirect_uri() ); ?>"
+								onclick="this.select();" />
+							<p class="description">
+								<?php esc_html_e( 'Add this exact URL as an OAuth 2.0 redirect URI in your Xero app Configuration. It must match for Connect to succeed.', 'remember' ); ?>
+							</p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row">
+							<label for="xero_client_id"><?php esc_html_e( 'Client ID', 'remember' ); ?></label>
+						</th>
+						<td>
+							<input type="text" id="xero_client_id" name="xero_client_id" class="regular-text"
+								value="<?php echo esc_attr( isset( $xero_settings['client_id'] ) ? $xero_settings['client_id'] : '' ); ?>"
+								placeholder="<?php esc_attr_e( 'Enter your Client ID', 'remember' ); ?>" autocomplete="off">
+						</td>
+					</tr>
+					<tr>
+						<th scope="row">
+							<label for="xero_client_secret"><?php esc_html_e( 'Client Secret', 'remember' ); ?></label>
+						</th>
+						<td>
+							<input type="password" id="xero_client_secret" name="xero_client_secret" class="regular-text" value=""
+								placeholder="<?php echo esc_attr( ! empty( $xero_settings['client_secret'] ) ? __( 'Enter new Client Secret to update', 'remember' ) : __( 'Enter your Client Secret', 'remember' ) ); ?>"
+								autocomplete="new-password">
+							<p class="description">
+								<?php if ( ! empty( $xero_settings['client_secret'] ) ) : ?>
+									<?php esc_html_e( 'Client Secret is already saved. Enter a new value to update it.', 'remember' ); ?>
+								<?php else : ?>
+									<?php esc_html_e( 'Enter your Client Secret from the Xero Developer portal.', 'remember' ); ?>
+								<?php endif; ?>
+							</p>
+						</td>
+					</tr>
+				</table>
+
+				<?php submit_button( __( 'Save Credentials', 'remember' ) ); ?>
+			</form>
+
+			<?php if ( ! empty( $xero_settings['client_id'] ) && ! empty( $xero_settings['client_secret'] ) ) : ?>
+				<?php if ( $xero_connected ) : ?>
+					<form method="post" action="" style="margin-bottom: 30px;">
+						<?php wp_nonce_field( 'remember_settings_action', 'remember_settings_nonce' ); ?>
+						<input type="hidden" name="remember_settings_action" value="disconnect_xero">
+						<?php submit_button( __( 'Disconnect Xero', 'remember' ), 'secondary' ); ?>
+					</form>
+				<?php else : ?>
+					<form method="post" action="" style="margin-bottom: 1em;">
+						<?php wp_nonce_field( 'remember_settings_action', 'remember_settings_nonce' ); ?>
+						<input type="hidden" name="remember_settings_action" value="start_xero_oauth" />
+						<?php submit_button( __( 'Connect to Xero', 'remember' ), 'primary large', 'submit', false ); ?>
+					</form>
+					<p class="description">
+						<?php esc_html_e( 'You will be asked to authorize one or more Xero organisations. reMember stores the first organisation returned for this connection.', 'remember' ); ?>
+					</p>
+				<?php endif; ?>
+			<?php endif; ?>
+
+			<p class="description" style="margin-top: 2em;">
+				<?php esc_html_e( 'Item mapping, contact sync, and invoice creation will appear here in a later update.', 'remember' ); ?>
+			</p>
 		</div>
 
 		<!-- Notification Settings -->

@@ -143,6 +143,7 @@ Enable `WP_DEBUG` as needed; logging uses `Remember_Logger`.
 ### 1.1.0 (in progress)
 
 - **Version** bumped to `1.1.0` (`REMEMBER_VERSION`).
+- **Xero (Phase 1):** DB `1.16.0` plumbing (`xero_*` payment columns, item mappings table, inactive processor). Encrypted Client ID/Secret in `remember_payment_processors`. Settings → **Billing provider** + **Xero** tab (Connect/Disconnect OAuth). Invoice/contact sync comes later. See `XERO_PLAN.md`.
 
 ### 1.0.1
 
