@@ -145,7 +145,7 @@ reMember adds granular capabilities (`remember_read_events`, `remember_create_me
 
 Enable `WP_DEBUG` as needed; logging uses `Remember_Logger`.
 
-**Branching note:** Release work for this line lives on branch `v1.1.1`. Prefer clear conventional commits so the changelog below stays easy to inventory across machines.
+**Branching note:** Release work for this line lives on branch `v1.1.2`. Prefer clear conventional commits so the changelog below stays easy to inventory across machines.
 
 **Accounting providers:** One active billing provider per site (`quickbooks` or `xero`). Parallel stacks; see [`XERO_PLAN.md`](XERO_PLAN.md).
 
@@ -159,6 +159,10 @@ Enable `WP_DEBUG` as needed; logging uses `Remember_Logger`.
 ---
 
 ## Changelog
+
+### 1.1.2 (planned)
+
+- See [`TODO_1.1.2.md`](TODO_1.1.2.md) — restore photo upload **zoom** and **drag-to-recenter** on registration (parity with profile).
 
 ### 1.1.1
 
