@@ -3,7 +3,7 @@
  * Plugin Name: reMember
  * Plugin URI: https://github.com/ctucker1984/remember
  * Description: A custom WordPress plugin for reMember functionality.
- * Version: 1.1.1
+ * Version: 1.1.0
  * Author: ctucker1984
  * Author URI: https://github.com/ctucker1984
  * License: GPL v2 or later
@@ -22,7 +22,7 @@ if ( ! defined( 'WPINC' ) ) {
 /**
  * Currently plugin version.
  */
-define( 'REMEMBER_VERSION', '1.1.1' );
+define( 'REMEMBER_VERSION', '1.1.0' );
 
 /**
  * Plugin directory path.

@@ -483,21 +483,19 @@ class Remember_Xero_Sync {
 
 		$xero_invoice_id     = isset( $invoice_result['InvoiceID'] ) ? $invoice_result['InvoiceID'] : '';
 		$xero_invoice_number = isset( $invoice_result['InvoiceNumber'] ) ? sanitize_text_field( (string) $invoice_result['InvoiceNumber'] ) : null;
-		$online_url          = '' !== $xero_invoice_id ? Remember_Xero_API::get_online_invoice_url( $xero_invoice_id ) : '';
 
 		if ( ! $payment ) {
 			$payment_data = array(
-				'event_application_id'    => $application_id,
-				'member_id'               => $member_id,
-				'role_cost'               => $event_role ? floatval( $event_role->cost ) : 0,
-				'merchandise_cost'        => 0,
-				'total_amount'            => $total_amount,
-				'amount_paid'             => 0,
-				'amount_due'              => $total_amount,
-				'payment_status'          => 'pending',
-				'xero_invoice_id'         => $xero_invoice_id,
-				'xero_invoice_number'     => $xero_invoice_number,
-				'xero_online_invoice_url' => '' !== $online_url ? $online_url : null,
+				'event_application_id' => $application_id,
+				'member_id'            => $member_id,
+				'role_cost'            => $event_role ? floatval( $event_role->cost ) : 0,
+				'merchandise_cost'     => 0,
+				'total_amount'         => $total_amount,
+				'amount_paid'          => 0,
+				'amount_due'           => $total_amount,
+				'payment_status'       => 'pending',
+				'xero_invoice_id'      => $xero_invoice_id,
+				'xero_invoice_number'  => $xero_invoice_number,
 			);
 			$payment_model->create( $payment_data );
 		} else {
@@ -506,9 +504,6 @@ class Remember_Xero_Sync {
 			);
 			if ( null !== $xero_invoice_number ) {
 				$update_invoice['xero_invoice_number'] = $xero_invoice_number;
-			}
-			if ( '' !== $online_url ) {
-				$update_invoice['xero_online_invoice_url'] = $online_url;
 			}
 			$payment_model->update( $payment->payment_id, $update_invoice );
 		}
@@ -707,12 +702,6 @@ class Remember_Xero_Sync {
 		if ( isset( $invoice['InvoiceNumber'] ) ) {
 			$update_data['xero_invoice_number'] = sanitize_text_field( (string) $invoice['InvoiceNumber'] );
 		}
-		if ( empty( $payment->xero_online_invoice_url ) ) {
-			$online_url = Remember_Xero_API::get_online_invoice_url( $payment->xero_invoice_id );
-			if ( '' !== $online_url ) {
-				$update_data['xero_online_invoice_url'] = $online_url;
-			}
-		}
 		$payment_model->update( $payment_id, $update_data );
 
 		Remember_Logger::info(
@@ -821,15 +810,14 @@ class Remember_Xero_Sync {
 		$payment_model->update(
 			$payment_id,
 			array(
-				'xero_invoice_id'          => null,
-				'xero_invoice_number'      => null,
-				'xero_online_invoice_url'  => null,
-				'xero_invoice_sort_ts'     => null,
-				'xero_payment_lines'       => null,
-				'xero_refund_lines'        => null,
-				'amount_paid'              => 0,
-				'payment_status'           => 'pending',
-				'payment_date'             => null,
+				'xero_invoice_id'      => null,
+				'xero_invoice_number'  => null,
+				'xero_invoice_sort_ts' => null,
+				'xero_payment_lines'   => null,
+				'xero_refund_lines'    => null,
+				'amount_paid'          => 0,
+				'payment_status'       => 'pending',
+				'payment_date'         => null,
 			)
 		);
 	}
@@ -851,10 +839,6 @@ class Remember_Xero_Sync {
 	/**
 	 * Whether a Xero API error means the invoice is missing.
 	 *
-	 * Only treat hard not-found responses as missing. Do NOT match arbitrary
-	 * "not found" substrings (e.g. "Refresh token not found") — that incorrectly
-	 * clears local invoice links and payment amounts.
-	 *
 	 * @param WP_Error $error Error from get_invoice().
 	 * @return bool
 	 */
@@ -862,13 +846,15 @@ class Remember_Xero_Sync {
 		if ( ! is_wp_error( $error ) ) {
 			return false;
 		}
-		if ( 'xero_invoice_not_found' === $error->get_error_code() ) {
-			return true;
-		}
 		$data = $error->get_error_data();
 		if ( is_array( $data ) && isset( $data['status'] ) && (int) $data['status'] === 404 ) {
 			return true;
 		}
-		return false;
+		$code = $error->get_error_code();
+		if ( in_array( $code, array( 'xero_invoice_not_found' ), true ) ) {
+			return true;
+		}
+		$message = strtolower( $error->get_error_message() );
+		return ( false !== strpos( $message, 'not found' ) || false !== strpos( $message, 'was not found' ) );
 	}
 }
