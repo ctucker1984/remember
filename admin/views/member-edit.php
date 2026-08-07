@@ -72,9 +72,16 @@ list( $legal_first_resolved, $legal_last_resolved ) = Remember_Import_Export::me
 // Get max image dimensions from settings
 $options = get_option( 'remember_options', array() );
 $max_image_size = isset( $options['photo_max_dimensions'] ) ? absint( $options['photo_max_dimensions'] ) : 800;
+$photo_max_bytes = isset( $options['photo_max_size'] ) ? absint( $options['photo_max_size'] ) : 2097152;
+if ( $max_image_size < 1 ) {
+	$max_image_size = 800;
+}
+if ( $photo_max_bytes < 1 ) {
+	$photo_max_bytes = 2097152;
+}
 ?>
 
-<form method="post" action="" enctype="multipart/form-data" style="background: #fff; border: 1px solid #ccd0d4; border-radius: 4px; padding: 20px;">
+<form method="post" action="" enctype="multipart/form-data" class="remember-member-edit-form" style="background: #fff; border: 1px solid #ccd0d4; border-radius: 4px; padding: 20px;">
 	<?php wp_nonce_field( 'remember_member_action', 'remember_member_nonce' ); ?>
 	<input type="hidden" name="remember_member_action" value="update_profile">
 	<input type="hidden" name="member_id" value="<?php echo esc_attr( $view_member_id ); ?>">
@@ -87,15 +94,49 @@ $max_image_size = isset( $options['photo_max_dimensions'] ) ? absint( $options['
 		<tr>
 			<th><label for="photo_file"><?php esc_html_e( 'Photo', 'remember' ); ?></label></th>
 			<td>
-				<?php if ( ! empty( $view_member->photo_url ) ) : ?>
-					<p>
-						<img src="<?php echo esc_url( $view_member->photo_url ); ?>" alt="<?php echo esc_attr( $view_user->display_name ); ?>" style="max-width: 150px; height: auto; border: 1px solid #ddd; padding: 5px; border-radius: 4px;">
+				<div class="remember-profile-photo-edit" data-output-size="<?php echo esc_attr( (string) $max_image_size ); ?>">
+					<div class="remember-profile-photo-current"<?php echo ( ! empty( $view_member->photo_url ) ) ? '' : ' hidden'; ?>>
+						<?php if ( ! empty( $view_member->photo_url ) ) : ?>
+							<div class="remember-profile-photo-preview">
+								<img src="<?php echo esc_url( $view_member->photo_url ); ?>" alt="<?php echo esc_attr( $view_user->display_name ); ?>">
+							</div>
+							<label class="remember-checkbox-label remember-profile-photo-delete">
+								<input type="checkbox" name="delete_photo" value="1" id="delete_photo">
+								<span><?php esc_html_e( 'Delete current photo', 'remember' ); ?></span>
+							</label>
+							<p class="description"><?php esc_html_e( 'Upload a new photo to replace the current one.', 'remember' ); ?></p>
+						<?php endif; ?>
+					</div>
+
+					<div class="remember-profile-photo-cropper" hidden>
+						<div class="remember-profile-photo-cropper-viewport" aria-label="<?php esc_attr_e( 'Photo framing preview', 'remember' ); ?>">
+							<img src="" alt="" class="remember-profile-photo-cropper-image" draggable="false">
+						</div>
+						<div class="remember-profile-photo-cropper-controls">
+							<button type="button" class="button remember-photo-zoom-out" aria-label="<?php esc_attr_e( 'Zoom out', 'remember' ); ?>">−</button>
+							<input type="range" class="remember-photo-zoom-range" min="1" max="3" step="0.01" value="1" aria-label="<?php esc_attr_e( 'Zoom', 'remember' ); ?>">
+							<button type="button" class="button remember-photo-zoom-in" aria-label="<?php esc_attr_e( 'Zoom in', 'remember' ); ?>">+</button>
+						</div>
+						<p class="description"><?php esc_html_e( 'Drag to recenter. Use zoom to frame the photo inside the circle. Framing is applied when you save.', 'remember' ); ?></p>
+						<button type="button" class="button remember-photo-clear">
+							<?php esc_html_e( 'Clear selected photo', 'remember' ); ?>
+						</button>
+					</div>
+
+					<input type="file" id="photo_file" name="photo_file" accept="image/jpeg,image/png,image/gif">
+					<p class="description">
+						<?php
+						echo esc_html(
+							sprintf(
+								/* translators: 1: max px, 2: max MB */
+								__( 'Square crop from your framing, max %1$dpx. Maximum file size %2$d MB. JPEG, PNG, or GIF.', 'remember' ),
+								$max_image_size,
+								(int) max( 1, round( $photo_max_bytes / 1024 / 1024 ) )
+							)
+						);
+						?>
 					</p>
-					<label><input type="checkbox" name="delete_photo" value="1"> <?php esc_html_e( 'Delete current photo', 'remember' ); ?></label>
-					<p class="description"><?php esc_html_e( 'Upload a new photo to replace the current one.', 'remember' ); ?></p>
-				<?php endif; ?>
-				<input type="file" id="photo_file" name="photo_file" accept="image/*">
-				<p class="description"><?php echo esc_html( sprintf( __( 'Square image, max %dpx. WordPress will resize if needed.', 'remember' ), $max_image_size ) ); ?></p>
+				</div>
 			</td>
 		</tr>
 	</table>

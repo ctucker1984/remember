@@ -660,7 +660,8 @@
 }
 
 .remember-profile-form-modern.remember-photo-cropping,
-.remember-register-form__inner.remember-photo-cropping {
+.remember-register-form__inner.remember-photo-cropping,
+.remember-member-edit-form.remember-photo-cropping {
 	opacity: 0.72;
 	pointer-events: none;
 }

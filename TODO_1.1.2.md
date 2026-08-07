@@ -10,6 +10,7 @@
 - [x] Registration photo UI vs profile photo UI (`public/partials/`, `assets/js/public.js`) — registration had **no** photo UI; cropper lived only on profile.
 - [x] Confirm whether controls are absent, CSS-hidden, or JS not binding on the register form — absent markup; JS only bound `#photo_file` inside `.remember-profile-photo-edit`.
 - [x] Restore parity with profile upload behavior — optional photo on register with same cropper (zoom + drag); JS generalized per wrap; form `enctype` + server upload after account create.
-- [ ] Smoke-test register + front-end profile edit on demo
+- [x] Admin Members → Edit Profile — same cropper (was plain file input).
+- [ ] Smoke-test register + front-end profile edit + admin member edit on demo
 
 **Branch:** `v1.1.2`

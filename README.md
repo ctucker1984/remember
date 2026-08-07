@@ -163,6 +163,7 @@ Enable `WP_DEBUG` as needed; logging uses `Remember_Logger`.
 ### 1.1.2 (in progress)
 
 - **Registration photo:** Optional profile photo on member register with the same circular **zoom** + **drag-to-recenter** cropper as profile edit.
+- **Admin member edit:** Same photo cropper on Members → Edit Profile.
 - See [`TODO_1.1.2.md`](TODO_1.1.2.md).
 
 ### 1.1.1
