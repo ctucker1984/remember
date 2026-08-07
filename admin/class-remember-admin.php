@@ -671,6 +671,8 @@ class Remember_Admin {
 			return;
 		}
 
+		require_once plugin_dir_path( __FILE__ ) . '../includes/integrations/class-remember-xero-oauth.php';
+
 		// Start OAuth (POST).
 		if ( isset( $_POST['remember_settings_action'] ) && 'start_xero_oauth' === $_POST['remember_settings_action'] ) {
 			if ( ! current_user_can( 'remember_access_settings' ) ) {
@@ -679,8 +681,6 @@ class Remember_Admin {
 			if ( ! check_admin_referer( 'remember_settings_action', 'remember_settings_nonce' ) ) {
 				return;
 			}
-
-			require_once plugin_dir_path( __FILE__ ) . '../includes/integrations/class-remember-xero-oauth.php';
 
 			$xero = Remember_Xero_OAuth::get_settings();
 			if ( empty( $xero['client_id'] ) || empty( $xero['client_secret'] ) ) {
@@ -707,8 +707,6 @@ class Remember_Admin {
 			return;
 		}
 
-		require_once plugin_dir_path( __FILE__ ) . '../includes/integrations/class-remember-xero-oauth.php';
-
 		$uid      = get_current_user_id();
 		$notice   = 'remember_xero_oauth_notice_' . $uid;
 		$redirect = admin_url( 'admin.php?page=remember-settings#xero' );
@@ -732,7 +730,16 @@ class Remember_Admin {
 		}
 
 		if ( empty( $_GET['code'] ) ) {
-			return;
+			set_transient(
+				$notice,
+				array(
+					'type'    => 'error',
+					'message' => __( 'Xero did not return an authorization code. If an organisation shows “Already connected”, disconnect reMember for WordPress under that org’s Settings → Connected apps, then try Connect again.', 'remember' ),
+				),
+				60
+			);
+			wp_safe_redirect( $redirect );
+			exit;
 		}
 
 		$code  = sanitize_text_field( wp_unslash( $_GET['code'] ) );
@@ -773,6 +780,9 @@ class Remember_Admin {
 		}
 		$settings['expires_at'] = time() + $expires_in;
 
+		// Persist tokens before connections call so a connections failure is recoverable.
+		Remember_Xero_OAuth::save_settings( $settings );
+
 		$connections = Remember_Xero_OAuth::get_connections( $settings['access_token'] );
 		if ( is_wp_error( $connections ) ) {
 			set_transient( $notice, array( 'type' => 'error', 'message' => wp_strip_all_tags( $connections->get_error_message() ) ), 60 );
@@ -787,8 +797,8 @@ class Remember_Admin {
 		}
 
 		// Phase 1: use the first authorised tenant (multi-tenant picker can come later).
-		$settings['tenant_id']   = sanitize_text_field( $connections[0]['tenantId'] );
-		$settings['tenant_name'] = ! empty( $connections[0]['tenantName'] ) ? sanitize_text_field( $connections[0]['tenantName'] ) : '';
+		$settings['tenant_id']     = sanitize_text_field( $connections[0]['tenantId'] );
+		$settings['tenant_name']   = ! empty( $connections[0]['tenantName'] ) ? sanitize_text_field( $connections[0]['tenantName'] ) : '';
 		$settings['connection_id'] = ! empty( $connections[0]['id'] ) ? sanitize_text_field( $connections[0]['id'] ) : '';
 
 		if ( ! Remember_Xero_OAuth::save_settings( $settings ) ) {

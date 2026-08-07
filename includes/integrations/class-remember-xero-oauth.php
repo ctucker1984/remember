@@ -33,10 +33,14 @@ class Remember_Xero_OAuth {
 	/**
 	 * Default OAuth scopes for contacts, invoices/payments, and items/settings.
 	 *
+	 * New Xero apps (created on/after 2026-03-02) require granular scopes —
+	 * the broad `accounting.transactions` scope returns invalid_scope.
+	 *
 	 * @return string Space-separated scopes.
+	 * @link https://developer.xero.com/faq/granular-scopes
 	 */
 	public static function get_default_scopes() {
-		return 'openid profile email offline_access accounting.contacts accounting.transactions accounting.settings';
+		return 'openid profile email offline_access accounting.contacts accounting.invoices accounting.payments accounting.settings';
 	}
 
 	/**
@@ -203,29 +207,76 @@ class Remember_Xero_OAuth {
 	 * @return array|WP_Error List of connection arrays or error.
 	 */
 	public static function get_connections( $access_token ) {
+		$access_token = is_string( $access_token ) ? trim( $access_token ) : '';
+		if ( '' === $access_token ) {
+			return new WP_Error( 'xero_connections_error', __( 'Missing Xero access token when loading connections.', 'remember' ) );
+		}
+
+		/*
+		 * Do not overwrite CURLOPT_HTTPHEADER wholesale — that can strip User-Agent and
+		 * trigger Akamai "Access Denied" (HTTP 403 HTML) in front of api.xero.com.
+		 */
 		$response = wp_remote_get(
 			self::CONNECTIONS_URL,
 			array(
-				'headers' => array(
+				'headers'     => array(
 					'Accept'        => 'application/json',
+					'Content-Type'  => 'application/json',
 					'Authorization' => 'Bearer ' . $access_token,
 				),
-				'timeout' => 30,
+				'user-agent'  => 'reMember-WordPress/' . ( defined( 'REMEMBER_VERSION' ) ? REMEMBER_VERSION : '1.1.0' ),
+				'timeout'     => 45,
+				'redirection' => 0,
+				'sslverify'   => true,
 			)
 		);
 
 		if ( is_wp_error( $response ) ) {
-			return $response;
-		}
-
-		$body        = json_decode( wp_remote_retrieve_body( $response ), true );
-		$status_code = wp_remote_retrieve_response_code( $response );
-
-		if ( 200 !== $status_code || ! is_array( $body ) ) {
 			return new WP_Error(
 				'xero_connections_error',
-				__( 'Failed to load Xero organisation connections.', 'remember' ),
-				$body
+				sprintf(
+					/* translators: %s: transport error */
+					__( 'Xero connections request failed: %s', 'remember' ),
+					$response->get_error_message()
+				),
+				array( 'transport' => $response->get_error_code() )
+			);
+		}
+
+		$raw_body    = wp_remote_retrieve_body( $response );
+		$status_code = (int) wp_remote_retrieve_response_code( $response );
+		$body        = json_decode( $raw_body, true );
+
+		if ( 200 !== $status_code || ! is_array( $body ) ) {
+			$detail = '';
+			if ( is_array( $body ) ) {
+				if ( ! empty( $body['Detail'] ) ) {
+					$detail = (string) $body['Detail'];
+				} elseif ( ! empty( $body['Title'] ) ) {
+					$detail = (string) $body['Title'];
+				} elseif ( ! empty( $body['error'] ) ) {
+					$detail = is_string( $body['error'] ) ? $body['error'] : wp_json_encode( $body['error'] );
+				}
+			} elseif ( is_string( $raw_body ) && '' !== $raw_body ) {
+				$detail = substr( wp_strip_all_tags( $raw_body ), 0, 240 );
+			}
+
+			$message = sprintf(
+				/* translators: %d: HTTP status */
+				__( 'Failed to load Xero organisation connections (HTTP %d).', 'remember' ),
+				$status_code
+			);
+			if ( $detail ) {
+				$message .= ' ' . $detail;
+			}
+
+			return new WP_Error(
+				'xero_connections_error',
+				$message,
+				array(
+					'status' => $status_code,
+					'body'   => is_array( $body ) ? $body : $raw_body,
+				)
 			);
 		}
 

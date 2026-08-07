@@ -1261,6 +1261,7 @@ $social_platforms = $wpdb->get_results(
 			<p class="description" style="margin-top: 2em;">
 				<?php esc_html_e( 'Item mapping, contact sync, and invoice creation will appear here in a later update.', 'remember' ); ?>
 			</p>
+
 		</div>
 
 		<!-- Notification Settings -->

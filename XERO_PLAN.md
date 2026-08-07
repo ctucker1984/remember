@@ -1,9 +1,11 @@
 # Xero Billing Integration Plan
 
-**Status:** Phase 1 complete (credentials + OAuth + Settings shell) — Phase 2 next (contacts / items / invoices)  
+**Status:** Phase 1 complete (OAuth Connect verified on demo) — Phase 2 next (contacts / items / invoices)  
 **Branch:** `v1.1.0`  
 **Decision date:** 2026-08-05  
-**Redirect URI (demo):** `https://remember.teamautomation.ddns.net/wp-admin/admin.php?page=remember-settings&tab=xero&xero_oauth_callback=1`
+**Redirect URI (demo example):** built at runtime with WordPress `admin_url()` — not hard-coded. On each site it becomes  
+`{that-site-wp-admin}/admin.php?page=remember-settings&tab=xero&xero_oauth_callback=1`  
+Register each production hostname as an additional redirect URI in the Xero app.
 
 ---
 
