@@ -3,7 +3,7 @@
  * Plugin Name: reMember
  * Plugin URI: https://github.com/ctucker1984/remember
  * Description: Membership communities for WordPress — member profiles, events and locations, applications and vetting, admission tickets, and billing with QuickBooks Online or Xero.
- * Version: 1.2.0
+ * Version: 1.3.0
  * Author: ctucker1984
  * Author URI: https://github.com/ctucker1984
  * License: GPL v2 or later
@@ -49,7 +49,7 @@ define( 'REMEMBER_LOADED', true );
 /**
  * Currently plugin version.
  */
-define( 'REMEMBER_VERSION', '1.2.0' );
+define( 'REMEMBER_VERSION', '1.3.0' );
 
 /**
  * Plugin directory path.
@@ -79,6 +79,13 @@ function deactivate_remember() {
 
 register_activation_hook( __FILE__, 'activate_remember' );
 register_deactivation_hook( __FILE__, 'deactivate_remember' );
+
+/*
+ * Upload → Replace does not deactivate like dashboard updates. Register early
+ * so an active 1.3.0+ install can safely overwrite itself later.
+ */
+require_once plugin_dir_path( __FILE__ ) . 'includes/utilities/class-remember-plugin-upgrader.php';
+Remember_Plugin_Upgrader::init();
 
 /**
  * Begins execution of the plugin.

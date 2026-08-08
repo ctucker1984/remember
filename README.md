@@ -2,7 +2,7 @@
 
 A WordPress plugin for membership-style communities: **members**, **events**, **locations**, **applications**, **vetting**, **billing** (including **QuickBooks Online**), and **role-based access**. It extends WordPress users with custom tables, an admin UI under **reMember**, and front-end templates (shortcodes and block patterns).
 
-**Version:** 1.2.0  
+**Version:** 1.3.0 (in progress)  
 **Requires:** WordPress 5.0 or higher  
 **License:** GPL v2 or later
 
@@ -145,7 +145,7 @@ reMember adds granular capabilities (`remember_read_events`, `remember_create_me
 
 Enable `WP_DEBUG` as needed; logging uses `Remember_Logger`.
 
-**Branching note:** `v1.2.0` is the release branch for this line; merge to `master` after tagging. Prefer clear conventional commits for the changelog.
+**Branching note:** Active work is on `v1.3.0`; merge to `master` after tagging. Prefer clear conventional commits for the changelog.
 
 **Accounting providers:** One active billing provider per site (`quickbooks` or `xero`). Parallel stacks; see [`XERO_PLAN.md`](XERO_PLAN.md).
 
@@ -153,11 +153,17 @@ Enable `WP_DEBUG` as needed; logging uses `Remember_Logger`.
 
 1. Download **`remember-x.y.z.zip`** from the release **Assets** — not GitHub’s auto “Source code (zip)”.
 2. Our zip filename is versioned, but it unpacks to **`remember/`** (WordPress-safe). GitHub’s source archive unpacks as `remember-<tag>/` and breaks upgrades — ignore it.
-3. Build locally: `bash bin/build-plugin-zip.sh` → `dist/remember-<version>.zip`, then attach on the GitHub Release.
+3. **Upgrade tip:** From **1.3.0+**, Upload → Replace deactivates reMember, replaces files, then silently reactivates. When upgrading **from ≤1.2.x to 1.3.0**, deactivate reMember first (or use a 1.2.1 hotfix that only adds that behavior), then upload and activate.
+4. Build locally: `bash bin/build-plugin-zip.sh` → `dist/remember-<version>.zip`, then attach on the GitHub Release.
 
 ---
 
 ## Changelog
+
+### 1.3.0 (in progress)
+
+- **Version** bumped to `1.3.0` (`REMEMBER_VERSION`).
+- **Upgrade safety:** On zip Upload → Replace, silently deactivate reMember before clearing `remember/`, then silently reactivate (matches dashboard update behavior). Does not help sites still running ≤1.2.0 until this version is installed once.
 
 ### 1.2.0
 
