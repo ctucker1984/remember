@@ -20,7 +20,7 @@
 
 **Required (registration + profile):** Nickname; Legal First/Last; Street; City; State/Province; Postal Code; Cell Phone; Time Zone; Instant Messenger; Emergency First/Last/Phone/Relationship.
 
-- [x] Clothing sizes: shirt/pants S–4XL, shoes 6–15 (schema `1.19.0` + seed on install)
+- [x] Clothing sizes: shirt/pants S–6XL, shoes 6–15 (schema `1.19.0` / `1.21.0` seed)
 - [x] Full registration profile + shared required-field policy (register / front profile / admin)
 
 ## C — Events

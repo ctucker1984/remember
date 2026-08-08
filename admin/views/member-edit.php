@@ -290,7 +290,7 @@ if ( $photo_max_bytes < 1 ) {
 			<th><label for="shoe_size"><?php esc_html_e( 'Shoe Size', 'remember' ); ?></label></th>
 			<td>
 				<?php echo Remember_Clothing_Sizes::dropdown( 'shoe', $shoe_size, 'shoe_size', 'shoe_size' ); ?>
-				<p class="description"><?php esc_html_e( 'US men\'s sizes. Shirt/pants: S-4XL. Shoes: 6-15.', 'remember' ); ?></p>
+				<p class="description"><?php esc_html_e( 'US men\'s sizes. Shirt/pants: S-6XL. Shoes: 6-15.', 'remember' ); ?></p>
 			</td>
 		</tr>
 		<tr>

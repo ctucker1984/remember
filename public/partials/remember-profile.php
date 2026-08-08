@@ -586,7 +586,7 @@ if ( ! empty( $selected_allergy_ids ) ) {
 
 			<div class="remember-form-section">
 				<h3 class="remember-form-section-title"><?php esc_html_e( 'Clothing Sizes', 'remember' ); ?></h3>
-				<p class="remember-form-help"><?php esc_html_e( 'US men\'s sizes. Shirt and pants: S-4XL. Shoes: 6-15.', 'remember' ); ?></p>
+				<p class="remember-form-help"><?php esc_html_e( 'US men\'s sizes. Shirt and pants: S-6XL. Shoes: 6-15.', 'remember' ); ?></p>
 				<div class="remember-form-row">
 					<div class="remember-form-col">
 						<label for="shirt_size" class="remember-form-label"><?php esc_html_e( 'Shirt', 'remember' ); ?></label>

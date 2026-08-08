@@ -327,7 +327,7 @@ class Remember_Seeder {
 	}
 
 	/**
-	 * Seed clothing size options (shirt/pants S–4XL, shoes 6–15).
+	 * Seed clothing size options (shirt/pants S–6XL, shoes 6–15).
 	 */
 	private function seed_clothing_size_options() {
 		require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-clothing-sizes.php';

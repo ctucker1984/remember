@@ -266,7 +266,7 @@ $remember_reg_im_type  = $remember_reg_val( 'im_type', 'telegram' );
 			</div>
 
 			<h3 class="remember-register-section-title"><?php esc_html_e( 'Clothing Sizes', 'remember' ); ?></h3>
-			<p class="remember-register-section-help"><?php esc_html_e( 'Optional. US men\'s sizes — shirt/pants S-4XL, shoes 6-15.', 'remember' ); ?></p>
+			<p class="remember-register-section-help"><?php esc_html_e( 'Optional. US men\'s sizes — shirt/pants S-6XL, shoes 6-15.', 'remember' ); ?></p>
 
 			<div class="remember-register-row">
 				<label for="remember_reg_shirt_size"><?php esc_html_e( 'Shirt', 'remember' ); ?></label>

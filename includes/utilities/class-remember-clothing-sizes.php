@@ -31,7 +31,7 @@ class Remember_Clothing_Sizes {
 	 * @return array<string,string[]> category => size codes
 	 */
 	public static function defaults() {
-		$letter = array( 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL' );
+		$letter = array( 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL', '5XL', '6XL' );
 		$shoes  = array();
 		for ( $n = 6; $n <= 15; $n++ ) {
 			$shoes[] = (string) $n;

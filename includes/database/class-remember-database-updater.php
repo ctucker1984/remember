@@ -757,6 +757,18 @@ class Remember_Database_Updater {
 			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.20.0' ) );
 		}
 
+		// Update to 1.21.0 — shirt/pants size options through 6XL.
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.21.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.21.0' ) );
+
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-seeder.php';
+			$seeder = new Remember_Seeder();
+			$seeder->ensure_clothing_size_options();
+
+			update_option( 'remember_db_version', '1.21.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.21.0' ) );
+		}
+
 		Remember_Logger::activation_debug(
 			'update_schema: exit',
 			array( 'remember_db_version' => get_option( 'remember_db_version', '0.0.0' ) )

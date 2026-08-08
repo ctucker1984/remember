@@ -24,9 +24,9 @@
 
 **Ask:** American male sizes in dropdowns.
 
-**Locked (2026-08-07):** Shirt S–4XL; Pants S–4XL; Shoes US 6–15 (whole). Optional on profile for now.
+**Locked:** Shirt/pants S–6XL; shoes US 6–15 (whole). Optional on profile.
 
-**Done in schema `1.19.0`:** `remember_clothing_size_options` seed table + `shirt_size` / `pants_size` / `shoe_size` on `member_profiles`; admin + front profile dropdowns. Registration surface lands with the rest of slice B.
+**Done:** `remember_clothing_size_options` + profile columns (`1.19.0`); 5XL/6XL seed (`1.21.0`); admin/front/register dropdowns.
 
 ---
 
