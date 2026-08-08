@@ -31,9 +31,4 @@ if ( ! defined( 'WPINC' ) ) {
 		</p>
 	</div>
 
-	<div style="max-width: 900px; margin-top: 16px;">
-		<p class="description">
-			<?php esc_html_e( 'For database schema and deeper technical detail, see README.md and ARCHITECTURE.md in the plugin folder.', 'remember' ); ?>
-		</p>
-	</div>
 </div>
