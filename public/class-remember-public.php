@@ -159,19 +159,27 @@ class Remember_Public {
 			$this->redirect_member_registration( 'invalid_nonce' );
 		}
 
-		$username     = isset( $_POST['remember_reg_username'] ) ? sanitize_user( wp_unslash( $_POST['remember_reg_username'] ), true ) : '';
-		$display_name = isset( $_POST['remember_reg_display_name'] ) ? sanitize_text_field( wp_unslash( $_POST['remember_reg_display_name'] ) ) : '';
-		$first_name   = isset( $_POST['remember_reg_first_name'] ) ? sanitize_text_field( wp_unslash( $_POST['remember_reg_first_name'] ) ) : '';
-		$last_name    = isset( $_POST['remember_reg_last_name'] ) ? sanitize_text_field( wp_unslash( $_POST['remember_reg_last_name'] ) ) : '';
-		$email        = isset( $_POST['remember_reg_email'] ) ? sanitize_email( wp_unslash( $_POST['remember_reg_email'] ) ) : '';
-		$cell_phone   = isset( $_POST['remember_reg_cell_phone'] ) ? sanitize_text_field( wp_unslash( $_POST['remember_reg_cell_phone'] ) ) : '';
-		$timezone     = isset( $_POST['remember_reg_timezone'] ) ? sanitize_text_field( wp_unslash( $_POST['remember_reg_timezone'] ) ) : '';
-		$password     = isset( $_POST['remember_reg_password'] ) ? wp_unslash( $_POST['remember_reg_password'] ) : '';
+		$username         = isset( $_POST['remember_reg_username'] ) ? sanitize_user( wp_unslash( $_POST['remember_reg_username'] ), true ) : '';
+		$email            = isset( $_POST['remember_reg_email'] ) ? sanitize_email( wp_unslash( $_POST['remember_reg_email'] ) ) : '';
+		$password         = isset( $_POST['remember_reg_password'] ) ? wp_unslash( $_POST['remember_reg_password'] ) : '';
 		$password_confirm = isset( $_POST['remember_reg_password_confirm'] ) ? wp_unslash( $_POST['remember_reg_password_confirm'] ) : '';
 
 		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-timezone.php';
+		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-profile-fields.php';
 
-		if ( '' === $username || '' === $display_name || '' === $first_name || '' === $last_name || '' === $email || '' === $cell_phone || '' === $timezone || '' === $password || '' === $password_confirm ) {
+		$profile_data = Remember_Profile_Fields::collect_profile_data_from_request();
+		$meta_data    = Remember_Profile_Fields::collect_meta_from_request();
+		$nickname     = $meta_data['nickname'];
+		$timezone     = $meta_data['timezone_string'];
+		$first_name   = $profile_data['legal_first_name'];
+		$last_name    = $profile_data['legal_last_name'];
+
+		if ( '' === $username || '' === $email || '' === $password || '' === $password_confirm ) {
+			$this->redirect_member_registration( 'missing_fields' );
+		}
+
+		$missing = Remember_Profile_Fields::first_missing_required( $profile_data, $meta_data );
+		if ( '' !== $missing ) {
 			$this->redirect_member_registration( 'missing_fields' );
 		}
 
@@ -242,13 +250,13 @@ class Remember_Public {
 
 		update_user_meta( $user_id, 'first_name', $first_name );
 		update_user_meta( $user_id, 'last_name', $last_name );
-		update_user_meta( $user_id, 'nickname', $display_name );
+		update_user_meta( $user_id, 'nickname', $nickname );
 		update_user_meta( $user_id, 'timezone_string', $timezone );
 		wp_update_user(
 			array(
 				'ID'           => $user_id,
-				'display_name' => $display_name,
-				'nickname'     => $display_name,
+				'display_name' => $nickname,
+				'nickname'     => $nickname,
 			)
 		);
 
@@ -269,22 +277,12 @@ class Remember_Public {
 		}
 
 		global $wpdb;
-		$profile_inserted = $wpdb->insert(
-			$wpdb->prefix . 'remember_member_profiles',
-			array(
-				'member_id'                       => $user_id,
-				'legal_first_name'                => $first_name,
-				'legal_last_name'                 => $last_name,
-				'cell_phone'                      => $cell_phone,
-				'emergency_contact_first'         => $first_name,
-				'emergency_contact_last'          => $last_name,
-				'emergency_contact_phone'         => '',
-				'emergency_contact_relationship'  => '',
-				'created_at'                      => current_time( 'mysql' ),
-				'updated_at'                      => current_time( 'mysql' ),
-			),
-			array( '%d', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s' )
-		);
+		$profile_row               = $profile_data;
+		$profile_row['member_id']  = $user_id;
+		$profile_row['created_at'] = current_time( 'mysql' );
+		$profile_row['updated_at'] = current_time( 'mysql' );
+
+		$profile_inserted = $wpdb->insert( $wpdb->prefix . 'remember_member_profiles', $profile_row );
 
 		if ( ! $profile_inserted ) {
 			Remember_Logger::error(
@@ -295,6 +293,8 @@ class Remember_Public {
 			wp_delete_user( $user_id );
 			$this->redirect_member_registration( 'profile_failed' );
 		}
+
+		Remember_Profile_Fields::save_junctions_from_request( $user_id );
 
 		if ( Remember_Vetting_Workflow::should_vet_on_join() ) {
 			$vetting_result = Remember_Vetting_Workflow::create_vetting_case( $user_id );
@@ -376,7 +376,7 @@ class Remember_Public {
 	}
 
 	/**
-	 * Minimal member registration shortcode (creates WP user + reMember member + profile).
+	 * Full member registration shortcode (WP user + reMember member + profile).
 	 *
 	 * @param array $atts Shortcode attributes (unused).
 	 * @return string

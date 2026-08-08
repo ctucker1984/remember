@@ -52,10 +52,9 @@
 
 **Today:** Register is minimal (username, display/legal name, email, cell, timezone, optional photo, password). Full profile is later.
 
-**Plan**
-- Expand `[remember_register]` to include the full profile surface (address, IM, interests, emergency, social, dietary/allergies/medical, sizes, privacy toggles, photo).
-- Drive required vs optional from a single config map (code or Settings) so admin/register/profile stay consistent.
-- **Required (confirmed 2026-08-07):** Nickname; Legal First/Last; Street; City; State/Province; Postal Code; Cell Phone; Time Zone; Instant Messenger; Emergency First/Last/Phone/Relationship. Other profile fields optional.
+**Done:** `[remember_register]` is a full profile form; `Remember_Profile_Fields` drives requireds for register, front profile, and admin edit.
+
+**Required:** Nickname; Legal First/Last; Street; City; State/Province; Postal Code; Cell Phone; Time Zone; Instant Messenger; Emergency First/Last/Phone/Relationship. Other fields optional.
 
 **Timezone UX:** Single combobox — type in the field (e.g. “Chicago”); no separate filter box.
 

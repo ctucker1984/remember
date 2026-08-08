@@ -240,13 +240,21 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 		}
 
 		require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-clothing-sizes.php';
+		require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-fields.php';
 
-		$cell_phone_check = isset( $_POST['cell_phone'] ) ? sanitize_text_field( wp_unslash( $_POST['cell_phone'] ) ) : '';
-		$emergency_phone_check = isset( $_POST['emergency_contact_phone'] ) ? sanitize_text_field( wp_unslash( $_POST['emergency_contact_phone'] ) ) : '';
-		if ( '' === $cell_phone_check ) {
-			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Cell phone is required.', 'remember' ) . '</p></div>';
-		} elseif ( '' === $emergency_phone_check ) {
-			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Emergency contact phone is required.', 'remember' ) . '</p></div>';
+		$profile_check = Remember_Profile_Fields::collect_profile_data_from_request();
+		$meta_check    = Remember_Profile_Fields::collect_meta_from_request();
+		$missing_key   = Remember_Profile_Fields::first_missing_required( $profile_check, $meta_check );
+		if ( '' !== $missing_key ) {
+			$labels = Remember_Profile_Fields::labels();
+			$label  = isset( $labels[ $missing_key ] ) ? $labels[ $missing_key ] : __( 'Required field', 'remember' );
+			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html(
+				sprintf(
+					/* translators: %s: field label */
+					__( '%s is required.', 'remember' ),
+					$label
+				)
+			) . '</p></div>';
 		} else {
 		
 		global $wpdb;

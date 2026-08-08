@@ -17,7 +17,70 @@
 /* Public registration (shortcode) — aligned label / field rows */
 .remember-register-form .remember-register-form__inner {
 	position: relative;
-	max-width: 38rem;
+	max-width: 44rem;
+}
+
+.remember-register-form .remember-register-intro {
+	margin: 0 0 1.25rem;
+	font-size: 0.95rem;
+	color: #50575e;
+}
+
+.remember-register-form .remember-register-section-title {
+	margin: 1.75rem 0 0.75rem;
+	padding-top: 0.75rem;
+	border-top: 1px solid #dcdcde;
+	font-size: 1.05rem;
+	font-weight: 650;
+	color: #1d2327;
+}
+
+.remember-register-form .remember-register-section-title:first-of-type {
+	margin-top: 0.5rem;
+	padding-top: 0;
+	border-top: 0;
+}
+
+.remember-register-form .remember-register-section-help {
+	margin: -0.25rem 0 0.85rem;
+	font-size: 0.875rem;
+	color: #646970;
+	line-height: 1.4;
+}
+
+.remember-register-form .remember-register-im {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5rem;
+	width: 100%;
+	max-width: 22rem;
+}
+
+.remember-register-form .remember-register-input--im-type {
+	max-width: 8.5rem;
+	flex: 0 0 8.5rem;
+}
+
+.remember-register-form .remember-register-input--im-handle {
+	flex: 1 1 10rem;
+	max-width: none;
+}
+
+.remember-register-form .remember-register-row--stack {
+	align-items: start;
+}
+
+.remember-register-form .remember-register-textarea {
+	max-width: 100%;
+	min-height: 6rem;
+	resize: vertical;
+}
+
+.remember-register-form .remember-register-checkboxes {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+	gap: 0.4rem 1rem;
+	margin: 0 0 1rem;
 }
 
 .remember-register-form .remember-register-hp {

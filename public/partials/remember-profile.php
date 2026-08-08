@@ -16,6 +16,7 @@ require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remem
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-import-export.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-image-uploader.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-clothing-sizes.php';
+require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-fields.php';
 
 $user = wp_get_current_user();
 $member_model = new Remember_Member();
@@ -47,9 +48,11 @@ if ( ! isset( $is_edit ) ) {
 
 // Handle form submission
 if ( isset( $_POST['remember_profile_action'] ) && check_admin_referer( 'remember_profile_action', 'remember_profile_nonce' ) ) {
-	$cell_phone = isset( $_POST['cell_phone'] ) ? sanitize_text_field( wp_unslash( $_POST['cell_phone'] ) ) : '';
-	if ( '' === $cell_phone ) {
-		wp_safe_redirect( add_query_arg( array( 'edit' => '1', 'remember_profile_error' => 'cell_phone' ) ) );
+	$profile_data = Remember_Profile_Fields::collect_profile_data_from_request();
+	$meta_data    = Remember_Profile_Fields::collect_meta_from_request();
+	$missing      = Remember_Profile_Fields::first_missing_required( $profile_data, $meta_data );
+	if ( '' !== $missing ) {
+		wp_safe_redirect( add_query_arg( array( 'edit' => '1', 'remember_profile_error' => $missing ) ) );
 		exit;
 	}
 
@@ -86,33 +89,7 @@ if ( isset( $_POST['remember_profile_action'] ) && check_admin_referer( 'remembe
 		}
 	}
 
-	$profile_data = array(
-		'legal_first_name'            => isset( $_POST['legal_first_name'] ) ? sanitize_text_field( wp_unslash( $_POST['legal_first_name'] ) ) : '',
-		'legal_last_name'             => isset( $_POST['legal_last_name'] ) ? sanitize_text_field( wp_unslash( $_POST['legal_last_name'] ) ) : '',
-		'address_street'              => isset( $_POST['address_street'] ) ? sanitize_text_field( wp_unslash( $_POST['address_street'] ) ) : '',
-		'address_city'                => isset( $_POST['address_city'] ) ? sanitize_text_field( wp_unslash( $_POST['address_city'] ) ) : '',
-		'address_state'               => isset( $_POST['address_state'] ) ? sanitize_text_field( wp_unslash( $_POST['address_state'] ) ) : '',
-		'address_postal'              => isset( $_POST['address_postal'] ) ? sanitize_text_field( wp_unslash( $_POST['address_postal'] ) ) : '',
-		'address_country'             => isset( $_POST['address_country'] ) ? sanitize_text_field( wp_unslash( $_POST['address_country'] ) ) : 'US',
-		'cell_phone'                  => $cell_phone,
-		'im_handle'                   => isset( $_POST['im_handle'] ) ? sanitize_text_field( wp_unslash( $_POST['im_handle'] ) ) : '',
-		'im_type'                     => isset( $_POST['im_type'] ) ? sanitize_text_field( wp_unslash( $_POST['im_type'] ) ) : 'telegram',
-		'interests'                   => isset( $_POST['interests'] ) ? wp_kses_post( wp_unslash( $_POST['interests'] ) ) : '',
-		'shirt_size'                  => isset( $_POST['shirt_size'] ) ? Remember_Clothing_Sizes::sanitize( 'shirt', wp_unslash( $_POST['shirt_size'] ) ) : '',
-		'pants_size'                  => isset( $_POST['pants_size'] ) ? Remember_Clothing_Sizes::sanitize( 'pants', wp_unslash( $_POST['pants_size'] ) ) : '',
-		'shoe_size'                   => isset( $_POST['shoe_size'] ) ? Remember_Clothing_Sizes::sanitize( 'shoe', wp_unslash( $_POST['shoe_size'] ) ) : '',
-		'emergency_contact_first'     => isset( $_POST['emergency_contact_first'] ) ? sanitize_text_field( wp_unslash( $_POST['emergency_contact_first'] ) ) : '',
-		'emergency_contact_last'      => isset( $_POST['emergency_contact_last'] ) ? sanitize_text_field( wp_unslash( $_POST['emergency_contact_last'] ) ) : '',
-		'emergency_contact_phone'     => isset( $_POST['emergency_contact_phone'] ) ? sanitize_text_field( wp_unslash( $_POST['emergency_contact_phone'] ) ) : '',
-		'emergency_contact_relationship' => isset( $_POST['emergency_contact_relationship'] ) ? sanitize_text_field( wp_unslash( $_POST['emergency_contact_relationship'] ) ) : '',
-		'share_email_with_events'     => isset( $_POST['share_email_with_events'] ) ? 1 : 0,
-		'share_phone_with_events'     => isset( $_POST['share_phone_with_events'] ) ? 1 : 0,
-		'share_location_with_events'  => isset( $_POST['share_location_with_events'] ) ? 1 : 0,
-		'share_im_with_events'        => isset( $_POST['share_im_with_events'] ) ? 1 : 0,
-		'share_interests_with_events' => isset( $_POST['share_interests_with_events'] ) ? 1 : 0,
-		'share_photo_with_events'     => isset( $_POST['share_photo_with_events'] ) ? 1 : 0,
-		'updated_at'                  => current_time( 'mysql' ),
-	);
+	$profile_data['updated_at'] = current_time( 'mysql' );
 
 	if ( $profile ) {
 		$wpdb->update(
@@ -168,83 +145,7 @@ if ( isset( $_POST['remember_profile_action'] ) && check_admin_referer( 'remembe
 		}
 	}
 	
-	// Save social media profiles (limit to 3)
-	$wpdb->delete( $wpdb->prefix . 'remember_member_social_media', array( 'member_id' => $user->ID ), array( '%d' ) );
-	if ( isset( $_POST['social_media'] ) && is_array( $_POST['social_media'] ) ) {
-		$social_count = 0;
-		foreach ( $_POST['social_media'] as $social_data ) {
-			if ( $social_count >= 3 ) {
-				break; // Limit to 3
-			}
-			$platform_id = isset( $social_data['platform_id'] ) ? absint( $social_data['platform_id'] ) : 0;
-			$handle = isset( $social_data['handle'] ) ? sanitize_text_field( wp_unslash( $social_data['handle'] ) ) : '';
-			if ( $platform_id > 0 && ! empty( $handle ) ) {
-				$wpdb->insert(
-					$wpdb->prefix . 'remember_member_social_media',
-					array(
-						'member_id'   => $user->ID,
-						'platform_id' => $platform_id,
-						'handle'      => $handle,
-						'created_at'  => current_time( 'mysql' ),
-					),
-					array( '%d', '%d', '%s', '%s' )
-				);
-				$social_count++;
-			}
-		}
-	}
-
-	// Dietary restrictions / medical accommodations / allergies (junction tables).
-	$wpdb->delete( $wpdb->prefix . 'remember_member_dietary_restrictions', array( 'member_id' => $user->ID ), array( '%d' ) );
-	if ( isset( $_POST['dietary_restrictions'] ) && is_array( $_POST['dietary_restrictions'] ) ) {
-		foreach ( $_POST['dietary_restrictions'] as $restriction_id ) {
-			$restriction_id = absint( $restriction_id );
-			if ( $restriction_id > 0 ) {
-				$wpdb->insert(
-					$wpdb->prefix . 'remember_member_dietary_restrictions',
-					array(
-						'member_id'      => $user->ID,
-						'restriction_id' => $restriction_id,
-					),
-					array( '%d', '%d' )
-				);
-			}
-		}
-	}
-
-	$wpdb->delete( $wpdb->prefix . 'remember_member_medical_accommodations', array( 'member_id' => $user->ID ), array( '%d' ) );
-	if ( isset( $_POST['medical_accommodations'] ) && is_array( $_POST['medical_accommodations'] ) ) {
-		foreach ( $_POST['medical_accommodations'] as $accommodation_id ) {
-			$accommodation_id = absint( $accommodation_id );
-			if ( $accommodation_id > 0 ) {
-				$wpdb->insert(
-					$wpdb->prefix . 'remember_member_medical_accommodations',
-					array(
-						'member_id'        => $user->ID,
-						'accommodation_id' => $accommodation_id,
-					),
-					array( '%d', '%d' )
-				);
-			}
-		}
-	}
-
-	$wpdb->delete( $wpdb->prefix . 'remember_member_allergies', array( 'member_id' => $user->ID ), array( '%d' ) );
-	if ( isset( $_POST['allergies'] ) && is_array( $_POST['allergies'] ) ) {
-		foreach ( $_POST['allergies'] as $allergy_id ) {
-			$allergy_id = absint( $allergy_id );
-			if ( $allergy_id > 0 ) {
-				$wpdb->insert(
-					$wpdb->prefix . 'remember_member_allergies',
-					array(
-						'member_id'  => $user->ID,
-						'allergy_id' => $allergy_id,
-					),
-					array( '%d', '%d' )
-				);
-			}
-		}
-	}
+	Remember_Profile_Fields::save_junctions_from_request( $user->ID );
 
 	do_action( 'remember_member_profile_saved', $user->ID );
 
@@ -390,9 +291,24 @@ if ( ! empty( $selected_allergy_ids ) ) {
 		<div class="remember-profile-edit-header">
 			<h2><?php esc_html_e( 'Edit Profile', 'remember' ); ?></h2>
 		</div>
-		<?php if ( 'cell_phone' === $profile_error ) : ?>
+		<?php if ( $profile_error ) : ?>
 			<div class="remember-notice remember-error" role="alert">
-				<p><?php esc_html_e( 'Cell phone is required.', 'remember' ); ?></p>
+				<p>
+					<?php
+					$labels = Remember_Profile_Fields::labels();
+					if ( isset( $labels[ $profile_error ] ) ) {
+						echo esc_html(
+							sprintf(
+								/* translators: %s: field label */
+								__( '%s is required.', 'remember' ),
+								$labels[ $profile_error ]
+							)
+						);
+					} else {
+						esc_html_e( 'Please fill in all required fields.', 'remember' );
+					}
+					?>
+				</p>
 			</div>
 		<?php endif; ?>
 		<?php if ( $photo_error_notice ) : ?>
@@ -533,25 +449,25 @@ if ( ! empty( $selected_allergy_ids ) ) {
 				<h3 class="remember-form-section-title"><?php esc_html_e( 'Address', 'remember' ); ?></h3>
 				<div class="remember-form-row">
 					<div class="remember-form-col remember-form-col-full">
-						<label for="address_street" class="remember-form-label"><?php esc_html_e( 'Street Address', 'remember' ); ?></label>
-						<input type="text" id="address_street" name="address_street" class="remember-form-control" 
+						<label for="address_street" class="remember-form-label"><?php esc_html_e( 'Street Address', 'remember' ); ?> <span class="remember-required">*</span></label>
+						<input type="text" id="address_street" name="address_street" class="remember-form-control" required
 							value="<?php echo esc_attr( $profile ? $profile->address_street : '' ); ?>">
 					</div>
 				</div>
 				<div class="remember-form-row">
 					<div class="remember-form-col">
-						<label for="address_city" class="remember-form-label"><?php esc_html_e( 'City', 'remember' ); ?></label>
-						<input type="text" id="address_city" name="address_city" class="remember-form-control" 
+						<label for="address_city" class="remember-form-label"><?php esc_html_e( 'City', 'remember' ); ?> <span class="remember-required">*</span></label>
+						<input type="text" id="address_city" name="address_city" class="remember-form-control" required
 							value="<?php echo esc_attr( $profile ? $profile->address_city : '' ); ?>">
 					</div>
 					<div class="remember-form-col">
-						<label for="address_state" class="remember-form-label"><?php esc_html_e( 'State/Province', 'remember' ); ?></label>
-						<input type="text" id="address_state" name="address_state" class="remember-form-control" 
+						<label for="address_state" class="remember-form-label"><?php esc_html_e( 'State/Province', 'remember' ); ?> <span class="remember-required">*</span></label>
+						<input type="text" id="address_state" name="address_state" class="remember-form-control" required
 							value="<?php echo esc_attr( $profile ? $profile->address_state : '' ); ?>">
 					</div>
 					<div class="remember-form-col">
-						<label for="address_postal" class="remember-form-label"><?php esc_html_e( 'Postal Code', 'remember' ); ?></label>
-						<input type="text" id="address_postal" name="address_postal" class="remember-form-control" 
+						<label for="address_postal" class="remember-form-label"><?php esc_html_e( 'Postal Code', 'remember' ); ?> <span class="remember-required">*</span></label>
+						<input type="text" id="address_postal" name="address_postal" class="remember-form-control" required
 							value="<?php echo esc_attr( $profile ? $profile->address_postal : '' ); ?>">
 					</div>
 					<div class="remember-form-col">
@@ -648,11 +564,11 @@ if ( ! empty( $selected_allergy_ids ) ) {
 			<?php endif; ?>
 
 			<div class="remember-form-section">
-				<h3 class="remember-form-section-title"><?php esc_html_e( 'Instant Messenger', 'remember' ); ?></h3>
+				<h3 class="remember-form-section-title"><?php esc_html_e( 'Instant Messenger', 'remember' ); ?> <span class="remember-required">*</span></h3>
 				<div class="remember-form-row">
 					<div class="remember-form-col">
 						<label for="im_type" class="remember-form-label"><?php esc_html_e( 'IM Type', 'remember' ); ?></label>
-						<select id="im_type" name="im_type" class="remember-form-control">
+						<select id="im_type" name="im_type" class="remember-form-control" required>
 							<option value="telegram" <?php selected( $profile && $profile->im_type ? $profile->im_type : 'telegram', 'telegram' ); ?>><?php esc_html_e( 'Telegram', 'remember' ); ?></option>
 							<option value="discord" <?php selected( $profile && $profile->im_type ? $profile->im_type : 'telegram', 'discord' ); ?>><?php esc_html_e( 'Discord', 'remember' ); ?></option>
 							<option value="signal" <?php selected( $profile && $profile->im_type ? $profile->im_type : 'telegram', 'signal' ); ?>><?php esc_html_e( 'Signal', 'remember' ); ?></option>
@@ -661,8 +577,8 @@ if ( ! empty( $selected_allergy_ids ) ) {
 						</select>
 					</div>
 					<div class="remember-form-col">
-						<label for="im_handle" class="remember-form-label"><?php esc_html_e( 'Handle', 'remember' ); ?></label>
-						<input type="text" id="im_handle" name="im_handle" class="remember-form-control" 
+						<label for="im_handle" class="remember-form-label"><?php esc_html_e( 'Handle', 'remember' ); ?> <span class="remember-required">*</span></label>
+						<input type="text" id="im_handle" name="im_handle" class="remember-form-control" required
 							value="<?php echo esc_attr( $profile ? $profile->im_handle : '' ); ?>" placeholder="<?php esc_attr_e( 'Handle', 'remember' ); ?>">
 					</div>
 				</div>
@@ -746,25 +662,25 @@ if ( ! empty( $selected_allergy_ids ) ) {
 				<h3 class="remember-form-section-title"><?php esc_html_e( 'Emergency Contact', 'remember' ); ?></h3>
 				<div class="remember-form-row">
 					<div class="remember-form-col">
-						<label for="emergency_contact_first" class="remember-form-label"><?php esc_html_e( 'First Name', 'remember' ); ?></label>
-						<input type="text" id="emergency_contact_first" name="emergency_contact_first" class="remember-form-control" 
+						<label for="emergency_contact_first" class="remember-form-label"><?php esc_html_e( 'First Name', 'remember' ); ?> <span class="remember-required">*</span></label>
+						<input type="text" id="emergency_contact_first" name="emergency_contact_first" class="remember-form-control" required
 							value="<?php echo esc_attr( $profile ? $profile->emergency_contact_first : '' ); ?>">
 					</div>
 					<div class="remember-form-col">
-						<label for="emergency_contact_last" class="remember-form-label"><?php esc_html_e( 'Last Name', 'remember' ); ?></label>
-						<input type="text" id="emergency_contact_last" name="emergency_contact_last" class="remember-form-control" 
+						<label for="emergency_contact_last" class="remember-form-label"><?php esc_html_e( 'Last Name', 'remember' ); ?> <span class="remember-required">*</span></label>
+						<input type="text" id="emergency_contact_last" name="emergency_contact_last" class="remember-form-control" required
 							value="<?php echo esc_attr( $profile ? $profile->emergency_contact_last : '' ); ?>">
 					</div>
 				</div>
 				<div class="remember-form-row">
 					<div class="remember-form-col">
-						<label for="emergency_contact_phone" class="remember-form-label"><?php esc_html_e( 'Phone', 'remember' ); ?></label>
-						<input type="text" id="emergency_contact_phone" name="emergency_contact_phone" class="remember-form-control" 
-							value="<?php echo esc_attr( $profile ? $profile->emergency_contact_phone : '' ); ?>">
+						<label for="emergency_contact_phone" class="remember-form-label"><?php esc_html_e( 'Phone', 'remember' ); ?> <span class="remember-required">*</span></label>
+						<input type="text" id="emergency_contact_phone" name="emergency_contact_phone" class="remember-form-control" required
+							value="<?php echo esc_attr( $profile ? $profile->emergency_contact_phone : '' ); ?>" placeholder="<?php esc_attr_e( '+18055551212', 'remember' ); ?>">
 					</div>
 					<div class="remember-form-col">
-						<label for="emergency_contact_relationship" class="remember-form-label"><?php esc_html_e( 'Relationship', 'remember' ); ?></label>
-						<input type="text" id="emergency_contact_relationship" name="emergency_contact_relationship" class="remember-form-control" 
+						<label for="emergency_contact_relationship" class="remember-form-label"><?php esc_html_e( 'Relationship', 'remember' ); ?> <span class="remember-required">*</span></label>
+						<input type="text" id="emergency_contact_relationship" name="emergency_contact_relationship" class="remember-form-control" required
 							value="<?php echo esc_attr( $profile ? $profile->emergency_contact_relationship : '' ); ?>" placeholder="<?php esc_attr_e( 'e.g., Spouse, Parent, Friend', 'remember' ); ?>">
 					</div>
 				</div>
