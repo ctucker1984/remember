@@ -610,6 +610,188 @@ class Remember_Database_Updater {
 			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.17.0' ) );
 		}
 
+		// Update to 1.18.0 — admission ticket columns + notification seed types.
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.18.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.18.0' ) );
+
+			$apps_table = $wpdb->prefix . 'remember_event_applications';
+			if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $apps_table ) ) === $apps_table ) {
+				$cols = $wpdb->get_col( "SHOW COLUMNS FROM {$apps_table}", 0 );
+				if ( is_array( $cols ) && ! in_array( 'ticket_voided', $cols, true ) ) {
+					$ok = $wpdb->query(
+						"ALTER TABLE {$apps_table} ADD COLUMN ticket_voided TINYINT(1) NOT NULL DEFAULT 0 AFTER notes"
+					);
+					if ( false === $ok ) {
+						Remember_Logger::error( 'Failed to add ticket_voided', array( 'error' => $wpdb->last_error ) );
+					}
+				}
+				$cols = $wpdb->get_col( "SHOW COLUMNS FROM {$apps_table}", 0 );
+				if ( is_array( $cols ) && ! in_array( 'ticket_ready_emailed_at', $cols, true ) ) {
+					$ok = $wpdb->query(
+						"ALTER TABLE {$apps_table} ADD COLUMN ticket_ready_emailed_at DATETIME DEFAULT NULL AFTER ticket_voided"
+					);
+					if ( false === $ok ) {
+						Remember_Logger::error( 'Failed to add ticket_ready_emailed_at', array( 'error' => $wpdb->last_error ) );
+					}
+				}
+			}
+
+			$payments_table = $wpdb->prefix . 'remember_payments';
+			if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $payments_table ) ) === $payments_table ) {
+				$cols = $wpdb->get_col( "SHOW COLUMNS FROM {$payments_table}", 0 );
+				if ( is_array( $cols ) && ! in_array( 'ticket_paid_emailed_at', $cols, true ) ) {
+					$ok = $wpdb->query(
+						"ALTER TABLE {$payments_table} ADD COLUMN ticket_paid_emailed_at DATETIME DEFAULT NULL AFTER notes"
+					);
+					if ( false === $ok ) {
+						Remember_Logger::error( 'Failed to add ticket_paid_emailed_at', array( 'error' => $wpdb->last_error ) );
+					}
+				}
+			}
+
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-seeder.php';
+			$seeder = new Remember_Seeder();
+			$seeder->ensure_notification_settings();
+
+			update_option( 'remember_db_version', '1.18.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.18.0' ) );
+		}
+
+		// Update to 1.19.0 — clothing size options + profile shirt/pants/shoe columns.
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.19.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.19.0' ) );
+
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-database.php';
+			$db = new Remember_Database();
+			$db->create_clothing_size_options_table();
+
+			$profiles_table = $wpdb->prefix . 'remember_member_profiles';
+			if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $profiles_table ) ) === $profiles_table ) {
+				$cols = $wpdb->get_col( "SHOW COLUMNS FROM {$profiles_table}", 0 );
+				if ( is_array( $cols ) ) {
+					$size_cols = array(
+						'shirt_size' => "ADD COLUMN shirt_size VARCHAR(20) DEFAULT NULL AFTER interests",
+						'pants_size' => "ADD COLUMN pants_size VARCHAR(20) DEFAULT NULL AFTER shirt_size",
+						'shoe_size'  => "ADD COLUMN shoe_size VARCHAR(20) DEFAULT NULL AFTER pants_size",
+					);
+					foreach ( $size_cols as $col_name => $alter_sql ) {
+						if ( ! in_array( $col_name, $cols, true ) ) {
+							$ok = $wpdb->query( "ALTER TABLE {$profiles_table} {$alter_sql}" );
+							if ( false === $ok ) {
+								Remember_Logger::error(
+									"Failed to add {$col_name} to remember_member_profiles",
+									array( 'error' => $wpdb->last_error )
+								);
+							} else {
+								Remember_Logger::info( "Added {$col_name} to remember_member_profiles" );
+								$cols[] = $col_name;
+							}
+						}
+					}
+				}
+			}
+
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-seeder.php';
+			$seeder = new Remember_Seeder();
+			$seeder->ensure_clothing_size_options();
+
+			update_option( 'remember_db_version', '1.19.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.19.0' ) );
+		}
+
+		// Update to 1.20.0 — per event-role add-on max qty (0 = hide).
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.20.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.20.0' ) );
+
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-database.php';
+			$db = new Remember_Database();
+			$db->create_event_merchandise_role_limits_table();
+
+			$limits_table = $wpdb->prefix . 'remember_event_merchandise_role_limits';
+			$merch_table  = $wpdb->prefix . 'remember_event_merchandise';
+			$roles_table  = $wpdb->prefix . 'remember_event_roles';
+
+			if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $limits_table ) ) === $limits_table
+				&& $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $merch_table ) ) === $merch_table
+				&& $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $roles_table ) ) === $roles_table ) {
+				// Backfill: each existing add-on × event role gets max_qty from legacy max_quantity (NULL → 1).
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$merch_rows = $wpdb->get_results( "SELECT merchandise_id, event_id, max_quantity FROM {$merch_table}" );
+				foreach ( (array) $merch_rows as $merch ) {
+					$max_qty = ( null === $merch->max_quantity || '' === $merch->max_quantity )
+						? 1
+						: max( 0, absint( $merch->max_quantity ) );
+					$event_roles = $wpdb->get_results(
+						$wpdb->prepare(
+							"SELECT event_role_id FROM {$roles_table} WHERE event_id = %d",
+							absint( $merch->event_id )
+						)
+					);
+					foreach ( (array) $event_roles as $er ) {
+						$exists = $wpdb->get_var(
+							$wpdb->prepare(
+								"SELECT limit_id FROM {$limits_table} WHERE merchandise_id = %d AND event_role_id = %d",
+								absint( $merch->merchandise_id ),
+								absint( $er->event_role_id )
+							)
+						);
+						if ( $exists ) {
+							continue;
+						}
+						$wpdb->insert(
+							$limits_table,
+							array(
+								'merchandise_id' => absint( $merch->merchandise_id ),
+								'event_role_id'  => absint( $er->event_role_id ),
+								'max_qty'        => $max_qty,
+								'created_at'     => current_time( 'mysql' ),
+								'updated_at'     => current_time( 'mysql' ),
+							),
+							array( '%d', '%d', '%d', '%s', '%s' )
+						);
+					}
+				}
+			}
+
+			update_option( 'remember_db_version', '1.20.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.20.0' ) );
+		}
+
+		// Update to 1.21.0 — shirt/pants size options through 6XL.
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.21.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.21.0' ) );
+
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-seeder.php';
+			$seeder = new Remember_Seeder();
+			$seeder->ensure_clothing_size_options();
+
+			update_option( 'remember_db_version', '1.21.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.21.0' ) );
+		}
+
+		// Update to 1.22.0 — attendee-only event details.
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.22.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.22.0' ) );
+
+			$events_table = $wpdb->prefix . 'remember_events';
+			if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $events_table ) ) === $events_table ) {
+				$cols = $wpdb->get_col( "SHOW COLUMNS FROM {$events_table}", 0 );
+				if ( is_array( $cols ) && ! in_array( 'attendee_details', $cols, true ) ) {
+					$ok = $wpdb->query(
+						"ALTER TABLE {$events_table} ADD COLUMN attendee_details TEXT DEFAULT NULL AFTER event_description"
+					);
+					if ( false === $ok ) {
+						Remember_Logger::error( 'Failed to add attendee_details', array( 'error' => $wpdb->last_error ) );
+					} else {
+						Remember_Logger::info( 'Added attendee_details to remember_events' );
+					}
+				}
+			}
+
+			update_option( 'remember_db_version', '1.22.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.22.0' ) );
+		}
+
 		Remember_Logger::activation_debug(
 			'update_schema: exit',
 			array( 'remember_db_version' => get_option( 'remember_db_version', '0.0.0' ) )

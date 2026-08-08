@@ -46,6 +46,60 @@ class Remember_Billing_Template {
 	}
 
 	/**
+	 * Sum of credit-note / refund-line amounts synced onto a payment row.
+	 *
+	 * @param object $payment Payment row.
+	 * @return float
+	 */
+	public static function get_credited_amount( $payment ) {
+		if ( ! is_object( $payment ) ) {
+			return 0.0;
+		}
+
+		require_once plugin_dir_path( __FILE__ ) . 'class-remember-billing-provider.php';
+		$json = '';
+		if ( Remember_Billing_Provider::is_xero() ) {
+			if ( ! empty( $payment->xero_refund_lines ) ) {
+				$json = $payment->xero_refund_lines;
+			} elseif ( ! empty( $payment->quickbooks_refund_lines ) ) {
+				$json = $payment->quickbooks_refund_lines;
+			}
+		} elseif ( ! empty( $payment->quickbooks_refund_lines ) ) {
+			$json = $payment->quickbooks_refund_lines;
+		} elseif ( ! empty( $payment->xero_refund_lines ) ) {
+			$json = $payment->xero_refund_lines;
+		}
+
+		if ( '' === $json || null === $json ) {
+			return 0.0;
+		}
+
+		$lines = json_decode( (string) $json, true );
+		if ( ! is_array( $lines ) ) {
+			return 0.0;
+		}
+
+		$total = 0.0;
+		foreach ( $lines as $line ) {
+			if ( is_array( $line ) && isset( $line['amount'] ) ) {
+				$total += floatval( $line['amount'] );
+			}
+		}
+		return max( 0.0, $total );
+	}
+
+	/**
+	 * Cash paid plus provider credits applied (for Payment/Credit column).
+	 *
+	 * @param object $payment Payment row.
+	 * @return float
+	 */
+	public static function get_payment_and_credit_total( $payment ) {
+		$paid = is_object( $payment ) && isset( $payment->amount_paid ) ? floatval( $payment->amount_paid ) : 0.0;
+		return max( 0.0, $paid + self::get_credited_amount( $payment ) );
+	}
+
+	/**
 	 * Resolve display invoice number and provider link URL for a payment row.
 	 *
 	 * Prefers Xero when xero_invoice_id is present; otherwise QuickBooks.
@@ -205,7 +259,7 @@ class Remember_Billing_Template {
 					<th class="column-member"><?php esc_html_e( 'Member', 'remember' ); ?></th>
 					<th class="column-qb-invoice"><?php esc_html_e( 'Invoice #', 'remember' ); ?></th>
 					<th class="column-amount"><?php esc_html_e( 'Subtotal Amount', 'remember' ); ?></th>
-					<th class="column-paid"><?php esc_html_e( 'Amount Paid', 'remember' ); ?></th>
+					<th class="column-paid"><?php esc_html_e( 'Payment/Credit', 'remember' ); ?></th>
 					<th class="column-due"><?php esc_html_e( 'Amount Due', 'remember' ); ?></th>
 					<th class="column-status"><?php esc_html_e( 'Status', 'remember' ); ?></th>
 					<th class="column-method"><?php esc_html_e( 'Method', 'remember' ); ?></th>
@@ -238,7 +292,7 @@ class Remember_Billing_Template {
 							<strong>$<?php echo esc_html( number_format( (float) $payment->total_amount, 2 ) ); ?></strong>
 						</td>
 						<td class="column-paid">
-							$<?php echo esc_html( number_format( (float) $payment->amount_paid, 2 ) ); ?>
+							$<?php echo esc_html( number_format( self::get_payment_and_credit_total( $payment ), 2 ) ); ?>
 						</td>
 						<td class="column-due">
 							<strong style="color: <?php echo (float) $payment->amount_due > 0 ? '#dc3232' : '#46b450'; ?>;">
@@ -292,7 +346,7 @@ class Remember_Billing_Template {
 					<th scope="col"><?php esc_html_e( 'Event', 'remember' ); ?></th>
 					<th scope="col"><?php esc_html_e( 'Invoice #', 'remember' ); ?></th>
 					<th scope="col" class="remember-billing-mt-num"><?php esc_html_e( 'Subtotal Amount', 'remember' ); ?></th>
-					<th scope="col" class="remember-billing-mt-num"><?php esc_html_e( 'Amount Paid', 'remember' ); ?></th>
+					<th scope="col" class="remember-billing-mt-num"><?php esc_html_e( 'Payment/Credit', 'remember' ); ?></th>
 					<th scope="col" class="remember-billing-mt-num"><?php esc_html_e( 'Amount Due', 'remember' ); ?></th>
 					<th scope="col"><?php esc_html_e( 'Status', 'remember' ); ?></th>
 					<th scope="col"><?php esc_html_e( 'Method', 'remember' ); ?></th>
@@ -320,7 +374,7 @@ class Remember_Billing_Template {
 							?>
 						</td>
 						<td class="remember-billing-mt-num"><strong>$<?php echo esc_html( number_format( (float) $payment->total_amount, 2 ) ); ?></strong></td>
-						<td class="remember-billing-mt-num">$<?php echo esc_html( number_format( (float) $payment->amount_paid, 2 ) ); ?></td>
+						<td class="remember-billing-mt-num">$<?php echo esc_html( number_format( self::get_payment_and_credit_total( $payment ), 2 ) ); ?></td>
 						<td class="remember-billing-mt-num">
 							<strong style="color: <?php echo (float) $payment->amount_due > 0 ? '#dc3232' : '#46b450'; ?>;">
 								$<?php echo esc_html( number_format( (float) $payment->amount_due, 2 ) ); ?>

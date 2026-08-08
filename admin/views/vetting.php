@@ -153,7 +153,7 @@ if ( isset( $_POST['remember_vetting_action'] ) && check_admin_referer( 'remembe
 			if ( ! current_user_can( 'remember_update_vetting' ) ) {
 				wp_die( __( 'You do not have sufficient permissions to perform this action.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
 			}
-			$note_content = isset( $_POST['note_content'] ) ? sanitize_textarea_field( $_POST['note_content'] ) : '';
+			$note_content = isset( $_POST['note_content'] ) ? sanitize_textarea_field( wp_unslash( $_POST['note_content'] ) ) : '';
 			$is_admin_only = isset( $_POST['is_admin_only'] ) ? 1 : 0;
 			if ( ! empty( $note_content ) ) {
 				$note_id = $vetting_model->add_note( $vetting_id, get_current_user_id(), $note_content, $is_admin_only );

@@ -455,6 +455,27 @@ class Remember_Xero_API {
 	}
 
 	/**
+	 * Email an AUTHORISED invoice to the related Xero contact.
+	 *
+	 * @param string $invoice_id Xero InvoiceID.
+	 * @return true|WP_Error
+	 */
+	public static function email_invoice( $invoice_id ) {
+		$invoice_id = trim( (string) $invoice_id );
+		if ( '' === $invoice_id ) {
+			return new WP_Error( 'xero_email_no_id', __( 'Missing Xero invoice ID.', 'remember' ) );
+		}
+
+		$result = self::request( 'POST', 'Invoices/' . rawurlencode( $invoice_id ) . '/Email', array() );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+
+		Remember_Logger::info( 'Xero invoice email requested', array( 'invoice_id' => $invoice_id ) );
+		return true;
+	}
+
+	/**
 	 * Create an ACCREC (sales) invoice in Xero.
 	 *
 	 * @param array $invoice_data Keys: contact_id, line_items[{item_code, quantity, unit_amount, description, tax_type?}], reference?, date?, due_date?.
@@ -521,6 +542,144 @@ class Remember_Xero_API {
 			return $result['Invoices'][0];
 		}
 		return new WP_Error( 'xero_invoice_save_failed', __( 'Xero did not return an invoice after save.', 'remember' ), $result );
+	}
+
+	/**
+	 * Void a Xero invoice (Status → VOIDED).
+	 *
+	 * @param string $invoice_id InvoiceID.
+	 * @return array|WP_Error Updated invoice or error.
+	 */
+	public static function void_invoice( $invoice_id ) {
+		$invoice_id = trim( (string) $invoice_id );
+		if ( '' === $invoice_id ) {
+			return new WP_Error( 'invalid_invoice_id', __( 'Invalid Xero invoice ID.', 'remember' ) );
+		}
+
+		$result = self::request(
+			'POST',
+			'Invoices/' . rawurlencode( $invoice_id ),
+			array(
+				'Invoices' => array(
+					array(
+						'InvoiceID' => $invoice_id,
+						'Status'    => 'VOIDED',
+					),
+				),
+			)
+		);
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		if ( ! empty( $result['Invoices'][0] ) && is_array( $result['Invoices'][0] ) ) {
+			return $result['Invoices'][0];
+		}
+		return new WP_Error( 'xero_invoice_void_failed', __( 'Xero did not confirm the invoice void.', 'remember' ), $result );
+	}
+
+	/**
+	 * Create an ACCRECCREDIT credit note for an invoice and allocate it (refund path).
+	 *
+	 * @param string $invoice_id InvoiceID.
+	 * @param string $reason     Optional reference / description prefix.
+	 * @return array|WP_Error Credit note entity or error.
+	 */
+	public static function create_and_allocate_credit_note_for_invoice( $invoice_id, $reason = '' ) {
+		$invoice = self::get_invoice( $invoice_id );
+		if ( is_wp_error( $invoice ) ) {
+			return $invoice;
+		}
+
+		$contact_id = ! empty( $invoice['Contact']['ContactID'] ) ? $invoice['Contact']['ContactID'] : '';
+		if ( '' === $contact_id ) {
+			return new WP_Error( 'xero_cn_no_contact', __( 'Invoice has no Xero contact for credit note.', 'remember' ) );
+		}
+
+		$line_items = array();
+		if ( ! empty( $invoice['LineItems'] ) && is_array( $invoice['LineItems'] ) ) {
+			foreach ( $invoice['LineItems'] as $li ) {
+				if ( ! is_array( $li ) ) {
+					continue;
+				}
+				$line = array(
+					'Description' => ! empty( $li['Description'] ) ? (string) $li['Description'] : __( 'Credit', 'remember' ),
+					'Quantity'    => isset( $li['Quantity'] ) ? floatval( $li['Quantity'] ) : 1.0,
+					'UnitAmount'  => isset( $li['UnitAmount'] ) ? floatval( $li['UnitAmount'] ) : 0.0,
+				);
+				if ( ! empty( $li['ItemCode'] ) ) {
+					$line['ItemCode'] = (string) $li['ItemCode'];
+				}
+				if ( ! empty( $li['AccountCode'] ) ) {
+					$line['AccountCode'] = (string) $li['AccountCode'];
+				}
+				if ( ! empty( $li['TaxType'] ) ) {
+					$line['TaxType'] = (string) $li['TaxType'];
+				}
+				$line_items[] = $line;
+			}
+		}
+		if ( empty( $line_items ) ) {
+			$total = isset( $invoice['Total'] ) ? floatval( $invoice['Total'] ) : 0.0;
+			if ( $total <= 0 ) {
+				return new WP_Error( 'xero_cn_no_amount', __( 'Nothing to credit on this invoice.', 'remember' ) );
+			}
+			$line_items[] = array(
+				'Description' => $reason ? $reason : __( 'Application credit', 'remember' ),
+				'Quantity'    => 1,
+				'UnitAmount'  => $total,
+			);
+		}
+
+		$cn_payload = array(
+			'Type'            => 'ACCRECCREDIT',
+			'Contact'         => array( 'ContactID' => (string) $contact_id ),
+			'LineItems'       => $line_items,
+			'Date'            => gmdate( 'Y-m-d' ),
+			'LineAmountTypes' => isset( $invoice['LineAmountTypes'] ) ? $invoice['LineAmountTypes'] : 'NoTax',
+			'Status'          => 'AUTHORISED',
+			'Reference'       => $reason ? substr( (string) $reason, 0, 255 ) : '',
+		);
+
+		$cn_result = self::request(
+			'PUT',
+			'CreditNotes',
+			array( 'CreditNotes' => array( $cn_payload ) )
+		);
+		if ( is_wp_error( $cn_result ) ) {
+			return $cn_result;
+		}
+		$credit_note = ! empty( $cn_result['CreditNotes'][0] ) ? $cn_result['CreditNotes'][0] : null;
+		if ( ! is_array( $credit_note ) || empty( $credit_note['CreditNoteID'] ) ) {
+			return new WP_Error( 'xero_cn_create_failed', __( 'Xero did not return a credit note.', 'remember' ), $cn_result );
+		}
+
+		$amount = isset( $credit_note['Total'] ) ? floatval( $credit_note['Total'] ) : 0.0;
+		if ( $amount <= 0 && isset( $invoice['AmountPaid'] ) ) {
+			$amount = floatval( $invoice['AmountPaid'] );
+		}
+		if ( $amount <= 0 && isset( $invoice['Total'] ) ) {
+			$amount = floatval( $invoice['Total'] );
+		}
+
+		if ( $amount > 0 ) {
+			$alloc = self::request(
+				'PUT',
+				'CreditNotes/' . rawurlencode( $credit_note['CreditNoteID'] ) . '/Allocations',
+				array(
+					'Allocations' => array(
+						array(
+							'Invoice' => array( 'InvoiceID' => $invoice_id ),
+							'Amount'  => $amount,
+						),
+					),
+				)
+			);
+			if ( is_wp_error( $alloc ) ) {
+				return $alloc;
+			}
+		}
+
+		return $credit_note;
 	}
 
 	/**
@@ -668,6 +827,7 @@ class Remember_Xero_API {
 				'qb_refund_id'   => isset( $note['CreditNoteID'] ) ? (string) $note['CreditNoteID'] : '',
 				'doc_number'     => isset( $note['CreditNoteNumber'] ) ? sanitize_text_field( (string) $note['CreditNoteNumber'] ) : '',
 				'sort_ts'        => self::xero_entity_sort_timestamp( $note ),
+				'ledger_effect'  => 'credit',
 			);
 		}
 
@@ -675,7 +835,7 @@ class Remember_Xero_API {
 	}
 
 	/**
-	 * Sort timestamp for a Xero entity (UpdatedDateUTC / Date).
+	 * Sort timestamp for a Xero entity (document Date first for ledger chronology).
 	 *
 	 * @param array $entity Xero entity.
 	 * @return int Unix timestamp (site timezone when possible).
@@ -684,7 +844,7 @@ class Remember_Xero_API {
 		if ( ! is_array( $entity ) ) {
 			return 0;
 		}
-		foreach ( array( 'UpdatedDateUTC', 'FullyPaidOnDate', 'Date' ) as $key ) {
+		foreach ( array( 'Date', 'FullyPaidOnDate', 'UpdatedDateUTC' ) as $key ) {
 			if ( empty( $entity[ $key ] ) ) {
 				continue;
 			}

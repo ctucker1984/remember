@@ -64,6 +64,42 @@
 				$button.text(originalText).prop('disabled', false);
 			}, 2000);
 		});
+
+		// Ticket logo override media picker
+		var ticketLogoFrame;
+		$('#remember-ticket-logo-select').on('click', function(e) {
+			e.preventDefault();
+			if (typeof wp === 'undefined' || !wp.media) {
+				return;
+			}
+			if (ticketLogoFrame) {
+				ticketLogoFrame.open();
+				return;
+			}
+			ticketLogoFrame = wp.media({
+				title: 'Select ticket logo',
+				button: { text: 'Use as ticket logo' },
+				multiple: false
+			});
+			ticketLogoFrame.on('select', function() {
+				var attachment = ticketLogoFrame.state().get('selection').first().toJSON();
+				$('#ticket_logo_id').val(attachment.id);
+				var url = (attachment.sizes && attachment.sizes.medium) ? attachment.sizes.medium.url : attachment.url;
+				$('#remember-ticket-logo-preview').html('<img src="' + url + '" alt="" style="max-height: 72px; width: auto;">');
+				$('#remember-ticket-logo-clear').prop('disabled', false);
+			});
+			ticketLogoFrame.open();
+		});
+		$('#remember-ticket-logo-clear').on('click', function(e) {
+			e.preventDefault();
+			$('#ticket_logo_id').val('0');
+			$('#remember-ticket-logo-preview').empty();
+			$(this).prop('disabled', true);
+		});
+
+		if (typeof window.rememberInitTimezoneComboboxes === 'function') {
+			window.rememberInitTimezoneComboboxes();
+		}
 	});
 	
 })(jQuery);

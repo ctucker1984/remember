@@ -2,8 +2,8 @@
 /**
  * Plugin Name: reMember
  * Plugin URI: https://github.com/ctucker1984/remember
- * Description: A custom WordPress plugin for reMember functionality.
- * Version: 1.1.2
+ * Description: Membership communities for WordPress — member profiles, events and locations, applications and vetting, admission tickets, and billing with QuickBooks Online or Xero.
+ * Version: 1.2.0
  * Author: ctucker1984
  * Author URI: https://github.com/ctucker1984
  * License: GPL v2 or later
@@ -49,7 +49,7 @@ define( 'REMEMBER_LOADED', true );
 /**
  * Currently plugin version.
  */
-define( 'REMEMBER_VERSION', '1.1.2' );
+define( 'REMEMBER_VERSION', '1.2.0' );
 
 /**
  * Plugin directory path.

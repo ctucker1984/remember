@@ -213,27 +213,27 @@ if ( $photo_max_bytes < 1 ) {
 			</td>
 		</tr>
 		<tr>
-			<th><label for="address_street"><?php esc_html_e( 'Street Address', 'remember' ); ?></label></th>
+			<th><label for="address_street"><?php esc_html_e( 'Street Address', 'remember' ); ?> <span class="description">(required)</span></label></th>
 			<td>
-				<input type="text" id="address_street" name="address_street" class="regular-text" value="<?php echo esc_attr( $view_profile ? $view_profile->address_street : '' ); ?>">
+				<input type="text" id="address_street" name="address_street" class="regular-text" value="<?php echo esc_attr( $view_profile ? $view_profile->address_street : '' ); ?>" required>
 			</td>
 		</tr>
 		<tr>
-			<th><label for="address_city"><?php esc_html_e( 'City', 'remember' ); ?></label></th>
+			<th><label for="address_city"><?php esc_html_e( 'City', 'remember' ); ?> <span class="description">(required)</span></label></th>
 			<td>
-				<input type="text" id="address_city" name="address_city" class="regular-text" value="<?php echo esc_attr( $view_profile ? $view_profile->address_city : '' ); ?>">
+				<input type="text" id="address_city" name="address_city" class="regular-text" value="<?php echo esc_attr( $view_profile ? $view_profile->address_city : '' ); ?>" required>
 			</td>
 		</tr>
 		<tr>
-			<th><label for="address_state"><?php esc_html_e( 'State/Province', 'remember' ); ?></label></th>
+			<th><label for="address_state"><?php esc_html_e( 'State/Province', 'remember' ); ?> <span class="description">(required)</span></label></th>
 			<td>
-				<input type="text" id="address_state" name="address_state" class="regular-text" value="<?php echo esc_attr( $view_profile ? $view_profile->address_state : '' ); ?>">
+				<input type="text" id="address_state" name="address_state" class="regular-text" value="<?php echo esc_attr( $view_profile ? $view_profile->address_state : '' ); ?>" required>
 			</td>
 		</tr>
 		<tr>
-			<th><label for="address_postal"><?php esc_html_e( 'Postal Code', 'remember' ); ?></label></th>
+			<th><label for="address_postal"><?php esc_html_e( 'Postal Code', 'remember' ); ?> <span class="description">(required)</span></label></th>
 			<td>
-				<input type="text" id="address_postal" name="address_postal" class="regular-text" value="<?php echo esc_attr( $view_profile ? $view_profile->address_postal : '' ); ?>">
+				<input type="text" id="address_postal" name="address_postal" class="regular-text" value="<?php echo esc_attr( $view_profile ? $view_profile->address_postal : '' ); ?>" required>
 			</td>
 		</tr>
 		<tr>
@@ -260,16 +260,37 @@ if ( $photo_max_bytes < 1 ) {
 			</td>
 		</tr>
 		<tr>
-			<th><label for="im_type"><?php esc_html_e( 'Instant Messenger', 'remember' ); ?></label></th>
+			<th><label for="im_type"><?php esc_html_e( 'Instant Messenger', 'remember' ); ?> <span class="description">(required)</span></label></th>
 			<td>
-				<select id="im_type" name="im_type" style="width: 150px;">
+				<select id="im_type" name="im_type" style="width: 150px;" required>
 					<option value="telegram" <?php selected( $view_profile && $view_profile->im_type ? $view_profile->im_type : 'telegram', 'telegram' ); ?>><?php esc_html_e( 'Telegram', 'remember' ); ?></option>
 					<option value="discord" <?php selected( $view_profile && $view_profile->im_type ? $view_profile->im_type : 'telegram', 'discord' ); ?>><?php esc_html_e( 'Discord', 'remember' ); ?></option>
 					<option value="signal" <?php selected( $view_profile && $view_profile->im_type ? $view_profile->im_type : 'telegram', 'signal' ); ?>><?php esc_html_e( 'Signal', 'remember' ); ?></option>
 					<option value="whatsapp" <?php selected( $view_profile && $view_profile->im_type ? $view_profile->im_type : 'telegram', 'whatsapp' ); ?>><?php esc_html_e( 'WhatsApp', 'remember' ); ?></option>
 					<option value="other" <?php selected( $view_profile && $view_profile->im_type ? $view_profile->im_type : 'telegram', 'other' ); ?>><?php esc_html_e( 'Other', 'remember' ); ?></option>
 				</select>
-				<input type="text" id="im_handle" name="im_handle" class="regular-text" value="<?php echo esc_attr( $view_profile ? $view_profile->im_handle : '' ); ?>" placeholder="<?php esc_attr_e( 'Handle', 'remember' ); ?>" style="margin-left: 10px;">
+				<input type="text" id="im_handle" name="im_handle" class="regular-text" value="<?php echo esc_attr( $view_profile ? $view_profile->im_handle : '' ); ?>" placeholder="<?php esc_attr_e( 'Handle', 'remember' ); ?>" style="margin-left: 10px;" required>
+			</td>
+		</tr>
+		<?php
+		require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-clothing-sizes.php';
+		$shirt_size = $view_profile && isset( $view_profile->shirt_size ) ? $view_profile->shirt_size : '';
+		$pants_size = $view_profile && isset( $view_profile->pants_size ) ? $view_profile->pants_size : '';
+		$shoe_size  = $view_profile && isset( $view_profile->shoe_size ) ? $view_profile->shoe_size : '';
+		?>
+		<tr>
+			<th><label for="shirt_size"><?php esc_html_e( 'Shirt Size', 'remember' ); ?></label></th>
+			<td><?php echo Remember_Clothing_Sizes::dropdown( 'shirt', $shirt_size, 'shirt_size', 'shirt_size' ); ?></td>
+		</tr>
+		<tr>
+			<th><label for="pants_size"><?php esc_html_e( 'Pants Size', 'remember' ); ?></label></th>
+			<td><?php echo Remember_Clothing_Sizes::dropdown( 'pants', $pants_size, 'pants_size', 'pants_size' ); ?></td>
+		</tr>
+		<tr>
+			<th><label for="shoe_size"><?php esc_html_e( 'Shoe Size', 'remember' ); ?></label></th>
+			<td>
+				<?php echo Remember_Clothing_Sizes::dropdown( 'shoe', $shoe_size, 'shoe_size', 'shoe_size' ); ?>
+				<p class="description"><?php esc_html_e( 'US men\'s sizes. Shirt/pants: S-6XL. Shoes: 6-15.', 'remember' ); ?></p>
 			</td>
 		</tr>
 		<tr>
@@ -277,8 +298,18 @@ if ( $photo_max_bytes < 1 ) {
 			<td>
 				<?php
 				$interests_value = $view_profile && isset( $view_profile->interests ) ? $view_profile->interests : '';
+				wp_editor(
+					$interests_value,
+					'interests',
+					array(
+						'textarea_name' => 'interests',
+						'textarea_rows' => 6,
+						'media_buttons' => false,
+						'teeny'         => true,
+						'quicktags'     => true,
+					)
+				);
 				?>
-				<textarea id="interests" name="interests" class="large-text" rows="4"><?php echo esc_textarea( $interests_value ); ?></textarea>
 			</td>
 		</tr>
 	</table>
@@ -299,9 +330,9 @@ if ( $photo_max_bytes < 1 ) {
 			</td>
 		</tr>
 		<tr>
-			<th><label for="emergency_contact_phone"><?php esc_html_e( 'Phone', 'remember' ); ?></label></th>
+			<th><label for="emergency_contact_phone"><?php esc_html_e( 'Phone', 'remember' ); ?> <span class="description">(required)</span></label></th>
 			<td>
-				<input type="text" id="emergency_contact_phone" name="emergency_contact_phone" class="regular-text" value="<?php echo esc_attr( $view_profile ? $view_profile->emergency_contact_phone : '' ); ?>">
+				<input type="text" id="emergency_contact_phone" name="emergency_contact_phone" class="regular-text" value="<?php echo esc_attr( $view_profile ? $view_profile->emergency_contact_phone : '' ); ?>" placeholder="<?php esc_attr_e( '+18055551212', 'remember' ); ?>" required>
 			</td>
 		</tr>
 		<tr>

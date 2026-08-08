@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Build a WordPress-installable zip whose root folder is always "remember/"
-# (GitHub's auto "Source code" zip uses remember-<tag>/ and breaks upgrades.)
+# Build a WordPress-installable zip: filename remember-<version>.zip, root folder always "remember/".
+# (GitHub's auto "Source code" zip uses remember-<tag>/ and breaks upgrades — do not use it.)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -12,7 +12,6 @@ fi
 
 OUT_DIR="$ROOT/dist"
 STAGE="$OUT_DIR/stage"
-ZIP_NAME="remember.zip"
 ZIP_VERSIONED="remember-${VERSION}.zip"
 
 rm -rf "$STAGE"
@@ -33,13 +32,12 @@ rsync -a \
 
 (
 	cd "$STAGE"
-	rm -f "$OUT_DIR/$ZIP_NAME" "$OUT_DIR/$ZIP_VERSIONED"
-	zip -rq "$OUT_DIR/$ZIP_NAME" remember
-	cp "$OUT_DIR/$ZIP_NAME" "$OUT_DIR/$ZIP_VERSIONED"
+	rm -f "$OUT_DIR/$ZIP_VERSIONED" "$OUT_DIR/remember.zip"
+	zip -rq "$OUT_DIR/$ZIP_VERSIONED" remember
 )
 
 # Sanity: archive must contain remember/remember.php, not remember-1.x.y/
-listing="$(unzip -l "$OUT_DIR/$ZIP_NAME")"
+listing="$(unzip -l "$OUT_DIR/$ZIP_VERSIONED")"
 if ! grep -q 'remember/remember.php' <<<"$listing"; then
 	echo "Zip layout check failed: remember/remember.php missing" >&2
 	exit 1
@@ -49,5 +47,5 @@ if grep -qE '(^|[[:space:]])remember-[0-9]+\.[0-9]+' <<<"$listing"; then
 	exit 1
 fi
 
-echo "Built $OUT_DIR/$ZIP_NAME and $OUT_DIR/$ZIP_VERSIONED (root folder: remember/)"
+echo "Built $OUT_DIR/$ZIP_VERSIONED (root folder: remember/)"
 echo "$listing" | head -20

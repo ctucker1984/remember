@@ -16,6 +16,7 @@ require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-applicat
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-vetting.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-location.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-merchandise.php';
+require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-addon-role-limits.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-timezone.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-payment.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-template.php';
@@ -57,14 +58,18 @@ if ( isset( $_POST['remember_member_application_action'] ) && check_admin_refere
 				}
 			}
 
-			// Replace add-ons with current selection.
+			// Replace add-ons with current selection (role-aware max qty).
 			$wpdb->delete(
 				$wpdb->prefix . 'remember_application_merchandise',
 				array( 'event_application_id' => $application_id ),
 				array( '%d' )
 			);
-			$event_addons = $merchandise_model->get_by_event( $application->event_id );
-			$addon_map = array();
+			$effective_role_id = isset( $_POST['event_role_id'] ) ? absint( $_POST['event_role_id'] ) : absint( $application->event_role_id );
+			if ( $effective_role_id < 1 ) {
+				$effective_role_id = absint( $application->event_role_id );
+			}
+			$event_addons = Remember_Addon_Role_Limits::get_available_addons_for_role( $application->event_id, $effective_role_id );
+			$addon_map    = array();
 			foreach ( $event_addons as $event_addon ) {
 				$addon_map[ absint( $event_addon->merchandise_id ) ] = $event_addon;
 			}
@@ -75,16 +80,17 @@ if ( isset( $_POST['remember_member_application_action'] ) && check_admin_refere
 					if ( $addon_id <= 0 || empty( $addon_data['selected'] ) || ! isset( $addon_map[ $addon_id ] ) ) {
 						continue;
 					}
-					$addon = $addon_map[ $addon_id ];
-					$quantity = isset( $addon_data['quantity'] ) ? absint( $addon_data['quantity'] ) : 1;
+					$addon    = $addon_map[ $addon_id ];
+					$quantity = Remember_Addon_Role_Limits::clamp_quantity(
+						$addon_id,
+						$effective_role_id,
+						isset( $addon_data['quantity'] ) ? absint( $addon_data['quantity'] ) : 1
+					);
 					if ( $quantity < 1 ) {
-						$quantity = 1;
-					}
-					if ( null !== $addon->max_quantity && $quantity > absint( $addon->max_quantity ) ) {
-						$quantity = absint( $addon->max_quantity );
+						continue;
 					}
 
-					$unit_cost = (float) $addon->cost;
+					$unit_cost  = (float) $addon->cost;
 					$total_cost = $unit_cost * $quantity;
 					$wpdb->insert(
 						$wpdb->prefix . 'remember_application_merchandise',
@@ -101,7 +107,21 @@ if ( isset( $_POST['remember_member_application_action'] ) && check_admin_refere
 				}
 			}
 		} elseif ( 'withdraw_application' === $member_action && 'accepted' === $application->status ) {
-			$application_model->update_status( $application_id, 'cancelled', get_current_user_id() );
+			require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-unwind.php';
+			$billing_action = isset( $_POST['billing_action'] ) ? Remember_Billing_Unwind::sanitize_action( wp_unslash( $_POST['billing_action'] ) ) : 'leave';
+			$updated        = $application_model->update_status( $application_id, 'cancelled', get_current_user_id() );
+			if ( false !== $updated ) {
+				$unwind = Remember_Billing_Unwind::apply(
+					$application_id,
+					$billing_action,
+					sprintf( __( 'Member cancelled application #%d', 'remember' ), $application_id )
+				);
+				if ( is_wp_error( $unwind ) ) {
+					echo '<div class="remember-notice remember-notice-warning"><p>' . esc_html( $unwind->get_error_message() ) . '</p></div>';
+				} else {
+					echo '<div class="remember-notice remember-notice-success"><p>' . esc_html__( 'Application cancelled. Your ticket is marked VOID.', 'remember' ) . '</p></div>';
+				}
+			}
 		}
 	}
 }
@@ -216,7 +236,10 @@ if ( $selected_application_id > 0 ) {
 				break;
 			}
 		}
-		$selected_event_addons = $merchandise_model->get_by_event( $selected_application->event_id );
+		$selected_event_addons = Remember_Addon_Role_Limits::get_available_addons_for_role(
+			$selected_application->event_id,
+			$selected_application->event_role_id
+		);
 		$selected_application_addons = $wpdb->get_results(
 			$wpdb->prepare(
 				"SELECT * FROM {$wpdb->prefix}remember_application_merchandise WHERE event_application_id = %d",
@@ -269,9 +292,13 @@ foreach ( $selected_application_addons as $selected_addon_row ) {
 
 					<div class="remember-form-group">
 						<label class="remember-form-label"><?php esc_html_e( 'Add-ons', 'remember' ); ?></label>
+						<p class="remember-description"><?php esc_html_e( 'Add-ons shown are for the selected role. Change role and save if needed; max qty is per role.', 'remember' ); ?></p>
 						<?php if ( ! empty( $selected_event_addons ) ) : ?>
 							<?php foreach ( $selected_event_addons as $addon_option ) : ?>
-								<?php $existing_addon = isset( $selected_addon_map[ absint( $addon_option->merchandise_id ) ] ) ? $selected_addon_map[ absint( $addon_option->merchandise_id ) ] : null; ?>
+								<?php
+								$existing_addon = isset( $selected_addon_map[ absint( $addon_option->merchandise_id ) ] ) ? $selected_addon_map[ absint( $addon_option->merchandise_id ) ] : null;
+								$role_max       = isset( $addon_option->max_quantity ) ? absint( $addon_option->max_quantity ) : 1;
+								?>
 								<div style="border: 1px solid #ddd; padding: 8px; margin-bottom: 8px;">
 									<label>
 										<input type="checkbox" name="event_addons[<?php echo esc_attr( $addon_option->merchandise_id ); ?>][selected]" value="1" <?php checked( null !== $existing_addon ); ?>>
@@ -280,24 +307,45 @@ foreach ( $selected_application_addons as $selected_addon_row ) {
 									</label>
 									<label style="margin-left: 10px;">
 										<?php esc_html_e( 'Qty', 'remember' ); ?>
-										<input type="number" class="small-text" min="1" <?php echo null !== $addon_option->max_quantity ? 'max="' . esc_attr( $addon_option->max_quantity ) . '"' : ''; ?> name="event_addons[<?php echo esc_attr( $addon_option->merchandise_id ); ?>][quantity]" value="<?php echo esc_attr( $existing_addon ? absint( $existing_addon->quantity ) : 1 ); ?>">
+										<input type="number" class="small-text" min="1" max="<?php echo esc_attr( $role_max ); ?>" name="event_addons[<?php echo esc_attr( $addon_option->merchandise_id ); ?>][quantity]" value="<?php echo esc_attr( $existing_addon ? min( absint( $existing_addon->quantity ), $role_max ) : 1 ); ?>">
+										<span class="remember-description">(max <?php echo esc_html( (string) $role_max ); ?>)</span>
 									</label>
 								</div>
 							<?php endforeach; ?>
 						<?php else : ?>
-							<p class="remember-description"><?php esc_html_e( 'No add-ons available for this event.', 'remember' ); ?></p>
+							<p class="remember-description"><?php esc_html_e( 'No add-ons available for this role.', 'remember' ); ?></p>
 						<?php endif; ?>
 					</div>
 
 					<button type="submit" class="remember-button remember-button-primary"><?php esc_html_e( 'Save Application Changes', 'remember' ); ?></button>
 				</form>
-			<?php elseif ( 'accepted' === $selected_application->status ) : ?>
-				<form method="post" action="" style="margin-top: 15px;">
+			<?php elseif ( 'accepted' === $selected_application->status || ! empty( $selected_application->ticket_voided ) ) : ?>
+				<?php
+				require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-ticket.php';
+				if ( Remember_Ticket::is_eligible( $selected_application ) ) :
+					$ticket_url = Remember_Ticket::get_ticket_url( $selected_application->application_id );
+					?>
+					<p style="margin-top: 15px;">
+						<a class="remember-button remember-button-primary" href="<?php echo esc_url( $ticket_url ); ?>" target="_blank" rel="noopener noreferrer"><?php esc_html_e( 'View / Print Ticket', 'remember' ); ?></a>
+					</p>
+				<?php endif; ?>
+				<?php if ( 'accepted' === $selected_application->status ) : ?>
+				<?php
+				require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-unwind.php';
+				$cancel_has_invoice = Remember_Billing_Unwind::has_invoice( $selected_application->application_id );
+				?>
+				<form method="post" action="" style="margin-top: 15px;" class="remember-cancel-application">
 					<?php wp_nonce_field( 'remember_member_application_action', 'remember_member_application_nonce' ); ?>
 					<input type="hidden" name="remember_member_application_action" value="withdraw_application">
 					<input type="hidden" name="application_id" value="<?php echo esc_attr( $selected_application->application_id ); ?>">
-					<button type="submit" class="remember-button remember-button-secondary" onclick="return confirm('<?php echo esc_js( __( 'Withdraw from this accepted event?', 'remember' ) ); ?>');"><?php esc_html_e( 'Withdraw Application', 'remember' ); ?></button>
+					<h4 style="margin: 0 0 8px;"><?php esc_html_e( 'Cancel application (member)', 'remember' ); ?></h4>
+					<p class="remember-description" style="margin-top: 0;">
+						<?php esc_html_e( 'This sets your application to Cancelled and voids your admission ticket. Choose what should happen to the invoice.', 'remember' ); ?>
+					</p>
+					<?php echo Remember_Billing_Unwind::render_action_radios( 'billing_action', $cancel_has_invoice ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in helper. ?>
+					<button type="submit" class="remember-button remember-button-secondary" style="margin-top: 10px;" onclick="return confirm('<?php echo esc_js( __( 'Cancel this application? Confirm your invoice choice above.', 'remember' ) ); ?>');"><?php esc_html_e( 'Cancel Application', 'remember' ); ?></button>
 				</form>
+				<?php endif; ?>
 			<?php endif; ?>
 		</div>
 	<?php else : ?>

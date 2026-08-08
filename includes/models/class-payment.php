@@ -62,13 +62,14 @@ class Remember_Payment extends Remember_Base_Model {
 	 */
 	public function update( $payment_id, $data ) {
 		$data['updated_at'] = current_time( 'mysql' );
+
+		$before = $this->get( $payment_id );
 		
 		// Recalculate amount_due if amount_paid changed (caller may set amount_due and payment_status explicitly).
 		if ( isset( $data['amount_paid'] ) ) {
-			$payment = $this->get( $payment_id );
-			if ( $payment ) {
+			if ( $before ) {
 				if ( ! isset( $data['amount_due'] ) ) {
-					$data['amount_due'] = $payment->total_amount - $data['amount_paid'];
+					$data['amount_due'] = $before->total_amount - $data['amount_paid'];
 				}
 
 				if ( ! isset( $data['payment_status'] ) ) {
@@ -81,7 +82,25 @@ class Remember_Payment extends Remember_Base_Model {
 			}
 		}
 		
-		return parent::update( $payment_id, $data );
+		$result = parent::update( $payment_id, $data );
+		if ( false === $result ) {
+			return $result;
+		}
+
+		$after = $this->get( $payment_id );
+		if ( $before && $after && (string) $before->payment_status !== (string) $after->payment_status ) {
+			/**
+			 * Fires when a payment row's payment_status changes.
+			 *
+			 * @param int    $payment_id Payment ID.
+			 * @param string $old_status Previous status.
+			 * @param string $new_status New status.
+			 * @param object $payment    Updated payment row.
+			 */
+			do_action( 'remember_payment_status_changed', (int) $payment_id, (string) $before->payment_status, (string) $after->payment_status, $after );
+		}
+
+		return $result;
 	}
 
 	/**

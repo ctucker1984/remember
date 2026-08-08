@@ -62,11 +62,31 @@ class Remember_Public {
 	 * @since    1.0.0
 	 */
 	public function enqueue_scripts() {
-		wp_enqueue_script( $this->plugin_name, plugin_dir_url( __FILE__ ) . '../assets/js/public.js', array( 'jquery' ), $this->version, true );
+		wp_enqueue_script(
+			$this->plugin_name . '-timezone',
+			plugin_dir_url( __FILE__ ) . '../assets/js/timezone-picker.js',
+			array( 'jquery' ),
+			$this->version,
+			true
+		);
+		wp_enqueue_script( $this->plugin_name, plugin_dir_url( __FILE__ ) . '../assets/js/public.js', array( 'jquery', $this->plugin_name . '-timezone' ), $this->version, true );
 		wp_localize_script( $this->plugin_name, 'rememberPublic', array(
 			'ajaxurl' => admin_url( 'admin-ajax.php' ),
 			'nonce'   => wp_create_nonce( 'remember_public_nonce' ),
 		) );
+
+		// Interests uses wp_editor on profile edit and public registration.
+		global $post;
+		if ( $post instanceof WP_Post ) {
+			$needs_editor = has_shortcode( $post->post_content, 'remember_register' )
+				|| has_shortcode( $post->post_content, 'remember_registration' );
+			if ( ! $needs_editor && isset( $_GET['edit'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- view flag only.
+				$needs_editor = has_shortcode( $post->post_content, 'remember_profile' );
+			}
+			if ( $needs_editor ) {
+				wp_enqueue_editor();
+			}
+		}
 	}
 
 	/**
@@ -83,6 +103,42 @@ class Remember_Public {
 		add_shortcode( 'remember_event_detail', array( $this, 'shortcode_event_detail' ) );
 		add_shortcode( 'remember_register', array( $this, 'shortcode_register' ) );
 		add_shortcode( 'remember_registration', array( $this, 'shortcode_register' ) );
+	}
+
+	/**
+	 * Output printable admission ticket when ?remember_ticket= is present.
+	 *
+	 * @return void
+	 */
+	public function maybe_output_admission_ticket() {
+		if ( ! isset( $_GET['remember_ticket'] ) ) {
+			return;
+		}
+
+		$application_id = absint( $_GET['remember_ticket'] );
+		if ( $application_id <= 0 ) {
+			return;
+		}
+
+		if ( ! is_user_logged_in() ) {
+			auth_redirect();
+			exit;
+		}
+
+		$nonce = isset( $_GET['remember_ticket_nonce'] ) ? sanitize_text_field( wp_unslash( $_GET['remember_ticket_nonce'] ) ) : '';
+		if ( ! wp_verify_nonce( $nonce, 'remember_ticket_' . $application_id ) ) {
+			wp_die( esc_html__( 'Invalid or expired ticket link. Open the ticket again from your dashboard or the admin application screen.', 'remember' ), esc_html__( 'Ticket', 'remember' ), array( 'response' => 403 ) );
+		}
+
+		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-ticket.php';
+		if ( ! Remember_Ticket::user_can_view( $application_id ) ) {
+			wp_die( esc_html__( 'You do not have permission to view this ticket.', 'remember' ), esc_html__( 'Ticket', 'remember' ), array( 'response' => 403 ) );
+		}
+
+		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-ticket-renderer.php';
+		$download = isset( $_GET['download'] ) && '1' === (string) $_GET['download'];
+		Remember_Ticket_Renderer::output_standalone( $application_id, $download );
+		exit;
 	}
 
 	/**
@@ -108,19 +164,27 @@ class Remember_Public {
 			$this->redirect_member_registration( 'invalid_nonce' );
 		}
 
-		$username     = isset( $_POST['remember_reg_username'] ) ? sanitize_user( wp_unslash( $_POST['remember_reg_username'] ), true ) : '';
-		$display_name = isset( $_POST['remember_reg_display_name'] ) ? sanitize_text_field( wp_unslash( $_POST['remember_reg_display_name'] ) ) : '';
-		$first_name   = isset( $_POST['remember_reg_first_name'] ) ? sanitize_text_field( wp_unslash( $_POST['remember_reg_first_name'] ) ) : '';
-		$last_name    = isset( $_POST['remember_reg_last_name'] ) ? sanitize_text_field( wp_unslash( $_POST['remember_reg_last_name'] ) ) : '';
-		$email        = isset( $_POST['remember_reg_email'] ) ? sanitize_email( wp_unslash( $_POST['remember_reg_email'] ) ) : '';
-		$cell_phone   = isset( $_POST['remember_reg_cell_phone'] ) ? sanitize_text_field( wp_unslash( $_POST['remember_reg_cell_phone'] ) ) : '';
-		$timezone     = isset( $_POST['remember_reg_timezone'] ) ? sanitize_text_field( wp_unslash( $_POST['remember_reg_timezone'] ) ) : '';
-		$password     = isset( $_POST['remember_reg_password'] ) ? wp_unslash( $_POST['remember_reg_password'] ) : '';
+		$username         = isset( $_POST['remember_reg_username'] ) ? sanitize_user( wp_unslash( $_POST['remember_reg_username'] ), true ) : '';
+		$email            = isset( $_POST['remember_reg_email'] ) ? sanitize_email( wp_unslash( $_POST['remember_reg_email'] ) ) : '';
+		$password         = isset( $_POST['remember_reg_password'] ) ? wp_unslash( $_POST['remember_reg_password'] ) : '';
 		$password_confirm = isset( $_POST['remember_reg_password_confirm'] ) ? wp_unslash( $_POST['remember_reg_password_confirm'] ) : '';
 
 		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-timezone.php';
+		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-profile-fields.php';
 
-		if ( '' === $username || '' === $display_name || '' === $first_name || '' === $last_name || '' === $email || '' === $cell_phone || '' === $timezone || '' === $password || '' === $password_confirm ) {
+		$profile_data = Remember_Profile_Fields::collect_profile_data_from_request();
+		$meta_data    = Remember_Profile_Fields::collect_meta_from_request();
+		$nickname     = $meta_data['nickname'];
+		$timezone     = $meta_data['timezone_string'];
+		$first_name   = $profile_data['legal_first_name'];
+		$last_name    = $profile_data['legal_last_name'];
+
+		if ( '' === $username || '' === $email || '' === $password || '' === $password_confirm ) {
+			$this->redirect_member_registration( 'missing_fields' );
+		}
+
+		$missing = Remember_Profile_Fields::first_missing_required( $profile_data, $meta_data );
+		if ( '' !== $missing ) {
 			$this->redirect_member_registration( 'missing_fields' );
 		}
 
@@ -191,13 +255,13 @@ class Remember_Public {
 
 		update_user_meta( $user_id, 'first_name', $first_name );
 		update_user_meta( $user_id, 'last_name', $last_name );
-		update_user_meta( $user_id, 'nickname', $display_name );
+		update_user_meta( $user_id, 'nickname', $nickname );
 		update_user_meta( $user_id, 'timezone_string', $timezone );
 		wp_update_user(
 			array(
 				'ID'           => $user_id,
-				'display_name' => $display_name,
-				'nickname'     => $display_name,
+				'display_name' => $nickname,
+				'nickname'     => $nickname,
 			)
 		);
 
@@ -218,22 +282,12 @@ class Remember_Public {
 		}
 
 		global $wpdb;
-		$profile_inserted = $wpdb->insert(
-			$wpdb->prefix . 'remember_member_profiles',
-			array(
-				'member_id'                       => $user_id,
-				'legal_first_name'                => $first_name,
-				'legal_last_name'                 => $last_name,
-				'cell_phone'                      => $cell_phone,
-				'emergency_contact_first'         => $first_name,
-				'emergency_contact_last'          => $last_name,
-				'emergency_contact_phone'         => '',
-				'emergency_contact_relationship'  => '',
-				'created_at'                      => current_time( 'mysql' ),
-				'updated_at'                      => current_time( 'mysql' ),
-			),
-			array( '%d', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s' )
-		);
+		$profile_row               = $profile_data;
+		$profile_row['member_id']  = $user_id;
+		$profile_row['created_at'] = current_time( 'mysql' );
+		$profile_row['updated_at'] = current_time( 'mysql' );
+
+		$profile_inserted = $wpdb->insert( $wpdb->prefix . 'remember_member_profiles', $profile_row );
 
 		if ( ! $profile_inserted ) {
 			Remember_Logger::error(
@@ -244,6 +298,8 @@ class Remember_Public {
 			wp_delete_user( $user_id );
 			$this->redirect_member_registration( 'profile_failed' );
 		}
+
+		Remember_Profile_Fields::save_junctions_from_request( $user_id );
 
 		if ( Remember_Vetting_Workflow::should_vet_on_join() ) {
 			$vetting_result = Remember_Vetting_Workflow::create_vetting_case( $user_id );
@@ -325,7 +381,7 @@ class Remember_Public {
 	}
 
 	/**
-	 * Minimal member registration shortcode (creates WP user + reMember member + profile).
+	 * Full member registration shortcode (WP user + reMember member + profile).
 	 *
 	 * @param array $atts Shortcode attributes (unused).
 	 * @return string

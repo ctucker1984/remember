@@ -152,20 +152,25 @@ class Remember_Timezone {
 		if ( empty( $selected ) ) {
 			$selected = 'America/Los_Angeles'; // Default
 		}
-		
-		$html = sprintf(
-			'<select name="%s" id="%s" class="%s"%s>',
+
+		$classes = trim( $class . ' remember-timezone-select' );
+
+		// Single combobox control (JS): type in the field to match options — no separate filter box.
+		$html  = '<div class="remember-timezone-picker">';
+		$html .= sprintf(
+			'<select name="%s" id="%s" class="%s"%s data-remember-timezone="1">',
 			esc_attr( $name ),
 			esc_attr( $id ),
-			esc_attr( $class ),
+			esc_attr( $classes ),
 			$required ? ' required' : ''
 		);
-		
-		// Use WordPress's built-in hierarchical timezone choice
+
+		// WordPress hierarchical list (continent/region optgroups) — source data for the combobox.
 		$html .= wp_timezone_choice( $selected, get_user_locale() );
-		
+
 		$html .= '</select>';
-		
+		$html .= '</div>';
+
 		return $html;
 	}
 

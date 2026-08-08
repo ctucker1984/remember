@@ -298,9 +298,17 @@ if ( isset( $_POST['remember_settings_action'] ) && check_admin_referer( 'rememb
 			}
 		}
 
+		// Email provider invoice to customer when an application is accepted (default on).
+		$options['email_invoice_on_accept'] = ! empty( $_POST['email_invoice_on_accept'] ) ? 1 : 0;
+
 		// Update subtotal disclaimer message.
 		if ( isset( $_POST['subtotal_disclaimer_text'] ) ) {
 			$options['subtotal_disclaimer_text'] = sanitize_textarea_field( wp_unslash( $_POST['subtotal_disclaimer_text'] ) );
+		}
+
+		// Ticket logo override (attachment ID); 0 clears override.
+		if ( isset( $_POST['ticket_logo_id'] ) ) {
+			$options['ticket_logo_id'] = absint( $_POST['ticket_logo_id'] );
 		}
 		
 		// Update vetting workflow
@@ -563,6 +571,25 @@ $social_platforms = $wpdb->get_results(
 				</tr>
 				<tr>
 					<th scope="row">
+						<?php esc_html_e( 'Email invoice on accept', 'remember' ); ?>
+					</th>
+					<td>
+						<?php
+						$email_invoice_on_accept = ! array_key_exists( 'email_invoice_on_accept', $options )
+							? true
+							: ! empty( $options['email_invoice_on_accept'] );
+						?>
+						<label for="email_invoice_on_accept">
+							<input type="checkbox" id="email_invoice_on_accept" name="email_invoice_on_accept" value="1" <?php checked( $email_invoice_on_accept ); ?>>
+							<?php esc_html_e( 'After accepting an application, ask Xero or QuickBooks to email the invoice to the customer', 'remember' ); ?>
+						</label>
+						<p class="description">
+							<?php esc_html_e( 'Uses the contact/customer email on file in the billing provider. Accept still succeeds if the email step fails. Ticket emails are separate.', 'remember' ); ?>
+						</p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row">
 						<label for="vetting_workflow"><?php esc_html_e( 'Vetting Workflow', 'remember' ); ?></label>
 					</th>
 					<td>
@@ -587,6 +614,28 @@ $social_platforms = $wpdb->get_results(
 						<textarea id="subtotal_disclaimer_text" name="subtotal_disclaimer_text" rows="4" class="large-text"><?php echo esc_textarea( Remember_Billing_Messaging::get_subtotal_disclaimer() ); ?></textarea>
 						<p class="description">
 							<?php esc_html_e( 'Shown on billing/application pricing touchpoints. Explains that reMember shows subtotal estimates and the active billing provider (QuickBooks or Xero) sends final totals/taxes/payment options. Leave the default wording to follow the selected provider automatically.', 'remember' ); ?>
+						</p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row">
+						<label for="ticket_logo_id"><?php esc_html_e( 'Ticket logo override', 'remember' ); ?></label>
+					</th>
+					<td>
+						<?php
+						$ticket_logo_id  = isset( $options['ticket_logo_id'] ) ? absint( $options['ticket_logo_id'] ) : 0;
+						$ticket_logo_url = $ticket_logo_id ? wp_get_attachment_image_url( $ticket_logo_id, 'medium' ) : '';
+						?>
+						<input type="hidden" id="ticket_logo_id" name="ticket_logo_id" value="<?php echo esc_attr( $ticket_logo_id ); ?>">
+						<div id="remember-ticket-logo-preview" style="margin-bottom: 8px;">
+							<?php if ( $ticket_logo_url ) : ?>
+								<img src="<?php echo esc_url( $ticket_logo_url ); ?>" alt="" style="max-height: 72px; width: auto;">
+							<?php endif; ?>
+						</div>
+						<button type="button" class="button" id="remember-ticket-logo-select"><?php esc_html_e( 'Select logo', 'remember' ); ?></button>
+						<button type="button" class="button" id="remember-ticket-logo-clear" <?php disabled( ! $ticket_logo_id ); ?>><?php esc_html_e( 'Use site logo', 'remember' ); ?></button>
+						<p class="description">
+							<?php esc_html_e( 'Admission tickets use the WordPress Site Logo by default. Set an override here if tickets should show a different mark.', 'remember' ); ?>
 						</p>
 					</td>
 				</tr>

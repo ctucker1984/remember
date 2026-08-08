@@ -17,6 +17,7 @@ require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-applicat
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-member.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-messaging.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-template.php';
+require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-provider.php';
 
 Remember_Logger::debug( 'Payments page loaded' );
 
@@ -25,6 +26,9 @@ $application_model = new Remember_Application();
 $member_model = new Remember_Member();
 $subtotal_disclaimer = Remember_Billing_Messaging::get_subtotal_disclaimer();
 $status_labels       = Remember_Billing_Template::get_payment_status_labels();
+
+// Pull latest paid/due from the active provider before listing.
+Remember_Billing_Provider::sync_all_payments();
 
 // Get filter parameters
 $filter_status = isset( $_GET['filter_status'] ) ? sanitize_text_field( $_GET['filter_status'] ) : '';

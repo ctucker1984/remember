@@ -17,7 +17,71 @@
 /* Public registration (shortcode) — aligned label / field rows */
 .remember-register-form .remember-register-form__inner {
 	position: relative;
-	max-width: 38rem;
+	max-width: 44rem;
+}
+
+.remember-register-form .remember-register-intro {
+	margin: 0 0 1.25rem;
+	font-size: 0.95rem;
+	color: #50575e;
+}
+
+.remember-register-form .remember-register-section-title {
+	margin: 1.75rem 0 0.75rem;
+	padding-top: 0.75rem;
+	border-top: 1px solid #dcdcde;
+	font-size: 1.05rem;
+	font-weight: 650;
+	color: #1d2327;
+}
+
+.remember-register-form .remember-register-section-title:first-of-type {
+	margin-top: 0.5rem;
+	padding-top: 0;
+	border-top: 0;
+}
+
+.remember-register-form .remember-register-section-help {
+	margin: -0.25rem 0 0.85rem;
+	font-size: 0.875rem;
+	color: #646970;
+	line-height: 1.4;
+}
+
+.remember-register-form .remember-register-im {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5rem;
+	width: 100%;
+	max-width: 22rem;
+}
+
+.remember-register-form .remember-register-input--im-type {
+	max-width: 8.5rem;
+	flex: 0 0 8.5rem;
+}
+
+.remember-register-form .remember-register-input--im-handle {
+	flex: 1 1 10rem;
+	max-width: none;
+}
+
+.remember-register-form .remember-register-editor {
+	margin: 0 0 1rem;
+	width: 100%;
+	max-width: 100%;
+}
+
+.remember-register-form .remember-register-editor .wp-editor-wrap {
+	width: 100%;
+	max-width: 100%;
+}
+
+.remember-register-form .remember-register-checkboxes {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+	gap: 0.4rem 1rem;
+	margin: 0 0 1rem;
 }
 
 .remember-register-form .remember-register-hp {
@@ -50,6 +114,83 @@
 	justify-self: end;
 	max-width: 12.5rem;
 	white-space: nowrap;
+}
+
+.remember-timezone-picker {
+	position: relative;
+	max-width: 22rem;
+	width: 100%;
+}
+
+.remember-timezone-picker .remember-timezone-select--sr {
+	position: absolute !important;
+	width: 1px !important;
+	height: 1px !important;
+	padding: 0 !important;
+	margin: -1px !important;
+	overflow: hidden !important;
+	clip: rect(0, 0, 0, 0) !important;
+	white-space: nowrap !important;
+	border: 0 !important;
+}
+
+.remember-timezone-combobox-input {
+	width: 100%;
+	max-width: 22rem;
+	box-sizing: border-box;
+	min-height: 2.4rem;
+	padding: 0.5em 0.65em;
+	font-size: 1rem;
+	line-height: 1.4;
+	border: 1px solid #8c8f94;
+	border-radius: 4px;
+	background: #fff;
+}
+
+.remember-timezone-combobox-list {
+	position: absolute;
+	z-index: 1000;
+	left: 0;
+	right: 0;
+	top: calc(100% + 2px);
+	max-height: 240px;
+	margin: 0;
+	padding: 4px 0;
+	overflow: auto;
+	list-style: none;
+	background: #fff;
+	border: 1px solid #8c8f94;
+	border-radius: 4px;
+	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+.remember-timezone-combobox-group {
+	padding: 6px 10px 2px;
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: #646970;
+}
+
+.remember-timezone-combobox-option {
+	padding: 6px 12px;
+	cursor: pointer;
+}
+
+.remember-timezone-combobox-option.is-active,
+.remember-timezone-combobox-option:hover {
+	background: #2271b1;
+	color: #fff;
+}
+
+.remember-timezone-combobox-option.is-selected {
+	font-weight: 600;
+}
+
+.remember-timezone-combobox-empty {
+	padding: 8px 12px;
+	color: #646970;
 }
 
 .remember-register-form .remember-register-input {
@@ -471,6 +612,23 @@
 	margin-bottom: 1em;
 	color: #50575e;
 	line-height: 1.6;
+}
+
+.remember-event-attendee-details {
+	margin: 1.25em 0 1.5em;
+	padding: 1em 1.15em;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+	background: #f6f7f7;
+}
+
+.remember-event-attendee-details h3 {
+	margin: 0 0 0.35em;
+	font-size: 1.1rem;
+}
+
+.remember-event-attendee-details .remember-form-help {
+	margin: 0 0 0.75em;
 }
 
 .remember-event-meta {

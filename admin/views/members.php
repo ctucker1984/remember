@@ -239,9 +239,22 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 			wp_die( __( 'You do not have sufficient permissions to perform this action.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
 		}
 
-		$cell_phone_check = isset( $_POST['cell_phone'] ) ? sanitize_text_field( wp_unslash( $_POST['cell_phone'] ) ) : '';
-		if ( '' === $cell_phone_check ) {
-			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Cell phone is required.', 'remember' ) . '</p></div>';
+		require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-clothing-sizes.php';
+		require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-fields.php';
+
+		$profile_check = Remember_Profile_Fields::collect_profile_data_from_request();
+		$meta_check    = Remember_Profile_Fields::collect_meta_from_request();
+		$missing_key   = Remember_Profile_Fields::first_missing_required( $profile_check, $meta_check );
+		if ( '' !== $missing_key ) {
+			$labels = Remember_Profile_Fields::labels();
+			$label  = isset( $labels[ $missing_key ] ) ? $labels[ $missing_key ] : __( 'Required field', 'remember' );
+			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html(
+				sprintf(
+					/* translators: %s: field label */
+					__( '%s is required.', 'remember' ),
+					$label
+				)
+			) . '</p></div>';
 		} else {
 		
 		global $wpdb;
@@ -251,7 +264,7 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 			$user_update_data = array( 'ID' => $member_id );
 			
 			if ( isset( $_POST['display_name'] ) ) {
-				$user_update_data['display_name'] = sanitize_text_field( $_POST['display_name'] );
+				$user_update_data['display_name'] = sanitize_text_field( wp_unslash( $_POST['display_name'] ) );
 			}
 			
 			$update_result = wp_update_user( $user_update_data );
@@ -259,7 +272,7 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 			if ( ! is_wp_error( $update_result ) ) {
 				// Update nickname in user meta
 				if ( isset( $_POST['nickname'] ) ) {
-					update_user_meta( $member_id, 'nickname', sanitize_text_field( $_POST['nickname'] ) );
+					update_user_meta( $member_id, 'nickname', sanitize_text_field( wp_unslash( $_POST['nickname'] ) ) );
 				}
 				Remember_Logger::info( 'WordPress user updated', array( 'user_id' => $member_id ) );
 			} else {
@@ -304,7 +317,7 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 		
 		// Save timezone to WP user meta (not member_profiles)
 		if ( isset( $_POST['timezone_string'] ) ) {
-			$timezone_string = sanitize_text_field( $_POST['timezone_string'] );
+			$timezone_string = sanitize_text_field( wp_unslash( $_POST['timezone_string'] ) );
 			if ( ! empty( $timezone_string ) ) {
 				update_user_meta( $member_id, 'timezone_string', $timezone_string );
 			} else {
@@ -315,21 +328,24 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 		
 		// Collect profile data (timezone is NOT stored here, it's in WP user meta)
 		$profile_data = array(
-			'legal_first_name' => isset( $_POST['legal_first_name'] ) ? sanitize_text_field( $_POST['legal_first_name'] ) : '',
-			'legal_last_name' => isset( $_POST['legal_last_name'] ) ? sanitize_text_field( $_POST['legal_last_name'] ) : '',
-			'address_street' => isset( $_POST['address_street'] ) ? sanitize_text_field( $_POST['address_street'] ) : '',
-			'address_city' => isset( $_POST['address_city'] ) ? sanitize_text_field( $_POST['address_city'] ) : '',
-			'address_state' => isset( $_POST['address_state'] ) ? sanitize_text_field( $_POST['address_state'] ) : '',
-			'address_postal' => isset( $_POST['address_postal'] ) ? sanitize_text_field( $_POST['address_postal'] ) : '',
-			'address_country' => isset( $_POST['address_country'] ) ? sanitize_text_field( $_POST['address_country'] ) : '',
-			'cell_phone' => isset( $_POST['cell_phone'] ) ? sanitize_text_field( $_POST['cell_phone'] ) : '',
-			'im_handle' => isset( $_POST['im_handle'] ) ? sanitize_text_field( $_POST['im_handle'] ) : '',
-			'im_type' => isset( $_POST['im_type'] ) ? sanitize_text_field( $_POST['im_type'] ) : 'telegram',
-			'interests' => isset( $_POST['interests'] ) ? sanitize_textarea_field( $_POST['interests'] ) : '',
-			'emergency_contact_first' => isset( $_POST['emergency_contact_first'] ) ? sanitize_text_field( $_POST['emergency_contact_first'] ) : '',
-			'emergency_contact_last' => isset( $_POST['emergency_contact_last'] ) ? sanitize_text_field( $_POST['emergency_contact_last'] ) : '',
-			'emergency_contact_phone' => isset( $_POST['emergency_contact_phone'] ) ? sanitize_text_field( $_POST['emergency_contact_phone'] ) : '',
-			'emergency_contact_relationship' => isset( $_POST['emergency_contact_relationship'] ) ? sanitize_text_field( $_POST['emergency_contact_relationship'] ) : '',
+			'legal_first_name' => isset( $_POST['legal_first_name'] ) ? sanitize_text_field( wp_unslash( $_POST['legal_first_name'] ) ) : '',
+			'legal_last_name' => isset( $_POST['legal_last_name'] ) ? sanitize_text_field( wp_unslash( $_POST['legal_last_name'] ) ) : '',
+			'address_street' => isset( $_POST['address_street'] ) ? sanitize_text_field( wp_unslash( $_POST['address_street'] ) ) : '',
+			'address_city' => isset( $_POST['address_city'] ) ? sanitize_text_field( wp_unslash( $_POST['address_city'] ) ) : '',
+			'address_state' => isset( $_POST['address_state'] ) ? sanitize_text_field( wp_unslash( $_POST['address_state'] ) ) : '',
+			'address_postal' => isset( $_POST['address_postal'] ) ? sanitize_text_field( wp_unslash( $_POST['address_postal'] ) ) : '',
+			'address_country' => isset( $_POST['address_country'] ) ? sanitize_text_field( wp_unslash( $_POST['address_country'] ) ) : '',
+			'cell_phone' => isset( $_POST['cell_phone'] ) ? sanitize_text_field( wp_unslash( $_POST['cell_phone'] ) ) : '',
+			'im_handle' => isset( $_POST['im_handle'] ) ? sanitize_text_field( wp_unslash( $_POST['im_handle'] ) ) : '',
+			'im_type' => isset( $_POST['im_type'] ) ? sanitize_text_field( wp_unslash( $_POST['im_type'] ) ) : 'telegram',
+			'interests' => isset( $_POST['interests'] ) ? wp_kses_post( wp_unslash( $_POST['interests'] ) ) : '',
+			'shirt_size' => isset( $_POST['shirt_size'] ) ? Remember_Clothing_Sizes::sanitize( 'shirt', wp_unslash( $_POST['shirt_size'] ) ) : '',
+			'pants_size' => isset( $_POST['pants_size'] ) ? Remember_Clothing_Sizes::sanitize( 'pants', wp_unslash( $_POST['pants_size'] ) ) : '',
+			'shoe_size' => isset( $_POST['shoe_size'] ) ? Remember_Clothing_Sizes::sanitize( 'shoe', wp_unslash( $_POST['shoe_size'] ) ) : '',
+			'emergency_contact_first' => isset( $_POST['emergency_contact_first'] ) ? sanitize_text_field( wp_unslash( $_POST['emergency_contact_first'] ) ) : '',
+			'emergency_contact_last' => isset( $_POST['emergency_contact_last'] ) ? sanitize_text_field( wp_unslash( $_POST['emergency_contact_last'] ) ) : '',
+			'emergency_contact_phone' => isset( $_POST['emergency_contact_phone'] ) ? sanitize_text_field( wp_unslash( $_POST['emergency_contact_phone'] ) ) : '',
+			'emergency_contact_relationship' => isset( $_POST['emergency_contact_relationship'] ) ? sanitize_text_field( wp_unslash( $_POST['emergency_contact_relationship'] ) ) : '',
 			'share_email_with_events' => isset( $_POST['share_email_with_events'] ) ? 1 : 0,
 			'share_phone_with_events' => isset( $_POST['share_phone_with_events'] ) ? 1 : 0,
 			'share_location_with_events' => isset( $_POST['share_location_with_events'] ) ? 1 : 0,
@@ -646,6 +662,10 @@ if ( $view_member_id > 0 ) {
 		$view_member_id
 	) );
 	
+	// Refresh amounts / lines from the active billing provider before the ledger.
+	require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-provider.php';
+	Remember_Billing_Provider::sync_member_payments( $view_member_id );
+
 	// Get payments for billing register
 	$view_payments = $payment_model->get_by_member( $view_member_id );
 	
@@ -699,13 +719,15 @@ if ( $view_member_id > 0 ) {
 		$refund_lines_json = '';
 		$provider_label = __( 'QuickBooks', 'remember' );
 
+		$refund_reduces_balance = false;
 		if ( $billing_use_xero ) {
 			$provider_label = __( 'Xero', 'remember' );
 			if ( ! empty( $payment->xero_invoice_number ) || ! empty( $payment->xero_invoice_id ) ) {
-				$invoice_number      = ! empty( $payment->xero_invoice_number ) ? $payment->xero_invoice_number : '';
-				$invoice_sort_ts_raw = ! empty( $payment->xero_invoice_sort_ts ) ? (int) $payment->xero_invoice_sort_ts : 0;
-				$payment_lines_json  = ! empty( $payment->xero_payment_lines ) ? $payment->xero_payment_lines : '';
-				$refund_lines_json   = ! empty( $payment->xero_refund_lines ) ? $payment->xero_refund_lines : '';
+				$invoice_number           = ! empty( $payment->xero_invoice_number ) ? $payment->xero_invoice_number : '';
+				$invoice_sort_ts_raw      = ! empty( $payment->xero_invoice_sort_ts ) ? (int) $payment->xero_invoice_sort_ts : 0;
+				$payment_lines_json       = ! empty( $payment->xero_payment_lines ) ? $payment->xero_payment_lines : '';
+				$refund_lines_json        = ! empty( $payment->xero_refund_lines ) ? $payment->xero_refund_lines : '';
+				$refund_reduces_balance   = true;
 			} else {
 				$invoice_number      = ! empty( $payment->quickbooks_invoice_number ) ? $payment->quickbooks_invoice_number : '';
 				$invoice_sort_ts_raw = ! empty( $payment->quickbooks_invoice_sort_ts ) ? (int) $payment->quickbooks_invoice_sort_ts : 0;
@@ -720,11 +742,12 @@ if ( $view_member_id > 0 ) {
 				$payment_lines_json  = ! empty( $payment->quickbooks_payment_lines ) ? $payment->quickbooks_payment_lines : '';
 				$refund_lines_json   = ! empty( $payment->quickbooks_refund_lines ) ? $payment->quickbooks_refund_lines : '';
 			} elseif ( ! empty( $payment->xero_invoice_id ) || ! empty( $payment->xero_invoice_number ) ) {
-				$provider_label      = __( 'Xero', 'remember' );
-				$invoice_number      = ! empty( $payment->xero_invoice_number ) ? $payment->xero_invoice_number : '';
-				$invoice_sort_ts_raw = ! empty( $payment->xero_invoice_sort_ts ) ? (int) $payment->xero_invoice_sort_ts : 0;
-				$payment_lines_json  = ! empty( $payment->xero_payment_lines ) ? $payment->xero_payment_lines : '';
-				$refund_lines_json   = ! empty( $payment->xero_refund_lines ) ? $payment->xero_refund_lines : '';
+				$provider_label           = __( 'Xero', 'remember' );
+				$invoice_number           = ! empty( $payment->xero_invoice_number ) ? $payment->xero_invoice_number : '';
+				$invoice_sort_ts_raw      = ! empty( $payment->xero_invoice_sort_ts ) ? (int) $payment->xero_invoice_sort_ts : 0;
+				$payment_lines_json       = ! empty( $payment->xero_payment_lines ) ? $payment->xero_payment_lines : '';
+				$refund_lines_json        = ! empty( $payment->xero_refund_lines ) ? $payment->xero_refund_lines : '';
+				$refund_reduces_balance   = true;
 			}
 		}
 		
@@ -829,8 +852,8 @@ if ( $view_member_id > 0 ) {
 			}
 		}
 		foreach ( $qb_refund_lines as $rf_line ) {
-			$debit = isset( $rf_line['amount'] ) ? floatval( $rf_line['amount'] ) : 0;
-			if ( $debit <= 0 ) {
+			$amount = isset( $rf_line['amount'] ) ? floatval( $rf_line['amount'] ) : 0;
+			if ( $amount <= 0 ) {
 				continue;
 			}
 			$method = isset( $rf_line['payment_method'] ) ? $rf_line['payment_method'] : '';
@@ -849,17 +872,21 @@ if ( $view_member_id > 0 ) {
 					? strtotime( $rf_line['txn_date'] . ' 12:00:00' )
 					: strtotime( $payment->payment_date ? $payment->payment_date : 'now' );
 			}
+			// Xero credit-note allocations reduce amount owed (credit). QBO refund receipts stay audit-only.
+			$as_credit = $refund_reduces_balance
+				|| ( isset( $rf_line['ledger_effect'] ) && 'credit' === $rf_line['ledger_effect'] );
 			$billing_register[] = array(
-				'date'        => date( 'Y-m-d H:i:s', $rf_sort_ts ),
-				'sort_ts'     => $rf_sort_ts,
-				'type'        => 'refund',
-				'description' => $desc,
-				'debit'       => $debit,
-				'credit'      => 0,
-				'balance'     => 0,
-				'status'      => $payment->payment_status,
-				'payment_id'  => $payment->payment_id,
+				'date'         => date( 'Y-m-d H:i:s', $rf_sort_ts ),
+				'sort_ts'      => $rf_sort_ts,
+				'type'         => 'refund',
+				'description'  => $desc,
+				'debit'        => $as_credit ? 0 : $amount,
+				'credit'       => $as_credit ? $amount : 0,
+				'balance'      => 0,
+				'status'       => $payment->payment_status,
+				'payment_id'   => $payment->payment_id,
 				'qb_refund_id' => isset( $rf_line['qb_refund_id'] ) ? (string) $rf_line['qb_refund_id'] : '',
+				'affects_balance' => $as_credit,
 			);
 		}
 	}
@@ -893,10 +920,10 @@ if ( $view_member_id > 0 ) {
 		}
 	);
 	
-	// Calculate running balance. Refund lines are shown for the audit trail (debit column)
-	// but do not change “balance due” — refunds are not new charges owed by the member.
+	// Running balance: invoices debit, payments credit, Xero credit notes credit.
+	// QBO refund-receipt audit rows (debit, affects_balance false) do not change balance due.
 	foreach ( $billing_register as &$entry ) {
-		if ( 'refund' === ( $entry['type'] ?? '' ) ) {
+		if ( 'refund' === ( $entry['type'] ?? '' ) && empty( $entry['affects_balance'] ) ) {
 			$entry['balance'] = $running_balance;
 			continue;
 		}

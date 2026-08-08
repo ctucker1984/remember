@@ -647,35 +647,53 @@ class Remember_Xero_Sync {
 			return $refund_lines;
 		}
 
-		$total_refunded = 0;
+		// Credit-note allocations reduce amount owed; they are not cash refunds of payments.
+		$total_credited = 0;
 		foreach ( $refund_lines as $rrow ) {
-			$total_refunded += floatval( $rrow['amount'] ?? 0 );
-		}
-
-		$net_paid = $total_paid - $total_refunded;
-		if ( $net_paid < 0 ) {
-			$net_paid = 0;
+			$total_credited += floatval( $rrow['amount'] ?? 0 );
 		}
 
 		$total_amt = floatval( $payment->total_amount );
 
-		if ( $total_refunded > 0 && $net_paid <= 0.001 ) {
-			$payment_status  = 'refunded';
-			$amount_due      = 0;
-			$amount_paid_out = 0;
-		} elseif ( $net_paid >= $total_amt - 0.001 ) {
-			$payment_status  = 'paid';
-			$amount_due      = 0;
-			$amount_paid_out = $net_paid;
-		} elseif ( $net_paid > 0 ) {
-			$payment_status  = 'partial';
-			$amount_due      = max( 0, $total_amt - $net_paid );
-			$amount_paid_out = $net_paid;
+		// Prefer Xero invoice totals when present (AmountPaid ≠ payments minus credits).
+		$xero_due       = isset( $invoice['AmountDue'] ) ? floatval( $invoice['AmountDue'] ) : null;
+		$xero_paid      = isset( $invoice['AmountPaid'] ) ? floatval( $invoice['AmountPaid'] ) : null;
+		$xero_credited  = isset( $invoice['AmountCredited'] ) ? floatval( $invoice['AmountCredited'] ) : null;
+		if ( null !== $xero_credited && $xero_credited > $total_credited ) {
+			$total_credited = $xero_credited;
+		}
+
+		if ( null !== $xero_paid ) {
+			$amount_paid_out = max( 0, $xero_paid );
+		} else {
+			$amount_paid_out = max( 0, $total_paid );
+		}
+
+		if ( null !== $xero_due ) {
+			$amount_due = max( 0, $xero_due );
+		} else {
+			$amount_due = max( 0, $total_amt - $amount_paid_out - $total_credited );
+		}
+
+		if ( $amount_due <= 0.001 ) {
+			$amount_due = 0;
+			if ( $amount_paid_out <= 0.001 && $total_credited > 0.001 ) {
+				$payment_status = 'refunded';
+			} else {
+				$payment_status  = 'paid';
+				$amount_paid_out = $amount_paid_out > 0 ? $amount_paid_out : $total_amt;
+			}
+		} elseif ( $amount_paid_out > 0.001 || $total_credited > 0.001 ) {
+			$payment_status = 'partial';
 		} else {
 			$payment_status  = 'pending';
-			$amount_due      = $total_amt;
 			$amount_paid_out = 0;
+			if ( null === $xero_due ) {
+				$amount_due = $total_amt;
+			}
 		}
+
+		$total_refunded = $total_credited;
 
 		$latest_ts = 0;
 		foreach ( $detail_lines as $row ) {

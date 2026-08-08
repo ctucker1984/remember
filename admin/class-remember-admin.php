@@ -54,7 +54,10 @@ class Remember_Admin {
 	 */
 	public function enqueue_styles() {
 		$screen = get_current_screen();
-		if ( $screen && strpos( $screen->id, 'remember' ) !== false ) {
+		if ( ! $screen ) {
+			return;
+		}
+		if ( strpos( $screen->id, 'remember' ) !== false ) {
 			wp_enqueue_style( $this->plugin_name, plugin_dir_url( __FILE__ ) . '../assets/css/admin.css', array(), $this->version, 'all' );
 			// Photo cropper styles (shared with front-end) on Members edit.
 			if ( false !== strpos( $screen->id, 'remember-members' ) ) {
@@ -67,6 +70,10 @@ class Remember_Admin {
 				);
 			}
 		}
+		// Timezone combobox on WP user profile screens.
+		if ( in_array( $screen->id, array( 'profile', 'user-edit' ), true ) ) {
+			wp_enqueue_style( $this->plugin_name . '-timezone', plugin_dir_url( __FILE__ ) . '../assets/css/admin.css', array(), $this->version, 'all' );
+		}
 	}
 
 	/**
@@ -76,8 +83,18 @@ class Remember_Admin {
 	 */
 	public function enqueue_scripts() {
 		$screen = get_current_screen();
-		if ( $screen && strpos( $screen->id, 'remember' ) !== false ) {
-			wp_enqueue_script( $this->plugin_name, plugin_dir_url( __FILE__ ) . '../assets/js/admin.js', array( 'jquery' ), $this->version, false );
+		if ( ! $screen ) {
+			return;
+		}
+		if ( strpos( $screen->id, 'remember' ) !== false ) {
+			wp_enqueue_script(
+				$this->plugin_name . '-timezone',
+				plugin_dir_url( __FILE__ ) . '../assets/js/timezone-picker.js',
+				array( 'jquery' ),
+				$this->version,
+				true
+			);
+			wp_enqueue_script( $this->plugin_name, plugin_dir_url( __FILE__ ) . '../assets/js/admin.js', array( 'jquery', $this->plugin_name . '-timezone' ), $this->version, true );
 			// Localize script for AJAX
 			wp_localize_script( $this->plugin_name, 'rememberAjax', array(
 				'ajaxurl' => admin_url( 'admin-ajax.php' ),
@@ -93,6 +110,18 @@ class Remember_Admin {
 					true
 				);
 			}
+			if ( false !== strpos( $screen->id, 'remember-settings' ) ) {
+				wp_enqueue_media();
+			}
+		}
+		if ( in_array( $screen->id, array( 'profile', 'user-edit' ), true ) ) {
+			wp_enqueue_script(
+				$this->plugin_name . '-timezone',
+				plugin_dir_url( __FILE__ ) . '../assets/js/timezone-picker.js',
+				array( 'jquery' ),
+				$this->version,
+				true
+			);
 		}
 	}
 
@@ -1194,14 +1223,20 @@ class Remember_Admin {
 	public function ajax_get_event_addons() {
 		check_ajax_referer( 'remember_get_event_addons', 'nonce' );
 
-		$event_id = isset( $_POST['event_id'] ) ? absint( $_POST['event_id'] ) : 0;
+		$event_id      = isset( $_POST['event_id'] ) ? absint( $_POST['event_id'] ) : 0;
+		$event_role_id = isset( $_POST['event_role_id'] ) ? absint( $_POST['event_role_id'] ) : 0;
 		if ( $event_id <= 0 ) {
 			wp_send_json_error( array( 'message' => __( 'Invalid event ID.', 'remember' ) ) );
 		}
 
-		require_once plugin_dir_path( __FILE__ ) . '../includes/models/class-merchandise.php';
-		$merchandise_model = new Remember_Merchandise();
-		$addons = $merchandise_model->get_by_event( $event_id );
+		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-addon-role-limits.php';
+
+		if ( $event_role_id > 0 ) {
+			$addons = Remember_Addon_Role_Limits::get_available_addons_for_role( $event_id, $event_role_id );
+		} else {
+			// No role yet — return empty so the UI waits for role selection.
+			$addons = array();
+		}
 
 		$formatted_addons = array();
 		foreach ( $addons as $addon ) {
@@ -1210,7 +1245,7 @@ class Remember_Admin {
 				'merchandise_name' => $addon->merchandise_name,
 				'description'      => $addon->description,
 				'cost'             => floatval( $addon->cost ),
-				'max_quantity'     => null !== $addon->max_quantity ? absint( $addon->max_quantity ) : null,
+				'max_quantity'     => isset( $addon->max_quantity ) ? absint( $addon->max_quantity ) : 1,
 			);
 		}
 

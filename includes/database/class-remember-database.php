@@ -60,6 +60,7 @@ class Remember_Database {
 			'member_dietary_restrictions'    => 'create_member_dietary_restrictions_table',
 			'allergies'                      => 'create_allergies_table',
 			'member_allergies'               => 'create_member_allergies_table',
+			'clothing_size_options'          => 'create_clothing_size_options_table',
 			'medical_accommodations'         => 'create_medical_accommodations_table',
 			'member_medical_accommodations'  => 'create_member_medical_accommodations_table',
 			'roles'                          => 'create_roles_table',
@@ -69,6 +70,7 @@ class Remember_Database {
 			'events'                         => 'create_events_table',
 			'event_roles'                    => 'create_event_roles_table',
 			'event_merchandise'              => 'create_event_merchandise_table',
+			'event_merchandise_role_limits'  => 'create_event_merchandise_role_limits_table',
 			'event_applications'             => 'create_event_applications_table',
 			'application_merchandise'        => 'create_application_merchandise_table',
 			'products'                       => 'create_products_table',
@@ -144,6 +146,9 @@ class Remember_Database {
 			im_handle VARCHAR(100) DEFAULT NULL,
 			im_type VARCHAR(50) DEFAULT 'telegram',
 			interests TEXT DEFAULT NULL,
+			shirt_size VARCHAR(20) DEFAULT NULL,
+			pants_size VARCHAR(20) DEFAULT NULL,
+			shoe_size VARCHAR(20) DEFAULT NULL,
 			emergency_contact_first VARCHAR(100) NOT NULL,
 			emergency_contact_last VARCHAR(100) NOT NULL,
 			emergency_contact_phone VARCHAR(50) NOT NULL,
@@ -236,6 +241,28 @@ class Remember_Database {
 			restriction_id BIGINT(20) UNSIGNED NOT NULL,
 			PRIMARY KEY (member_id, restriction_id),
 			KEY restriction_id (restriction_id)
+		) $charset_collate;";
+
+		dbDelta( $sql );
+	}
+
+	/**
+	 * Create clothing size options table (shirt / pants / shoe catalogs).
+	 */
+	public function create_clothing_size_options_table() {
+		$table_name      = $this->prefix . 'clothing_size_options';
+		$charset_collate = $this->wpdb->get_charset_collate();
+
+		$sql = "CREATE TABLE $table_name (
+			option_id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+			size_category ENUM('shirt','pants','shoe') NOT NULL,
+			size_code VARCHAR(20) NOT NULL,
+			is_active TINYINT(1) DEFAULT 1,
+			sort_order INT(11) DEFAULT 0,
+			created_at DATETIME NOT NULL,
+			PRIMARY KEY (option_id),
+			UNIQUE KEY category_code (size_category, size_code),
+			KEY size_category (size_category)
 		) $charset_collate;";
 
 		dbDelta( $sql );
@@ -422,6 +449,7 @@ class Remember_Database {
 			event_id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
 			event_name VARCHAR(255) NOT NULL,
 			event_description TEXT DEFAULT NULL,
+			attendee_details TEXT DEFAULT NULL,
 			location_id BIGINT(20) UNSIGNED DEFAULT NULL,
 			start_date DATE NOT NULL,
 			end_date DATE NOT NULL,
@@ -490,6 +518,28 @@ class Remember_Database {
 	}
 
 	/**
+	 * Create per event-role max qty for event add-ons (0 = hide from that role).
+	 */
+	public function create_event_merchandise_role_limits_table() {
+		$table_name      = $this->prefix . 'event_merchandise_role_limits';
+		$charset_collate = $this->wpdb->get_charset_collate();
+
+		$sql = "CREATE TABLE $table_name (
+			limit_id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+			merchandise_id BIGINT(20) UNSIGNED NOT NULL,
+			event_role_id BIGINT(20) UNSIGNED NOT NULL,
+			max_qty INT(11) NOT NULL DEFAULT 0,
+			created_at DATETIME NOT NULL,
+			updated_at DATETIME NOT NULL,
+			PRIMARY KEY (limit_id),
+			UNIQUE KEY merchandise_role (merchandise_id, event_role_id),
+			KEY event_role_id (event_role_id)
+		) $charset_collate;";
+
+		dbDelta( $sql );
+	}
+
+	/**
 	 * Create event applications table.
 	 */
 	private function create_event_applications_table() {
@@ -507,6 +557,8 @@ class Remember_Database {
 			processed_at DATETIME DEFAULT NULL,
 			processed_by BIGINT(20) UNSIGNED DEFAULT NULL,
 			notes TEXT DEFAULT NULL,
+			ticket_voided TINYINT(1) NOT NULL DEFAULT 0,
+			ticket_ready_emailed_at DATETIME DEFAULT NULL,
 			PRIMARY KEY (application_id),
 			UNIQUE KEY event_member_role (event_id, member_id, event_role_id),
 			KEY event_id (event_id),
@@ -670,6 +722,7 @@ class Remember_Database {
 			xero_payment_lines LONGTEXT DEFAULT NULL,
 			xero_refund_lines LONGTEXT DEFAULT NULL,
 			notes TEXT DEFAULT NULL,
+			ticket_paid_emailed_at DATETIME DEFAULT NULL,
 			created_at DATETIME NOT NULL,
 			updated_at DATETIME NOT NULL,
 			PRIMARY KEY (payment_id),

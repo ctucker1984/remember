@@ -187,7 +187,7 @@ foreach ( $event_roles as $event_role ) {
 						<?php if ( ! empty( $profile->share_interests_with_events ) && ! empty( $profile->interests ) ) : ?>
 							<p>
 								<strong><?php esc_html_e( 'Interests:', 'remember' ); ?></strong><br>
-								<?php echo esc_html( $profile->interests ); ?>
+								<?php echo wp_kses_post( wpautop( $profile->interests ) ); ?>
 							</p>
 						<?php endif; ?>
 					<?php endif; ?>
