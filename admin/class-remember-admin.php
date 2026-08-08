@@ -74,6 +74,17 @@ class Remember_Admin {
 		if ( in_array( $screen->id, array( 'profile', 'user-edit' ), true ) ) {
 			wp_enqueue_style( $this->plugin_name . '-timezone', plugin_dir_url( __FILE__ ) . '../assets/css/admin.css', array(), $this->version, 'all' );
 		}
+
+		// Settings flyout in the left admin menu (any wp-admin screen).
+		if ( $this->current_user_has_remember_capability() ) {
+			wp_enqueue_style(
+				$this->plugin_name . '-admin-menu',
+				plugin_dir_url( __FILE__ ) . '../assets/css/admin-menu.css',
+				array(),
+				$this->version,
+				'all'
+			);
+		}
 	}
 
 	/**
@@ -123,6 +134,99 @@ class Remember_Admin {
 				true
 			);
 		}
+
+		if ( $this->current_user_has_remember_capability() ) {
+			wp_enqueue_script(
+				$this->plugin_name . '-admin-menu',
+				plugin_dir_url( __FILE__ ) . '../assets/js/admin-menu.js',
+				array(),
+				$this->version,
+				true
+			);
+			wp_localize_script(
+				$this->plugin_name . '-admin-menu',
+				'rememberSettingsFlyout',
+				array(
+					'label' => __( 'Settings', 'remember' ),
+					'items' => $this->get_settings_flyout_items_for_user(),
+				)
+			);
+		}
+	}
+
+	/**
+	 * Whether the current user has any reMember capability (sees the admin menu).
+	 *
+	 * @return bool
+	 */
+	private function current_user_has_remember_capability() {
+		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-capabilities.php';
+		foreach ( array_keys( Remember_Capabilities::get_all_capabilities() ) as $cap ) {
+			if ( current_user_can( $cap ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Settings flyout links the current user can open.
+	 *
+	 * @return array<int, array{slug:string,label:string,url:string}>
+	 */
+	private function get_settings_flyout_items_for_user() {
+		$candidates = array(
+			array(
+				'slug'  => 'remember-settings',
+				'label' => __( 'Settings', 'remember' ),
+				'caps'  => array( 'remember_access_settings' ),
+			),
+			array(
+				'slug'  => 'remember-getting-started',
+				'label' => __( 'Getting Started', 'remember' ),
+				'caps'  => array( 'remember_read_events', 'remember_access_settings' ),
+			),
+			array(
+				'slug'  => 'remember-locations',
+				'label' => __( 'Locations', 'remember' ),
+				'caps'  => array( 'remember_read_locations' ),
+			),
+			array(
+				'slug'  => 'remember-roles',
+				'label' => __( 'Roles', 'remember' ),
+				'caps'  => array( 'remember_read_roles' ),
+			),
+			array(
+				'slug'  => 'remember-products',
+				'label' => __( 'Products', 'remember' ),
+				'caps'  => array( 'remember_access_settings' ),
+			),
+			array(
+				'slug'  => 'remember-profile-questions',
+				'label' => __( 'Custom Fields', 'remember' ),
+				'caps'  => array( 'remember_access_settings' ),
+			),
+			array(
+				'slug'  => 'remember-import-export',
+				'label' => __( 'Import/Export', 'remember' ),
+				'caps'  => array( 'remember_access_settings' ),
+			),
+		);
+
+		$items = array();
+		foreach ( $candidates as $item ) {
+			foreach ( $item['caps'] as $cap ) {
+				if ( current_user_can( $cap ) ) {
+					$items[] = array(
+						'slug'  => $item['slug'],
+						'label' => $item['label'],
+						'url'   => admin_url( 'admin.php?page=' . $item['slug'] ),
+					);
+					break;
+				}
+			}
+		}
+		return $items;
 	}
 
 	/**
@@ -178,16 +282,6 @@ class Remember_Admin {
 			$main_cap,
 			'remember',
 			array( $this, 'display_dashboard_page' )
-		);
-
-		// Getting Started (locations, roles, products, events — plus wizard link).
-		add_submenu_page(
-			'remember',
-			__( 'Getting Started', 'remember' ),
-			__( 'Getting Started', 'remember' ),
-			'remember_read_events',
-			'remember-getting-started',
-			array( $this, 'display_getting_started_page' )
 		);
 
 		// Members (accessible with either members or attendees capability)
@@ -256,78 +350,160 @@ class Remember_Admin {
 			array( $this, 'display_billing_page' )
 		);
 
-		// Locations
-		add_submenu_page(
-			'remember',
-			__( 'Locations', 'remember' ),
-			__( 'Locations', 'remember' ),
-			'remember_read_locations',
-			'remember-locations',
-			array( $this, 'display_locations_page' )
-		);
-
-		// Roles
-		add_submenu_page(
-			'remember',
-			__( 'Roles', 'remember' ),
-			__( 'Roles', 'remember' ),
-			'remember_read_roles',
-			'remember-roles',
-			array( $this, 'display_roles_page' )
-		);
-
-		// Products
-		add_submenu_page(
-			'remember',
-			__( 'Products', 'remember' ),
-			__( 'Products', 'remember' ),
-			'remember_access_settings',
-			'remember-products',
-			array( $this, 'display_products_page' )
-		);
-
-		// Custom profile fields (admin-defined questions).
-		add_submenu_page(
-			'remember',
-			__( 'Custom Fields', 'remember' ),
-			__( 'Custom Fields', 'remember' ),
-			'remember_access_settings',
-			'remember-profile-questions',
-			array( $this, 'display_profile_questions_page' )
-		);
-
-		// Settings
+		// Settings — nested setup pages open from a left-menu flyout (not listed vertically).
 		add_submenu_page(
 			'remember',
 			__( 'Settings', 'remember' ),
 			__( 'Settings', 'remember' ),
-			'remember_access_settings',
+			$this->get_settings_menu_capability(),
 			'remember-settings',
 			array( $this, 'display_settings_page' )
 		);
 
-		// Import/Export
+		// Hidden pages nested under Settings flyout (empty menu title).
+		$getting_started_cap = 'remember_read_events';
+		if ( ! current_user_can( 'remember_read_events' ) && current_user_can( 'remember_access_settings' ) ) {
+			$getting_started_cap = 'remember_access_settings';
+		}
+		add_submenu_page(
+			'remember',
+			__( 'Getting Started', 'remember' ),
+			'',
+			$getting_started_cap,
+			'remember-getting-started',
+			array( $this, 'display_getting_started_page' )
+		);
+		add_submenu_page(
+			'remember',
+			__( 'Locations', 'remember' ),
+			'',
+			'remember_read_locations',
+			'remember-locations',
+			array( $this, 'display_locations_page' )
+		);
+		add_submenu_page(
+			'remember',
+			__( 'Roles', 'remember' ),
+			'',
+			'remember_read_roles',
+			'remember-roles',
+			array( $this, 'display_roles_page' )
+		);
+		add_submenu_page(
+			'remember',
+			__( 'Products', 'remember' ),
+			'',
+			'remember_access_settings',
+			'remember-products',
+			array( $this, 'display_products_page' )
+		);
+		add_submenu_page(
+			'remember',
+			__( 'Custom Fields', 'remember' ),
+			'',
+			'remember_access_settings',
+			'remember-profile-questions',
+			array( $this, 'display_profile_questions_page' )
+		);
 		add_submenu_page(
 			'remember',
 			__( 'Import/Export', 'remember' ),
-			__( 'Import/Export', 'remember' ),
+			'',
 			'remember_access_settings',
 			'remember-import-export',
 			array( $this, 'display_import_export_page' )
 		);
 
 		// Setup Wizard (hidden page, only shown when needed)
-		// Use 'remember' as parent to avoid null issues, but it won't show in menu
 		add_submenu_page(
 			'remember',
 			__( 'reMember Setup', 'remember' ),
-			'', // Empty menu title makes it hidden
+			'',
 			'remember_access_settings',
 			'remember-setup',
 			array( $this, 'display_setup_wizard' )
 		);
 
 		Remember_Logger::debug( 'Admin menu registered' );
+	}
+
+	/**
+	 * Page slugs nested under the Settings hub (hidden from left menu).
+	 *
+	 * @return string[]
+	 */
+	public static function get_settings_hub_page_slugs() {
+		return array(
+			'remember-settings',
+			'remember-getting-started',
+			'remember-locations',
+			'remember-roles',
+			'remember-products',
+			'remember-profile-questions',
+			'remember-import-export',
+		);
+	}
+
+	/**
+	 * Capability for the visible Settings menu item (any hub page the user can open).
+	 *
+	 * @return string
+	 */
+	private function get_settings_menu_capability() {
+		foreach ( array(
+			'remember_access_settings',
+			'remember_read_locations',
+			'remember_read_roles',
+			'remember_read_events',
+		) as $cap ) {
+			if ( current_user_can( $cap ) ) {
+				return $cap;
+			}
+		}
+		return 'remember_access_settings';
+	}
+
+	/**
+	 * First Settings-hub URL the current user can open.
+	 *
+	 * @param bool $exclude_settings Skip the main Settings page (used when redirecting away from it).
+	 * @return string Empty if none.
+	 */
+	private function get_first_accessible_settings_hub_url( $exclude_settings = false ) {
+		$candidates = array(
+			array( 'remember-settings', array( 'remember_access_settings' ) ),
+			array( 'remember-getting-started', array( 'remember_read_events', 'remember_access_settings' ) ),
+			array( 'remember-locations', array( 'remember_read_locations' ) ),
+			array( 'remember-roles', array( 'remember_read_roles' ) ),
+			array( 'remember-products', array( 'remember_access_settings' ) ),
+			array( 'remember-profile-questions', array( 'remember_access_settings' ) ),
+			array( 'remember-import-export', array( 'remember_access_settings' ) ),
+		);
+		foreach ( $candidates as $pair ) {
+			if ( $exclude_settings && 'remember-settings' === $pair[0] ) {
+				continue;
+			}
+			foreach ( $pair[1] as $cap ) {
+				if ( current_user_can( $cap ) ) {
+					return admin_url( 'admin.php?page=' . $pair[0] );
+				}
+			}
+		}
+		return '';
+	}
+
+	/**
+	 * Keep Settings highlighted in the left menu on hub pages.
+	 *
+	 * @param string $submenu_file Current submenu file.
+	 * @return string
+	 */
+	public function highlight_settings_hub_submenu( $submenu_file ) {
+		$page = isset( $_GET['page'] ) ? sanitize_key( wp_unslash( $_GET['page'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( in_array( $page, self::get_settings_hub_page_slugs(), true ) ) {
+			return 'remember-settings';
+		}
+		return $submenu_file;
 	}
 
 	/**
@@ -505,11 +681,15 @@ class Remember_Admin {
 	 * @since    1.0.0
 	 */
 	public function display_settings_page() {
-		// Check capability
 		if ( ! current_user_can( 'remember_access_settings' ) ) {
+			$fallback = $this->get_first_accessible_settings_hub_url( true );
+			if ( $fallback ) {
+				wp_safe_redirect( $fallback );
+				exit;
+			}
 			wp_die( __( 'You do not have sufficient permissions to access this page.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
 		}
-		
+
 		include_once 'views/settings.php';
 	}
 
