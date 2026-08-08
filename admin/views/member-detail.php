@@ -175,7 +175,14 @@ if ( $is_editing && ! current_user_can( 'remember_update_members' ) ) {
 					<tr>
 						<th><?php esc_html_e( 'Interests', 'remember' ); ?></th>
 						<td>
-							<?php echo $view_profile && $view_profile->interests ? esc_html( $view_profile->interests ) : '<span class="description">' . esc_html__( 'Not provided', 'remember' ) . '</span>'; ?>
+							<?php
+							if ( $view_profile && ! empty( $view_profile->interests ) ) {
+								echo '<div class="remember-richtext">' . wp_kses_post( wpautop( $view_profile->interests ) ) . '</div>';
+							} else {
+								echo '<span class="description">' . esc_html__( 'Not provided', 'remember' ) . '</span>';
+							}
+							?>
+
 						</td>
 					</tr>
 				</table>

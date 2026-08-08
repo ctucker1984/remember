@@ -610,6 +610,53 @@ class Remember_Database_Updater {
 			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.17.0' ) );
 		}
 
+		// Update to 1.18.0 — admission ticket columns + notification seed types.
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.18.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.18.0' ) );
+
+			$apps_table = $wpdb->prefix . 'remember_event_applications';
+			if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $apps_table ) ) === $apps_table ) {
+				$cols = $wpdb->get_col( "SHOW COLUMNS FROM {$apps_table}", 0 );
+				if ( is_array( $cols ) && ! in_array( 'ticket_voided', $cols, true ) ) {
+					$ok = $wpdb->query(
+						"ALTER TABLE {$apps_table} ADD COLUMN ticket_voided TINYINT(1) NOT NULL DEFAULT 0 AFTER notes"
+					);
+					if ( false === $ok ) {
+						Remember_Logger::error( 'Failed to add ticket_voided', array( 'error' => $wpdb->last_error ) );
+					}
+				}
+				$cols = $wpdb->get_col( "SHOW COLUMNS FROM {$apps_table}", 0 );
+				if ( is_array( $cols ) && ! in_array( 'ticket_ready_emailed_at', $cols, true ) ) {
+					$ok = $wpdb->query(
+						"ALTER TABLE {$apps_table} ADD COLUMN ticket_ready_emailed_at DATETIME DEFAULT NULL AFTER ticket_voided"
+					);
+					if ( false === $ok ) {
+						Remember_Logger::error( 'Failed to add ticket_ready_emailed_at', array( 'error' => $wpdb->last_error ) );
+					}
+				}
+			}
+
+			$payments_table = $wpdb->prefix . 'remember_payments';
+			if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $payments_table ) ) === $payments_table ) {
+				$cols = $wpdb->get_col( "SHOW COLUMNS FROM {$payments_table}", 0 );
+				if ( is_array( $cols ) && ! in_array( 'ticket_paid_emailed_at', $cols, true ) ) {
+					$ok = $wpdb->query(
+						"ALTER TABLE {$payments_table} ADD COLUMN ticket_paid_emailed_at DATETIME DEFAULT NULL AFTER notes"
+					);
+					if ( false === $ok ) {
+						Remember_Logger::error( 'Failed to add ticket_paid_emailed_at', array( 'error' => $wpdb->last_error ) );
+					}
+				}
+			}
+
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-seeder.php';
+			$seeder = new Remember_Seeder();
+			$seeder->ensure_notification_settings();
+
+			update_option( 'remember_db_version', '1.18.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.18.0' ) );
+		}
+
 		Remember_Logger::activation_debug(
 			'update_schema: exit',
 			array( 'remember_db_version' => get_option( 'remember_db_version', '0.0.0' ) )

@@ -302,6 +302,11 @@ if ( isset( $_POST['remember_settings_action'] ) && check_admin_referer( 'rememb
 		if ( isset( $_POST['subtotal_disclaimer_text'] ) ) {
 			$options['subtotal_disclaimer_text'] = sanitize_textarea_field( wp_unslash( $_POST['subtotal_disclaimer_text'] ) );
 		}
+
+		// Ticket logo override (attachment ID); 0 clears override.
+		if ( isset( $_POST['ticket_logo_id'] ) ) {
+			$options['ticket_logo_id'] = absint( $_POST['ticket_logo_id'] );
+		}
 		
 		// Update vetting workflow
 		if ( isset( $_POST['vetting_workflow'] ) ) {
@@ -587,6 +592,28 @@ $social_platforms = $wpdb->get_results(
 						<textarea id="subtotal_disclaimer_text" name="subtotal_disclaimer_text" rows="4" class="large-text"><?php echo esc_textarea( Remember_Billing_Messaging::get_subtotal_disclaimer() ); ?></textarea>
 						<p class="description">
 							<?php esc_html_e( 'Shown on billing/application pricing touchpoints. Explains that reMember shows subtotal estimates and the active billing provider (QuickBooks or Xero) sends final totals/taxes/payment options. Leave the default wording to follow the selected provider automatically.', 'remember' ); ?>
+						</p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row">
+						<label for="ticket_logo_id"><?php esc_html_e( 'Ticket logo override', 'remember' ); ?></label>
+					</th>
+					<td>
+						<?php
+						$ticket_logo_id  = isset( $options['ticket_logo_id'] ) ? absint( $options['ticket_logo_id'] ) : 0;
+						$ticket_logo_url = $ticket_logo_id ? wp_get_attachment_image_url( $ticket_logo_id, 'medium' ) : '';
+						?>
+						<input type="hidden" id="ticket_logo_id" name="ticket_logo_id" value="<?php echo esc_attr( $ticket_logo_id ); ?>">
+						<div id="remember-ticket-logo-preview" style="margin-bottom: 8px;">
+							<?php if ( $ticket_logo_url ) : ?>
+								<img src="<?php echo esc_url( $ticket_logo_url ); ?>" alt="" style="max-height: 72px; width: auto;">
+							<?php endif; ?>
+						</div>
+						<button type="button" class="button" id="remember-ticket-logo-select"><?php esc_html_e( 'Select logo', 'remember' ); ?></button>
+						<button type="button" class="button" id="remember-ticket-logo-clear" <?php disabled( ! $ticket_logo_id ); ?>><?php esc_html_e( 'Use site logo', 'remember' ); ?></button>
+						<p class="description">
+							<?php esc_html_e( 'Admission tickets use the WordPress Site Logo by default. Set an override here if tickets should show a different mark.', 'remember' ); ?>
 						</p>
 					</td>
 				</tr>

@@ -54,7 +54,10 @@ class Remember_Admin {
 	 */
 	public function enqueue_styles() {
 		$screen = get_current_screen();
-		if ( $screen && strpos( $screen->id, 'remember' ) !== false ) {
+		if ( ! $screen ) {
+			return;
+		}
+		if ( strpos( $screen->id, 'remember' ) !== false ) {
 			wp_enqueue_style( $this->plugin_name, plugin_dir_url( __FILE__ ) . '../assets/css/admin.css', array(), $this->version, 'all' );
 			// Photo cropper styles (shared with front-end) on Members edit.
 			if ( false !== strpos( $screen->id, 'remember-members' ) ) {
@@ -67,6 +70,10 @@ class Remember_Admin {
 				);
 			}
 		}
+		// Timezone combobox on WP user profile screens.
+		if ( in_array( $screen->id, array( 'profile', 'user-edit' ), true ) ) {
+			wp_enqueue_style( $this->plugin_name . '-timezone', plugin_dir_url( __FILE__ ) . '../assets/css/admin.css', array(), $this->version, 'all' );
+		}
 	}
 
 	/**
@@ -76,8 +83,18 @@ class Remember_Admin {
 	 */
 	public function enqueue_scripts() {
 		$screen = get_current_screen();
-		if ( $screen && strpos( $screen->id, 'remember' ) !== false ) {
-			wp_enqueue_script( $this->plugin_name, plugin_dir_url( __FILE__ ) . '../assets/js/admin.js', array( 'jquery' ), $this->version, false );
+		if ( ! $screen ) {
+			return;
+		}
+		if ( strpos( $screen->id, 'remember' ) !== false ) {
+			wp_enqueue_script(
+				$this->plugin_name . '-timezone',
+				plugin_dir_url( __FILE__ ) . '../assets/js/timezone-picker.js',
+				array( 'jquery' ),
+				$this->version,
+				true
+			);
+			wp_enqueue_script( $this->plugin_name, plugin_dir_url( __FILE__ ) . '../assets/js/admin.js', array( 'jquery', $this->plugin_name . '-timezone' ), $this->version, true );
 			// Localize script for AJAX
 			wp_localize_script( $this->plugin_name, 'rememberAjax', array(
 				'ajaxurl' => admin_url( 'admin-ajax.php' ),
@@ -93,6 +110,18 @@ class Remember_Admin {
 					true
 				);
 			}
+			if ( false !== strpos( $screen->id, 'remember-settings' ) ) {
+				wp_enqueue_media();
+			}
+		}
+		if ( in_array( $screen->id, array( 'profile', 'user-edit' ), true ) ) {
+			wp_enqueue_script(
+				$this->plugin_name . '-timezone',
+				plugin_dir_url( __FILE__ ) . '../assets/js/timezone-picker.js',
+				array( 'jquery' ),
+				$this->version,
+				true
+			);
 		}
 	}
 

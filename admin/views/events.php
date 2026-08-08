@@ -165,7 +165,7 @@ if ( isset( $_POST['remember_event_action'] ) && check_admin_referer( 'remember_
 		}
 		$data = array(
 			'event_name'        => sanitize_text_field( wp_unslash( $_POST['event_name'] ) ),
-			'event_description' => sanitize_textarea_field( wp_unslash( $_POST['event_description'] ) ),
+			'event_description' => isset( $_POST['event_description'] ) ? wp_kses_post( wp_unslash( $_POST['event_description'] ) ) : '',
 			'location_id'       => ! empty( $_POST['location_id'] ) ? absint( $_POST['location_id'] ) : null,
 			'start_date'        => sanitize_text_field( wp_unslash( $_POST['start_date'] ) ),
 			'end_date'          => sanitize_text_field( wp_unslash( $_POST['end_date'] ) ),
@@ -196,7 +196,7 @@ if ( isset( $_POST['remember_event_action'] ) && check_admin_referer( 'remember_
 		$event_id = absint( $_POST['event_id'] );
 		$data = array(
 			'event_name'        => sanitize_text_field( wp_unslash( $_POST['event_name'] ) ),
-			'event_description' => sanitize_textarea_field( wp_unslash( $_POST['event_description'] ) ),
+			'event_description' => isset( $_POST['event_description'] ) ? wp_kses_post( wp_unslash( $_POST['event_description'] ) ) : '',
 			'location_id'       => ! empty( $_POST['location_id'] ) ? absint( $_POST['location_id'] ) : null,
 			'start_date'        => sanitize_text_field( wp_unslash( $_POST['start_date'] ) ),
 			'end_date'          => sanitize_text_field( wp_unslash( $_POST['end_date'] ) ),
@@ -323,8 +323,23 @@ if ( isset( $_GET['view'] ) ) {
 						<td><input type="text" id="event_name" name="event_name" class="regular-text" value="<?php echo esc_attr( $editing_event->event_name ); ?>" required></td>
 					</tr>
 					<tr>
-						<th><label for="event_description"><?php esc_html_e( 'Description', 'remember' ); ?></label></th>
-						<td><textarea id="event_description" name="event_description" class="large-text" rows="5"><?php echo esc_textarea( $editing_event->event_description ); ?></textarea></td>
+						<th><label for="event_description"><?php esc_html_e( 'Public description', 'remember' ); ?></label></th>
+						<td>
+							<?php
+							wp_editor(
+								$editing_event->event_description,
+								'event_description',
+								array(
+									'textarea_name' => 'event_description',
+									'textarea_rows' => 8,
+									'media_buttons' => false,
+									'teeny'         => true,
+									'quicktags'     => true,
+								)
+							);
+							?>
+							<p class="description"><?php esc_html_e( 'Shown to everyone browsing the event. Use Attendee details (below, when available) for logistics only accepted attendees should see.', 'remember' ); ?></p>
+						</td>
 					</tr>
 					<tr>
 						<th><label for="location_id"><?php esc_html_e( 'Location', 'remember' ); ?></label></th>
@@ -466,8 +481,22 @@ if ( isset( $_GET['view'] ) ) {
 						<td><input type="text" id="event_name" name="event_name" class="regular-text" required></td>
 					</tr>
 					<tr>
-						<th><label for="event_description"><?php esc_html_e( 'Description', 'remember' ); ?></label></th>
-						<td><textarea id="event_description" name="event_description" class="large-text" rows="5"></textarea></td>
+						<th><label for="event_description"><?php esc_html_e( 'Public description', 'remember' ); ?></label></th>
+						<td>
+							<?php
+							wp_editor(
+								'',
+								'event_description_new',
+								array(
+									'textarea_name' => 'event_description',
+									'textarea_rows' => 8,
+									'media_buttons' => false,
+									'teeny'         => true,
+									'quicktags'     => true,
+								)
+							);
+							?>
+						</td>
 					</tr>
 					<tr>
 						<th><label for="location_id"><?php esc_html_e( 'Location', 'remember' ); ?></label></th>

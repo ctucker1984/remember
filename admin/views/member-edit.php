@@ -277,8 +277,18 @@ if ( $photo_max_bytes < 1 ) {
 			<td>
 				<?php
 				$interests_value = $view_profile && isset( $view_profile->interests ) ? $view_profile->interests : '';
+				wp_editor(
+					$interests_value,
+					'interests',
+					array(
+						'textarea_name' => 'interests',
+						'textarea_rows' => 6,
+						'media_buttons' => false,
+						'teeny'         => true,
+						'quicktags'     => true,
+					)
+				);
 				?>
-				<textarea id="interests" name="interests" class="large-text" rows="4"><?php echo esc_textarea( $interests_value ); ?></textarea>
 			</td>
 		</tr>
 	</table>
@@ -299,9 +309,9 @@ if ( $photo_max_bytes < 1 ) {
 			</td>
 		</tr>
 		<tr>
-			<th><label for="emergency_contact_phone"><?php esc_html_e( 'Phone', 'remember' ); ?></label></th>
+			<th><label for="emergency_contact_phone"><?php esc_html_e( 'Phone', 'remember' ); ?> <span class="description">(required)</span></label></th>
 			<td>
-				<input type="text" id="emergency_contact_phone" name="emergency_contact_phone" class="regular-text" value="<?php echo esc_attr( $view_profile ? $view_profile->emergency_contact_phone : '' ); ?>">
+				<input type="text" id="emergency_contact_phone" name="emergency_contact_phone" class="regular-text" value="<?php echo esc_attr( $view_profile ? $view_profile->emergency_contact_phone : '' ); ?>" placeholder="<?php esc_attr_e( '+18055551212', 'remember' ); ?>" required>
 			</td>
 		</tr>
 		<tr>

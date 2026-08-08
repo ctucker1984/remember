@@ -1,0 +1,38 @@
+# reMember 1.2.0 — TODO
+
+**Branch:** `v1.2.0`  
+**Includes:** Admission tickets + roadmap slices **A–D**. Slices **E–F** → 1.3.0.
+
+## Tickets (prior)
+
+- [x] HTML ticket + stamps + member/admin print + emails + Email Ticket button
+- See `TODO_TICKETS.md`
+
+## A — Polish
+
+- [x] Slash-escaping / `wp_unslash` on admin text saves
+- [x] Rich text (`wp_editor`) for location details + event public description + member Interests (admin + front)
+- [x] Timezone: single typeahead combobox (type “Chicago” in the field; no separate filter)
+- [x] Emergency contact phone required (admin edit + server check)
+- [x] Admin Declined vs Member Cancelled; invoice prompt void / refund / leave; ticket VOID
+
+## B — Profile / registration
+
+**Required (registration + profile):** Nickname; Legal First/Last; Street; City; State/Province; Postal Code; Cell Phone; Time Zone; Instant Messenger; Emergency First/Last/Phone/Relationship.
+
+- [ ] Clothing sizes (US male dropdowns) — awaiting exact enums if not default
+- [ ] Full registration profile using required list above; other fields optional
+
+## C — Events
+
+- [ ] Add-on max qty per application (default 1) — confirm if per-role matrix needed now
+- [ ] Attendee-only event details field + front-end gate
+
+## D — Billing
+
+- [ ] Auto-email invoice from Xero/QBO on accept
+- [ ] Member ledger chronological order + Xero credit-note accounting
+
+## Docs
+
+- [x] `TODO_ROADMAP_POST_DEMO.md` — A–D in 1.2.0, E–F in 1.3.0

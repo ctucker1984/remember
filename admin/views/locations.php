@@ -43,7 +43,7 @@ if ( isset( $_POST['remember_location_action'] ) && check_admin_referer( 'rememb
 			'address_state'  => sanitize_text_field( $_POST['address_state'] ),
 			'address_postal' => sanitize_text_field( $_POST['address_postal'] ),
 			'address_country' => sanitize_text_field( $_POST['address_country'] ),
-			'details'        => sanitize_textarea_field( $_POST['details'] ),
+			'details'        => isset( $_POST['details'] ) ? wp_kses_post( wp_unslash( $_POST['details'] ) ) : '',
 			'is_active'      => isset( $_POST['is_active'] ) ? 1 : 0,
 		);
 		
@@ -82,7 +82,7 @@ if ( isset( $_POST['remember_location_action'] ) && check_admin_referer( 'rememb
 			'address_state'  => sanitize_text_field( $_POST['address_state'] ),
 			'address_postal' => sanitize_text_field( $_POST['address_postal'] ),
 			'address_country' => sanitize_text_field( $_POST['address_country'] ),
-			'details'        => sanitize_textarea_field( $_POST['details'] ),
+			'details'        => isset( $_POST['details'] ) ? wp_kses_post( wp_unslash( $_POST['details'] ) ) : '',
 			'is_active'      => isset( $_POST['is_active'] ) ? 1 : 0,
 		);
 		
@@ -274,7 +274,21 @@ function remember_format_address( $location ) {
 					</tr>
 					<tr>
 						<th><label for="details"><?php esc_html_e( 'Details', 'remember' ); ?></label></th>
-						<td><textarea id="details" name="details" class="large-text" rows="5"><?php echo esc_textarea( $editing_location->details ); ?></textarea></td>
+						<td>
+							<?php
+							wp_editor(
+								$editing_location->details,
+								'details',
+								array(
+									'textarea_name' => 'details',
+									'textarea_rows' => 8,
+									'media_buttons' => false,
+									'teeny'         => true,
+									'quicktags'     => true,
+								)
+							);
+							?>
+						</td>
 					</tr>
 					<tr>
 						<th><label for="is_active"><?php esc_html_e( 'Active', 'remember' ); ?></label></th>
@@ -361,7 +375,21 @@ function remember_format_address( $location ) {
 					</tr>
 					<tr>
 						<th><label for="details"><?php esc_html_e( 'Details', 'remember' ); ?></label></th>
-						<td><textarea id="details" name="details" class="large-text" rows="5"></textarea></td>
+						<td>
+							<?php
+							wp_editor(
+								'',
+								'details_new',
+								array(
+									'textarea_name' => 'details',
+									'textarea_rows' => 8,
+									'media_buttons' => false,
+									'teeny'         => true,
+									'quicktags'     => true,
+								)
+							);
+							?>
+						</td>
 					</tr>
 					<tr>
 						<th><label for="is_active"><?php esc_html_e( 'Active', 'remember' ); ?></label></th>

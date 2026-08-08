@@ -240,8 +240,11 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 		}
 
 		$cell_phone_check = isset( $_POST['cell_phone'] ) ? sanitize_text_field( wp_unslash( $_POST['cell_phone'] ) ) : '';
+		$emergency_phone_check = isset( $_POST['emergency_contact_phone'] ) ? sanitize_text_field( wp_unslash( $_POST['emergency_contact_phone'] ) ) : '';
 		if ( '' === $cell_phone_check ) {
 			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Cell phone is required.', 'remember' ) . '</p></div>';
+		} elseif ( '' === $emergency_phone_check ) {
+			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Emergency contact phone is required.', 'remember' ) . '</p></div>';
 		} else {
 		
 		global $wpdb;
@@ -251,7 +254,7 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 			$user_update_data = array( 'ID' => $member_id );
 			
 			if ( isset( $_POST['display_name'] ) ) {
-				$user_update_data['display_name'] = sanitize_text_field( $_POST['display_name'] );
+				$user_update_data['display_name'] = sanitize_text_field( wp_unslash( $_POST['display_name'] ) );
 			}
 			
 			$update_result = wp_update_user( $user_update_data );
@@ -259,7 +262,7 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 			if ( ! is_wp_error( $update_result ) ) {
 				// Update nickname in user meta
 				if ( isset( $_POST['nickname'] ) ) {
-					update_user_meta( $member_id, 'nickname', sanitize_text_field( $_POST['nickname'] ) );
+					update_user_meta( $member_id, 'nickname', sanitize_text_field( wp_unslash( $_POST['nickname'] ) ) );
 				}
 				Remember_Logger::info( 'WordPress user updated', array( 'user_id' => $member_id ) );
 			} else {
@@ -304,7 +307,7 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 		
 		// Save timezone to WP user meta (not member_profiles)
 		if ( isset( $_POST['timezone_string'] ) ) {
-			$timezone_string = sanitize_text_field( $_POST['timezone_string'] );
+			$timezone_string = sanitize_text_field( wp_unslash( $_POST['timezone_string'] ) );
 			if ( ! empty( $timezone_string ) ) {
 				update_user_meta( $member_id, 'timezone_string', $timezone_string );
 			} else {
@@ -315,21 +318,21 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 		
 		// Collect profile data (timezone is NOT stored here, it's in WP user meta)
 		$profile_data = array(
-			'legal_first_name' => isset( $_POST['legal_first_name'] ) ? sanitize_text_field( $_POST['legal_first_name'] ) : '',
-			'legal_last_name' => isset( $_POST['legal_last_name'] ) ? sanitize_text_field( $_POST['legal_last_name'] ) : '',
-			'address_street' => isset( $_POST['address_street'] ) ? sanitize_text_field( $_POST['address_street'] ) : '',
-			'address_city' => isset( $_POST['address_city'] ) ? sanitize_text_field( $_POST['address_city'] ) : '',
-			'address_state' => isset( $_POST['address_state'] ) ? sanitize_text_field( $_POST['address_state'] ) : '',
-			'address_postal' => isset( $_POST['address_postal'] ) ? sanitize_text_field( $_POST['address_postal'] ) : '',
-			'address_country' => isset( $_POST['address_country'] ) ? sanitize_text_field( $_POST['address_country'] ) : '',
-			'cell_phone' => isset( $_POST['cell_phone'] ) ? sanitize_text_field( $_POST['cell_phone'] ) : '',
-			'im_handle' => isset( $_POST['im_handle'] ) ? sanitize_text_field( $_POST['im_handle'] ) : '',
-			'im_type' => isset( $_POST['im_type'] ) ? sanitize_text_field( $_POST['im_type'] ) : 'telegram',
-			'interests' => isset( $_POST['interests'] ) ? sanitize_textarea_field( $_POST['interests'] ) : '',
-			'emergency_contact_first' => isset( $_POST['emergency_contact_first'] ) ? sanitize_text_field( $_POST['emergency_contact_first'] ) : '',
-			'emergency_contact_last' => isset( $_POST['emergency_contact_last'] ) ? sanitize_text_field( $_POST['emergency_contact_last'] ) : '',
-			'emergency_contact_phone' => isset( $_POST['emergency_contact_phone'] ) ? sanitize_text_field( $_POST['emergency_contact_phone'] ) : '',
-			'emergency_contact_relationship' => isset( $_POST['emergency_contact_relationship'] ) ? sanitize_text_field( $_POST['emergency_contact_relationship'] ) : '',
+			'legal_first_name' => isset( $_POST['legal_first_name'] ) ? sanitize_text_field( wp_unslash( $_POST['legal_first_name'] ) ) : '',
+			'legal_last_name' => isset( $_POST['legal_last_name'] ) ? sanitize_text_field( wp_unslash( $_POST['legal_last_name'] ) ) : '',
+			'address_street' => isset( $_POST['address_street'] ) ? sanitize_text_field( wp_unslash( $_POST['address_street'] ) ) : '',
+			'address_city' => isset( $_POST['address_city'] ) ? sanitize_text_field( wp_unslash( $_POST['address_city'] ) ) : '',
+			'address_state' => isset( $_POST['address_state'] ) ? sanitize_text_field( wp_unslash( $_POST['address_state'] ) ) : '',
+			'address_postal' => isset( $_POST['address_postal'] ) ? sanitize_text_field( wp_unslash( $_POST['address_postal'] ) ) : '',
+			'address_country' => isset( $_POST['address_country'] ) ? sanitize_text_field( wp_unslash( $_POST['address_country'] ) ) : '',
+			'cell_phone' => isset( $_POST['cell_phone'] ) ? sanitize_text_field( wp_unslash( $_POST['cell_phone'] ) ) : '',
+			'im_handle' => isset( $_POST['im_handle'] ) ? sanitize_text_field( wp_unslash( $_POST['im_handle'] ) ) : '',
+			'im_type' => isset( $_POST['im_type'] ) ? sanitize_text_field( wp_unslash( $_POST['im_type'] ) ) : 'telegram',
+			'interests' => isset( $_POST['interests'] ) ? wp_kses_post( wp_unslash( $_POST['interests'] ) ) : '',
+			'emergency_contact_first' => isset( $_POST['emergency_contact_first'] ) ? sanitize_text_field( wp_unslash( $_POST['emergency_contact_first'] ) ) : '',
+			'emergency_contact_last' => isset( $_POST['emergency_contact_last'] ) ? sanitize_text_field( wp_unslash( $_POST['emergency_contact_last'] ) ) : '',
+			'emergency_contact_phone' => isset( $_POST['emergency_contact_phone'] ) ? sanitize_text_field( wp_unslash( $_POST['emergency_contact_phone'] ) ) : '',
+			'emergency_contact_relationship' => isset( $_POST['emergency_contact_relationship'] ) ? sanitize_text_field( wp_unslash( $_POST['emergency_contact_relationship'] ) ) : '',
 			'share_email_with_events' => isset( $_POST['share_email_with_events'] ) ? 1 : 0,
 			'share_phone_with_events' => isset( $_POST['share_phone_with_events'] ) ? 1 : 0,
 			'share_location_with_events' => isset( $_POST['share_location_with_events'] ) ? 1 : 0,

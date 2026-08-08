@@ -2,7 +2,7 @@
 
 A WordPress plugin for membership-style communities: **members**, **events**, **locations**, **applications**, **vetting**, **billing** (including **QuickBooks Online**), and **role-based access**. It extends WordPress users with custom tables, an admin UI under **reMember**, and front-end templates (shortcodes and block patterns).
 
-**Version:** 1.1.2  
+**Version:** 1.2.0  
 **Requires:** WordPress 5.0 or higher  
 **License:** GPL v2 or later
 
@@ -145,7 +145,7 @@ reMember adds granular capabilities (`remember_read_events`, `remember_create_me
 
 Enable `WP_DEBUG` as needed; logging uses `Remember_Logger`.
 
-**Branching note:** Release work for this line lives on branch `v1.1.2`. Prefer clear conventional commits so the changelog below stays easy to inventory across machines.
+**Branching note:** Release work for this line lives on branch `v1.2.0`. Prefer clear conventional commits so the changelog below stays easy to inventory across machines.
 
 **Accounting providers:** One active billing provider per site (`quickbooks` or `xero`). Parallel stacks; see [`XERO_PLAN.md`](XERO_PLAN.md).
 
@@ -159,6 +159,12 @@ Enable `WP_DEBUG` as needed; logging uses `Remember_Logger`.
 ---
 
 ## Changelog
+
+### 1.2.0 (in progress)
+
+- **Admission tickets:** Printable HTML admission ticket + receipt for accepted applications (site logo / optional override, event + payment status, line items). Adverse stamps only: **PAYMENT REQUIRED** / **VOID**.
+- **Emails:** Sends ticket-ready mail on accept; paid-ticket mail when billing status becomes `paid`; balance-due reminder + Applications blast. Schema `1.18.0`.
+- **Member / admin:** View/print/download from member dashboard and application detail; void ticket from admin.
 
 ### 1.1.2
 

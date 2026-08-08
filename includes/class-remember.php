@@ -195,7 +195,9 @@ class Remember {
 		$this->loader->add_action( 'wp_enqueue_scripts', $plugin_public, 'enqueue_scripts' );
 		$this->loader->add_action( 'init', $plugin_public, 'register_shortcodes' );
 		$this->loader->add_action( 'template_redirect', $plugin_public, 'maybe_process_member_registration', 1 );
+		$this->loader->add_action( 'template_redirect', $plugin_public, 'maybe_output_admission_ticket', 0 );
 		$this->loader->add_action( 'remember_member_profile_saved', $this, 'maybe_sync_member_profile_to_qb', 10, 1 );
+		$this->loader->add_action( 'remember_payment_status_changed', $this, 'on_payment_status_changed', 10, 4 );
 
 		// Register FSE block patterns
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-fse.php';
@@ -219,6 +221,20 @@ class Remember {
 		$this->loader->add_action( 'admin_init', $this, 'maybe_schedule_qb_sync' );
 		
 		$this->loader->run();
+	}
+
+	/**
+	 * When payment status changes to paid, email the paid ticket.
+	 *
+	 * @param int    $payment_id Payment ID.
+	 * @param string $old_status Previous status.
+	 * @param string $new_status New status.
+	 * @param object $payment    Payment row.
+	 * @return void
+	 */
+	public function on_payment_status_changed( $payment_id, $old_status, $new_status, $payment ) {
+		require_once plugin_dir_path( __FILE__ ) . 'utilities/class-remember-notifications.php';
+		Remember_Notifications::maybe_send_on_payment_status_change( $payment_id, $old_status, $new_status, $payment );
 	}
 
 	/**

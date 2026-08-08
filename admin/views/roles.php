@@ -55,7 +55,7 @@ if ( isset( $_POST['remember_role_action'] ) && check_admin_referer( 'remember_r
 			'role_name'     => sanitize_text_field( $_POST['role_name'] ),
 			'role_type'     => sanitize_text_field( $_POST['role_type'] ),
 			'is_event_role' => ( 'event' === $_POST['role_type'] ) ? 1 : 0,
-			'description'   => sanitize_textarea_field( $_POST['description'] ),
+			'description'   => isset( $_POST['description'] ) ? sanitize_textarea_field( wp_unslash( $_POST['description'] ) ) : '',
 		);
 		$role_id = $role_model->create( $data );
 		if ( $role_id ) {
@@ -84,7 +84,7 @@ if ( isset( $_POST['remember_role_action'] ) && check_admin_referer( 'remember_r
 			'role_type'        => sanitize_text_field( $_POST['role_type'] ),
 			'is_event_role'    => ( 'event' === $_POST['role_type'] ) ? 1 : 0,
 			'show_in_frontend' => isset( $_POST['show_in_frontend'] ) && $_POST['show_in_frontend'] ? 1 : 0,
-			'description'      => sanitize_textarea_field( $_POST['description'] ),
+			'description'      => isset( $_POST['description'] ) ? sanitize_textarea_field( wp_unslash( $_POST['description'] ) ) : '',
 		);
 		$update_result = $role_model->update( $role_id, $data );
 		

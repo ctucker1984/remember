@@ -435,6 +435,35 @@ class Remember_QuickBooks_API {
 	}
 
 	/**
+	 * Void a QuickBooks invoice.
+	 *
+	 * @param string $invoice_id Invoice Id.
+	 * @return array|WP_Error Voided invoice payload or error.
+	 */
+	public static function void_invoice( $invoice_id ) {
+		$invoice = self::get_invoice( $invoice_id );
+		if ( is_wp_error( $invoice ) ) {
+			return $invoice;
+		}
+		if ( empty( $invoice['Id'] ) || ! isset( $invoice['SyncToken'] ) ) {
+			return new WP_Error( 'qb_void_missing_token', __( 'QuickBooks invoice is missing Id/SyncToken for void.', 'remember' ) );
+		}
+
+		$response = self::api_request(
+			'POST',
+			'invoice?operation=void',
+			array(
+				'Id'        => (string) $invoice['Id'],
+				'SyncToken' => (string) $invoice['SyncToken'],
+			)
+		);
+		if ( is_wp_error( $response ) ) {
+			return $response;
+		}
+		return isset( $response['Invoice'] ) ? $response['Invoice'] : $response;
+	}
+
+	/**
 	 * Deep link into QuickBooks Online UI for an invoice (staff browser).
 	 *
 	 * @param string $invoice_id QBO Invoice Id (entity Id, not DocNumber).

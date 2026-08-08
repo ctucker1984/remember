@@ -66,6 +66,15 @@ class Remember_Seeder {
 	}
 
 	/**
+	 * Ensure notification setting rows exist (safe for upgrades).
+	 *
+	 * @return void
+	 */
+	public function ensure_notification_settings() {
+		$this->seed_notification_settings();
+	}
+
+	/**
 	 * Seed default location.
 	 */
 	private function seed_default_location() {
@@ -373,6 +382,7 @@ class Remember_Seeder {
 			'event_application_accepted',
 			'event_application_declined',
 			'event_application_waitlisted',
+			'event_ticket_paid',
 			'payment_recorded',
 			'payment_due_reminder',
 			'vetting_collaborator_invited',

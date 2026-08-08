@@ -335,6 +335,9 @@
 	$(function() {
 		initDisplayNameNicknameSync();
 		initProfilePhotoCropper();
+		if (typeof window.rememberInitTimezoneComboboxes === 'function') {
+			window.rememberInitTimezoneComboboxes();
+		}
 	});
 
 })(jQuery);

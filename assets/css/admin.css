@@ -533,3 +533,72 @@
 		grid-template-columns: 1fr;
 	}
 }
+
+.remember-timezone-picker {
+	position: relative;
+	max-width: 28rem;
+}
+
+.remember-timezone-picker .remember-timezone-select--sr {
+	position: absolute !important;
+	width: 1px !important;
+	height: 1px !important;
+	padding: 0 !important;
+	margin: -1px !important;
+	overflow: hidden !important;
+	clip: rect(0, 0, 0, 0) !important;
+	white-space: nowrap !important;
+	border: 0 !important;
+}
+
+.remember-timezone-combobox-input.regular-text,
+.remember-timezone-combobox-input {
+	width: 100%;
+	max-width: 28rem;
+	box-sizing: border-box;
+}
+
+.remember-timezone-combobox-list {
+	position: absolute;
+	z-index: 100000;
+	left: 0;
+	right: 0;
+	top: calc(100% + 2px);
+	max-height: 260px;
+	margin: 0;
+	padding: 4px 0;
+	overflow: auto;
+	list-style: none;
+	background: #fff;
+	border: 1px solid #8c8f94;
+	border-radius: 4px;
+	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+.remember-timezone-combobox-group {
+	padding: 6px 10px 2px;
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+	color: #646970;
+}
+
+.remember-timezone-combobox-option {
+	padding: 6px 12px;
+	cursor: pointer;
+}
+
+.remember-timezone-combobox-option.is-active,
+.remember-timezone-combobox-option:hover {
+	background: #2271b1;
+	color: #fff;
+}
+
+.remember-timezone-combobox-option.is-selected {
+	font-weight: 600;
+}
+
+.remember-timezone-combobox-empty {
+	padding: 8px 12px;
+	color: #646970;
+}

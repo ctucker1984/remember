@@ -13,10 +13,10 @@
 - [x] Admin Members → Edit Profile — same cropper (was plain file input).
 - [x] Smoke-test register + front-end profile edit + admin member edit on demo — skipped by request; ship without.
 
-**Branch:** `v1.1.2`
+**Branch:** `v1.1.2` (shipped)
 
 ---
 
-## Deferred (not 1.1.2)
+## Deferred (completed on v1.2.0)
 
-Printable admission ticket + receipt — decisions locked in `TODO_TICKETS.md`. Implement after 1.1.2 ships.
+Printable admission ticket + receipt — see `TODO_TICKETS.md` / branch `v1.2.0`.

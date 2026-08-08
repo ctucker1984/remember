@@ -101,7 +101,21 @@ if ( isset( $_POST['remember_member_application_action'] ) && check_admin_refere
 				}
 			}
 		} elseif ( 'withdraw_application' === $member_action && 'accepted' === $application->status ) {
-			$application_model->update_status( $application_id, 'cancelled', get_current_user_id() );
+			require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-unwind.php';
+			$billing_action = isset( $_POST['billing_action'] ) ? Remember_Billing_Unwind::sanitize_action( wp_unslash( $_POST['billing_action'] ) ) : 'leave';
+			$updated        = $application_model->update_status( $application_id, 'cancelled', get_current_user_id() );
+			if ( false !== $updated ) {
+				$unwind = Remember_Billing_Unwind::apply(
+					$application_id,
+					$billing_action,
+					sprintf( __( 'Member cancelled application #%d', 'remember' ), $application_id )
+				);
+				if ( is_wp_error( $unwind ) ) {
+					echo '<div class="remember-notice remember-notice-warning"><p>' . esc_html( $unwind->get_error_message() ) . '</p></div>';
+				} else {
+					echo '<div class="remember-notice remember-notice-success"><p>' . esc_html__( 'Application cancelled. Your ticket is marked VOID.', 'remember' ) . '</p></div>';
+				}
+			}
 		}
 	}
 }
@@ -291,13 +305,33 @@ foreach ( $selected_application_addons as $selected_addon_row ) {
 
 					<button type="submit" class="remember-button remember-button-primary"><?php esc_html_e( 'Save Application Changes', 'remember' ); ?></button>
 				</form>
-			<?php elseif ( 'accepted' === $selected_application->status ) : ?>
-				<form method="post" action="" style="margin-top: 15px;">
+			<?php elseif ( 'accepted' === $selected_application->status || ! empty( $selected_application->ticket_voided ) ) : ?>
+				<?php
+				require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-ticket.php';
+				if ( Remember_Ticket::is_eligible( $selected_application ) ) :
+					$ticket_url = Remember_Ticket::get_ticket_url( $selected_application->application_id );
+					?>
+					<p style="margin-top: 15px;">
+						<a class="remember-button remember-button-primary" href="<?php echo esc_url( $ticket_url ); ?>" target="_blank" rel="noopener noreferrer"><?php esc_html_e( 'View / Print Ticket', 'remember' ); ?></a>
+					</p>
+				<?php endif; ?>
+				<?php if ( 'accepted' === $selected_application->status ) : ?>
+				<?php
+				require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-unwind.php';
+				$cancel_has_invoice = Remember_Billing_Unwind::has_invoice( $selected_application->application_id );
+				?>
+				<form method="post" action="" style="margin-top: 15px;" class="remember-cancel-application">
 					<?php wp_nonce_field( 'remember_member_application_action', 'remember_member_application_nonce' ); ?>
 					<input type="hidden" name="remember_member_application_action" value="withdraw_application">
 					<input type="hidden" name="application_id" value="<?php echo esc_attr( $selected_application->application_id ); ?>">
-					<button type="submit" class="remember-button remember-button-secondary" onclick="return confirm('<?php echo esc_js( __( 'Withdraw from this accepted event?', 'remember' ) ); ?>');"><?php esc_html_e( 'Withdraw Application', 'remember' ); ?></button>
+					<h4 style="margin: 0 0 8px;"><?php esc_html_e( 'Cancel application (member)', 'remember' ); ?></h4>
+					<p class="remember-description" style="margin-top: 0;">
+						<?php esc_html_e( 'This sets your application to Cancelled and voids your admission ticket. Choose what should happen to the invoice.', 'remember' ); ?>
+					</p>
+					<?php echo Remember_Billing_Unwind::render_action_radios( 'billing_action', $cancel_has_invoice ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in helper. ?>
+					<button type="submit" class="remember-button remember-button-secondary" style="margin-top: 10px;" onclick="return confirm('<?php echo esc_js( __( 'Cancel this application? Confirm your invoice choice above.', 'remember' ) ); ?>');"><?php esc_html_e( 'Cancel Application', 'remember' ); ?></button>
 				</form>
+				<?php endif; ?>
 			<?php endif; ?>
 		</div>
 	<?php else : ?>

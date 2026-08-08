@@ -62,11 +62,26 @@ class Remember_Public {
 	 * @since    1.0.0
 	 */
 	public function enqueue_scripts() {
-		wp_enqueue_script( $this->plugin_name, plugin_dir_url( __FILE__ ) . '../assets/js/public.js', array( 'jquery' ), $this->version, true );
+		wp_enqueue_script(
+			$this->plugin_name . '-timezone',
+			plugin_dir_url( __FILE__ ) . '../assets/js/timezone-picker.js',
+			array( 'jquery' ),
+			$this->version,
+			true
+		);
+		wp_enqueue_script( $this->plugin_name, plugin_dir_url( __FILE__ ) . '../assets/js/public.js', array( 'jquery', $this->plugin_name . '-timezone' ), $this->version, true );
 		wp_localize_script( $this->plugin_name, 'rememberPublic', array(
 			'ajaxurl' => admin_url( 'admin-ajax.php' ),
 			'nonce'   => wp_create_nonce( 'remember_public_nonce' ),
 		) );
+
+		// Front profile edit uses wp_editor for Interests.
+		if ( isset( $_GET['edit'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- view flag only.
+			global $post;
+			if ( $post instanceof WP_Post && has_shortcode( $post->post_content, 'remember_profile' ) ) {
+				wp_enqueue_editor();
+			}
+		}
 	}
 
 	/**
@@ -83,6 +98,42 @@ class Remember_Public {
 		add_shortcode( 'remember_event_detail', array( $this, 'shortcode_event_detail' ) );
 		add_shortcode( 'remember_register', array( $this, 'shortcode_register' ) );
 		add_shortcode( 'remember_registration', array( $this, 'shortcode_register' ) );
+	}
+
+	/**
+	 * Output printable admission ticket when ?remember_ticket= is present.
+	 *
+	 * @return void
+	 */
+	public function maybe_output_admission_ticket() {
+		if ( ! isset( $_GET['remember_ticket'] ) ) {
+			return;
+		}
+
+		$application_id = absint( $_GET['remember_ticket'] );
+		if ( $application_id <= 0 ) {
+			return;
+		}
+
+		if ( ! is_user_logged_in() ) {
+			auth_redirect();
+			exit;
+		}
+
+		$nonce = isset( $_GET['remember_ticket_nonce'] ) ? sanitize_text_field( wp_unslash( $_GET['remember_ticket_nonce'] ) ) : '';
+		if ( ! wp_verify_nonce( $nonce, 'remember_ticket_' . $application_id ) ) {
+			wp_die( esc_html__( 'Invalid or expired ticket link. Open the ticket again from your dashboard or the admin application screen.', 'remember' ), esc_html__( 'Ticket', 'remember' ), array( 'response' => 403 ) );
+		}
+
+		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-ticket.php';
+		if ( ! Remember_Ticket::user_can_view( $application_id ) ) {
+			wp_die( esc_html__( 'You do not have permission to view this ticket.', 'remember' ), esc_html__( 'Ticket', 'remember' ), array( 'response' => 403 ) );
+		}
+
+		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-ticket-renderer.php';
+		$download = isset( $_GET['download'] ) && '1' === (string) $_GET['download'];
+		Remember_Ticket_Renderer::output_standalone( $application_id, $download );
+		exit;
 	}
 
 	/**

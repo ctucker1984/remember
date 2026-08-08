@@ -96,7 +96,7 @@ if ( isset( $_POST['remember_profile_action'] ) && check_admin_referer( 'remembe
 		'cell_phone'                  => $cell_phone,
 		'im_handle'                   => isset( $_POST['im_handle'] ) ? sanitize_text_field( wp_unslash( $_POST['im_handle'] ) ) : '',
 		'im_type'                     => isset( $_POST['im_type'] ) ? sanitize_text_field( wp_unslash( $_POST['im_type'] ) ) : 'telegram',
-		'interests'                   => isset( $_POST['interests'] ) ? sanitize_textarea_field( wp_unslash( $_POST['interests'] ) ) : '',
+		'interests'                   => isset( $_POST['interests'] ) ? wp_kses_post( wp_unslash( $_POST['interests'] ) ) : '',
 		'emergency_contact_first'     => isset( $_POST['emergency_contact_first'] ) ? sanitize_text_field( wp_unslash( $_POST['emergency_contact_first'] ) ) : '',
 		'emergency_contact_last'      => isset( $_POST['emergency_contact_last'] ) ? sanitize_text_field( wp_unslash( $_POST['emergency_contact_last'] ) ) : '',
 		'emergency_contact_phone'     => isset( $_POST['emergency_contact_phone'] ) ? sanitize_text_field( wp_unslash( $_POST['emergency_contact_phone'] ) ) : '',
@@ -669,7 +669,23 @@ if ( ! empty( $selected_allergy_ids ) ) {
 				<div class="remember-form-row">
 					<div class="remember-form-col remember-form-col-full">
 						<label for="interests" class="remember-form-label"><?php esc_html_e( 'Interests', 'remember' ); ?></label>
-						<textarea id="interests" name="interests" class="remember-form-control" rows="4"><?php echo esc_textarea( $profile ? $profile->interests : '' ); ?></textarea>
+						<?php
+						if ( ! wp_script_is( 'editor', 'enqueued' ) && ! wp_script_is( 'editor', 'done' ) ) {
+							wp_enqueue_editor();
+						}
+						wp_editor(
+							$profile && isset( $profile->interests ) ? $profile->interests : '',
+							'interests',
+							array(
+								'textarea_name' => 'interests',
+								'textarea_rows' => 6,
+								'media_buttons' => false,
+								'teeny'         => true,
+								'quicktags'     => true,
+								'editor_class'  => 'remember-form-control',
+							)
+						);
+						?>
 					</div>
 				</div>
 			</div>
@@ -908,7 +924,7 @@ if ( ! empty( $selected_allergy_ids ) ) {
 					<div class="remember-form-section">
 						<h3 class="remember-form-section-title"><?php esc_html_e( 'Interests', 'remember' ); ?></h3>
 						<div class="remember-profile-view-item remember-profile-view-item-full">
-							<span class="remember-profile-view-value"><?php echo esc_html( $profile->interests ); ?></span>
+							<span class="remember-profile-view-value remember-richtext"><?php echo wp_kses_post( wpautop( $profile->interests ) ); ?></span>
 						</div>
 					</div>
 				<?php endif; ?>

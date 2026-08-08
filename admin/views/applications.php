@@ -21,6 +21,8 @@ require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remem
 
 Remember_Logger::debug( 'Applications page loaded' );
 
+require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-ticket.php';
+
 $application_model = new Remember_Application();
 $event_model = new Remember_Event();
 $member_model = new Remember_Member();
@@ -214,6 +216,21 @@ if ( isset( $_POST['remember_application_action'] ) && check_admin_referer( 'rem
 				if ( ! $invoice_notice_shown ) {
 					echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Application accepted successfully.', 'remember' ) . '</p></div>';
 				}
+
+				require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-notifications.php';
+				$notify_result = Remember_Notifications::send_ticket_ready( $application_id );
+				if ( is_wp_error( $notify_result ) ) {
+					Remember_Logger::warning(
+						'Ticket ready email failed after accept',
+						array(
+							'application_id' => $application_id,
+							'error'          => $notify_result->get_error_message(),
+						)
+					);
+					echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html__( 'Application accepted, but the ticket email could not be sent: ', 'remember' ) . esc_html( $notify_result->get_error_message() ) . '</p></div>';
+				} elseif ( true === $notify_result ) {
+					echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Ticket email sent to the member.', 'remember' ) . '</p></div>';
+				}
 					} else {
 						Remember_Logger::error( 'Failed to accept application', array( 'application_id' => $application_id ) );
 						echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to accept application.', 'remember' ) . '</p></div>';
@@ -227,23 +244,72 @@ if ( isset( $_POST['remember_application_action'] ) && check_admin_referer( 'rem
 			}
 			$application = $application_model->get( $application_id );
 			$previous_status = $application ? $application->status : '';
-			$result = $application_model->update_status( $application_id, 'declined', get_current_user_id() );
-			if ( $result !== false ) {
-				Remember_Logger::info( 'Application declined', array( 'application_id' => $application_id ) );
-				if ( 'accepted' === $previous_status && $application ) {
-					$event = $event_model->get( $application->event_id );
-					$event_name = $event ? $event->event_name : __( 'Unknown Event', 'remember' );
-					remember_notify_event_admins(
-						$application->event_id,
-						sprintf( __( 'Seat opened for %s', 'remember' ), $event_name ),
-						sprintf( __( 'A previously accepted attendee was declined. A seat is now available for this event.%1$sEvent: %2$s', 'remember' ), "\n", $event_name )
-					);
-					echo '<div class="notice notice-info is-dismissible"><p>' . esc_html__( 'Seat opened and Event Administrators were notified for manual waitlist promotion.', 'remember' ) . '</p></div>';
-				}
-				echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Application declined successfully.', 'remember' ) . '</p></div>';
+			if ( ! $application || ! in_array( $previous_status, array( 'pending', 'waitlisted', 'accepted' ), true ) ) {
+				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Only pending, waitlisted, or accepted applications can be declined.', 'remember' ) . '</p></div>';
 			} else {
-				Remember_Logger::error( 'Failed to decline application', array( 'application_id' => $application_id ) );
-				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to decline application.', 'remember' ) . '</p></div>';
+				require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-unwind.php';
+				$billing_action = isset( $_POST['billing_action'] ) ? Remember_Billing_Unwind::sanitize_action( wp_unslash( $_POST['billing_action'] ) ) : 'leave';
+
+				$result = $application_model->update_status( $application_id, 'declined', get_current_user_id() );
+				if ( $result !== false ) {
+					Remember_Logger::info(
+						'Application declined',
+						array(
+							'application_id' => $application_id,
+							'billing_action' => $billing_action,
+							'previous'       => $previous_status,
+						)
+					);
+
+					$unwind = Remember_Billing_Unwind::apply(
+						$application_id,
+						$billing_action,
+						sprintf( __( 'Admin declined application #%d', 'remember' ), $application_id )
+					);
+
+					if ( 'accepted' === $previous_status ) {
+						$event = $event_model->get( $application->event_id );
+						$event_name = $event ? $event->event_name : __( 'Unknown Event', 'remember' );
+						remember_notify_event_admins(
+							$application->event_id,
+							sprintf( __( 'Seat opened for %s', 'remember' ), $event_name ),
+							sprintf( __( 'A previously accepted attendee was declined. A seat is now available for this event.%1$sEvent: %2$s', 'remember' ), "\n", $event_name )
+						);
+						echo '<div class="notice notice-info is-dismissible"><p>' . esc_html__( 'Seat opened and Event Administrators were notified for manual waitlist promotion.', 'remember' ) . '</p></div>';
+					}
+
+					$member_user = get_user_by( 'ID', $application->member_id );
+					if ( ! isset( $event_name ) ) {
+						$event_obj  = $event_model->get( $application->event_id );
+						$event_name = $event_obj ? $event_obj->event_name : '';
+					}
+					if ( $member_user && is_email( $member_user->user_email ) ) {
+						require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-notifications.php';
+						$notify = Remember_Notifications::send(
+							'event_application_declined',
+							array(
+								'member_name'    => $member_user->display_name,
+								'event_name'     => $event_name,
+								'application_id' => (string) $application_id,
+								'date'           => date_i18n( get_option( 'date_format' ) ),
+							),
+							$member_user->user_email
+						);
+						if ( is_wp_error( $notify ) ) {
+							Remember_Logger::warning( 'Decline email failed', array( 'error' => $notify->get_error_message() ) );
+						}
+					}
+
+					echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Application declined (admin). Ticket marked VOID.', 'remember' ) . '</p></div>';
+					if ( is_wp_error( $unwind ) ) {
+						echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html( $unwind->get_error_message() ) . '</p></div>';
+					} elseif ( 'leave' !== $billing_action ) {
+						echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Billing action applied in the connected provider.', 'remember' ) . '</p></div>';
+					}
+				} else {
+					Remember_Logger::error( 'Failed to decline application', array( 'application_id' => $application_id ) );
+					echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to decline application.', 'remember' ) . '</p></div>';
+				}
 			}
 		} elseif ( 'waitlist' === $action ) {
 			// Check capability
@@ -328,7 +394,87 @@ if ( isset( $_POST['remember_application_action'] ) && check_admin_referer( 'rem
 					echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html__( 'No billing provider is selected. Choose QuickBooks or Xero under Settings → General.', 'remember' ) . '</p></div>';
 				}
 			}
+		} elseif ( 'void_ticket' === $action || 'unvoid_ticket' === $action ) {
+			if ( ! current_user_can( 'remember_update_applications' ) ) {
+				wp_die( __( 'You do not have sufficient permissions to perform this action.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+			}
+			require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-ticket.php';
+			$voided = ( 'void_ticket' === $action );
+			$result = Remember_Ticket::set_voided( $application_id, $voided );
+			if ( false !== $result ) {
+				echo '<div class="notice notice-success is-dismissible"><p>' . esc_html( $voided ? __( 'Ticket marked VOID.', 'remember' ) : __( 'Ticket void cleared.', 'remember' ) ) . '</p></div>';
+			} else {
+				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Could not update ticket void status.', 'remember' ) . '</p></div>';
+			}
+		} elseif ( 'email_ticket' === $action ) {
+			if ( ! current_user_can( 'remember_update_applications' ) ) {
+				wp_die( __( 'You do not have sufficient permissions to perform this action.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+			}
+			require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-notifications.php';
+			$result = Remember_Notifications::send_current_ticket( $application_id );
+			if ( true === $result ) {
+				echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Ticket email sent to the member.', 'remember' ) . '</p></div>';
+			} elseif ( false === $result ) {
+				echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html__( 'Notification is disabled in Settings → Notifications.', 'remember' ) . '</p></div>';
+			} else {
+				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html( $result->get_error_message() ) . '</p></div>';
+			}
+		} elseif ( 'email_ticket_ready' === $action ) {
+			if ( ! current_user_can( 'remember_update_applications' ) ) {
+				wp_die( __( 'You do not have sufficient permissions to perform this action.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+			}
+			require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-notifications.php';
+			$result = Remember_Notifications::send_ticket_ready( $application_id );
+			if ( true === $result ) {
+				echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Ticket-ready email sent.', 'remember' ) . '</p></div>';
+			} elseif ( false === $result ) {
+				echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html__( 'Notification is disabled in Settings → Notifications.', 'remember' ) . '</p></div>';
+			} else {
+				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html( $result->get_error_message() ) . '</p></div>';
+			}
+		} elseif ( 'email_ticket_paid' === $action ) {
+			if ( ! current_user_can( 'remember_update_applications' ) ) {
+				wp_die( __( 'You do not have sufficient permissions to perform this action.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+			}
+			require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-notifications.php';
+			$result = Remember_Notifications::send_ticket_paid( $application_id );
+			if ( true === $result ) {
+				echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Paid-ticket email sent.', 'remember' ) . '</p></div>';
+			} elseif ( false === $result ) {
+				echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html__( 'Notification is disabled in Settings → Notifications.', 'remember' ) . '</p></div>';
+			} else {
+				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html( $result->get_error_message() ) . '</p></div>';
+			}
+		} elseif ( 'email_balance_due' === $action ) {
+			if ( ! current_user_can( 'remember_update_applications' ) ) {
+				wp_die( __( 'You do not have sufficient permissions to perform this action.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+			}
+			require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-notifications.php';
+			$result = Remember_Notifications::send_balance_due( $application_id );
+			if ( true === $result ) {
+				echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Balance-due email sent.', 'remember' ) . '</p></div>';
+			} elseif ( false === $result ) {
+				echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html__( 'Notification is disabled in Settings → Notifications.', 'remember' ) . '</p></div>';
+			} else {
+				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html( $result->get_error_message() ) . '</p></div>';
+			}
 		}
+	} elseif ( 'blast_balance_due' === $action ) {
+		if ( ! current_user_can( 'remember_update_applications' ) ) {
+			wp_die( __( 'You do not have sufficient permissions to perform this action.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+		}
+		require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-notifications.php';
+		$blast_event_id = isset( $_POST['blast_event_id'] ) ? absint( $_POST['blast_event_id'] ) : 0;
+		$stats          = Remember_Notifications::blast_balance_due( array( 'event_id' => $blast_event_id ) );
+		echo '<div class="notice notice-success is-dismissible"><p>' . esc_html(
+			sprintf(
+				/* translators: 1: sent count, 2: skipped, 3: errors */
+				__( 'Balance-due blast finished. Sent: %1$d, skipped: %2$d, errors: %3$d.', 'remember' ),
+				(int) $stats['sent'],
+				(int) $stats['skipped'],
+				(int) $stats['errors']
+			)
+		) . '</p></div>';
 	}
 }
 
@@ -571,6 +717,15 @@ $status_colors = array(
 				<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-applications' ) ); ?>" class="button"><?php esc_html_e( 'Clear Filters', 'remember' ); ?></a>
 			<?php endif; ?>
 		</form>
+		<?php if ( current_user_can( 'remember_update_applications' ) ) : ?>
+			<form method="post" action="" style="margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
+				<?php wp_nonce_field( 'remember_application_action', 'remember_application_nonce' ); ?>
+				<input type="hidden" name="remember_application_action" value="blast_balance_due">
+				<input type="hidden" name="blast_event_id" value="<?php echo esc_attr( $filter_event ); ?>">
+				<input type="submit" class="button" value="<?php echo esc_attr( $filter_event > 0 ? __( 'Email balance due (this event)', 'remember' ) : __( 'Email balance due (all accepted with balance)', 'remember' ) ); ?>" onclick="return confirm('<?php echo esc_js( __( 'Send balance-due emails to accepted applicants who still owe?', 'remember' ) ); ?>');">
+				<span class="description"><?php esc_html_e( 'Uses the Payment Due Reminder template (includes ticket link).', 'remember' ); ?></span>
+			</form>
+		<?php endif; ?>
 	</div>
 
 	<!-- Applications List -->
@@ -645,6 +800,10 @@ $status_colors = array(
 						</td>
 						<td class="column-actions">
 							<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-applications&view=' . $application->application_id ) ); ?>"><?php esc_html_e( 'View', 'remember' ); ?></a>
+							<?php if ( Remember_Ticket::is_eligible( $application ) ) : ?>
+								|
+								<a href="<?php echo esc_url( Remember_Ticket::get_ticket_url( $application->application_id ) ); ?>" target="_blank" rel="noopener noreferrer"><?php esc_html_e( 'Ticket', 'remember' ); ?></a>
+							<?php endif; ?>
 							<?php if ( 'pending' === $application->status || 'waitlisted' === $application->status ) : ?>
 								|
 								<form method="post" action="" style="display: inline;">
@@ -658,7 +817,8 @@ $status_colors = array(
 									<?php wp_nonce_field( 'remember_application_action', 'remember_application_nonce' ); ?>
 									<input type="hidden" name="remember_application_action" value="decline">
 									<input type="hidden" name="application_id" value="<?php echo esc_attr( $application->application_id ); ?>">
-									<input type="submit" class="button button-small" value="<?php esc_attr_e( 'Decline', 'remember' ); ?>" onclick="return confirm('<?php esc_attr_e( 'Decline this application?', 'remember' ); ?>');">
+									<input type="hidden" name="billing_action" value="leave">
+									<input type="submit" class="button button-small" value="<?php esc_attr_e( 'Decline', 'remember' ); ?>" onclick="return confirm('<?php echo esc_js( __( 'Decline this application? Invoice will be left unaltered. Open the application detail to void or refund.', 'remember' ) ); ?>');">
 								</form>
 								
 								<?php if ( 'pending' === $application->status ) : ?>
@@ -671,6 +831,8 @@ $status_colors = array(
 								<?php endif; ?>
 							<?php else : ?>
 								<?php if ( 'accepted' === $application->status ) : ?>
+									|
+									<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-applications&view=' . $application->application_id ) ); ?>"><?php esc_html_e( 'Decline…', 'remember' ); ?></a>
 									|
 									<form method="post" action="" style="display: inline;">
 										<?php wp_nonce_field( 'remember_application_action', 'remember_application_nonce' ); ?>

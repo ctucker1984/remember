@@ -110,6 +110,22 @@ $status_colors = array(
 				</p>
 				</div>
 			</div>
+			<?php
+			require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-ticket.php';
+			if ( Remember_Ticket::is_eligible( $viewing_application ) ) :
+				$ticket_url = Remember_Ticket::get_ticket_url( $viewing_application->application_id );
+				?>
+				<div style="display:flex; flex-direction:column; gap:8px; align-items:flex-end;">
+					<a class="button button-primary" href="<?php echo esc_url( $ticket_url ); ?>" target="_blank" rel="noopener noreferrer"><?php esc_html_e( 'View / Print Ticket', 'remember' ); ?></a>
+					<a class="button" href="<?php echo esc_url( add_query_arg( 'download', '1', $ticket_url ) ); ?>"><?php esc_html_e( 'Download Ticket', 'remember' ); ?></a>
+					<form method="post" action="" style="margin: 0;">
+						<?php wp_nonce_field( 'remember_application_action', 'remember_application_nonce' ); ?>
+						<input type="hidden" name="remember_application_action" value="email_ticket">
+						<input type="hidden" name="application_id" value="<?php echo esc_attr( $viewing_application->application_id ); ?>">
+						<input type="submit" class="button" value="<?php esc_attr_e( 'Email Ticket', 'remember' ); ?>" onclick="return confirm('<?php echo esc_js( __( 'Email this ticket to the member now?', 'remember' ) ); ?>');">
+					</form>
+				</div>
+			<?php endif; ?>
 		</div>
 	</div>
 
@@ -287,6 +303,10 @@ $status_colors = array(
 
 	<!-- Action Buttons -->
 	<?php if ( 'pending' === $viewing_application->status || 'waitlisted' === $viewing_application->status || 'accepted' === $viewing_application->status ) : ?>
+		<?php
+		require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-unwind.php';
+		$decline_has_invoice = Remember_Billing_Unwind::has_invoice( $viewing_application->application_id );
+		?>
 		<div style="background: #fff; border: 1px solid #ccd0d4; border-radius: 4px; padding: 20px; margin-top: 20px;">
 			<h3 style="margin-top: 0;"><?php esc_html_e( 'Actions', 'remember' ); ?></h3>
 			<?php if ( 'pending' === $viewing_application->status || 'waitlisted' === $viewing_application->status ) : ?>
@@ -296,17 +316,10 @@ $status_colors = array(
 					<input type="hidden" name="application_id" value="<?php echo esc_attr( $viewing_application->application_id ); ?>">
 					<input type="submit" class="button button-primary" value="<?php esc_attr_e( 'Accept Application', 'remember' ); ?>" onclick="return confirm('<?php esc_attr_e( 'Accept this application?', 'remember' ); ?>');">
 				</form>
-
-				<form method="post" action="" style="display: inline-block; margin-right: 10px;">
-					<?php wp_nonce_field( 'remember_application_action', 'remember_application_nonce' ); ?>
-					<input type="hidden" name="remember_application_action" value="decline">
-					<input type="hidden" name="application_id" value="<?php echo esc_attr( $viewing_application->application_id ); ?>">
-					<input type="submit" class="button" value="<?php esc_attr_e( 'Decline Application', 'remember' ); ?>" onclick="return confirm('<?php esc_attr_e( 'Decline this application?', 'remember' ); ?>');">
-				</form>
 			<?php endif; ?>
 
 			<?php if ( 'pending' === $viewing_application->status ) : ?>
-				<form method="post" action="" style="display: inline-block;">
+				<form method="post" action="" style="display: inline-block; margin-right: 10px;">
 					<?php wp_nonce_field( 'remember_application_action', 'remember_application_nonce' ); ?>
 					<input type="hidden" name="remember_application_action" value="waitlist">
 					<input type="hidden" name="application_id" value="<?php echo esc_attr( $viewing_application->application_id ); ?>">
@@ -321,13 +334,60 @@ $status_colors = array(
 					<input type="hidden" name="application_id" value="<?php echo esc_attr( $viewing_application->application_id ); ?>">
 					<input type="submit" class="button" value="<?php esc_attr_e( 'Move to Pending', 'remember' ); ?>" onclick="return confirm('<?php esc_attr_e( 'Move this accepted application back to pending?', 'remember' ); ?>');">
 				</form>
-				<form method="post" action="" style="display: inline-block;">
+				<form method="post" action="" style="display: inline-block; margin-right: 10px;">
 					<?php wp_nonce_field( 'remember_application_action', 'remember_application_nonce' ); ?>
 					<input type="hidden" name="remember_application_action" value="reprocess_billing">
 					<input type="hidden" name="application_id" value="<?php echo esc_attr( $viewing_application->application_id ); ?>">
 					<input type="submit" class="button button-primary" value="<?php esc_attr_e( 'Reprocess Billing', 'remember' ); ?>">
 				</form>
+				<form method="post" action="" style="display: inline-block; margin-right: 10px;">
+					<?php wp_nonce_field( 'remember_application_action', 'remember_application_nonce' ); ?>
+					<input type="hidden" name="remember_application_action" value="email_ticket_ready">
+					<input type="hidden" name="application_id" value="<?php echo esc_attr( $viewing_application->application_id ); ?>">
+					<input type="submit" class="button" value="<?php esc_attr_e( 'Resend ticket-ready email', 'remember' ); ?>">
+				</form>
+				<form method="post" action="" style="display: inline-block; margin-right: 10px;">
+					<?php wp_nonce_field( 'remember_application_action', 'remember_application_nonce' ); ?>
+					<input type="hidden" name="remember_application_action" value="email_ticket_paid">
+					<input type="hidden" name="application_id" value="<?php echo esc_attr( $viewing_application->application_id ); ?>">
+					<input type="submit" class="button" value="<?php esc_attr_e( 'Send paid-ticket email', 'remember' ); ?>">
+				</form>
+				<form method="post" action="" style="display: inline-block; margin-right: 10px;">
+					<?php wp_nonce_field( 'remember_application_action', 'remember_application_nonce' ); ?>
+					<input type="hidden" name="remember_application_action" value="email_balance_due">
+					<input type="hidden" name="application_id" value="<?php echo esc_attr( $viewing_application->application_id ); ?>">
+					<input type="submit" class="button" value="<?php esc_attr_e( 'Send balance-due email', 'remember' ); ?>">
+				</form>
+				<?php if ( empty( $viewing_application->ticket_voided ) ) : ?>
+					<form method="post" action="" style="display: inline-block; margin-right: 10px;">
+						<?php wp_nonce_field( 'remember_application_action', 'remember_application_nonce' ); ?>
+						<input type="hidden" name="remember_application_action" value="void_ticket">
+						<input type="hidden" name="application_id" value="<?php echo esc_attr( $viewing_application->application_id ); ?>">
+						<input type="submit" class="button" value="<?php esc_attr_e( 'Void Ticket', 'remember' ); ?>" onclick="return confirm('<?php echo esc_js( __( 'Mark this ticket VOID? The application stays accepted.', 'remember' ) ); ?>');">
+					</form>
+				<?php else : ?>
+					<form method="post" action="" style="display: inline-block; margin-right: 10px;">
+						<?php wp_nonce_field( 'remember_application_action', 'remember_application_nonce' ); ?>
+						<input type="hidden" name="remember_application_action" value="unvoid_ticket">
+						<input type="hidden" name="application_id" value="<?php echo esc_attr( $viewing_application->application_id ); ?>">
+						<input type="submit" class="button" value="<?php esc_attr_e( 'Clear ticket VOID', 'remember' ); ?>">
+					</form>
+				<?php endif; ?>
 			<?php endif; ?>
+
+			<form method="post" action="" style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #ddd;">
+				<?php wp_nonce_field( 'remember_application_action', 'remember_application_nonce' ); ?>
+				<input type="hidden" name="remember_application_action" value="decline">
+				<input type="hidden" name="application_id" value="<?php echo esc_attr( $viewing_application->application_id ); ?>">
+				<h4 style="margin: 0 0 8px;"><?php esc_html_e( 'Decline application (admin)', 'remember' ); ?></h4>
+				<p class="description" style="margin-top: 0;">
+					<?php esc_html_e( 'Sets status to Declined, voids the admission ticket, and optionally updates the billing provider invoice.', 'remember' ); ?>
+				</p>
+				<?php echo Remember_Billing_Unwind::render_action_radios( 'billing_action', $decline_has_invoice ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in helper. ?>
+				<p style="margin: 10px 0 0;">
+					<input type="submit" class="button button-secondary" value="<?php esc_attr_e( 'Decline Application', 'remember' ); ?>" onclick="return confirm('<?php echo esc_js( __( 'Decline this application as admin? Choose invoice handling above before confirming.', 'remember' ) ); ?>');">
+				</p>
+			</form>
 		</div>
 	<?php endif; ?>
 </div>

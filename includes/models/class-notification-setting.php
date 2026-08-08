@@ -111,6 +111,7 @@ class Remember_Notification_Setting extends Remember_Base_Model {
 			'event_application_accepted'     => __( 'Event Application Accepted', 'remember' ),
 			'event_application_declined'    => __( 'Event Application Declined', 'remember' ),
 			'event_application_waitlisted'  => __( 'Event Application Waitlisted', 'remember' ),
+			'event_ticket_paid'             => __( 'Event Ticket Paid', 'remember' ),
 			'payment_recorded'              => __( 'Payment Recorded', 'remember' ),
 			'payment_due_reminder'          => __( 'Payment Due Reminder', 'remember' ),
 			'vetting_collaborator_invited'  => __( 'Vetting Collaborator Invited', 'remember' ),
@@ -132,11 +133,12 @@ class Remember_Notification_Setting extends Remember_Base_Model {
 			'vetting_completed'             => __( 'Sent when a vetting case is completed.', 'remember' ),
 			'member_vetted'                 => __( 'Sent when a member is vetted (accepted).', 'remember' ),
 			'event_application_submitted'   => __( 'Sent to member when they submit an event application.', 'remember' ),
-			'event_application_accepted'     => __( 'Sent to member when their event application is accepted.', 'remember' ),
+			'event_application_accepted'     => __( 'Sent to member when their event application is accepted (includes ticket link).', 'remember' ),
 			'event_application_declined'    => __( 'Sent to member when their event application is declined.', 'remember' ),
 			'event_application_waitlisted'  => __( 'Sent to member when their event application is waitlisted.', 'remember' ),
+			'event_ticket_paid'             => __( 'Sent to member when their event ticket is paid in full (includes ticket link).', 'remember' ),
 			'payment_recorded'              => __( 'Sent when a payment is recorded.', 'remember' ),
-			'payment_due_reminder'          => __( 'Sent as a reminder when payment is due.', 'remember' ),
+			'payment_due_reminder'          => __( 'Sent as a reminder when payment is due (also used for balance-due blasts).', 'remember' ),
 			'vetting_collaborator_invited'  => __( 'Sent when a collaborator is invited to a vetting case.', 'remember' ),
 		);
 		return isset( $descriptions[ $type ] ) ? $descriptions[ $type ] : '';
@@ -177,8 +179,9 @@ class Remember_Notification_Setting extends Remember_Base_Model {
 			'event_application_accepted'     => __( 'Application Accepted for {event_name}', 'remember' ),
 			'event_application_declined'    => __( 'Application Update for {event_name}', 'remember' ),
 			'event_application_waitlisted'  => __( 'Application Waitlisted for {event_name}', 'remember' ),
+			'event_ticket_paid'             => __( 'Your paid ticket for {event_name}', 'remember' ),
 			'payment_recorded'              => __( 'Payment Recorded - \${amount}', 'remember' ),
-			'payment_due_reminder'          => __( 'Payment Reminder - \${amount} Due', 'remember' ),
+			'payment_due_reminder'          => __( 'Payment Reminder - \${amount_due} Due for {event_name}', 'remember' ),
 			'vetting_collaborator_invited'  => __( 'Invitation to Collaborate on Vetting Case', 'remember' ),
 		);
 		return isset( $templates[ $type ] ) ? $templates[ $type ] : '';
@@ -204,15 +207,17 @@ class Remember_Notification_Setting extends Remember_Base_Model {
 			
 			'event_application_submitted' => __( "Hello {member_name},\n\nThank you for submitting your application for {event_name}.\n\nApplication ID: {application_id}\nDate: {date}\n\nWe have received your application and will review it shortly. You will be notified once a decision has been made.\n\nThank you,\nThe Team", 'remember' ),
 			
-			'event_application_accepted' => __( "Hello {member_name},\n\nGreat news! Your application for {event_name} has been accepted.\n\nApplication ID: {application_id}\nEvent: {event_name}\nDate: {date}\n\nWe look forward to seeing you at the event!\n\nBest regards,\nThe Team", 'remember' ),
+			'event_application_accepted' => __( "Hello {member_name},\n\nGreat news! Your application for {event_name} has been accepted.\n\nApplication ID: {application_id}\nTicket ID: {ticket_id}\nEvent: {event_name}\nDates: {event_dates}\nLocation: {event_location}\nPayment status: {payment_status}\nAmount due: \${amount_due}\n\nView or print your admission ticket (also serves as a receipt):\n{ticket_url}\n\nIf a balance remains, please complete payment. You will receive another email with your paid ticket once payment is recorded.\n\nBest regards,\nThe Team", 'remember' ),
 			
 			'event_application_declined' => __( "Hello {member_name},\n\nThank you for your interest in {event_name}.\n\nApplication ID: {application_id}\nEvent: {event_name}\nDate: {date}\n\nUnfortunately, we are unable to accept your application at this time. We appreciate your interest and encourage you to apply for future events.\n\nBest regards,\nThe Team", 'remember' ),
 			
 			'event_application_waitlisted' => __( "Hello {member_name},\n\nYour application for {event_name} has been placed on our waitlist.\n\nApplication ID: {application_id}\nEvent: {event_name}\nDate: {date}\n\nWe will notify you if a spot becomes available.\n\nThank you for your patience,\nThe Team", 'remember' ),
+
+			'event_ticket_paid' => __( "Hello {member_name},\n\nYour payment for {event_name} has been recorded as paid in full.\n\nTicket ID: {ticket_id}\nApplication ID: {application_id}\nEvent: {event_name}\nDates: {event_dates}\nLocation: {event_location}\n\nView or print your paid admission ticket / receipt:\n{ticket_url}\n\nWe look forward to seeing you at the event.\n\nBest regards,\nThe Team", 'remember' ),
 			
 			'payment_recorded' => __( "Hello {member_name},\n\nThis email confirms that a payment has been recorded.\n\nAmount: \${amount}\nDate: {date}\nApplication ID: {application_id}\n\nThank you for your payment.\n\nBest regards,\nThe Team", 'remember' ),
 			
-			'payment_due_reminder' => __( "Hello {member_name},\n\nThis is a reminder that payment is due for your application.\n\nAmount Due: \${amount}\nApplication ID: {application_id}\nEvent: {event_name}\nDate: {date}\n\nPlease submit your payment at your earliest convenience.\n\nThank you,\nThe Team", 'remember' ),
+			'payment_due_reminder' => __( "Hello {member_name},\n\nThis is a reminder that payment is due for your accepted application.\n\nAmount Due: \${amount_due}\nApplication ID: {application_id}\nTicket ID: {ticket_id}\nEvent: {event_name}\nDates: {event_dates}\nLocation: {event_location}\nPayment status: {payment_status}\n\nView your ticket (PAYMENT REQUIRED until paid):\n{ticket_url}\n\nPlease submit your payment at your earliest convenience.\n\nThank you,\nThe Team", 'remember' ),
 			
 			'vetting_collaborator_invited' => __( "Hello,\n\nYou have been invited to collaborate on a vetting case.\n\nMember: {member_name}\nVetting Case ID: {vetting_id}\nDate: {date}\n\nPlease review the case and provide your input.\n\nThank you,\nThe Team", 'remember' ),
 		);
