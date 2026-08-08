@@ -30,8 +30,8 @@
 
 ## D — Billing
 
-- [ ] Auto-email invoice from Xero/QBO on accept
-- [ ] Member ledger chronological order + Xero credit-note accounting
+- [x] Auto-email invoice from Xero/QBO on accept (Settings toggle; soft-fail)
+- [x] Member ledger chronological order + Xero credit-note accounting
 
 ## Docs
 

@@ -298,6 +298,9 @@ if ( isset( $_POST['remember_settings_action'] ) && check_admin_referer( 'rememb
 			}
 		}
 
+		// Email provider invoice to customer when an application is accepted (default on).
+		$options['email_invoice_on_accept'] = ! empty( $_POST['email_invoice_on_accept'] ) ? 1 : 0;
+
 		// Update subtotal disclaimer message.
 		if ( isset( $_POST['subtotal_disclaimer_text'] ) ) {
 			$options['subtotal_disclaimer_text'] = sanitize_textarea_field( wp_unslash( $_POST['subtotal_disclaimer_text'] ) );
@@ -563,6 +566,25 @@ $social_platforms = $wpdb->get_results(
 						</fieldset>
 						<p class="description">
 							<?php esc_html_e( 'Only one accounting provider is active at a time. Switching does not delete historical invoice IDs on payment rows (QuickBooks and Xero columns can coexist). Finish open billing cycles before switching; new invoices use only the selected provider.', 'remember' ); ?>
+						</p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row">
+						<?php esc_html_e( 'Email invoice on accept', 'remember' ); ?>
+					</th>
+					<td>
+						<?php
+						$email_invoice_on_accept = ! array_key_exists( 'email_invoice_on_accept', $options )
+							? true
+							: ! empty( $options['email_invoice_on_accept'] );
+						?>
+						<label for="email_invoice_on_accept">
+							<input type="checkbox" id="email_invoice_on_accept" name="email_invoice_on_accept" value="1" <?php checked( $email_invoice_on_accept ); ?>>
+							<?php esc_html_e( 'After accepting an application, ask Xero or QuickBooks to email the invoice to the customer', 'remember' ); ?>
+						</label>
+						<p class="description">
+							<?php esc_html_e( 'Uses the contact/customer email on file in the billing provider. Accept still succeeds if the email step fails. Ticket emails are separate.', 'remember' ); ?>
 						</p>
 					</td>
 				</tr>

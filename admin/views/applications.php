@@ -188,6 +188,19 @@ if ( isset( $_POST['remember_application_action'] ) && check_admin_referer( 'rem
 							echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html__( 'Application accepted, but Xero invoice creation failed: ', 'remember' ) . esc_html( $invoice_result->get_error_message() ) . '</p></div>';
 						} else {
 							echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Application accepted and Xero invoice created successfully.', 'remember' ) . '</p></div>';
+							$email_invoice = Remember_Billing_Provider::email_invoice_for_application( $application_id );
+							if ( is_wp_error( $email_invoice ) ) {
+								Remember_Logger::warning(
+									'Xero invoice email failed after accept',
+									array(
+										'application_id' => $application_id,
+										'error'          => $email_invoice->get_error_message(),
+									)
+								);
+								echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html__( 'Invoice created, but Xero could not email it to the customer: ', 'remember' ) . esc_html( $email_invoice->get_error_message() ) . '</p></div>';
+							} elseif ( true === $email_invoice ) {
+								echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Xero invoice emailed to the customer.', 'remember' ) . '</p></div>';
+							}
 						}
 						$invoice_notice_shown = true;
 					}
@@ -208,6 +221,19 @@ if ( isset( $_POST['remember_application_action'] ) && check_admin_referer( 'rem
 							echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html__( 'Application accepted, but QuickBooks invoice creation failed: ', 'remember' ) . esc_html( $invoice_result->get_error_message() ) . '</p></div>';
 						} else {
 							echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Application accepted and QuickBooks invoice created successfully.', 'remember' ) . '</p></div>';
+							$email_invoice = Remember_Billing_Provider::email_invoice_for_application( $application_id );
+							if ( is_wp_error( $email_invoice ) ) {
+								Remember_Logger::warning(
+									'QuickBooks invoice email failed after accept',
+									array(
+										'application_id' => $application_id,
+										'error'          => $email_invoice->get_error_message(),
+									)
+								);
+								echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html__( 'Invoice created, but QuickBooks could not email it to the customer: ', 'remember' ) . esc_html( $email_invoice->get_error_message() ) . '</p></div>';
+							} elseif ( true === $email_invoice ) {
+								echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'QuickBooks invoice emailed to the customer.', 'remember' ) . '</p></div>';
+							}
 						}
 						$invoice_notice_shown = true;
 					}
@@ -372,6 +398,12 @@ if ( isset( $_POST['remember_application_action'] ) && check_admin_referer( 'rem
 							echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html__( 'Billing reprocess failed: ', 'remember' ) . esc_html( $invoice_result->get_error_message() ) . '</p></div>';
 						} else {
 							echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Billing reprocess succeeded. Xero invoice created.', 'remember' ) . '</p></div>';
+							$email_invoice = Remember_Billing_Provider::email_invoice_for_application( $application_id );
+							if ( is_wp_error( $email_invoice ) ) {
+								echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html__( 'Invoice created, but Xero could not email it: ', 'remember' ) . esc_html( $email_invoice->get_error_message() ) . '</p></div>';
+							} elseif ( true === $email_invoice ) {
+								echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Xero invoice emailed to the customer.', 'remember' ) . '</p></div>';
+							}
 						}
 					} else {
 						echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html__( 'Xero is not connected. Connect Xero in Settings to reprocess billing.', 'remember' ) . '</p></div>';
@@ -386,6 +418,12 @@ if ( isset( $_POST['remember_application_action'] ) && check_admin_referer( 'rem
 							echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html__( 'Billing reprocess failed: ', 'remember' ) . esc_html( $invoice_result->get_error_message() ) . '</p></div>';
 						} else {
 							echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Billing reprocess succeeded. QuickBooks invoice created.', 'remember' ) . '</p></div>';
+							$email_invoice = Remember_Billing_Provider::email_invoice_for_application( $application_id );
+							if ( is_wp_error( $email_invoice ) ) {
+								echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html__( 'Invoice created, but QuickBooks could not email it: ', 'remember' ) . esc_html( $email_invoice->get_error_message() ) . '</p></div>';
+							} elseif ( true === $email_invoice ) {
+								echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'QuickBooks invoice emailed to the customer.', 'remember' ) . '</p></div>';
+							}
 						}
 					} else {
 						echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html__( 'QuickBooks is not connected. Connect QuickBooks in Settings to reprocess billing.', 'remember' ) . '</p></div>';

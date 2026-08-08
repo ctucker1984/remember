@@ -79,34 +79,13 @@
 
 ## 6. Billing provider auto-sends invoice on accept
 
-**Today:** Accept creates Xero/QB invoice locally + ticket-ready email; **does not** call provider “email invoice to customer.”
-
-**Plan**
-- After successful `create_invoice_for_application`:
-  - **Xero:** Email invoice API (or equivalent for AUTHORISED invoices) to the contact’s email.
-  - **QuickBooks:** Send invoice email endpoint for that Invoice Id.
-- Soft-fail: accept + invoice still succeed if email API fails; admin notice + log.
-- Settings toggle: “Email invoice from provider on accept” (default on when provider connected).
-
-**Open questions**
-- Always send, or only when member has email / contact synced?
-- Also re-send on “Reprocess Billing”?
+**Done (1.2.0):** After successful invoice create on accept (and reprocess billing), call Xero/QBO email-invoice APIs. Soft-fail with admin notice. Settings → “Email invoice on accept” (default on).
 
 ---
 
 ## 7. Bug: member billing ledger order + Xero credit notes
 
-**Today:** Ledger built in `admin/views/members.php`, sorted by provider sort timestamps; refunds/credit notes from synced JSON lines.
-
-**Plan**
-- Reproduce on demo with a known Xero credit note + payment sequence.
-- Fix sort key consistency (invoice / payment / credit note `sort_ts`; timezone; missing ts fallbacks).
-- Fix credit-note math: ensure CN amounts reduce balance the same way QB refund receipts do; handle partial CNs and CN applied to invoice.
-- Add a small unit-testable pure function for “register rows → running balance” if practical.
-- Document expected order: chronological by provider event time, then type tie-break.
-
-**Open questions**
-- Specific demo member/invoice IDs where order/CN look wrong (speeds fix).
+**Done (1.2.0):** Sort keys prefer document `Date` / `TxnDate` over sync timestamps. Xero credit-note allocations credit the ledger and reduce running balance; QBO refund receipts remain audit-only (do not inflate balance due).
 
 ---
 

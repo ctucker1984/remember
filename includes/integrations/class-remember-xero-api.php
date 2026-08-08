@@ -455,6 +455,27 @@ class Remember_Xero_API {
 	}
 
 	/**
+	 * Email an AUTHORISED invoice to the related Xero contact.
+	 *
+	 * @param string $invoice_id Xero InvoiceID.
+	 * @return true|WP_Error
+	 */
+	public static function email_invoice( $invoice_id ) {
+		$invoice_id = trim( (string) $invoice_id );
+		if ( '' === $invoice_id ) {
+			return new WP_Error( 'xero_email_no_id', __( 'Missing Xero invoice ID.', 'remember' ) );
+		}
+
+		$result = self::request( 'POST', 'Invoices/' . rawurlencode( $invoice_id ) . '/Email', array() );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+
+		Remember_Logger::info( 'Xero invoice email requested', array( 'invoice_id' => $invoice_id ) );
+		return true;
+	}
+
+	/**
 	 * Create an ACCREC (sales) invoice in Xero.
 	 *
 	 * @param array $invoice_data Keys: contact_id, line_items[{item_code, quantity, unit_amount, description, tax_type?}], reference?, date?, due_date?.
@@ -806,6 +827,7 @@ class Remember_Xero_API {
 				'qb_refund_id'   => isset( $note['CreditNoteID'] ) ? (string) $note['CreditNoteID'] : '',
 				'doc_number'     => isset( $note['CreditNoteNumber'] ) ? sanitize_text_field( (string) $note['CreditNoteNumber'] ) : '',
 				'sort_ts'        => self::xero_entity_sort_timestamp( $note ),
+				'ledger_effect'  => 'credit',
 			);
 		}
 
@@ -813,7 +835,7 @@ class Remember_Xero_API {
 	}
 
 	/**
-	 * Sort timestamp for a Xero entity (UpdatedDateUTC / Date).
+	 * Sort timestamp for a Xero entity (document Date first for ledger chronology).
 	 *
 	 * @param array $entity Xero entity.
 	 * @return int Unix timestamp (site timezone when possible).
@@ -822,7 +844,7 @@ class Remember_Xero_API {
 		if ( ! is_array( $entity ) ) {
 			return 0;
 		}
-		foreach ( array( 'UpdatedDateUTC', 'FullyPaidOnDate', 'Date' ) as $key ) {
+		foreach ( array( 'Date', 'FullyPaidOnDate', 'UpdatedDateUTC' ) as $key ) {
 			if ( empty( $entity[ $key ] ) ) {
 				continue;
 			}

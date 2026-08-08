@@ -715,13 +715,15 @@ if ( $view_member_id > 0 ) {
 		$refund_lines_json = '';
 		$provider_label = __( 'QuickBooks', 'remember' );
 
+		$refund_reduces_balance = false;
 		if ( $billing_use_xero ) {
 			$provider_label = __( 'Xero', 'remember' );
 			if ( ! empty( $payment->xero_invoice_number ) || ! empty( $payment->xero_invoice_id ) ) {
-				$invoice_number      = ! empty( $payment->xero_invoice_number ) ? $payment->xero_invoice_number : '';
-				$invoice_sort_ts_raw = ! empty( $payment->xero_invoice_sort_ts ) ? (int) $payment->xero_invoice_sort_ts : 0;
-				$payment_lines_json  = ! empty( $payment->xero_payment_lines ) ? $payment->xero_payment_lines : '';
-				$refund_lines_json   = ! empty( $payment->xero_refund_lines ) ? $payment->xero_refund_lines : '';
+				$invoice_number           = ! empty( $payment->xero_invoice_number ) ? $payment->xero_invoice_number : '';
+				$invoice_sort_ts_raw      = ! empty( $payment->xero_invoice_sort_ts ) ? (int) $payment->xero_invoice_sort_ts : 0;
+				$payment_lines_json       = ! empty( $payment->xero_payment_lines ) ? $payment->xero_payment_lines : '';
+				$refund_lines_json        = ! empty( $payment->xero_refund_lines ) ? $payment->xero_refund_lines : '';
+				$refund_reduces_balance   = true;
 			} else {
 				$invoice_number      = ! empty( $payment->quickbooks_invoice_number ) ? $payment->quickbooks_invoice_number : '';
 				$invoice_sort_ts_raw = ! empty( $payment->quickbooks_invoice_sort_ts ) ? (int) $payment->quickbooks_invoice_sort_ts : 0;
@@ -736,11 +738,12 @@ if ( $view_member_id > 0 ) {
 				$payment_lines_json  = ! empty( $payment->quickbooks_payment_lines ) ? $payment->quickbooks_payment_lines : '';
 				$refund_lines_json   = ! empty( $payment->quickbooks_refund_lines ) ? $payment->quickbooks_refund_lines : '';
 			} elseif ( ! empty( $payment->xero_invoice_id ) || ! empty( $payment->xero_invoice_number ) ) {
-				$provider_label      = __( 'Xero', 'remember' );
-				$invoice_number      = ! empty( $payment->xero_invoice_number ) ? $payment->xero_invoice_number : '';
-				$invoice_sort_ts_raw = ! empty( $payment->xero_invoice_sort_ts ) ? (int) $payment->xero_invoice_sort_ts : 0;
-				$payment_lines_json  = ! empty( $payment->xero_payment_lines ) ? $payment->xero_payment_lines : '';
-				$refund_lines_json   = ! empty( $payment->xero_refund_lines ) ? $payment->xero_refund_lines : '';
+				$provider_label           = __( 'Xero', 'remember' );
+				$invoice_number           = ! empty( $payment->xero_invoice_number ) ? $payment->xero_invoice_number : '';
+				$invoice_sort_ts_raw      = ! empty( $payment->xero_invoice_sort_ts ) ? (int) $payment->xero_invoice_sort_ts : 0;
+				$payment_lines_json       = ! empty( $payment->xero_payment_lines ) ? $payment->xero_payment_lines : '';
+				$refund_lines_json        = ! empty( $payment->xero_refund_lines ) ? $payment->xero_refund_lines : '';
+				$refund_reduces_balance   = true;
 			}
 		}
 		
@@ -845,8 +848,8 @@ if ( $view_member_id > 0 ) {
 			}
 		}
 		foreach ( $qb_refund_lines as $rf_line ) {
-			$debit = isset( $rf_line['amount'] ) ? floatval( $rf_line['amount'] ) : 0;
-			if ( $debit <= 0 ) {
+			$amount = isset( $rf_line['amount'] ) ? floatval( $rf_line['amount'] ) : 0;
+			if ( $amount <= 0 ) {
 				continue;
 			}
 			$method = isset( $rf_line['payment_method'] ) ? $rf_line['payment_method'] : '';
@@ -865,17 +868,21 @@ if ( $view_member_id > 0 ) {
 					? strtotime( $rf_line['txn_date'] . ' 12:00:00' )
 					: strtotime( $payment->payment_date ? $payment->payment_date : 'now' );
 			}
+			// Xero credit-note allocations reduce amount owed (credit). QBO refund receipts stay audit-only.
+			$as_credit = $refund_reduces_balance
+				|| ( isset( $rf_line['ledger_effect'] ) && 'credit' === $rf_line['ledger_effect'] );
 			$billing_register[] = array(
-				'date'        => date( 'Y-m-d H:i:s', $rf_sort_ts ),
-				'sort_ts'     => $rf_sort_ts,
-				'type'        => 'refund',
-				'description' => $desc,
-				'debit'       => $debit,
-				'credit'      => 0,
-				'balance'     => 0,
-				'status'      => $payment->payment_status,
-				'payment_id'  => $payment->payment_id,
+				'date'         => date( 'Y-m-d H:i:s', $rf_sort_ts ),
+				'sort_ts'      => $rf_sort_ts,
+				'type'         => 'refund',
+				'description'  => $desc,
+				'debit'        => $as_credit ? 0 : $amount,
+				'credit'       => $as_credit ? $amount : 0,
+				'balance'      => 0,
+				'status'       => $payment->payment_status,
+				'payment_id'   => $payment->payment_id,
 				'qb_refund_id' => isset( $rf_line['qb_refund_id'] ) ? (string) $rf_line['qb_refund_id'] : '',
+				'affects_balance' => $as_credit,
 			);
 		}
 	}
@@ -909,10 +916,10 @@ if ( $view_member_id > 0 ) {
 		}
 	);
 	
-	// Calculate running balance. Refund lines are shown for the audit trail (debit column)
-	// but do not change “balance due” — refunds are not new charges owed by the member.
+	// Running balance: invoices debit, payments credit, Xero credit notes credit.
+	// QBO refund-receipt audit rows (debit, affects_balance false) do not change balance due.
 	foreach ( $billing_register as &$entry ) {
-		if ( 'refund' === ( $entry['type'] ?? '' ) ) {
+		if ( 'refund' === ( $entry['type'] ?? '' ) && empty( $entry['affects_balance'] ) ) {
 			$entry['balance'] = $running_balance;
 			continue;
 		}

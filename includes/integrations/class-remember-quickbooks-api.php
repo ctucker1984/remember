@@ -391,6 +391,34 @@ class Remember_QuickBooks_API {
 	}
 
 	/**
+	 * Email an invoice to the customer (QuickBooks Online).
+	 *
+	 * @param string      $invoice_id Invoice Id.
+	 * @param string|null $send_to    Optional override email; omit to use customer email on file.
+	 * @return true|WP_Error
+	 */
+	public static function email_invoice( $invoice_id, $send_to = null ) {
+		$invoice_id = trim( (string) $invoice_id );
+		if ( '' === $invoice_id ) {
+			return new WP_Error( 'qb_email_no_id', __( 'Missing QuickBooks invoice ID.', 'remember' ) );
+		}
+
+		$endpoint = 'invoice/' . rawurlencode( $invoice_id ) . '/send';
+		$send_to  = is_string( $send_to ) ? trim( $send_to ) : '';
+		if ( '' !== $send_to && is_email( $send_to ) ) {
+			$endpoint .= '?sendTo=' . rawurlencode( $send_to );
+		}
+
+		$response = self::api_request( 'POST', $endpoint );
+		if ( is_wp_error( $response ) ) {
+			return $response;
+		}
+
+		Remember_Logger::info( 'QuickBooks invoice email requested', array( 'invoice_id' => $invoice_id ) );
+		return true;
+	}
+
+	/**
 	 * Create invoice in QuickBooks.
 	 *
 	 * @param array $invoice_data Invoice data.
@@ -596,6 +624,13 @@ class Remember_QuickBooks_API {
 		if ( ! is_array( $entity ) ) {
 			return 0;
 		}
+		// Prefer document date for ledger chronology over sync timestamps.
+		if ( ! empty( $entity['TxnDate'] ) ) {
+			$t = strtotime( $entity['TxnDate'] . ' 12:00:00' );
+			if ( $t ) {
+				return $t;
+			}
+		}
 		if ( ! empty( $entity['MetaData']['CreateTime'] ) ) {
 			$t = strtotime( $entity['MetaData']['CreateTime'] );
 			if ( $t ) {
@@ -604,12 +639,6 @@ class Remember_QuickBooks_API {
 		}
 		if ( ! empty( $entity['MetaData']['LastUpdatedTime'] ) ) {
 			$t = strtotime( $entity['MetaData']['LastUpdatedTime'] );
-			if ( $t ) {
-				return $t;
-			}
-		}
-		if ( ! empty( $entity['TxnDate'] ) ) {
-			$t = strtotime( $entity['TxnDate'] . ' 12:00:00' );
 			if ( $t ) {
 				return $t;
 			}
