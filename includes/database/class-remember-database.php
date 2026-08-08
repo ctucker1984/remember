@@ -70,6 +70,7 @@ class Remember_Database {
 			'events'                         => 'create_events_table',
 			'event_roles'                    => 'create_event_roles_table',
 			'event_merchandise'              => 'create_event_merchandise_table',
+			'event_merchandise_role_limits'  => 'create_event_merchandise_role_limits_table',
 			'event_applications'             => 'create_event_applications_table',
 			'application_merchandise'        => 'create_application_merchandise_table',
 			'products'                       => 'create_products_table',
@@ -510,6 +511,28 @@ class Remember_Database {
 			updated_at DATETIME NOT NULL,
 			PRIMARY KEY (merchandise_id),
 			KEY event_id (event_id)
+		) $charset_collate;";
+
+		dbDelta( $sql );
+	}
+
+	/**
+	 * Create per event-role max qty for event add-ons (0 = hide from that role).
+	 */
+	public function create_event_merchandise_role_limits_table() {
+		$table_name      = $this->prefix . 'event_merchandise_role_limits';
+		$charset_collate = $this->wpdb->get_charset_collate();
+
+		$sql = "CREATE TABLE $table_name (
+			limit_id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+			merchandise_id BIGINT(20) UNSIGNED NOT NULL,
+			event_role_id BIGINT(20) UNSIGNED NOT NULL,
+			max_qty INT(11) NOT NULL DEFAULT 0,
+			created_at DATETIME NOT NULL,
+			updated_at DATETIME NOT NULL,
+			PRIMARY KEY (limit_id),
+			UNIQUE KEY merchandise_role (merchandise_id, event_role_id),
+			KEY event_role_id (event_role_id)
 		) $charset_collate;";
 
 		dbDelta( $sql );

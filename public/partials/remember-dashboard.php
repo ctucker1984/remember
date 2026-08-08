@@ -16,6 +16,7 @@ require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-applicat
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-vetting.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-location.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-merchandise.php';
+require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-addon-role-limits.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-timezone.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-payment.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-template.php';
@@ -57,14 +58,18 @@ if ( isset( $_POST['remember_member_application_action'] ) && check_admin_refere
 				}
 			}
 
-			// Replace add-ons with current selection.
+			// Replace add-ons with current selection (role-aware max qty).
 			$wpdb->delete(
 				$wpdb->prefix . 'remember_application_merchandise',
 				array( 'event_application_id' => $application_id ),
 				array( '%d' )
 			);
-			$event_addons = $merchandise_model->get_by_event( $application->event_id );
-			$addon_map = array();
+			$effective_role_id = isset( $_POST['event_role_id'] ) ? absint( $_POST['event_role_id'] ) : absint( $application->event_role_id );
+			if ( $effective_role_id < 1 ) {
+				$effective_role_id = absint( $application->event_role_id );
+			}
+			$event_addons = Remember_Addon_Role_Limits::get_available_addons_for_role( $application->event_id, $effective_role_id );
+			$addon_map    = array();
 			foreach ( $event_addons as $event_addon ) {
 				$addon_map[ absint( $event_addon->merchandise_id ) ] = $event_addon;
 			}
@@ -75,16 +80,17 @@ if ( isset( $_POST['remember_member_application_action'] ) && check_admin_refere
 					if ( $addon_id <= 0 || empty( $addon_data['selected'] ) || ! isset( $addon_map[ $addon_id ] ) ) {
 						continue;
 					}
-					$addon = $addon_map[ $addon_id ];
-					$quantity = isset( $addon_data['quantity'] ) ? absint( $addon_data['quantity'] ) : 1;
+					$addon    = $addon_map[ $addon_id ];
+					$quantity = Remember_Addon_Role_Limits::clamp_quantity(
+						$addon_id,
+						$effective_role_id,
+						isset( $addon_data['quantity'] ) ? absint( $addon_data['quantity'] ) : 1
+					);
 					if ( $quantity < 1 ) {
-						$quantity = 1;
-					}
-					if ( null !== $addon->max_quantity && $quantity > absint( $addon->max_quantity ) ) {
-						$quantity = absint( $addon->max_quantity );
+						continue;
 					}
 
-					$unit_cost = (float) $addon->cost;
+					$unit_cost  = (float) $addon->cost;
 					$total_cost = $unit_cost * $quantity;
 					$wpdb->insert(
 						$wpdb->prefix . 'remember_application_merchandise',
@@ -230,7 +236,10 @@ if ( $selected_application_id > 0 ) {
 				break;
 			}
 		}
-		$selected_event_addons = $merchandise_model->get_by_event( $selected_application->event_id );
+		$selected_event_addons = Remember_Addon_Role_Limits::get_available_addons_for_role(
+			$selected_application->event_id,
+			$selected_application->event_role_id
+		);
 		$selected_application_addons = $wpdb->get_results(
 			$wpdb->prepare(
 				"SELECT * FROM {$wpdb->prefix}remember_application_merchandise WHERE event_application_id = %d",
@@ -283,9 +292,13 @@ foreach ( $selected_application_addons as $selected_addon_row ) {
 
 					<div class="remember-form-group">
 						<label class="remember-form-label"><?php esc_html_e( 'Add-ons', 'remember' ); ?></label>
+						<p class="remember-description"><?php esc_html_e( 'Add-ons shown are for the selected role. Change role and save if needed; max qty is per role.', 'remember' ); ?></p>
 						<?php if ( ! empty( $selected_event_addons ) ) : ?>
 							<?php foreach ( $selected_event_addons as $addon_option ) : ?>
-								<?php $existing_addon = isset( $selected_addon_map[ absint( $addon_option->merchandise_id ) ] ) ? $selected_addon_map[ absint( $addon_option->merchandise_id ) ] : null; ?>
+								<?php
+								$existing_addon = isset( $selected_addon_map[ absint( $addon_option->merchandise_id ) ] ) ? $selected_addon_map[ absint( $addon_option->merchandise_id ) ] : null;
+								$role_max       = isset( $addon_option->max_quantity ) ? absint( $addon_option->max_quantity ) : 1;
+								?>
 								<div style="border: 1px solid #ddd; padding: 8px; margin-bottom: 8px;">
 									<label>
 										<input type="checkbox" name="event_addons[<?php echo esc_attr( $addon_option->merchandise_id ); ?>][selected]" value="1" <?php checked( null !== $existing_addon ); ?>>
@@ -294,12 +307,13 @@ foreach ( $selected_application_addons as $selected_addon_row ) {
 									</label>
 									<label style="margin-left: 10px;">
 										<?php esc_html_e( 'Qty', 'remember' ); ?>
-										<input type="number" class="small-text" min="1" <?php echo null !== $addon_option->max_quantity ? 'max="' . esc_attr( $addon_option->max_quantity ) . '"' : ''; ?> name="event_addons[<?php echo esc_attr( $addon_option->merchandise_id ); ?>][quantity]" value="<?php echo esc_attr( $existing_addon ? absint( $existing_addon->quantity ) : 1 ); ?>">
+										<input type="number" class="small-text" min="1" max="<?php echo esc_attr( $role_max ); ?>" name="event_addons[<?php echo esc_attr( $addon_option->merchandise_id ); ?>][quantity]" value="<?php echo esc_attr( $existing_addon ? min( absint( $existing_addon->quantity ), $role_max ) : 1 ); ?>">
+										<span class="remember-description">(max <?php echo esc_html( (string) $role_max ); ?>)</span>
 									</label>
 								</div>
 							<?php endforeach; ?>
 						<?php else : ?>
-							<p class="remember-description"><?php esc_html_e( 'No add-ons available for this event.', 'remember' ); ?></p>
+							<p class="remember-description"><?php esc_html_e( 'No add-ons available for this role.', 'remember' ); ?></p>
 						<?php endif; ?>
 					</div>
 

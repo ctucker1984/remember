@@ -699,6 +699,64 @@ class Remember_Database_Updater {
 			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.19.0' ) );
 		}
 
+		// Update to 1.20.0 — per event-role add-on max qty (0 = hide).
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.20.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.20.0' ) );
+
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-database.php';
+			$db = new Remember_Database();
+			$db->create_event_merchandise_role_limits_table();
+
+			$limits_table = $wpdb->prefix . 'remember_event_merchandise_role_limits';
+			$merch_table  = $wpdb->prefix . 'remember_event_merchandise';
+			$roles_table  = $wpdb->prefix . 'remember_event_roles';
+
+			if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $limits_table ) ) === $limits_table
+				&& $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $merch_table ) ) === $merch_table
+				&& $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $roles_table ) ) === $roles_table ) {
+				// Backfill: each existing add-on × event role gets max_qty from legacy max_quantity (NULL → 1).
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$merch_rows = $wpdb->get_results( "SELECT merchandise_id, event_id, max_quantity FROM {$merch_table}" );
+				foreach ( (array) $merch_rows as $merch ) {
+					$max_qty = ( null === $merch->max_quantity || '' === $merch->max_quantity )
+						? 1
+						: max( 0, absint( $merch->max_quantity ) );
+					$event_roles = $wpdb->get_results(
+						$wpdb->prepare(
+							"SELECT event_role_id FROM {$roles_table} WHERE event_id = %d",
+							absint( $merch->event_id )
+						)
+					);
+					foreach ( (array) $event_roles as $er ) {
+						$exists = $wpdb->get_var(
+							$wpdb->prepare(
+								"SELECT limit_id FROM {$limits_table} WHERE merchandise_id = %d AND event_role_id = %d",
+								absint( $merch->merchandise_id ),
+								absint( $er->event_role_id )
+							)
+						);
+						if ( $exists ) {
+							continue;
+						}
+						$wpdb->insert(
+							$limits_table,
+							array(
+								'merchandise_id' => absint( $merch->merchandise_id ),
+								'event_role_id'  => absint( $er->event_role_id ),
+								'max_qty'        => $max_qty,
+								'created_at'     => current_time( 'mysql' ),
+								'updated_at'     => current_time( 'mysql' ),
+							),
+							array( '%d', '%d', '%d', '%s', '%s' )
+						);
+					}
+				}
+			}
+
+			update_option( 'remember_db_version', '1.20.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.20.0' ) );
+		}
+
 		Remember_Logger::activation_debug(
 			'update_schema: exit',
 			array( 'remember_db_version' => get_option( 'remember_db_version', '0.0.0' ) )

@@ -25,7 +25,7 @@
 
 ## C — Events
 
-- [ ] Add-on max qty per application (default 1) — confirm if per-role matrix needed now
+- [x] Add-on max qty per event × event-role (0 = hide); schema `1.20.0`
 - [ ] Attendee-only event details field + front-end gate
 
 ## D — Billing

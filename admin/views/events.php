@@ -18,6 +18,7 @@ require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-applicat
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-role.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-merchandise.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-product.php';
+require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-addon-role-limits.php';
 
 Remember_Logger::debug( 'Events page loaded' );
 
@@ -94,13 +95,21 @@ function remember_build_addons_from_post( $product_model ) {
 			continue;
 		}
 
+		$role_limits = array();
+		if ( isset( $addon['role_limits'] ) && is_array( $addon['role_limits'] ) ) {
+			foreach ( $addon['role_limits'] as $role_id => $max_qty ) {
+				$role_limits[ absint( $role_id ) ] = max( 0, absint( $max_qty ) );
+			}
+		}
+
 		$addons[] = array(
-			'merchandise_id' => isset( $addon['id'] ) ? absint( $addon['id'] ) : 0,
+			'merchandise_id'   => isset( $addon['id'] ) ? absint( $addon['id'] ) : 0,
 			'merchandise_name' => sanitize_text_field( $product->product_name ),
-			'description'    => isset( $product->description ) ? sanitize_textarea_field( $product->description ) : '',
-			'cost'           => isset( $addon['cost'] ) ? floatval( wp_unslash( $addon['cost'] ) ) : 0,
-			'max_quantity'   => ( isset( $addon['max_quantity'] ) && '' !== $addon['max_quantity'] ) ? absint( $addon['max_quantity'] ) : null,
-			'is_available'   => isset( $addon['is_available'] ) ? 1 : 0,
+			'description'      => isset( $product->description ) ? sanitize_textarea_field( $product->description ) : '',
+			'cost'             => isset( $addon['cost'] ) ? floatval( wp_unslash( $addon['cost'] ) ) : 0,
+			'max_quantity'     => ( isset( $addon['max_quantity'] ) && '' !== $addon['max_quantity'] ) ? absint( $addon['max_quantity'] ) : null,
+			'is_available'     => isset( $addon['is_available'] ) ? 1 : 0,
+			'role_limits'      => $role_limits,
 		);
 	}
 
@@ -127,14 +136,15 @@ function remember_sync_event_addons( $merchandise_model, $event_id, $addons ) {
 	$incoming_ids = array();
 	foreach ( $addons as $addon ) {
 		$data = array(
-			'event_id'          => $event_id,
-			'merchandise_name'  => $addon['merchandise_name'],
-			'description'       => $addon['description'],
-			'cost'              => $addon['cost'],
-			'max_quantity'      => $addon['max_quantity'],
-			'is_available'      => $addon['is_available'],
+			'event_id'         => $event_id,
+			'merchandise_name' => $addon['merchandise_name'],
+			'description'      => $addon['description'],
+			'cost'             => $addon['cost'],
+			'max_quantity'     => $addon['max_quantity'],
+			'is_available'     => $addon['is_available'],
 		);
 
+		$merchandise_id = 0;
 		if ( ! empty( $addon['merchandise_id'] ) ) {
 			$merchandise_id = absint( $addon['merchandise_id'] );
 			$incoming_ids[] = $merchandise_id;
@@ -142,16 +152,67 @@ function remember_sync_event_addons( $merchandise_model, $event_id, $addons ) {
 		} else {
 			$new_id = $merchandise_model->create( $data );
 			if ( $new_id ) {
-				$incoming_ids[] = absint( $new_id );
+				$merchandise_id = absint( $new_id );
+				$incoming_ids[] = $merchandise_id;
 			}
+		}
+
+		if ( $merchandise_id > 0 ) {
+			$role_limits = isset( $addon['role_limits'] ) && is_array( $addon['role_limits'] ) ? $addon['role_limits'] : array();
+			Remember_Addon_Role_Limits::sync_for_merchandise( $event_id, $merchandise_id, $role_limits );
 		}
 	}
 
 	foreach ( $existing_ids as $existing_id ) {
 		if ( ! in_array( $existing_id, $incoming_ids, true ) ) {
+			Remember_Addon_Role_Limits::delete_for_merchandise( $existing_id );
 			$merchandise_model->delete( $existing_id );
 		}
 	}
+}
+
+/**
+ * Render per-role max qty inputs for an add-on row.
+ *
+ * @param int   $index            Addon row index.
+ * @param array $event_roles      Catalog event roles.
+ * @param array $limits_by_role_id role_id => max_qty.
+ * @return void
+ */
+function remember_render_addon_role_limits( $index, $event_roles, $limits_by_role_id = array() ) {
+	if ( empty( $event_roles ) ) {
+		echo '<p class="description">' . esc_html__( 'Add event roles above to configure per-role add-on limits.', 'remember' ) . '</p>';
+		return;
+	}
+	?>
+	<div class="remember-addon-role-limits" style="margin-top:10px;">
+		<p class="description" style="margin:0 0 6px;">
+			<?php esc_html_e( 'Max quantity per event role. Use 0 to hide this add-on from that role (e.g. Inmate uniform = 1 for Inmate, 0 for Guard; Guard polos = 2 for Guard, 0 for Inmate).', 'remember' ); ?>
+		</p>
+		<table class="widefat striped" style="max-width:36rem;">
+			<thead>
+				<tr>
+					<th><?php esc_html_e( 'Event role', 'remember' ); ?></th>
+					<th style="width:8rem;"><?php esc_html_e( 'Max qty', 'remember' ); ?></th>
+				</tr>
+			</thead>
+			<tbody>
+				<?php foreach ( $event_roles as $role ) : ?>
+					<?php
+					$role_id = absint( $role->role_id );
+					$value   = array_key_exists( $role_id, $limits_by_role_id ) ? absint( $limits_by_role_id[ $role_id ] ) : 1;
+					?>
+					<tr>
+						<td><?php echo esc_html( $role->role_name ); ?></td>
+						<td>
+							<input type="number" min="0" class="small-text" name="event_addons[<?php echo esc_attr( $index ); ?>][role_limits][<?php echo esc_attr( $role_id ); ?>]" value="<?php echo esc_attr( $value ); ?>">
+						</td>
+					</tr>
+				<?php endforeach; ?>
+			</tbody>
+		</table>
+	</div>
+	<?php
 }
 
 // Handle form submissions
@@ -419,7 +480,7 @@ if ( isset( $_GET['view'] ) ) {
 					<tr>
 						<th><label><?php esc_html_e( 'Event Add-ons', 'remember' ); ?></label></th>
 						<td>
-							<p class="description"><?php esc_html_e( 'Define optional add-ons for this event (uniforms, sessions, services, etc.). Prices are subtotal amounts.', 'remember' ); ?></p>
+							<p class="description"><?php esc_html_e( 'Define optional add-ons for this event (uniforms, sessions, services, etc.). Prices are subtotal amounts. Set max quantity per event role below each add-on (0 hides it from that role).', 'remember' ); ?></p>
 							<?php if ( ! $has_catalog_products ) : ?>
 								<p class="description" style="color:#b32d2e;"><?php esc_html_e( 'No active products found. Add products first under reMember > Products.', 'remember' ); ?></p>
 							<?php endif; ?>
@@ -431,6 +492,10 @@ if ( isset( $_GET['view'] ) ) {
 										if ( isset( $catalog_products_by_name[ $addon->merchandise_name ] ) ) {
 											$selected_catalog_product_id = absint( $catalog_products_by_name[ $addon->merchandise_name ]->product_id );
 										}
+										$limits_by_role = Remember_Addon_Role_Limits::get_for_merchandise_by_role_id(
+											absint( $addon->merchandise_id ),
+											absint( $editing_event->event_id )
+										);
 										?>
 										<div class="remember-addon-row" style="border:1px solid #ccd0d4; padding:10px; margin:8px 0;">
 											<input type="hidden" name="event_addons[<?php echo esc_attr( $index ); ?>][id]" value="<?php echo esc_attr( $addon->merchandise_id ); ?>">
@@ -449,10 +514,10 @@ if ( isset( $_GET['view'] ) ) {
 											</p>
 											<p>
 												<label><?php esc_html_e( 'Subtotal Price', 'remember' ); ?> <input type="number" step="0.01" min="0" class="small-text" name="event_addons[<?php echo esc_attr( $index ); ?>][cost]" value="<?php echo esc_attr( number_format( (float) $addon->cost, 2, '.', '' ) ); ?>"></label>
-												<label style="margin-left: 15px;"><?php esc_html_e( 'Max Qty (blank = unlimited)', 'remember' ); ?> <input type="number" min="1" class="small-text" name="event_addons[<?php echo esc_attr( $index ); ?>][max_quantity]" value="<?php echo esc_attr( null !== $addon->max_quantity ? $addon->max_quantity : '' ); ?>"></label>
 												<label style="margin-left: 15px;"><input type="checkbox" name="event_addons[<?php echo esc_attr( $index ); ?>][is_available]" value="1" <?php checked( (int) $addon->is_available, 1 ); ?>> <?php esc_html_e( 'Available', 'remember' ); ?></label>
 												<button type="button" class="button button-link-delete remember-remove-addon"><?php esc_html_e( 'Remove', 'remember' ); ?></button>
 											</p>
+											<?php remember_render_addon_role_limits( $index, $event_roles, $limits_by_role ); ?>
 										</div>
 									<?php endforeach; ?>
 								<?php endif; ?>
@@ -569,7 +634,7 @@ if ( isset( $_GET['view'] ) ) {
 					<tr>
 						<th><label><?php esc_html_e( 'Event Add-ons', 'remember' ); ?></label></th>
 						<td>
-							<p class="description"><?php esc_html_e( 'Select from your pre-defined product catalog and configure per-event subtotal pricing and availability.', 'remember' ); ?></p>
+							<p class="description"><?php esc_html_e( 'Select from your product catalog, set subtotal pricing, and set max quantity per event role (0 hides the add-on for that role).', 'remember' ); ?></p>
 							<?php if ( ! $has_catalog_products ) : ?>
 								<p class="description" style="color:#b32d2e;"><?php esc_html_e( 'No active products found. Add products first under reMember > Products.', 'remember' ); ?></p>
 							<?php endif; ?>
@@ -669,6 +734,28 @@ jQuery(document).ready(function($) {
 	echo wp_json_encode( $options );
 	?>;
 
+	var eventRoleLimitRows = <?php
+	$role_limit_js = '';
+	foreach ( $event_roles as $role ) {
+		$role_limit_js .= '<tr><td>' . esc_html( $role->role_name ) . '</td><td><input type="number" min="0" class="small-text" name="event_addons[__INDEX__][role_limits][' . absint( $role->role_id ) . ']" value="1"></td></tr>';
+	}
+	echo wp_json_encode( $role_limit_js );
+	?>;
+
+	function buildAddonRoleLimits(index) {
+		if (!eventRoleLimitRows) {
+			return '<p class="description"><?php echo esc_js( __( 'Add event roles above to configure per-role add-on limits.', 'remember' ) ); ?></p>';
+		}
+		var body = String(eventRoleLimitRows).split('__INDEX__').join(String(index));
+		return '' +
+			'<div class="remember-addon-role-limits" style="margin-top:10px;">' +
+				'<p class="description" style="margin:0 0 6px;"><?php echo esc_js( __( 'Max quantity per event role. Use 0 to hide this add-on from that role.', 'remember' ) ); ?></p>' +
+				'<table class="widefat striped" style="max-width:36rem;"><thead><tr><th><?php echo esc_js( __( 'Event role', 'remember' ) ); ?></th><th style="width:8rem;"><?php echo esc_js( __( 'Max qty', 'remember' ) ); ?></th></tr></thead><tbody>' +
+				body +
+				'</tbody></table>' +
+			'</div>';
+	}
+
 	function buildAddonRow(index) {
 		return '' +
 			'<div class="remember-addon-row" style="border:1px solid #ccd0d4; padding:10px; margin:8px 0;">' +
@@ -676,10 +763,10 @@ jQuery(document).ready(function($) {
 				'<p><select class="regular-text remember-addon-product-select" name="event_addons[' + index + '][product_id]" required>' + productOptionsHtml + '</select></p>' +
 				'<p>' +
 					'<label><?php echo esc_js( __( 'Subtotal Price', 'remember' ) ); ?> <input type="number" step="0.01" min="0" class="small-text" name="event_addons[' + index + '][cost]" value="0.00"></label>' +
-					'<label style="margin-left: 15px;"><?php echo esc_js( __( 'Max Qty (blank = unlimited)', 'remember' ) ); ?> <input type="number" min="1" class="small-text" name="event_addons[' + index + '][max_quantity]" value=""></label>' +
 					'<label style="margin-left: 15px;"><input type="checkbox" name="event_addons[' + index + '][is_available]" value="1" checked> <?php echo esc_js( __( 'Available', 'remember' ) ); ?></label>' +
 					'<button type="button" class="button button-link-delete remember-remove-addon"><?php echo esc_js( __( 'Remove', 'remember' ) ); ?></button>' +
 				'</p>' +
+				buildAddonRoleLimits(index) +
 			'</div>';
 	}
 

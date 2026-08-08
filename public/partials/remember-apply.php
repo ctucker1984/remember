@@ -58,11 +58,12 @@ if ( isset( $_POST['remember_apply_action'] ) && check_admin_referer( 'remember_
 			$new_application_id = $application_model->create( $data );
 
 			if ( $new_application_id ) {
-				// Save selected add-ons for this application.
+				// Save selected add-ons for this application (role-aware max qty; 0 = not offered).
 				if ( isset( $_POST['event_addons'] ) && is_array( $_POST['event_addons'] ) ) {
 					global $wpdb;
+					require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-addon-role-limits.php';
 					$available_addons = array();
-					foreach ( $merchandise_model->get_by_event( $event_id ) as $addon ) {
+					foreach ( Remember_Addon_Role_Limits::get_available_addons_for_role( $event_id, $event_role_id ) as $addon ) {
 						$available_addons[ absint( $addon->merchandise_id ) ] = $addon;
 					}
 
@@ -75,16 +76,17 @@ if ( isset( $_POST['remember_apply_action'] ) && check_admin_referer( 'remember_
 							continue;
 						}
 
-						$addon = $available_addons[ $merchandise_id ];
-						$quantity = isset( $addon_data['quantity'] ) ? absint( $addon_data['quantity'] ) : 1;
+						$addon    = $available_addons[ $merchandise_id ];
+						$quantity = Remember_Addon_Role_Limits::clamp_quantity(
+							$merchandise_id,
+							$event_role_id,
+							isset( $addon_data['quantity'] ) ? absint( $addon_data['quantity'] ) : 1
+						);
 						if ( $quantity < 1 ) {
-							$quantity = 1;
-						}
-						if ( null !== $addon->max_quantity && $quantity > absint( $addon->max_quantity ) ) {
-							$quantity = absint( $addon->max_quantity );
+							continue;
 						}
 
-						$unit_cost = floatval( $addon->cost );
+						$unit_cost  = floatval( $addon->cost );
 						$total_cost = $unit_cost * $quantity;
 
 						$wpdb->insert(
@@ -215,7 +217,7 @@ if ( ! $selected_event ) {
 			<div class="remember-form-group">
 				<label class="remember-form-label"><?php esc_html_e( 'Event Add-ons (optional)', 'remember' ); ?></label>
 				<div id="remember-event-addons">
-					<p class="remember-form-help"><?php esc_html_e( 'Select an event first to see available add-ons.', 'remember' ); ?></p>
+					<p class="remember-form-help"><?php esc_html_e( 'Select an event and role to see add-ons available for that role.', 'remember' ); ?></p>
 				</div>
 			</div>
 
@@ -293,9 +295,13 @@ if ( ! $selected_event ) {
 			$addonsContainer.html(html);
 		}
 
-		function loadEventAddons(selectedEventId) {
+		function loadEventAddons(selectedEventId, selectedRoleId) {
 			if (!selectedEventId) {
-				$addonsContainer.html('<p class="remember-form-help"><?php esc_html_e( 'Select an event first to see available add-ons.', 'remember' ); ?></p>');
+				$addonsContainer.html('<p class="remember-form-help"><?php esc_html_e( 'Select an event and role to see add-ons available for that role.', 'remember' ); ?></p>');
+				return;
+			}
+			if (!selectedRoleId) {
+				$addonsContainer.html('<p class="remember-form-help"><?php esc_html_e( 'Select a role to see add-ons available for that role.', 'remember' ); ?></p>');
 				return;
 			}
 
@@ -307,13 +313,14 @@ if ( ! $selected_event ) {
 				data: {
 					action: 'remember_get_event_addons',
 					event_id: selectedEventId,
+					event_role_id: selectedRoleId,
 					nonce: '<?php echo wp_create_nonce( 'remember_get_event_addons' ); ?>'
 				},
 				success: function(response) {
-					if (response.success && response.data) {
+					if (response.success && response.data && response.data.length) {
 						renderAddons(response.data);
 					} else {
-						$addonsContainer.html('<p class="remember-form-help"><?php esc_html_e( 'No add-ons are available for this event.', 'remember' ); ?></p>');
+						$addonsContainer.html('<p class="remember-form-help"><?php esc_html_e( 'No add-ons are available for this role.', 'remember' ); ?></p>');
 					}
 				},
 				error: function() {
@@ -325,14 +332,17 @@ if ( ! $selected_event ) {
 		// Load roles if event is pre-selected
 		if (eventId > 0) {
 			loadEventRoles(eventId);
-			loadEventAddons(eventId);
 		}
 
 		// Load roles when event selection changes
 		$eventSelect.on('change', function() {
 			var selectedEventId = $(this).val();
 			loadEventRoles(selectedEventId);
-			loadEventAddons(selectedEventId);
+			loadEventAddons(selectedEventId, '');
+		});
+
+		$roleSelect.on('change', function() {
+			loadEventAddons($eventSelect.val(), $(this).val());
 		});
 
 		$(document).on('change', '.remember-addon-toggle', function() {

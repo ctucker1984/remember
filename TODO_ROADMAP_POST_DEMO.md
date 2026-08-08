@@ -30,21 +30,11 @@
 
 ---
 
-## 2. Event add-on: qty allowed per member / application (often 1, sometimes 2)
+## 2. Event add-on: qty per event-role
 
-**Today:** `event_merchandise.max_quantity` is a global cap on the add-on line (how many can be selected), not clearly “per role.”
+**Locked:** Per add-on × event-role max qty. `0` = hide from that role. Example: Inmate uniform/GPS = 1 for Inmate, 0 for Guard; Guard polo = 2 for Guard, 0 for Inmate.
 
-**Plan**
-- Extend event add-on definition with **max quantity per application** (primary ask). Default `1`.
-- If “per role” is required: either
-  - **(Preferred v1)** one max per add-on for all roles on that event, or  
-  - **(v2)** `event_merchandise_role_limits` (merchandise_id × role_id → max_qty).
-- Enforce on apply + dashboard edit + admin create application; clamp UI max on qty inputs.
-- Invoice line items already use selected qty — no change if enforcement is correct upstream.
-
-**Open questions**
-- Confirm v1 = single max per add-on for the event (simpler), vs true per-role matrix now.
-- Interaction with existing `max_quantity` (replace vs rename vs keep as inventory-style pool).
+**Done (schema `1.20.0`):** `remember_event_merchandise_role_limits`; admin event edit matrix; apply/dashboard enforce + AJAX filter by selected role. Legacy `event_merchandise.max_quantity` kept as fallback when no limit row exists.
 
 ---
 
