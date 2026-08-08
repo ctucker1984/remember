@@ -164,7 +164,7 @@ Enable `WP_DEBUG` as needed; logging uses `Remember_Logger`.
 
 - **Version** bumped to `1.3.0` (`REMEMBER_VERSION`).
 - **Upgrade safety:** On zip Upload → Replace, silently deactivate reMember before clearing `remember/`, then silently reactivate (matches dashboard update behavior). Does not help sites still running ≤1.2.0 until this version is installed once.
-- **Custom profile fields:** Admin-defined questions (free text or dropdown with key/label options), export field keys for member CSV, shown on registration and profile. Schema `1.23.0`.
+- **Custom profile fields:** Admin-defined questions (free text, single-select, or multi-select with key/label options), export field keys for member CSV, shown on registration and profile. Schema `1.23.0`.
 
 ### 1.2.0
 

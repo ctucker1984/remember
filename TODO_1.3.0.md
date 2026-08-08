@@ -15,7 +15,7 @@
 - [x] Schema `1.23.0`: `remember_profile_questions` + `remember_profile_question_responses`
 - [x] Admin → **Custom Fields**: question text, export field key, type (text | dropdown with key|label options), required, active, sort
 - [x] Show on registration, front profile edit/view, admin member edit/detail
-- [x] Member CSV export/import columns = export field keys (select stores/exports option **key**)
+- [x] Member CSV export/import columns = export field keys (select stores/exports option **key**; multiselect exports `key|key`)
 
 ## F — Event waivers
 

@@ -832,7 +832,7 @@ class Remember_Database {
 	}
 
 	/**
-	 * Admin-defined profile custom questions (text or select).
+	 * Admin-defined profile custom questions (text, select, or multiselect).
 	 */
 	public function create_profile_questions_table() {
 		$table_name      = $this->prefix . 'profile_questions';

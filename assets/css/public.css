@@ -920,6 +920,13 @@
 	background: #fff;
 }
 
+.remember-pq-checkboxes {
+	display: flex;
+	flex-direction: column;
+	gap: 0.5em;
+	margin-top: 0.35em;
+}
+
 .remember-checkbox-label {
 	display: flex;
 	align-items: center;

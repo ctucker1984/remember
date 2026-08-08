@@ -22,7 +22,71 @@ class Remember_Profile_Questions {
 	 * @return array<int, string>
 	 */
 	public static function allowed_types() {
-		return array( 'text', 'select' );
+		return array( 'text', 'select', 'multiselect' );
+	}
+
+	/**
+	 * Whether the type uses a defined choice list.
+	 *
+	 * @param string $field_type Type.
+	 * @return bool
+	 */
+	public static function type_uses_options( $field_type ) {
+		return in_array( (string) $field_type, array( 'select', 'multiselect' ), true );
+	}
+
+	/**
+	 * Decode a multiselect stored value to option keys.
+	 *
+	 * Accepts JSON array, pipe-separated, or comma-separated keys.
+	 *
+	 * @param mixed $value Stored or imported value.
+	 * @return array<int, string>
+	 */
+	public static function decode_multi_keys( $value ) {
+		if ( is_array( $value ) ) {
+			$raw = $value;
+		} else {
+			$value = trim( (string) $value );
+			if ( '' === $value ) {
+				return array();
+			}
+			if ( '[' === substr( $value, 0, 1 ) ) {
+				$decoded = json_decode( $value, true );
+				$raw     = is_array( $decoded ) ? $decoded : array();
+			} elseif ( false !== strpos( $value, '|' ) ) {
+				$raw = explode( '|', $value );
+			} elseif ( false !== strpos( $value, ',' ) ) {
+				$raw = explode( ',', $value );
+			} else {
+				$raw = array( $value );
+			}
+		}
+		$out  = array();
+		$seen = array();
+		foreach ( $raw as $item ) {
+			$key = self::sanitize_field_key( (string) $item );
+			if ( '' === $key || isset( $seen[ $key ] ) ) {
+				continue;
+			}
+			$seen[ $key ] = true;
+			$out[]        = $key;
+		}
+		return $out;
+	}
+
+	/**
+	 * Encode multiselect keys for storage (JSON array).
+	 *
+	 * @param array<int, string> $keys Option keys.
+	 * @return string Empty string when none.
+	 */
+	public static function encode_multi_keys( $keys ) {
+		$keys = self::decode_multi_keys( $keys );
+		if ( empty( $keys ) ) {
+			return '';
+		}
+		return wp_json_encode( array_values( $keys ) );
 	}
 
 	/**
@@ -250,8 +314,13 @@ class Remember_Profile_Questions {
 		$map   = self::get_responses_map( $member_id );
 		$out   = array();
 		foreach ( $qs as $q ) {
-			$qid = (int) $q->question_id;
-			$out[ (string) $q->field_key ] = isset( $map[ $qid ] ) ? $map[ $qid ] : '';
+			$qid    = (int) $q->question_id;
+			$stored = isset( $map[ $qid ] ) ? $map[ $qid ] : '';
+			if ( 'multiselect' === $q->field_type ) {
+				$out[ (string) $q->field_key ] = implode( '|', self::decode_multi_keys( $stored ) );
+			} else {
+				$out[ (string) $q->field_key ] = $stored;
+			}
 		}
 		return $out;
 	}
@@ -269,10 +338,22 @@ class Remember_Profile_Questions {
 			$qid  = (int) $q->question_id;
 			$name = 'remember_pq_' . $qid;
 			$raw  = isset( $_POST[ $name ] ) ? wp_unslash( $_POST[ $name ] ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing
-			if ( is_array( $raw ) ) {
-				$raw = '';
+			if ( 'multiselect' === $q->field_type ) {
+				$keys = array();
+				if ( is_array( $raw ) ) {
+					foreach ( $raw as $item ) {
+						$keys[] = sanitize_text_field( (string) $item );
+					}
+				} elseif ( is_string( $raw ) && '' !== $raw ) {
+					$keys[] = sanitize_text_field( $raw );
+				}
+				$out[ $qid ] = self::encode_multi_keys( $keys );
+			} else {
+				if ( is_array( $raw ) ) {
+					$raw = '';
+				}
+				$out[ $qid ] = sanitize_text_field( (string) $raw );
 			}
-			$out[ $qid ] = sanitize_text_field( (string) $raw );
 		}
 		return $out;
 	}
@@ -294,6 +375,12 @@ class Remember_Profile_Questions {
 			}
 			$qid = (int) $q->question_id;
 			$val = isset( $answers[ $qid ] ) ? trim( (string) $answers[ $qid ] ) : '';
+			if ( 'multiselect' === $q->field_type ) {
+				if ( empty( self::decode_multi_keys( $val ) ) ) {
+					return (string) $q->label;
+				}
+				continue;
+			}
 			if ( '' === $val ) {
 				return (string) $q->label;
 			}
@@ -308,7 +395,7 @@ class Remember_Profile_Questions {
 	}
 
 	/**
-	 * Validate select keys; strip invalid. Returns cleaned answers.
+	 * Validate select/multiselect keys; strip invalid. Returns cleaned answers.
 	 *
 	 * @param array<int, string> $answers Answers.
 	 * @return array<int, string>
@@ -324,6 +411,15 @@ class Remember_Profile_Questions {
 				if ( '' !== $val && ! in_array( $val, $keys, true ) ) {
 					$val = '';
 				}
+			} elseif ( 'multiselect' === $q->field_type ) {
+				$allowed = wp_list_pluck( self::parse_options( $q->options_json ), 'key' );
+				$picked  = array();
+				foreach ( self::decode_multi_keys( $val ) as $key ) {
+					if ( in_array( $key, $allowed, true ) ) {
+						$picked[] = $key;
+					}
+				}
+				$val = self::encode_multi_keys( $picked );
 			}
 			$clean[ $qid ] = $val;
 		}
@@ -384,10 +480,10 @@ class Remember_Profile_Questions {
 	}
 
 	/**
-	 * Human label for a stored select key.
+	 * Human label(s) for a stored select/multiselect value.
 	 *
 	 * @param object $question Question row.
-	 * @param string $value    Stored key.
+	 * @param string $value    Stored key or JSON keys.
 	 * @return string
 	 */
 	public static function display_value( $question, $value ) {
@@ -395,12 +491,27 @@ class Remember_Profile_Questions {
 		if ( '' === $value ) {
 			return '';
 		}
-		if ( is_object( $question ) && 'select' === $question->field_type ) {
+		if ( ! is_object( $question ) ) {
+			return $value;
+		}
+		if ( 'select' === $question->field_type ) {
 			foreach ( self::parse_options( $question->options_json ) as $opt ) {
 				if ( $opt['key'] === $value ) {
 					return $opt['label'];
 				}
 			}
+			return $value;
+		}
+		if ( 'multiselect' === $question->field_type ) {
+			$labels_by_key = array();
+			foreach ( self::parse_options( $question->options_json ) as $opt ) {
+				$labels_by_key[ $opt['key'] ] = $opt['label'];
+			}
+			$labels = array();
+			foreach ( self::decode_multi_keys( $value ) as $key ) {
+				$labels[] = isset( $labels_by_key[ $key ] ) ? $labels_by_key[ $key ] : $key;
+			}
+			return implode( ', ', $labels );
 		}
 		return $value;
 	}
@@ -439,22 +550,35 @@ class Remember_Profile_Questions {
 			$req   = ! empty( $q->is_required );
 			$label = (string) $q->label;
 
+			$is_multi = ( 'multiselect' === $q->field_type );
+			$multi_selected = $is_multi ? self::decode_multi_keys( $value ) : array();
+
 			if ( $is_admin ) {
-				echo '<tr><th scope="row"><label for="' . esc_attr( $id ) . '">' . esc_html( $label );
-				if ( $req ) {
-					echo ' <span class="description" style="color:#b32d2e;">*</span>';
+				echo '<tr><th scope="row">';
+				if ( $is_multi ) {
+					echo '<span>' . esc_html( $label );
+					if ( $req ) {
+						echo ' <span class="description" style="color:#b32d2e;">*</span>';
+					}
+					echo '</span>';
+				} else {
+					echo '<label for="' . esc_attr( $id ) . '">' . esc_html( $label );
+					if ( $req ) {
+						echo ' <span class="description" style="color:#b32d2e;">*</span>';
+					}
+					echo '</label>';
 				}
-				echo '</label></th><td>';
+				echo '</th><td>';
 			} elseif ( $is_register ) {
 				echo '<div class="remember-register-row">';
-				echo '<label for="' . esc_attr( $id ) . '">' . esc_html( $label );
+				echo '<label' . ( $is_multi ? '' : ' for="' . esc_attr( $id ) . '"' ) . '>' . esc_html( $label );
 				if ( $req ) {
 					echo ' <span class="required">*</span>';
 				}
 				echo '</label>';
 			} else {
 				echo '<div class="remember-form-row"><div class="remember-form-col">';
-				echo '<label for="' . esc_attr( $id ) . '" class="remember-form-label">' . esc_html( $label );
+				echo '<label' . ( $is_multi ? ' class="remember-form-label"' : ' for="' . esc_attr( $id ) . '" class="remember-form-label"' ) . '>' . esc_html( $label );
 				if ( $req ) {
 					echo ' <span class="remember-required">*</span>';
 				}
@@ -468,6 +592,17 @@ class Remember_Profile_Questions {
 					echo '<option value="' . esc_attr( $opt['key'] ) . '" ' . selected( $value, $opt['key'], false ) . '>' . esc_html( $opt['label'] ) . '</option>';
 				}
 				echo '</select>';
+			} elseif ( $is_multi ) {
+				$box_class = $is_admin ? 'remember-pq-checkboxes' : ( $is_register ? 'remember-register-checkboxes' : 'remember-pq-checkboxes' );
+				echo '<div class="' . esc_attr( $box_class ) . '" role="group" aria-label="' . esc_attr( $label ) . '">';
+				foreach ( self::parse_options( $q->options_json ) as $opt_i => $opt ) {
+					$cid = $id . '_' . $opt_i;
+					echo '<label class="remember-checkbox-label" for="' . esc_attr( $cid ) . '">';
+					echo '<input type="checkbox" name="' . esc_attr( $name ) . '[]" id="' . esc_attr( $cid ) . '" value="' . esc_attr( $opt['key'] ) . '" ' . checked( in_array( $opt['key'], $multi_selected, true ), true, false ) . '>';
+					echo ' <span>' . esc_html( $opt['label'] ) . '</span>';
+					echo '</label>';
+				}
+				echo '</div>';
 			} else {
 				echo '<input type="text" name="' . esc_attr( $name ) . '" id="' . esc_attr( $id ) . '" value="' . esc_attr( $value ) . '" class="' . esc_attr( $input_class ) . '"' . ( $req ? ' required' : '' ) . '>';
 			}
@@ -544,7 +679,7 @@ class Remember_Profile_Questions {
 	 *
 	 * @param int    $member_id Member ID.
 	 * @param string $field_key Export key.
-	 * @param string $value     Value (select key or text).
+	 * @param string $value     Value (select key, multiselect keys, or text).
 	 * @return bool
 	 */
 	public static function save_by_field_key( $member_id, $field_key, $value ) {
@@ -553,14 +688,14 @@ class Remember_Profile_Questions {
 		if ( ! $q ) {
 			return false;
 		}
-		$answers = array( (int) $q->question_id => sanitize_text_field( (string) $value ) );
 		// Allow saving inactive questions on import; bypass active-only sanitize for that id.
 		global $wpdb;
 		$member_id   = absint( $member_id );
 		$question_id = (int) $q->question_id;
-		$value       = sanitize_text_field( (string) $value );
+		$value       = is_string( $value ) ? trim( $value ) : '';
 		if ( 'select' === $q->field_type ) {
-			$keys = wp_list_pluck( self::parse_options( $q->options_json ), 'key' );
+			$value = sanitize_text_field( $value );
+			$keys  = wp_list_pluck( self::parse_options( $q->options_json ), 'key' );
 			if ( '' !== $value && ! in_array( $value, $keys, true ) ) {
 				// Accept label match → store key.
 				foreach ( self::parse_options( $q->options_json ) as $opt ) {
@@ -573,6 +708,35 @@ class Remember_Profile_Questions {
 					return false;
 				}
 			}
+		} elseif ( 'multiselect' === $q->field_type ) {
+			$allowed = array();
+			$by_label = array();
+			foreach ( self::parse_options( $q->options_json ) as $opt ) {
+				$allowed[] = $opt['key'];
+				$by_label[ strtolower( $opt['label'] ) ] = $opt['key'];
+			}
+			$picked = array();
+			foreach ( self::decode_multi_keys( $value ) as $piece ) {
+				if ( in_array( $piece, $allowed, true ) ) {
+					$picked[] = $piece;
+					continue;
+				}
+				$lk = strtolower( str_replace( '_', ' ', $piece ) );
+				if ( isset( $by_label[ strtolower( $piece ) ] ) ) {
+					$picked[] = $by_label[ strtolower( $piece ) ];
+				} elseif ( isset( $by_label[ $lk ] ) ) {
+					$picked[] = $by_label[ $lk ];
+				}
+			}
+			// Also try splitting original by common separators when decode treated whole string as one key.
+			if ( empty( $picked ) && '' !== $value && false === strpos( $value, '|' ) && false === strpos( $value, ',' ) && '[' !== substr( $value, 0, 1 ) ) {
+				if ( isset( $by_label[ strtolower( $value ) ] ) ) {
+					$picked[] = $by_label[ strtolower( $value ) ];
+				}
+			}
+			$value = self::encode_multi_keys( $picked );
+		} else {
+			$value = sanitize_text_field( $value );
 		}
 		$table = self::responses_table();
 		$now   = current_time( 'mysql' );

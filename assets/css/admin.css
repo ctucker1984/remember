@@ -610,6 +610,25 @@
 	max-width: 420px;
 }
 
+.remember-pq-checkboxes {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin: 4px 0 0;
+}
+
+.remember-pq-checkboxes .remember-checkbox-label {
+	display: flex;
+	align-items: flex-start;
+	gap: 6px;
+	margin: 0;
+	font-weight: 400;
+}
+
+.remember-pq-checkboxes .remember-checkbox-label input {
+	margin: 3px 0 0;
+}
+
 .remember-pq-choices-head,
 .remember-pq-choice-row {
 	display: grid;

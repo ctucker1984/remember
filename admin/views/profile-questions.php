@@ -59,7 +59,7 @@ if ( isset( $_POST['remember_pq_action'] ) && check_admin_referer( 'remember_pq_
 	$sort_order  = isset( $_POST['sort_order'] ) ? absint( $_POST['sort_order'] ) : 0;
 
 	$option_pairs = array();
-	if ( 'select' === $field_type && isset( $_POST['option_label'] ) && is_array( $_POST['option_label'] ) ) {
+	if ( Remember_Profile_Questions::type_uses_options( $field_type ) && isset( $_POST['option_label'] ) && is_array( $_POST['option_label'] ) ) {
 		$labels_in = wp_unslash( $_POST['option_label'] ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 		$keys_in   = isset( $_POST['option_key'] ) && is_array( $_POST['option_key'] ) ? wp_unslash( $_POST['option_key'] ) : array(); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 		foreach ( $labels_in as $i => $opt_label ) {
@@ -83,7 +83,7 @@ if ( isset( $_POST['remember_pq_action'] ) && check_admin_referer( 'remember_pq_
 			);
 		}
 	}
-	$options = ( 'select' === $field_type )
+	$options = Remember_Profile_Questions::type_uses_options( $field_type )
 		? Remember_Profile_Questions::encode_options( $option_pairs )
 		: null;
 
@@ -92,7 +92,7 @@ if ( isset( $_POST['remember_pq_action'] ) && check_admin_referer( 'remember_pq_
 		$error = __( 'Please enter the question members will see.', 'remember' );
 	} elseif ( '' === $field_key ) {
 		$error = __( 'Please enter a short name for spreadsheets (for example ice_cream_flavor).', 'remember' );
-	} elseif ( 'select' === $field_type && empty( Remember_Profile_Questions::parse_options( $options ) ) ) {
+	} elseif ( Remember_Profile_Questions::type_uses_options( $field_type ) && empty( Remember_Profile_Questions::parse_options( $options ) ) ) {
 		$error = __( 'Add at least one choice with a label and a key (for example Vanilla / vanilla).', 'remember' );
 	}
 
@@ -192,7 +192,8 @@ $remember_pq_render_form = static function ( $row ) {
 			<td>
 				<select name="field_type" id="field_type">
 					<option value="text" <?php selected( $field_type, 'text' ); ?>><?php esc_html_e( 'They type their own answer', 'remember' ); ?></option>
-					<option value="select" <?php selected( $field_type, 'select' ); ?>><?php esc_html_e( 'They pick from a list', 'remember' ); ?></option>
+					<option value="select" <?php selected( $field_type, 'select' ); ?>><?php esc_html_e( 'They pick one from a list', 'remember' ); ?></option>
+					<option value="multiselect" <?php selected( $field_type, 'multiselect' ); ?>><?php esc_html_e( 'They can pick several from a list', 'remember' ); ?></option>
 				</select>
 			</td>
 		</tr>
@@ -318,7 +319,17 @@ $remember_pq_render_form = static function ( $row ) {
 					<tr>
 						<td><strong><?php echo esc_html( $q->label ); ?></strong></td>
 						<td><code><?php echo esc_html( $q->field_key ); ?></code></td>
-						<td><?php echo 'select' === $q->field_type ? esc_html__( 'Pick from list', 'remember' ) : esc_html__( 'Type answer', 'remember' ); ?></td>
+						<td>
+							<?php
+							if ( 'select' === $q->field_type ) {
+								esc_html_e( 'Pick one', 'remember' );
+							} elseif ( 'multiselect' === $q->field_type ) {
+								esc_html_e( 'Pick several', 'remember' );
+							} else {
+								esc_html_e( 'Type answer', 'remember' );
+							}
+							?>
+						</td>
 						<td><?php echo ! empty( $q->is_required ) ? esc_html__( 'Yes', 'remember' ) : esc_html__( 'No', 'remember' ); ?></td>
 						<td><?php echo ! empty( $q->is_active ) ? esc_html__( 'Yes', 'remember' ) : esc_html__( 'No', 'remember' ); ?></td>
 						<td><?php echo esc_html( (string) $q->sort_order ); ?></td>
@@ -345,7 +356,7 @@ $remember_pq_render_form = static function ( $row ) {
 	function toggleOptions() {
 		var sel = document.getElementById('field_type');
 		if (!sel) return;
-		var show = sel.value === 'select';
+		var show = sel.value === 'select' || sel.value === 'multiselect';
 		document.querySelectorAll('.remember-pq-options-row').forEach(function (row) {
 			row.style.display = show ? '' : 'none';
 		});
