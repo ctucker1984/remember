@@ -246,8 +246,8 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 		$profile_check = Remember_Profile_Fields::collect_profile_data_from_request();
 		$meta_check    = Remember_Profile_Fields::collect_meta_from_request();
 		$pq_answers    = Remember_Profile_Questions::collect_from_request();
-		$missing_key   = Remember_Profile_Fields::first_missing_required( $profile_check, $meta_check );
-		$missing_pq    = Remember_Profile_Questions::first_missing_required( $pq_answers );
+		// Admin: only nickname, display name, legal first/last, cell phone are required.
+		$missing_key = Remember_Profile_Fields::first_missing_required( $profile_check, $meta_check, 'admin' );
 		if ( '' !== $missing_key ) {
 			$labels = Remember_Profile_Fields::labels();
 			$label  = isset( $labels[ $missing_key ] ) ? $labels[ $missing_key ] : __( 'Required field', 'remember' );
@@ -256,14 +256,6 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 					/* translators: %s: field label */
 					__( '%s is required.', 'remember' ),
 					$label
-				)
-			) . '</p></div>';
-		} elseif ( null !== $missing_pq ) {
-			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html(
-				sprintf(
-					/* translators: %s: question label */
-					__( '%s is required.', 'remember' ),
-					$missing_pq
 				)
 			) . '</p></div>';
 		} else {

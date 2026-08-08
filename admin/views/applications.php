@@ -377,6 +377,40 @@ if ( isset( $_POST['remember_application_action'] ) && check_admin_referer( 'rem
 			} else {
 				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to move application back to pending.', 'remember' ) . '</p></div>';
 			}
+		} elseif ( 'allow_reapply' === $action ) {
+			if ( ! current_user_can( 'remember_update_applications' ) ) {
+				wp_die( __( 'You do not have sufficient permissions to perform this action.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+			}
+			$result = $application_model->allow_reapply( $application_id );
+			if ( true === $result ) {
+				Remember_Logger::info( 'Application superseded for reapply', array( 'application_id' => $application_id ) );
+				echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Reapply allowed. The member can submit a new application for this event and role (including agreements). This record is kept for history.', 'remember' ) . '</p></div>';
+			} else {
+				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html( $result ) . '</p></div>';
+			}
+		} elseif ( 'unwind_billing' === $action ) {
+			if ( ! current_user_can( 'remember_update_applications' ) ) {
+				wp_die( __( 'You do not have sufficient permissions to perform this action.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+			}
+			require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-unwind.php';
+			$application = $application_model->get( $application_id );
+			if ( ! $application || ! in_array( $application->status, array( 'declined', 'cancelled' ), true ) ) {
+				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Invoice actions are available on declined or cancelled applications.', 'remember' ) . '</p></div>';
+			} else {
+				$billing_action = isset( $_POST['billing_action'] ) ? Remember_Billing_Unwind::sanitize_action( wp_unslash( $_POST['billing_action'] ) ) : 'leave';
+				$unwind         = Remember_Billing_Unwind::apply(
+					$application_id,
+					$billing_action,
+					sprintf( __( 'Admin invoice action on application #%d', 'remember' ), $application_id )
+				);
+				if ( is_wp_error( $unwind ) ) {
+					echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html( $unwind->get_error_message() ) . '</p></div>';
+				} elseif ( 'leave' === $billing_action ) {
+					echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Invoice left unaltered.', 'remember' ) . '</p></div>';
+				} else {
+					echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Billing action applied in the connected provider.', 'remember' ) . '</p></div>';
+				}
+			}
 		} elseif ( 'reprocess_billing' === $action ) {
 			// Check capability
 			if ( ! current_user_can( 'remember_update_applications' ) ) {

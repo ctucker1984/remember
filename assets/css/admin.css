@@ -413,6 +413,44 @@
 	padding: 15px;
 }
 
+/* Agreements acknowledged — caret inside the frame, modest indent */
+.remember-agreements-acknowledged > summary {
+	cursor: pointer;
+	list-style: none;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 14px;
+	font-weight: 600;
+}
+
+.remember-agreements-acknowledged > summary::-webkit-details-marker {
+	display: none;
+}
+
+.remember-agreements-acknowledged > summary::before {
+	content: "";
+	display: inline-block;
+	width: 0;
+	height: 0;
+	border-top: 5px solid transparent;
+	border-bottom: 5px solid transparent;
+	border-left: 6px solid #1d2327;
+	flex: 0 0 auto;
+}
+
+.remember-agreements-acknowledged[open] > summary::before {
+	border-left: 5px solid transparent;
+	border-right: 5px solid transparent;
+	border-top: 6px solid #1d2327;
+	border-bottom: 0;
+	margin-top: 2px;
+}
+
+.remember-agreements-acknowledged-body {
+	margin-top: 12px;
+}
+
 .remember-application-detail-section h3 {
 	margin-top: 0;
 	margin-bottom: 12px;

@@ -805,6 +805,58 @@ class Remember_Database_Updater {
 			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.23.0' ) );
 		}
 
+		// Update to 1.24.0 — event agreements library (versioned) + acceptances.
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.24.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.24.0' ) );
+
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-database.php';
+			$db = new Remember_Database();
+			$db->create_agreements_table();
+			$db->create_agreement_revisions_table();
+			$db->create_event_agreements_table();
+			$db->create_agreement_acceptances_table();
+
+			update_option( 'remember_db_version', '1.24.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.24.0' ) );
+		}
+
+		// Update to 1.25.0 — allow admin to supersede closed applications for reapply.
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.25.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.25.0' ) );
+
+			global $wpdb;
+			$apps_table = $wpdb->prefix . 'remember_event_applications';
+			$col        = $wpdb->get_results( $wpdb->prepare( 'SHOW COLUMNS FROM `' . $apps_table . '` LIKE %s', 'superseded_at' ) );
+			if ( empty( $col ) ) {
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is plugin-controlled.
+				$ok = $wpdb->query( "ALTER TABLE {$apps_table} ADD COLUMN superseded_at DATETIME DEFAULT NULL AFTER ticket_ready_emailed_at" );
+				if ( false === $ok ) {
+					Remember_Logger::error( 'Failed to add superseded_at', array( 'error' => $wpdb->last_error ) );
+				}
+			}
+
+			$indexes = $wpdb->get_results( "SHOW INDEX FROM {$apps_table} WHERE Key_name = 'event_member_role'" );
+			if ( ! empty( $indexes ) ) {
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$drop = $wpdb->query( "ALTER TABLE {$apps_table} DROP INDEX event_member_role" );
+				if ( false === $drop ) {
+					Remember_Logger::error( 'Failed to drop event_member_role unique index', array( 'error' => $wpdb->last_error ) );
+				}
+			}
+
+			$new_idx = $wpdb->get_results( "SHOW INDEX FROM {$apps_table} WHERE Key_name = 'event_member_role_active'" );
+			if ( empty( $new_idx ) ) {
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$add_idx = $wpdb->query( "ALTER TABLE {$apps_table} ADD KEY event_member_role_active (event_id, member_id, event_role_id, superseded_at)" );
+				if ( false === $add_idx ) {
+					Remember_Logger::error( 'Failed to add event_member_role_active index', array( 'error' => $wpdb->last_error ) );
+				}
+			}
+
+			update_option( 'remember_db_version', '1.25.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.25.0' ) );
+		}
+
 		Remember_Logger::activation_debug(
 			'update_schema: exit',
 			array( 'remember_db_version' => get_option( 'remember_db_version', '0.0.0' ) )

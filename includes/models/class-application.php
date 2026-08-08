@@ -184,10 +184,12 @@ class Remember_Application extends Remember_Base_Model {
 	}
 
 	/**
-	 * Check if member already applied to event role.
+	 * Check if member already has an active (non-superseded) application for event role.
 	 *
-	 * @param int $event_id     Event ID.
-	 * @param int $member_id    Member ID.
+	 * Superseded rows are kept for history after an admin allows reapply.
+	 *
+	 * @param int $event_id      Event ID.
+	 * @param int $member_id     Member ID.
 	 * @param int $event_role_id Event role ID.
 	 * @return object|null
 	 */
@@ -195,12 +197,48 @@ class Remember_Application extends Remember_Base_Model {
 		global $wpdb;
 		return $wpdb->get_row(
 			$wpdb->prepare(
-				"SELECT * FROM {$this->get_table()} WHERE event_id = %d AND member_id = %d AND event_role_id = %d",
+				"SELECT * FROM {$this->get_table()}
+				WHERE event_id = %d AND member_id = %d AND event_role_id = %d
+				AND superseded_at IS NULL
+				ORDER BY applied_at DESC
+				LIMIT 1",
 				$event_id,
 				$member_id,
 				$event_role_id
 			)
 		);
+	}
+
+	/**
+	 * Mark a closed application as superseded so the member may reapply (admin forgive).
+	 *
+	 * @param int $application_id Application ID.
+	 * @return true|string True on success, or error message.
+	 */
+	public function allow_reapply( $application_id ) {
+		$application_id = absint( $application_id );
+		$application    = $this->get( $application_id );
+		if ( ! $application ) {
+			return __( 'Application not found.', 'remember' );
+		}
+		if ( ! empty( $application->superseded_at ) ) {
+			return __( 'Reapply was already allowed for this application.', 'remember' );
+		}
+		if ( ! in_array( $application->status, array( 'declined', 'cancelled' ), true ) ) {
+			return __( 'Only declined or cancelled applications can be opened for reapply.', 'remember' );
+		}
+		$result = $this->update(
+			$application_id,
+			array(
+				'superseded_at' => current_time( 'mysql' ),
+				'processed_at'  => current_time( 'mysql' ),
+				'processed_by'  => get_current_user_id() ? get_current_user_id() : null,
+			)
+		);
+		if ( false === $result ) {
+			return __( 'Failed to allow reapply.', 'remember' );
+		}
+		return true;
 	}
 
 	/**

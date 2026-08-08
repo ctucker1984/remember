@@ -143,6 +143,7 @@ class Remember {
 		$this->loader->add_action( 'admin_enqueue_scripts', $plugin_admin, 'enqueue_scripts' );
 		$this->loader->add_action( 'wp_ajax_remember_get_event_roles', $plugin_admin, 'ajax_get_event_roles' );
 		$this->loader->add_action( 'wp_ajax_remember_get_event_addons', $plugin_admin, 'ajax_get_event_addons' );
+		$this->loader->add_action( 'wp_ajax_remember_get_event_agreements', $plugin_admin, 'ajax_get_event_agreements' );
 		$this->loader->add_action( 'admin_menu', $plugin_admin, 'add_admin_menu' );
 		$this->loader->add_filter( 'submenu_file', $plugin_admin, 'highlight_settings_hub_submenu' );
 		$this->loader->add_action( 'wp_dashboard_setup', $plugin_admin, 'register_dashboard_widget' );

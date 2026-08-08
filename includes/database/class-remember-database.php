@@ -84,6 +84,10 @@ class Remember_Database {
 			'notification_settings'          => 'create_notification_settings_table',
 			'profile_questions'              => 'create_profile_questions_table',
 			'profile_question_responses'     => 'create_profile_question_responses_table',
+			'agreements'                     => 'create_agreements_table',
+			'agreement_revisions'            => 'create_agreement_revisions_table',
+			'event_agreements'               => 'create_event_agreements_table',
+			'agreement_acceptances'          => 'create_agreement_acceptances_table',
 			'plugin_version'                 => 'create_plugin_version_table',
 		);
 
@@ -561,8 +565,9 @@ class Remember_Database {
 			notes TEXT DEFAULT NULL,
 			ticket_voided TINYINT(1) NOT NULL DEFAULT 0,
 			ticket_ready_emailed_at DATETIME DEFAULT NULL,
+			superseded_at DATETIME DEFAULT NULL,
 			PRIMARY KEY (application_id),
-			UNIQUE KEY event_member_role (event_id, member_id, event_role_id),
+			KEY event_member_role_active (event_id, member_id, event_role_id, superseded_at),
 			KEY event_id (event_id),
 			KEY member_id (member_id),
 			KEY event_role_id (event_role_id),
@@ -874,6 +879,95 @@ class Remember_Database {
 			PRIMARY KEY (response_id),
 			UNIQUE KEY question_member (question_id, member_id),
 			KEY member_id (member_id)
+		) $charset_collate;";
+
+		dbDelta( $sql );
+	}
+
+	/**
+	 * Agreement library entries (rules, waivers, etc.).
+	 */
+	public function create_agreements_table() {
+		$table_name      = $this->prefix . 'agreements';
+		$charset_collate = $this->wpdb->get_charset_collate();
+
+		$sql = "CREATE TABLE $table_name (
+			agreement_id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+			title VARCHAR(255) NOT NULL,
+			is_active TINYINT(1) NOT NULL DEFAULT 1,
+			sort_order INT(11) NOT NULL DEFAULT 0,
+			created_at DATETIME NOT NULL,
+			updated_at DATETIME NOT NULL,
+			PRIMARY KEY (agreement_id),
+			KEY is_active_sort (is_active, sort_order)
+		) $charset_collate;";
+
+		dbDelta( $sql );
+	}
+
+	/**
+	 * Immutable agreement revisions (rich text body).
+	 */
+	public function create_agreement_revisions_table() {
+		$table_name      = $this->prefix . 'agreement_revisions';
+		$charset_collate = $this->wpdb->get_charset_collate();
+
+		$sql = "CREATE TABLE $table_name (
+			revision_id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+			agreement_id BIGINT(20) UNSIGNED NOT NULL,
+			revision_number INT(11) UNSIGNED NOT NULL DEFAULT 1,
+			body LONGTEXT NOT NULL,
+			created_by BIGINT(20) UNSIGNED DEFAULT NULL,
+			created_at DATETIME NOT NULL,
+			PRIMARY KEY (revision_id),
+			UNIQUE KEY agreement_revision (agreement_id, revision_number),
+			KEY agreement_id (agreement_id)
+		) $charset_collate;";
+
+		dbDelta( $sql );
+	}
+
+	/**
+	 * Event pins specific agreement revisions.
+	 */
+	public function create_event_agreements_table() {
+		$table_name      = $this->prefix . 'event_agreements';
+		$charset_collate = $this->wpdb->get_charset_collate();
+
+		$sql = "CREATE TABLE $table_name (
+			event_agreement_id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+			event_id BIGINT(20) UNSIGNED NOT NULL,
+			agreement_id BIGINT(20) UNSIGNED NOT NULL,
+			revision_id BIGINT(20) UNSIGNED NOT NULL,
+			sort_order INT(11) NOT NULL DEFAULT 0,
+			PRIMARY KEY (event_agreement_id),
+			UNIQUE KEY event_agreement (event_id, agreement_id),
+			KEY event_id (event_id),
+			KEY revision_id (revision_id)
+		) $charset_collate;";
+
+		dbDelta( $sql );
+	}
+
+	/**
+	 * Per-application acknowledgments of pinned agreement revisions.
+	 */
+	public function create_agreement_acceptances_table() {
+		$table_name      = $this->prefix . 'agreement_acceptances';
+		$charset_collate = $this->wpdb->get_charset_collate();
+
+		$sql = "CREATE TABLE $table_name (
+			acceptance_id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+			application_id BIGINT(20) UNSIGNED NOT NULL,
+			revision_id BIGINT(20) UNSIGNED NOT NULL,
+			typed_legal_name VARCHAR(255) NOT NULL,
+			ip_address VARCHAR(45) DEFAULT NULL,
+			user_agent VARCHAR(500) DEFAULT NULL,
+			accepted_at DATETIME NOT NULL,
+			PRIMARY KEY (acceptance_id),
+			UNIQUE KEY application_revision (application_id, revision_id),
+			KEY application_id (application_id),
+			KEY revision_id (revision_id)
 		) $charset_collate;";
 
 		dbDelta( $sql );

@@ -60,6 +60,7 @@ class Remember_Profile_Fields {
 	public static function labels() {
 		return array(
 			'nickname'                       => __( 'Nickname', 'remember' ),
+			'display_name'                   => __( 'Display name', 'remember' ),
 			'timezone_string'                => __( 'Time Zone', 'remember' ),
 			'legal_first_name'               => __( 'Legal First Name', 'remember' ),
 			'legal_last_name'                => __( 'Legal Last Name', 'remember' ),
@@ -77,15 +78,51 @@ class Remember_Profile_Fields {
 	}
 
 	/**
+	 * Required profile keys for a form context.
+	 *
+	 * Admin member edit stays lean so staff can save incomplete records.
+	 *
+	 * @param string $context front|register|admin.
+	 * @return string[]
+	 */
+	public static function required_profile_keys_for_context( $context = 'front' ) {
+		if ( 'admin' === $context ) {
+			return array(
+				'legal_first_name',
+				'legal_last_name',
+				'cell_phone',
+			);
+		}
+		return self::required_profile_keys();
+	}
+
+	/**
+	 * Required meta keys for a form context.
+	 *
+	 * @param string $context front|register|admin.
+	 * @return string[]
+	 */
+	public static function required_meta_keys_for_context( $context = 'front' ) {
+		if ( 'admin' === $context ) {
+			return array(
+				'nickname',
+				'display_name',
+			);
+		}
+		return self::required_meta_keys();
+	}
+
+	/**
 	 * Whether a field key is required.
 	 *
-	 * @param string $key Field key.
+	 * @param string $key     Field key.
+	 * @param string $context front|register|admin.
 	 * @return bool
 	 */
-	public static function is_required( $key ) {
+	public static function is_required( $key, $context = 'front' ) {
 		$key = (string) $key;
-		return in_array( $key, self::required_profile_keys(), true )
-			|| in_array( $key, self::required_meta_keys(), true );
+		return in_array( $key, self::required_profile_keys_for_context( $context ), true )
+			|| in_array( $key, self::required_meta_keys_for_context( $context ), true );
 	}
 
 	/**
@@ -159,33 +196,35 @@ class Remember_Profile_Fields {
 	}
 
 	/**
-	 * Collect nickname + timezone from the request.
+	 * Collect nickname + timezone (+ display_name when posted) from the request.
 	 *
-	 * @return array{nickname:string,timezone_string:string}
+	 * @return array<string,string>
 	 */
 	public static function collect_meta_from_request() {
 		$nickname = self::post_text( array( 'nickname', 'remember_reg_display_name', 'remember_reg_nickname' ) );
 		$timezone = self::post_text( array( 'timezone_string', 'remember_reg_timezone' ) );
 		return array(
-			'nickname'         => $nickname,
-			'timezone_string'  => $timezone,
+			'nickname'        => $nickname,
+			'timezone_string' => $timezone,
+			'display_name'    => self::post_text( array( 'display_name' ) ),
 		);
 	}
 
 	/**
 	 * First missing required key among profile + meta, or empty string if complete.
 	 *
-	 * @param array<string,mixed> $profile_data Profile columns.
-	 * @param array<string,string> $meta_data    nickname + timezone_string.
+	 * @param array<string,mixed>  $profile_data Profile columns.
+	 * @param array<string,string> $meta_data    Meta keys from collect_meta_from_request().
+	 * @param string               $context      front|register|admin.
 	 * @return string
 	 */
-	public static function first_missing_required( array $profile_data, array $meta_data ) {
-		foreach ( self::required_meta_keys() as $key ) {
+	public static function first_missing_required( array $profile_data, array $meta_data, $context = 'front' ) {
+		foreach ( self::required_meta_keys_for_context( $context ) as $key ) {
 			if ( ! isset( $meta_data[ $key ] ) || '' === trim( (string) $meta_data[ $key ] ) ) {
 				return $key;
 			}
 		}
-		foreach ( self::required_profile_keys() as $key ) {
+		foreach ( self::required_profile_keys_for_context( $context ) as $key ) {
 			if ( ! isset( $profile_data[ $key ] ) || '' === trim( (string) $profile_data[ $key ] ) ) {
 				return $key;
 			}

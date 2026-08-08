@@ -1,7 +1,7 @@
 # Post-demo roadmap (business meeting notes)
 
 **Captured:** 2026-08-07  
-**Status:** A–D shipped in **1.2.0**. **E** (profile custom fields) on `v1.3.0`. F (waivers) still open.  
+**Status:** A–D shipped in **1.2.0**. **E** (custom fields) and **F** (agreements) implemented on `v1.3.0`.  
 **Source:** Live demo feedback.
 
 ---
@@ -69,11 +69,7 @@
 
 ## 5. Admin member edit — emergency phone required
 
-**Finding:** Front/admin emergency phone is largely optional; cell is the required phone. If you’re blocked on save, likely a browser `required` attribute or custom JS on that field — worth re-checking when we touch member-edit.
-
-**Plan**
-- Align validation with registration policy: if emergency phone is required at register, keep required on admin/profile; if optional, remove blocking `required`.
-- Don’t invent a new rule until registration required-list is set (item 3).
+**Done (1.3.0):** Admin edit uses a lean required set — nickname, display name, legal first/last, cell phone only. Address, timezone, IM, emergency contact, and custom fields are optional for staff. Front/register keep the full required list from item 3.
 
 ---
 
@@ -112,20 +108,9 @@
 
 ---
 
-## 11. Event waivers — prepare to support
+## 11. Event agreements (was: waivers)
 
-**Today:** None.
-
-**Plan (slice F)**
-- Admin-defined waiver per event (or global template + event override): rich text body, version/timestamp.
-- Member affirmation **internal v1**:
-  - Checkbox + typed legal name + IP + user agent + `accepted_at` stored on application (or `remember_waiver_acceptances`).
-  - Block accept? or block check-in? — typically **must accept before application submit** or before ticket valid.
-- DocuSign / similar: later integration spike; don’t block internal flow.
-
-**Open questions**
-- Must waive before apply, after accept, or before ticket “valid”?
-- One waiver per event vs reusable library of waiver templates?
+**Done (1.3.0 / schema `1.24.0`):** **Agreements** library (custom tables). Immutable revisions; events pin revision(s); apply requires checkbox + typed legal name per pinned agreement; acceptances store IP/UA/`accepted_at` + revision link. No CPT. DocuSign later.
 
 ---
 
@@ -138,14 +123,17 @@
 
 ---
 
-## When you return — decide these first
+## What’s left from this meeting
 
-1. **Registration required vs optional list** (item 3).  
-2. Add-on limits: **per application only** vs **per role matrix** now (item 2).  
-3. Eject: status naming + **billing void default** (item 8).  
-4. Rich-text field list (item 4).  
-5. Size enums / male-only (item 1).  
-6. Ledger bug: **example member / invoice** on demo (item 7).  
-7. Priority order if not A→F above.
+| Item | Status | Notes |
+|------|--------|--------|
+| 1 Sizes | Done (1.2.0) | |
+| 2 Add-on role limits | Done (1.2.0) | |
+| 3 Full registration + requireds | Done (1.2.0) | Admin lean requireds in 1.3.0 (item 5) |
+| 4 Escape / rich text | **Open** | Slash audit + which fields get `wp_editor` |
+| 5 Admin emergency phone | Done (1.3.0) | Lean admin requireds |
+| 6–9 Billing / eject / attendee details | Done (1.2.0) | |
+| 10 Custom fields | Done (1.3.0) | + multiselect |
+| 11 Agreements | Done (1.3.0) | + reapply / cancel billing UX |
 
-No implementation started from this meeting doc until you pick slice(s) and answer blockers.
+**Likely next product work (not from demo list):** ship/tag **1.3.0**; then item **4** (escaping + rich text) or post-demo ideas beyond this doc (DocuSign, per-event questionnaires, notifications polish).

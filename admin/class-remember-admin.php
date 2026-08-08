@@ -207,6 +207,11 @@ class Remember_Admin {
 				'caps'  => array( 'remember_access_settings' ),
 			),
 			array(
+				'slug'  => 'remember-agreements',
+				'label' => __( 'Agreements', 'remember' ),
+				'caps'  => array( 'remember_access_settings' ),
+			),
+			array(
 				'slug'  => 'remember-import-export',
 				'label' => __( 'Import/Export', 'remember' ),
 				'caps'  => array( 'remember_access_settings' ),
@@ -407,6 +412,14 @@ class Remember_Admin {
 		);
 		add_submenu_page(
 			'remember',
+			__( 'Agreements', 'remember' ),
+			'',
+			'remember_access_settings',
+			'remember-agreements',
+			array( $this, 'display_agreements_page' )
+		);
+		add_submenu_page(
+			'remember',
 			__( 'Import/Export', 'remember' ),
 			'',
 			'remember_access_settings',
@@ -440,6 +453,7 @@ class Remember_Admin {
 			'remember-roles',
 			'remember-products',
 			'remember-profile-questions',
+			'remember-agreements',
 			'remember-import-export',
 		);
 	}
@@ -477,6 +491,7 @@ class Remember_Admin {
 			array( 'remember-roles', array( 'remember_read_roles' ) ),
 			array( 'remember-products', array( 'remember_access_settings' ) ),
 			array( 'remember-profile-questions', array( 'remember_access_settings' ) ),
+			array( 'remember-agreements', array( 'remember_access_settings' ) ),
 			array( 'remember-import-export', array( 'remember_access_settings' ) ),
 		);
 		foreach ( $candidates as $pair ) {
@@ -718,6 +733,18 @@ class Remember_Admin {
 			wp_die( __( 'You do not have sufficient permissions to access this page.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
 		}
 		include_once 'views/profile-questions.php';
+	}
+
+	/**
+	 * Render Agreements library admin page.
+	 *
+	 * @return void
+	 */
+	public function display_agreements_page() {
+		if ( ! current_user_can( 'remember_access_settings' ) ) {
+			wp_die( __( 'You do not have sufficient permissions to access this page.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+		}
+		include_once 'views/agreements.php';
 	}
 
 	/**
@@ -1452,6 +1479,30 @@ class Remember_Admin {
 		}
 
 		wp_send_json_success( $formatted_addons );
+	}
+
+	/**
+	 * AJAX: HTML for agreements required on apply for an event.
+	 *
+	 * @return void
+	 */
+	public function ajax_get_event_agreements() {
+		check_ajax_referer( 'remember_get_event_agreements', 'nonce' );
+
+		$event_id = isset( $_POST['event_id'] ) ? absint( $_POST['event_id'] ) : 0;
+		if ( $event_id <= 0 ) {
+			wp_send_json_error( array( 'message' => __( 'Invalid event ID.', 'remember' ) ) );
+		}
+		if ( ! is_user_logged_in() ) {
+			wp_send_json_error( array( 'message' => __( 'You must be logged in.', 'remember' ) ) );
+		}
+
+		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-agreements.php';
+		wp_send_json_success(
+			array(
+				'html' => Remember_Agreements::render_apply_html( $event_id ),
+			)
+		);
 	}
 
 	/**

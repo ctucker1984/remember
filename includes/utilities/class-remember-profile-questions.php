@@ -547,7 +547,8 @@ class Remember_Profile_Questions {
 			$name  = 'remember_pq_' . $qid;
 			$id    = $name;
 			$value = isset( $responses[ $qid ] ) ? $responses[ $qid ] : '';
-			$req   = ! empty( $q->is_required );
+			// Admin member edit does not enforce custom-field required flags.
+			$req   = ! empty( $q->is_required ) && ! $is_admin;
 			$label = (string) $q->label;
 
 			$is_multi = ( 'multiselect' === $q->field_type );
