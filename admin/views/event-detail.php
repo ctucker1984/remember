@@ -56,7 +56,7 @@ $is_multi_day = $viewing_event->start_date !== $viewing_event->end_date;
 <div class="remember-event-detail">
 	<!-- Header Section -->
 	<div style="background: #fff; border: 1px solid #ccd0d4; border-radius: 4px; padding: 20px; margin-bottom: 20px;">
-		<div style="display: flex; align-items: center; gap: 20px; justify-content: space-between;">
+		<div style="display: flex; align-items: flex-start; gap: 20px; justify-content: space-between;">
 			<div style="flex: 1;">
 				<h2 style="margin: 0 0 10px 0; font-size: 24px;">
 					<?php echo esc_html( $viewing_event->event_name ); ?>
@@ -102,6 +102,25 @@ $is_multi_day = $viewing_event->start_date !== $viewing_event->end_date;
 					<?php endif; ?>
 				</div>
 			</div>
+			<?php if ( current_user_can( 'remember_event_data_export' ) ) : ?>
+				<div style="flex-shrink: 0;">
+					<?php
+					$export_url = wp_nonce_url(
+						admin_url(
+							'admin.php?page=remember-events&view=' . (int) $viewing_event->event_id
+							. '&remember_export_event_participants=1&event_id=' . (int) $viewing_event->event_id
+						),
+						'remember_export_event_participants_' . (int) $viewing_event->event_id
+					);
+					?>
+					<a href="<?php echo esc_url( $export_url ); ?>" class="button button-secondary">
+						<?php esc_html_e( 'Export accepted participants', 'remember' ); ?>
+					</a>
+					<p class="description" style="margin: 8px 0 0; max-width: 220px;">
+						<?php esc_html_e( 'CSV of accepted members for external lists.', 'remember' ); ?>
+					</p>
+				</div>
+			<?php endif; ?>
 		</div>
 	</div>
 

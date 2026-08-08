@@ -52,18 +52,7 @@
 
 ## 4. Escape characters before apostrophes + rich text
 
-**Likely cause:** `sanitize_textarea_field( $_POST[...] )` without `wp_unslash()` on some admin saves (e.g. location details, some member fields). Stored `\'` then shown literally.
-
-**Plan**
-- Audit all textarea/content saves: `wp_unslash` → sanitize appropriately.
-- One-time cleanup helper or migration note for existing bad rows (optional SQL/stripslashes pass).
-- Promote key “big text” fields to **rich text** (`wp_editor` / block-friendly HTML):
-  - Candidates: location `details`, event `event_description`, future **waivers**, maybe member `interests` (or keep interests plain).
-- Output with `wp_kses_post` (not `esc_html` of raw HTML).
-- Keep application notes / short fields plain unless you want those rich too.
-
-**Open questions**
-- Which fields must be rich text in v1 vs plain + slash-fix only?
+**Done (1.2.0 / 1.3.0):** Big-text fields use `wp_editor` + `wp_kses_post( wp_unslash( … ) )` (location details, event description, attendee details, interests, agreement bodies). New saves no longer store literal `\'`. Optional: one-time cleanup of old bad rows; admin location detail should render with `wp_kses_post` (not `esc_html`) if still showing tags literally.
 
 ---
 
@@ -130,10 +119,10 @@
 | 1 Sizes | Done (1.2.0) | |
 | 2 Add-on role limits | Done (1.2.0) | |
 | 3 Full registration + requireds | Done (1.2.0) | Admin lean requireds in 1.3.0 (item 5) |
-| 4 Escape / rich text | **Open** | Slash audit + which fields get `wp_editor` |
+| 4 Escape / rich text | Done | Rich-text saves with `wp_unslash`; optional legacy cleanup |
 | 5 Admin emergency phone | Done (1.3.0) | Lean admin requireds |
 | 6–9 Billing / eject / attendee details | Done (1.2.0) | |
 | 10 Custom fields | Done (1.3.0) | + multiselect |
 | 11 Agreements | Done (1.3.0) | + reapply / cancel billing UX |
 
-**Likely next product work (not from demo list):** ship/tag **1.3.0**; then item **4** (escaping + rich text) or post-demo ideas beyond this doc (DocuSign, per-event questionnaires, notifications polish).
+**Likely next product work:** ship/tag **1.3.0**; then ideas beyond this doc (DocuSign, per-event questionnaires, notifications polish).

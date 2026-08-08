@@ -676,6 +676,20 @@ class Remember_Profile_Questions {
 	}
 
 	/**
+	 * Active custom field short names (CSV headers for event participant export).
+	 *
+	 * @return string[]
+	 */
+	public static function active_export_field_keys() {
+		$model = self::question_model();
+		$keys  = array();
+		foreach ( $model->get_active() as $q ) {
+			$keys[] = (string) $q->field_key;
+		}
+		return $keys;
+	}
+
+	/**
 	 * Set one answer by field_key (import).
 	 *
 	 * @param int    $member_id Member ID.

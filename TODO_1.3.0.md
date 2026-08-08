@@ -32,3 +32,4 @@
 - [x] Schema `1.25.0`: `superseded_at` — admin **Allow reapply** for declined/cancelled (keeps history; member can re-ack agreements)
 - [x] Member dashboard cancel: leave invoice alone (no void/refund radios); admin can **unwind billing** later
 - [x] Admin member edit: only nickname, display name, legal first/last, cell phone required (address/IM/emergency/custom optional)
+- [x] Cap `remember_event_data_export` (Event Admin + System Admin); event detail **Export accepted participants** CSV (profile + custom short names + role + add-on qty columns). Schema bump `1.26.0` (cap grant)

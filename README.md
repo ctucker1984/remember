@@ -168,6 +168,7 @@ Enable `WP_DEBUG` as needed; logging uses `Remember_Logger`.
 - **Agreements:** Versioned library (rules, waivers, etc.); events pin revisions; applicants acknowledge each with typed legal name on apply. Schema `1.24.0`.
 - **Allow reapply:** Admin can supersede declined/cancelled applications so the member may apply again (schema `1.25.0`).
 - **Admin profile flexibility:** Member edit only requires nickname, display name, legal first/last, and cell phone.
+- **Event participant CSV:** On admin event detail, export accepted participants (profile, custom field short names/keys, role, per–add-on quantities). Capability `remember_event_data_export` (Event Administrator + System Administrator). Schema `1.26.0`.
 
 ### 1.2.0
 

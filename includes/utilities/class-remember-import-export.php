@@ -981,4 +981,263 @@ class Remember_Import_Export {
 	private static function read_csv_line( $handle ) {
 		return fgetcsv( $handle, 0, ',', '"', '\\' );
 	}
+
+	/**
+	 * Export accepted participants for one event (organizer roster dump).
+	 *
+	 * @param int $event_id Event ID.
+	 * @return void Exits after download, or returns on invalid event.
+	 */
+	public static function export_event_participants( $event_id ) {
+		global $wpdb;
+
+		$event_id = absint( $event_id );
+		if ( $event_id <= 0 ) {
+			return;
+		}
+
+		require_once plugin_dir_path( __FILE__ ) . '../models/class-event.php';
+		require_once plugin_dir_path( __FILE__ ) . 'class-remember-profile-questions.php';
+
+		$event_model = new Remember_Event();
+		$event       = $event_model->get( $event_id );
+		if ( ! $event ) {
+			return;
+		}
+
+		$apps_table  = $wpdb->prefix . 'remember_event_applications';
+		$er_table    = $wpdb->prefix . 'remember_event_roles';
+		$roles_table = $wpdb->prefix . 'remember_roles';
+		$merch_table = $wpdb->prefix . 'remember_event_merchandise';
+		$app_merch   = $wpdb->prefix . 'remember_application_merchandise';
+
+		$addons = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT merchandise_id, merchandise_name FROM {$merch_table}
+				WHERE event_id = %d
+				ORDER BY merchandise_name ASC, merchandise_id ASC",
+				$event_id
+			)
+		);
+		if ( ! is_array( $addons ) ) {
+			$addons = array();
+		}
+
+		$field_keys = Remember_Profile_Questions::active_export_field_keys();
+
+		$headers = array(
+			'Application ID',
+			'Event ID',
+			'Event Name',
+			'Event Role',
+			'Applied At',
+			'Status',
+			'Ticket Voided',
+			'Ticket Ready Emailed At',
+			'User ID',
+			'Email',
+			'Display Name',
+			'Nickname',
+			'First Name',
+			'Last Name',
+			'Legal First Name',
+			'Legal Last Name',
+			'Street Address',
+			'City',
+			'State',
+			'Postal Code',
+			'Country',
+			'Cell Phone',
+			'Timezone',
+			'IM Type',
+			'IM Handle',
+			'Shirt Size',
+			'Pants Size',
+			'Shoe Size',
+			'Emergency Contact First',
+			'Emergency Contact Last',
+			'Emergency Contact Phone',
+			'Emergency Contact Relationship',
+			'Dietary Restrictions',
+			'Allergies',
+			'Medical Accommodations',
+		);
+		$headers = array_merge( $headers, $field_keys );
+		foreach ( $addons as $addon ) {
+			$headers[] = (string) $addon->merchandise_name;
+		}
+		$headers[] = 'Add-ons Summary';
+
+		$applications = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT a.*, r.role_name
+				FROM {$apps_table} a
+				LEFT JOIN {$er_table} er ON a.event_role_id = er.event_role_id
+				LEFT JOIN {$roles_table} r ON er.role_id = r.role_id
+				WHERE a.event_id = %d
+					AND a.status = 'accepted'
+					AND a.superseded_at IS NULL
+				ORDER BY r.role_name ASC, a.applied_at ASC, a.application_id ASC",
+				$event_id
+			)
+		);
+		if ( ! is_array( $applications ) ) {
+			$applications = array();
+		}
+
+		$filename = 'event-' . $event_id . '-participants-' . gmdate( 'Y-m-d-H-i-s' ) . '.csv';
+
+		header( 'Content-Type: text/csv; charset=utf-8' );
+		header( 'Content-Disposition: attachment; filename=' . $filename );
+		header( 'Pragma: no-cache' );
+		header( 'Expires: 0' );
+
+		$output = fopen( 'php://output', 'w' );
+		fprintf( $output, chr( 0xEF ) . chr( 0xBB ) . chr( 0xBF ) );
+		fputcsv( $output, $headers );
+
+		foreach ( $applications as $app ) {
+			$user = get_user_by( 'ID', (int) $app->member_id );
+			if ( ! $user ) {
+				continue;
+			}
+
+			$profile = $wpdb->get_row(
+				$wpdb->prepare(
+					"SELECT * FROM {$wpdb->prefix}remember_member_profiles WHERE member_id = %d",
+					(int) $app->member_id
+				)
+			);
+
+			$qty_by_merch = array();
+			$merch_rows   = $wpdb->get_results(
+				$wpdb->prepare(
+					"SELECT merchandise_id, quantity FROM {$app_merch} WHERE event_application_id = %d",
+					(int) $app->application_id
+				)
+			);
+			if ( is_array( $merch_rows ) ) {
+				foreach ( $merch_rows as $mr ) {
+					$qty_by_merch[ (int) $mr->merchandise_id ] = (int) $mr->quantity;
+				}
+			}
+
+			$summary_parts = array();
+			foreach ( $addons as $addon ) {
+				$mid = (int) $addon->merchandise_id;
+				if ( isset( $qty_by_merch[ $mid ] ) && $qty_by_merch[ $mid ] > 0 ) {
+					$summary_parts[] = $addon->merchandise_name . '×' . $qty_by_merch[ $mid ];
+				}
+			}
+
+			$custom = Remember_Profile_Questions::get_responses_by_field_key( (int) $app->member_id );
+
+			$row = array(
+				(int) $app->application_id,
+				$event_id,
+				$event->event_name,
+				isset( $app->role_name ) ? $app->role_name : '',
+				isset( $app->applied_at ) ? $app->applied_at : '',
+				'accepted',
+				! empty( $app->ticket_voided ) ? 'Yes' : 'No',
+				isset( $app->ticket_ready_emailed_at ) ? (string) $app->ticket_ready_emailed_at : '',
+				(int) $app->member_id,
+				$user->user_email,
+				$user->display_name,
+				get_user_meta( $user->ID, 'nickname', true ),
+				$user->first_name,
+				$user->last_name,
+				$profile->legal_first_name ?? '',
+				$profile->legal_last_name ?? '',
+				$profile->address_street ?? '',
+				$profile->address_city ?? '',
+				$profile->address_state ?? '',
+				$profile->address_postal ?? '',
+				$profile->address_country ?? '',
+				$profile->cell_phone ?? '',
+				get_user_meta( $user->ID, 'timezone_string', true ),
+				$profile->im_type ?? '',
+				$profile->im_handle ?? '',
+				$profile->shirt_size ?? '',
+				$profile->pants_size ?? '',
+				$profile->shoe_size ?? '',
+				$profile->emergency_contact_first ?? '',
+				$profile->emergency_contact_last ?? '',
+				$profile->emergency_contact_phone ?? '',
+				$profile->emergency_contact_relationship ?? '',
+				self::member_list_labels( (int) $app->member_id, 'dietary' ),
+				self::member_list_labels( (int) $app->member_id, 'allergies' ),
+				self::member_list_labels( (int) $app->member_id, 'medical' ),
+			);
+
+			foreach ( $field_keys as $fkey ) {
+				$row[] = isset( $custom[ $fkey ] ) ? $custom[ $fkey ] : '';
+			}
+			foreach ( $addons as $addon ) {
+				$mid = (int) $addon->merchandise_id;
+				$row[] = ( isset( $qty_by_merch[ $mid ] ) && $qty_by_merch[ $mid ] > 0 ) ? (string) $qty_by_merch[ $mid ] : '';
+			}
+			$row[] = implode( '; ', $summary_parts );
+
+			fputcsv( $output, $row );
+		}
+
+		fclose( $output );
+		exit;
+	}
+
+	/**
+	 * Comma-separated labels for a member's dietary / allergy / medical selections.
+	 *
+	 * @param int    $member_id Member ID.
+	 * @param string $type      dietary|allergies|medical.
+	 * @return string
+	 */
+	private static function member_list_labels( $member_id, $type ) {
+		global $wpdb;
+		$member_id = absint( $member_id );
+		if ( $member_id <= 0 ) {
+			return '';
+		}
+
+		if ( 'dietary' === $type ) {
+			$names = $wpdb->get_col(
+				$wpdb->prepare(
+					"SELECT dr.restriction_name
+					FROM {$wpdb->prefix}remember_dietary_restrictions dr
+					INNER JOIN {$wpdb->prefix}remember_member_dietary_restrictions mdr ON dr.restriction_id = mdr.restriction_id
+					WHERE mdr.member_id = %d
+					ORDER BY dr.sort_order ASC, dr.restriction_name ASC",
+					$member_id
+				)
+			);
+		} elseif ( 'allergies' === $type ) {
+			$names = $wpdb->get_col(
+				$wpdb->prepare(
+					"SELECT a.allergy_name
+					FROM {$wpdb->prefix}remember_allergies a
+					INNER JOIN {$wpdb->prefix}remember_member_allergies ma ON a.allergy_id = ma.allergy_id
+					WHERE ma.member_id = %d
+					ORDER BY a.sort_order ASC, a.allergy_name ASC",
+					$member_id
+				)
+			);
+		} else {
+			$names = $wpdb->get_col(
+				$wpdb->prepare(
+					"SELECT ma.accommodation_name
+					FROM {$wpdb->prefix}remember_medical_accommodations ma
+					INNER JOIN {$wpdb->prefix}remember_member_medical_accommodations mma ON ma.accommodation_id = mma.accommodation_id
+					WHERE mma.member_id = %d
+					ORDER BY ma.sort_order ASC, ma.accommodation_name ASC",
+					$member_id
+				)
+			);
+		}
+
+		if ( ! is_array( $names ) || empty( $names ) ) {
+			return '';
+		}
+		return implode( ', ', $names );
+	}
 }

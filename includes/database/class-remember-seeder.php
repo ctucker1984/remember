@@ -155,6 +155,7 @@ class Remember_Seeder {
 				'remember_read_events',
 				'remember_update_events',
 				'remember_delete_events',
+				'remember_event_data_export',
 				// Locations (read only)
 				'remember_read_locations',
 				// Members (read only)

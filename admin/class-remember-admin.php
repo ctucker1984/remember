@@ -763,6 +763,35 @@ class Remember_Admin {
 	}
 
 	/**
+	 * Serve per-event accepted-participant CSV before admin HTML output.
+	 *
+	 * @since 1.3.0
+	 */
+	public function handle_event_participant_export() {
+		if ( ! is_admin() || ! isset( $_GET['page'] ) || 'remember-events' !== $_GET['page'] ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			return;
+		}
+		if ( empty( $_GET['remember_export_event_participants'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			return;
+		}
+		if ( ! current_user_can( 'remember_event_data_export' ) ) {
+			wp_die( esc_html__( 'You do not have permission to export event participant data.', 'remember' ) );
+		}
+
+		$event_id = isset( $_GET['event_id'] ) ? absint( $_GET['event_id'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( $event_id <= 0 ) {
+			return;
+		}
+
+		check_admin_referer( 'remember_export_event_participants_' . $event_id );
+
+		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-import-export.php';
+		Remember_Import_Export::export_event_participants( $event_id );
+
+		wp_die( esc_html__( 'Event not found or export failed.', 'remember' ) );
+	}
+
+	/**
 	 * Serve CSV template downloads and exports before admin HTML output (avoids "headers already sent").
 	 *
 	 * @since    1.0.0

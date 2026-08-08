@@ -857,6 +857,53 @@ class Remember_Database_Updater {
 			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.25.0' ) );
 		}
 
+		// Update to 1.26.0 — event participant CSV export capability.
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.26.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.26.0' ) );
+
+			require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-capabilities.php';
+			require_once plugin_dir_path( __FILE__ ) . '../models/class-role.php';
+
+			Remember_Capabilities::setup_capabilities();
+
+			$role_model = new Remember_Role();
+			$cap        = 'remember_event_data_export';
+			$role_names = array( 'Event Administrator', 'System Administrator' );
+			$role_ids   = array();
+
+			foreach ( $role_names as $role_name ) {
+				$role_id = (int) $wpdb->get_var(
+					$wpdb->prepare(
+						"SELECT role_id FROM {$wpdb->prefix}remember_roles WHERE role_name = %s",
+						$role_name
+					)
+				);
+				if ( $role_id > 0 ) {
+					$role_model->add_capability( $role_id, $cap );
+					$role_ids[] = $role_id;
+				}
+			}
+
+			if ( ! empty( $role_ids ) ) {
+				$placeholders = implode( ',', array_fill( 0, count( $role_ids ), '%d' ) );
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- placeholders built from count.
+				$member_ids = $wpdb->get_col(
+					$wpdb->prepare(
+						"SELECT DISTINCT member_id FROM {$wpdb->prefix}remember_member_roles WHERE role_id IN ($placeholders)",
+						$role_ids
+					)
+				);
+				if ( is_array( $member_ids ) ) {
+					foreach ( $member_ids as $member_id ) {
+						Remember_Capabilities::sync_user_capabilities_from_roles( (int) $member_id );
+					}
+				}
+			}
+
+			update_option( 'remember_db_version', '1.26.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.26.0' ) );
+		}
+
 		Remember_Logger::activation_debug(
 			'update_schema: exit',
 			array( 'remember_db_version' => get_option( 'remember_db_version', '0.0.0' ) )
