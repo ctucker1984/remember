@@ -340,9 +340,25 @@ $remember_reg_im_type  = $remember_reg_val( 'im_type', 'telegram' );
 			<?php endif; ?>
 
 			<h3 class="remember-register-section-title"><?php esc_html_e( 'Interests', 'remember' ); ?></h3>
-			<div class="remember-register-row remember-register-row--stack">
-				<label for="remember_reg_interests"><?php esc_html_e( 'Interests', 'remember' ); ?></label>
-				<textarea name="remember_reg_interests" id="remember_reg_interests" class="remember-register-input remember-register-textarea" rows="4"><?php echo isset( $_POST['remember_reg_interests'] ) ? esc_textarea( wp_unslash( $_POST['remember_reg_interests'] ) ) : ''; ?></textarea>
+			<p class="remember-register-section-help"><?php esc_html_e( 'Optional.', 'remember' ); ?></p>
+			<div class="remember-register-editor">
+				<?php
+				if ( ! wp_script_is( 'editor', 'enqueued' ) && ! wp_script_is( 'editor', 'done' ) ) {
+					wp_enqueue_editor();
+				}
+				$interests_value = isset( $_POST['remember_reg_interests'] ) ? wp_kses_post( wp_unslash( $_POST['remember_reg_interests'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing -- sticky display only.
+				wp_editor(
+					$interests_value,
+					'remember_reg_interests',
+					array(
+						'textarea_name' => 'remember_reg_interests',
+						'textarea_rows' => 6,
+						'media_buttons' => false,
+						'teeny'         => true,
+						'quicktags'     => true,
+					)
+				);
+				?>
 			</div>
 
 			<h3 class="remember-register-section-title"><?php esc_html_e( 'Privacy', 'remember' ); ?></h3>

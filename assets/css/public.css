@@ -66,14 +66,15 @@
 	max-width: none;
 }
 
-.remember-register-form .remember-register-row--stack {
-	align-items: start;
+.remember-register-form .remember-register-editor {
+	margin: 0 0 1rem;
+	width: 100%;
+	max-width: 100%;
 }
 
-.remember-register-form .remember-register-textarea {
+.remember-register-form .remember-register-editor .wp-editor-wrap {
+	width: 100%;
 	max-width: 100%;
-	min-height: 6rem;
-	resize: vertical;
 }
 
 .remember-register-form .remember-register-checkboxes {

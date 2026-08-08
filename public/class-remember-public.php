@@ -75,10 +75,15 @@ class Remember_Public {
 			'nonce'   => wp_create_nonce( 'remember_public_nonce' ),
 		) );
 
-		// Front profile edit uses wp_editor for Interests.
-		if ( isset( $_GET['edit'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- view flag only.
-			global $post;
-			if ( $post instanceof WP_Post && has_shortcode( $post->post_content, 'remember_profile' ) ) {
+		// Interests uses wp_editor on profile edit and public registration.
+		global $post;
+		if ( $post instanceof WP_Post ) {
+			$needs_editor = has_shortcode( $post->post_content, 'remember_register' )
+				|| has_shortcode( $post->post_content, 'remember_registration' );
+			if ( ! $needs_editor && isset( $_GET['edit'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- view flag only.
+				$needs_editor = has_shortcode( $post->post_content, 'remember_profile' );
+			}
+			if ( $needs_editor ) {
 				wp_enqueue_editor();
 			}
 		}
