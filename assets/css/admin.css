@@ -255,6 +255,7 @@
 	grid-template-columns: 1fr;
 }
 
+.remember-member-detail-middle-column,
 .remember-member-detail-health-column {
 	display: flex;
 	flex-direction: column;
@@ -262,6 +263,7 @@
 	min-width: 0;
 }
 
+.remember-member-detail-middle-column .remember-member-detail-section,
 .remember-member-detail-health-column .remember-member-detail-health-card {
 	margin: 0;
 }

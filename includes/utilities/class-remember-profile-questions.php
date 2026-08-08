@@ -488,16 +488,16 @@ class Remember_Profile_Questions {
 	}
 
 	/**
-	 * Render read-only values for member detail.
+	 * Render read-only custom field rows for member detail (table only; caller wraps the section).
 	 *
 	 * @param int $member_id Member ID.
-	 * @return void
+	 * @return bool True if any rows were rendered.
 	 */
 	public static function render_detail_rows( $member_id ) {
 		$model = self::question_model();
 		$qs    = $model->get_all_ordered();
 		if ( empty( $qs ) ) {
-			return;
+			return false;
 		}
 		$map = self::get_responses_map( $member_id );
 		$any = false;
@@ -511,19 +511,18 @@ class Remember_Profile_Questions {
 				continue;
 			}
 			if ( ! $any ) {
-				echo '<h3 style="margin-top:1.5em;">' . esc_html__( 'Custom fields', 'remember' ) . '</h3>';
 				echo '<table class="form-table" role="presentation"><tbody>';
 				$any = true;
 			}
 			$display = self::display_value( $q, $val );
 			echo '<tr><th scope="row">' . esc_html( $q->label ) . '</th><td>';
 			echo '' !== $display ? esc_html( $display ) : '<span class="description">—</span>';
-			echo ' <span class="description">(<code>' . esc_html( $q->field_key ) . '</code>)</span>';
 			echo '</td></tr>';
 		}
 		if ( $any ) {
 			echo '</tbody></table>';
 		}
+		return $any;
 	}
 
 	/**

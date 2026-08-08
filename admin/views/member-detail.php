@@ -105,7 +105,7 @@ if ( $is_editing && ! current_user_can( 'remember_update_members' ) ) {
 		<!-- Edit Form -->
 		<?php include 'member-edit.php'; ?>
 	<?php else : ?>
-		<!-- View Mode: three equal columns — Profile | Emergency | Dietary / Allergies / Medical (stacked in column 3) -->
+		<!-- View Mode: three equal columns — Profile | Emergency + Custom Fields | Dietary / Allergies / Medical -->
 		<div class="remember-member-detail-grid remember-member-detail-grid--three-cols">
 			<!-- Profile Information -->
 			<div class="remember-member-detail-section">
@@ -206,39 +206,49 @@ if ( $is_editing && ! current_user_can( 'remember_update_members' ) ) {
 						</td>
 					</tr>
 				</table>
-				<?php
-				require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-questions.php';
-				Remember_Profile_Questions::render_detail_rows( (int) $view_member_id );
-				?>
 			</div>
 
-			<!-- Emergency Contact -->
-			<div class="remember-member-detail-section">
-				<h3><?php esc_html_e( 'Emergency Contact', 'remember' ); ?></h3>
-				<table class="form-table">
-					<tr>
-						<th><?php esc_html_e( 'Name', 'remember' ); ?></th>
-						<td>
-							<?php if ( $view_profile ) : ?>
-								<?php echo esc_html( trim( $view_profile->emergency_contact_first . ' ' . $view_profile->emergency_contact_last ) ); ?>
-							<?php else : ?>
-								<span class="description"><?php esc_html_e( 'Not provided', 'remember' ); ?></span>
-							<?php endif; ?>
-						</td>
-					</tr>
-					<tr>
-						<th><?php esc_html_e( 'Phone', 'remember' ); ?></th>
-						<td>
-							<?php echo $view_profile && $view_profile->emergency_contact_phone ? esc_html( $view_profile->emergency_contact_phone ) : '<span class="description">' . esc_html__( 'Not provided', 'remember' ) . '</span>'; ?>
-						</td>
-					</tr>
-					<tr>
-						<th><?php esc_html_e( 'Relationship', 'remember' ); ?></th>
-						<td>
-							<?php echo $view_profile && $view_profile->emergency_contact_relationship ? esc_html( $view_profile->emergency_contact_relationship ) : '<span class="description">' . esc_html__( 'Not provided', 'remember' ) . '</span>'; ?>
-						</td>
-					</tr>
-				</table>
+			<!-- Emergency Contact + Custom Fields (stacked) -->
+			<div class="remember-member-detail-middle-column">
+				<div class="remember-member-detail-section">
+					<h3><?php esc_html_e( 'Emergency Contact', 'remember' ); ?></h3>
+					<table class="form-table">
+						<tr>
+							<th><?php esc_html_e( 'Name', 'remember' ); ?></th>
+							<td>
+								<?php if ( $view_profile ) : ?>
+									<?php echo esc_html( trim( $view_profile->emergency_contact_first . ' ' . $view_profile->emergency_contact_last ) ); ?>
+								<?php else : ?>
+									<span class="description"><?php esc_html_e( 'Not provided', 'remember' ); ?></span>
+								<?php endif; ?>
+							</td>
+						</tr>
+						<tr>
+							<th><?php esc_html_e( 'Phone', 'remember' ); ?></th>
+							<td>
+								<?php echo $view_profile && $view_profile->emergency_contact_phone ? esc_html( $view_profile->emergency_contact_phone ) : '<span class="description">' . esc_html__( 'Not provided', 'remember' ) . '</span>'; ?>
+							</td>
+						</tr>
+						<tr>
+							<th><?php esc_html_e( 'Relationship', 'remember' ); ?></th>
+							<td>
+								<?php echo $view_profile && $view_profile->emergency_contact_relationship ? esc_html( $view_profile->emergency_contact_relationship ) : '<span class="description">' . esc_html__( 'Not provided', 'remember' ) . '</span>'; ?>
+							</td>
+						</tr>
+					</table>
+				</div>
+				<?php
+				require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-questions.php';
+				ob_start();
+				$remember_has_custom_fields = Remember_Profile_Questions::render_detail_rows( (int) $view_member_id );
+				$remember_custom_fields_html = ob_get_clean();
+				if ( $remember_has_custom_fields ) :
+					?>
+					<div class="remember-member-detail-section">
+						<h3><?php esc_html_e( 'Custom Fields', 'remember' ); ?></h3>
+						<?php echo $remember_custom_fields_html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in render_detail_rows() ?>
+					</div>
+				<?php endif; ?>
 			</div>
 
 			<!-- Dietary, Allergies, Medical: stacked in the third column; always show all three cards -->
