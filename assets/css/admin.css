@@ -602,3 +602,59 @@
 	padding: 8px 12px;
 	color: #646970;
 }
+
+/* Custom profile fields — choice repeater */
+.remember-pq-choices {
+	max-width: 420px;
+}
+
+.remember-pq-choices-head,
+.remember-pq-choice-row {
+	display: grid;
+	grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto;
+	gap: 8px;
+	align-items: center;
+}
+
+.remember-pq-choices-head {
+	margin-bottom: 4px;
+	font-size: 12px;
+	font-weight: 600;
+	color: #646970;
+}
+
+.remember-pq-choices-list {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.remember-pq-choice-row input[type="text"] {
+	width: 100%;
+	max-width: 100%;
+	margin: 0;
+}
+
+.remember-pq-remove-choice {
+	padding: 0 2px;
+	white-space: nowrap;
+	line-height: 2.2;
+}
+
+.remember-pq-choices-actions {
+	margin: 10px 0 0;
+}
+
+.remember-pq-form .form-table th {
+	width: 140px;
+	padding-top: 16px;
+}
+
+.remember-pq-form .form-table td {
+	padding-top: 12px;
+	padding-bottom: 12px;
+}
+
+.remember-pq-form .form-table .description {
+	margin-bottom: 0;
+}

@@ -313,6 +313,13 @@ if ( $photo_max_bytes < 1 ) {
 			</td>
 		</tr>
 	</table>
+
+	<?php
+	require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-questions.php';
+	echo '<table class="form-table">';
+	Remember_Profile_Questions::render_fields( (int) $view_member_id, 'admin' );
+	echo '</table>';
+	?>
 	
 	<!-- Emergency Contact -->
 	<h3><?php esc_html_e( 'Emergency Contact', 'remember' ); ?></h3>

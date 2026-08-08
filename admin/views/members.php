@@ -241,10 +241,13 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 
 		require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-clothing-sizes.php';
 		require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-fields.php';
+		require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-questions.php';
 
 		$profile_check = Remember_Profile_Fields::collect_profile_data_from_request();
 		$meta_check    = Remember_Profile_Fields::collect_meta_from_request();
+		$pq_answers    = Remember_Profile_Questions::collect_from_request();
 		$missing_key   = Remember_Profile_Fields::first_missing_required( $profile_check, $meta_check );
+		$missing_pq    = Remember_Profile_Questions::first_missing_required( $pq_answers );
 		if ( '' !== $missing_key ) {
 			$labels = Remember_Profile_Fields::labels();
 			$label  = isset( $labels[ $missing_key ] ) ? $labels[ $missing_key ] : __( 'Required field', 'remember' );
@@ -253,6 +256,14 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 					/* translators: %s: field label */
 					__( '%s is required.', 'remember' ),
 					$label
+				)
+			) . '</p></div>';
+		} elseif ( null !== $missing_pq ) {
+			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html(
+				sprintf(
+					/* translators: %s: question label */
+					__( '%s is required.', 'remember' ),
+					$missing_pq
 				)
 			) . '</p></div>';
 		} else {
@@ -489,6 +500,7 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 				Remember_Logger::info( 'Member roles updated', array( 'member_id' => $member_id, 'roles' => $selected_role_ids ) );
 			}
 			
+			Remember_Profile_Questions::save_for_member( $member_id, $pq_answers );
 			Remember_Logger::info( 'Member profile updated', array( 'member_id' => $member_id ) );
 			do_action( 'remember_member_profile_saved', $member_id );
 			// Set success flag and clear edit mode (no redirect to avoid headers already sent)
@@ -499,7 +511,7 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 			Remember_Logger::error( 'Failed to update member profile', array( 'member_id' => $member_id ) );
 			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to update member profile.', 'remember' ) . '</p></div>';
 		}
-		} // end cell_phone required check
+		} // end required-field checks
 	} elseif ( $member_id > 0 && 'sync_qb_customer' === $action ) {
 		if ( ! current_user_can( 'remember_update_members' ) ) {
 			wp_die( __( 'You do not have sufficient permissions to perform this action.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );

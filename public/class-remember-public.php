@@ -183,8 +183,14 @@ class Remember_Public {
 			$this->redirect_member_registration( 'missing_fields' );
 		}
 
+		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-profile-questions.php';
+		$pq_answers = Remember_Profile_Questions::collect_from_request();
+
 		$missing = Remember_Profile_Fields::first_missing_required( $profile_data, $meta_data );
 		if ( '' !== $missing ) {
+			$this->redirect_member_registration( 'missing_fields' );
+		}
+		if ( null !== Remember_Profile_Questions::first_missing_required( $pq_answers ) ) {
 			$this->redirect_member_registration( 'missing_fields' );
 		}
 
@@ -300,6 +306,7 @@ class Remember_Public {
 		}
 
 		Remember_Profile_Fields::save_junctions_from_request( $user_id );
+		Remember_Profile_Questions::save_for_member( $user_id, $pq_answers );
 
 		if ( Remember_Vetting_Workflow::should_vet_on_join() ) {
 			$vetting_result = Remember_Vetting_Workflow::create_vetting_case( $user_id );

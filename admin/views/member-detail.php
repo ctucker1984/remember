@@ -206,6 +206,10 @@ if ( $is_editing && ! current_user_can( 'remember_update_members' ) ) {
 						</td>
 					</tr>
 				</table>
+				<?php
+				require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-questions.php';
+				Remember_Profile_Questions::render_detail_rows( (int) $view_member_id );
+				?>
 			</div>
 
 			<!-- Emergency Contact -->

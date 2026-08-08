@@ -207,6 +207,11 @@ $remember_reg_im_type  = $remember_reg_val( 'im_type', 'telegram' );
 				?>
 			</div>
 
+			<?php
+			require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-questions.php';
+			Remember_Profile_Questions::render_fields( 0, 'register' );
+			?>
+
 			<h3 class="remember-register-section-title"><?php esc_html_e( 'Emergency Contact', 'remember' ); ?></h3>
 
 			<div class="remember-register-row">

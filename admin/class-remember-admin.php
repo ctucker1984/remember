@@ -286,6 +286,16 @@ class Remember_Admin {
 			array( $this, 'display_products_page' )
 		);
 
+		// Custom profile fields (admin-defined questions).
+		add_submenu_page(
+			'remember',
+			__( 'Custom Fields', 'remember' ),
+			__( 'Custom Fields', 'remember' ),
+			'remember_access_settings',
+			'remember-profile-questions',
+			array( $this, 'display_profile_questions_page' )
+		);
+
 		// Settings
 		add_submenu_page(
 			'remember',
@@ -516,6 +526,18 @@ class Remember_Admin {
 
 		require_once plugin_dir_path( __FILE__ ) . '../includes/models/class-product.php';
 		include_once 'views/products.php';
+	}
+
+	/**
+	 * Render custom profile fields (questions) admin page.
+	 *
+	 * @return void
+	 */
+	public function display_profile_questions_page() {
+		if ( ! current_user_can( 'remember_access_settings' ) ) {
+			wp_die( __( 'You do not have sufficient permissions to access this page.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+		}
+		include_once 'views/profile-questions.php';
 	}
 
 	/**

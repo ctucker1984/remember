@@ -3,12 +3,20 @@
 **Branch:** `v1.3.0`  
 **From roadmap:** Questionnaires / waivers (E–F). See `TODO_ROADMAP_POST_DEMO.md`.
 
-## Upgrade safety (do first)
+## Upgrade safety
 
-- [x] Deactivate → replace → silent reactivate on zip **upload overwrite** (WP core only does this for dashboard `upgrade()`, not Upload → Replace)
-- [ ] **Note for sites still on ≤1.2.0:** this code is not present until 1.3.0 is installed. Upgrade **to** 1.3.0 once by deactivating reMember first, then upload/activate — or ship a **1.2.1** hotfix with only this class, then upgrade normally.
+- [x] Deactivate → replace → silent reactivate on zip **upload overwrite**
+- [ ] **Note for sites still on ≤1.2.0:** deactivate reMember once before first install of 1.3.0 (or ship a 1.2.1 hotfix with only the upgrader).
 
-## E / F — deferred product work
+## E — Profile custom fields (questionnaires)
 
-- [ ] Questionnaires
-- [ ] Waivers
+**Scope:** Member profile only (no per-event questions).
+
+- [x] Schema `1.23.0`: `remember_profile_questions` + `remember_profile_question_responses`
+- [x] Admin → **Custom Fields**: question text, export field key, type (text | dropdown with key|label options), required, active, sort
+- [x] Show on registration, front profile edit/view, admin member edit/detail
+- [x] Member CSV export/import columns = export field keys (select stores/exports option **key**)
+
+## F — Event waivers
+
+- [ ] Deferred until E is validated

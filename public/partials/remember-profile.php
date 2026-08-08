@@ -48,11 +48,18 @@ if ( ! isset( $is_edit ) ) {
 
 // Handle form submission
 if ( isset( $_POST['remember_profile_action'] ) && check_admin_referer( 'remember_profile_action', 'remember_profile_nonce' ) ) {
+	require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-questions.php';
 	$profile_data = Remember_Profile_Fields::collect_profile_data_from_request();
 	$meta_data    = Remember_Profile_Fields::collect_meta_from_request();
+	$pq_answers   = Remember_Profile_Questions::collect_from_request();
 	$missing      = Remember_Profile_Fields::first_missing_required( $profile_data, $meta_data );
 	if ( '' !== $missing ) {
 		wp_safe_redirect( add_query_arg( array( 'edit' => '1', 'remember_profile_error' => $missing ) ) );
+		exit;
+	}
+	$missing_pq = Remember_Profile_Questions::first_missing_required( $pq_answers );
+	if ( null !== $missing_pq ) {
+		wp_safe_redirect( add_query_arg( array( 'edit' => '1', 'remember_profile_error' => 'custom_field' ) ) );
 		exit;
 	}
 
@@ -146,6 +153,7 @@ if ( isset( $_POST['remember_profile_action'] ) && check_admin_referer( 'remembe
 	}
 	
 	Remember_Profile_Fields::save_junctions_from_request( $user->ID );
+	Remember_Profile_Questions::save_for_member( $user->ID, $pq_answers );
 
 	do_action( 'remember_member_profile_saved', $user->ID );
 
@@ -658,6 +666,11 @@ if ( ! empty( $selected_allergy_ids ) ) {
 				</div>
 			</div>
 
+			<?php
+			require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-questions.php';
+			Remember_Profile_Questions::render_fields( (int) $user->ID, 'front' );
+			?>
+
 			<div class="remember-form-section">
 				<h3 class="remember-form-section-title"><?php esc_html_e( 'Emergency Contact', 'remember' ); ?></h3>
 				<div class="remember-form-row">
@@ -922,6 +935,38 @@ if ( ! empty( $selected_allergy_ids ) ) {
 						<h3 class="remember-form-section-title"><?php esc_html_e( 'Interests', 'remember' ); ?></h3>
 						<div class="remember-profile-view-item remember-profile-view-item-full">
 							<span class="remember-profile-view-value remember-richtext"><?php echo wp_kses_post( wpautop( $profile->interests ) ); ?></span>
+						</div>
+					</div>
+				<?php endif; ?>
+
+				<?php
+				require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-profile-question.php';
+				require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-questions.php';
+				$pq_map    = Remember_Profile_Questions::get_responses_map( (int) $user->ID );
+				$pq_active = array();
+				foreach ( ( new Remember_Profile_Question() )->get_active() as $pq ) {
+					$qid = (int) $pq->question_id;
+					$val = isset( $pq_map[ $qid ] ) ? $pq_map[ $qid ] : '';
+					if ( '' === $val ) {
+						continue;
+					}
+					$pq_active[] = array( $pq, $val );
+				}
+				if ( ! empty( $pq_active ) ) :
+					?>
+					<div class="remember-form-section">
+						<h3 class="remember-form-section-title"><?php esc_html_e( 'Additional questions', 'remember' ); ?></h3>
+						<div class="remember-profile-view-grid">
+							<?php foreach ( $pq_active as $pair ) : ?>
+								<?php
+								$pq  = $pair[0];
+								$val = $pair[1];
+								?>
+								<div class="remember-profile-view-item">
+									<strong class="remember-profile-view-label"><?php echo esc_html( $pq->label ); ?></strong>
+									<span class="remember-profile-view-value"><?php echo esc_html( Remember_Profile_Questions::display_value( $pq, $val ) ); ?></span>
+								</div>
+							<?php endforeach; ?>
 						</div>
 					</div>
 				<?php endif; ?>

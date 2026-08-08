@@ -82,6 +82,8 @@ class Remember_Database {
 			'vetting_collaborators'          => 'create_vetting_collaborators_table',
 			'vetting_notes'                  => 'create_vetting_notes_table',
 			'notification_settings'          => 'create_notification_settings_table',
+			'profile_questions'              => 'create_profile_questions_table',
+			'profile_question_responses'     => 'create_profile_question_responses_table',
 			'plugin_version'                 => 'create_plugin_version_table',
 		);
 
@@ -824,6 +826,54 @@ class Remember_Database {
 			updated_at DATETIME NOT NULL,
 			PRIMARY KEY (setting_id),
 			UNIQUE KEY notification_type (notification_type)
+		) $charset_collate;";
+
+		dbDelta( $sql );
+	}
+
+	/**
+	 * Admin-defined profile custom questions (text or select).
+	 */
+	public function create_profile_questions_table() {
+		$table_name      = $this->prefix . 'profile_questions';
+		$charset_collate = $this->wpdb->get_charset_collate();
+
+		$sql = "CREATE TABLE $table_name (
+			question_id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+			field_key VARCHAR(64) NOT NULL,
+			label VARCHAR(500) NOT NULL,
+			field_type VARCHAR(20) NOT NULL DEFAULT 'text',
+			options_json LONGTEXT DEFAULT NULL,
+			is_required TINYINT(1) NOT NULL DEFAULT 0,
+			sort_order INT(11) NOT NULL DEFAULT 0,
+			is_active TINYINT(1) NOT NULL DEFAULT 1,
+			created_at DATETIME NOT NULL,
+			updated_at DATETIME NOT NULL,
+			PRIMARY KEY (question_id),
+			UNIQUE KEY field_key (field_key),
+			KEY is_active_sort (is_active, sort_order)
+		) $charset_collate;";
+
+		dbDelta( $sql );
+	}
+
+	/**
+	 * Member answers to profile custom questions.
+	 */
+	public function create_profile_question_responses_table() {
+		$table_name      = $this->prefix . 'profile_question_responses';
+		$charset_collate = $this->wpdb->get_charset_collate();
+
+		$sql = "CREATE TABLE $table_name (
+			response_id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+			question_id BIGINT(20) UNSIGNED NOT NULL,
+			member_id BIGINT(20) UNSIGNED NOT NULL,
+			value_text TEXT DEFAULT NULL,
+			created_at DATETIME NOT NULL,
+			updated_at DATETIME NOT NULL,
+			PRIMARY KEY (response_id),
+			UNIQUE KEY question_member (question_id, member_id),
+			KEY member_id (member_id)
 		) $charset_collate;";
 
 		dbDelta( $sql );

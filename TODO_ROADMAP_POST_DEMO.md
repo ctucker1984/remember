@@ -1,7 +1,7 @@
 # Post-demo roadmap (business meeting notes)
 
 **Captured:** 2026-08-07  
-**Status:** **Implementing A–D on `v1.2.0`.** E–F deferred to **1.3.0**.  
+**Status:** A–D shipped in **1.2.0**. **E** (profile custom fields) on `v1.3.0`. F (waivers) still open.  
 **Source:** Live demo feedback.
 
 ---
@@ -106,21 +106,9 @@
 
 ---
 
-## 10. Questionnaires (custom fields) — prepare to support
+## 10. Questionnaires (custom fields) — profile only
 
-**Today:** No form builder. Closest: dietary/allergy/medical multi-selects + interests text.
-
-**Plan (design now, ship in slice E)**
-- Tables (sketch):
-  - `remember_questions` — id, scope (`profile` | `event` | `application`), label, type (`text|textarea|select|multiselect|checkbox|radio|number|date`), options JSON, `is_required`, sort, active.
-  - `remember_question_responses` — question_id, subject_type, subject_id (member_id or application_id), value JSON/text.
-- Admin UI: define questions; assign to profile and/or per-event application.
-- Front: render on register/profile/apply as configured; enforce required.
-- Export/import later.
-
-**Open questions**
-- Profile-only first vs event-application questions first?
-- Need conditional logic (show if…)? Assume **no** for v1.
+**Done (1.3.0 / schema `1.23.0`):** Admin → Custom Fields. Each question has label, export `field_key` (CSV header), type `text` or `select` (options as `key|Label`), required/active/sort. Shown on register + profile + admin member. CSV export/import appends field keys. No per-event questionnaires; no conditional logic.
 
 ---
 

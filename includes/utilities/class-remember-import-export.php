@@ -44,34 +44,11 @@ class Remember_Import_Export {
 		// Add BOM for Excel compatibility
 		fprintf( $output, chr( 0xEF ) . chr( 0xBB ) . chr( 0xBF ) );
 		
-		// Headers only
-		fputcsv( $output, array(
-			'User ID',
-			'Email',
-			'Display Name',
-			'First Name',
-			'Last Name',
-			'Status',
-			'Legal First Name',
-			'Legal Last Name',
-			'Street Address',
-			'City',
-			'State',
-			'Postal Code',
-			'Country',
-			'Cell Phone',
-			'Timezone',
-			'IM Handle',
-			'IM Type',
-			'Interests',
-			'Emergency Contact First',
-			'Emergency Contact Last',
-			'Emergency Contact Phone',
-			'Emergency Contact Relationship',
-		) );
-		
-		// Add example row
-		fputcsv( $output, array(
+		$headers = self::member_csv_headers();
+		fputcsv( $output, $headers );
+
+		// Add example row (core columns only; custom field keys are empty).
+		$example = array(
 			'', // User ID - leave blank for new users
 			'john.doe@example.com',
 			'John Doe',
@@ -94,7 +71,11 @@ class Remember_Import_Export {
 			'Doe',
 			'+1-555-987-6543',
 			'Spouse',
-		) );
+		);
+		while ( count( $example ) < count( $headers ) ) {
+			$example[] = '';
+		}
+		fputcsv( $output, $example );
 		
 		fclose( $output );
 		exit;
@@ -105,24 +86,14 @@ class Remember_Import_Export {
 	 *
 	 * @return void
 	 */
-	public static function export_members() {
-		$member_model = new Remember_Member();
-		$members = $member_model->get_all();
-		
-		$filename = 'members-export-' . date( 'Y-m-d-H-i-s' ) . '.csv';
-		
-		header( 'Content-Type: text/csv; charset=utf-8' );
-		header( 'Content-Disposition: attachment; filename=' . $filename );
-		header( 'Pragma: no-cache' );
-		header( 'Expires: 0' );
-		
-		$output = fopen( 'php://output', 'w' );
-		
-		// Add BOM for Excel compatibility
-		fprintf( $output, chr( 0xEF ) . chr( 0xBB ) . chr( 0xBF ) );
-		
-		// Headers
-		fputcsv( $output, array(
+	/**
+	 * Member CSV column headers (core + custom profile question field keys).
+	 *
+	 * @return array<int, string>
+	 */
+	public static function member_csv_headers() {
+		require_once plugin_dir_path( __FILE__ ) . 'class-remember-profile-questions.php';
+		$headers = array(
 			'User ID',
 			'Email',
 			'Display Name',
@@ -145,7 +116,30 @@ class Remember_Import_Export {
 			'Emergency Contact Last',
 			'Emergency Contact Phone',
 			'Emergency Contact Relationship',
-		) );
+		);
+		return array_merge( $headers, Remember_Profile_Questions::export_field_keys() );
+	}
+
+	public static function export_members() {
+		$member_model = new Remember_Member();
+		$members = $member_model->get_all();
+		
+		$filename = 'members-export-' . date( 'Y-m-d-H-i-s' ) . '.csv';
+		
+		header( 'Content-Type: text/csv; charset=utf-8' );
+		header( 'Content-Disposition: attachment; filename=' . $filename );
+		header( 'Pragma: no-cache' );
+		header( 'Expires: 0' );
+		
+		$output = fopen( 'php://output', 'w' );
+		
+		// Add BOM for Excel compatibility
+		fprintf( $output, chr( 0xEF ) . chr( 0xBB ) . chr( 0xBF ) );
+
+		require_once plugin_dir_path( __FILE__ ) . 'class-remember-profile-questions.php';
+		$headers    = self::member_csv_headers();
+		$field_keys = Remember_Profile_Questions::export_field_keys();
+		fputcsv( $output, $headers );
 		
 		// Data rows
 		foreach ( $members as $member ) {
@@ -162,8 +156,9 @@ class Remember_Import_Export {
 					$member->member_id
 				)
 			);
-			
-			fputcsv( $output, array(
+
+			$custom = Remember_Profile_Questions::get_responses_by_field_key( (int) $member->member_id );
+			$row    = array(
 				$member->member_id,
 				$user->user_email,
 				$user->display_name,
@@ -186,7 +181,11 @@ class Remember_Import_Export {
 				$profile->emergency_contact_last ?? '',
 				$profile->emergency_contact_phone ?? '',
 				$profile->emergency_contact_relationship ?? '',
-			) );
+			);
+			foreach ( $field_keys as $fkey ) {
+				$row[] = isset( $custom[ $fkey ] ) ? $custom[ $fkey ] : '';
+			}
+			fputcsv( $output, $row );
 		}
 		
 		fclose( $output );
@@ -696,6 +695,18 @@ class Remember_Import_Export {
 					$profile_data,
 					array( '%d', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s' )
 				);
+			}
+
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-profile-questions.php';
+			foreach ( Remember_Profile_Questions::export_field_keys() as $fkey ) {
+				if ( ! array_key_exists( $fkey, $row_data ) ) {
+					continue;
+				}
+				$raw = trim( (string) $row_data[ $fkey ] );
+				if ( '' === $raw ) {
+					continue;
+				}
+				Remember_Profile_Questions::save_by_field_key( (int) $user_id, $fkey, $raw );
 			}
 			
 			$results['success']++;
