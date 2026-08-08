@@ -55,12 +55,12 @@ $is_multi_day = $viewing_event->start_date !== $viewing_event->end_date;
 
 <div class="remember-event-detail">
 	<!-- Header Section -->
-	<div style="background: #fff; border: 1px solid #ccd0d4; border-radius: 4px; padding: 20px; margin-bottom: 20px;">
-		<div style="display: flex; align-items: flex-start; gap: 20px; justify-content: space-between;">
-			<div style="flex: 1;">
+	<div class="remember-member-detail-card">
+		<div class="remember-member-detail-header">
+			<div class="remember-member-detail-header__meta" style="flex: 1; min-width: 0;">
 				<h2 style="margin: 0 0 10px 0; font-size: 24px;">
 					<?php echo esc_html( $viewing_event->event_name ); ?>
-					<span style="color: <?php echo esc_attr( $status_colors[ $viewing_event->status ] ); ?>; font-size: 14px; font-weight: normal; margin-left: 10px;">
+					<span class="remember-member-detail-status" style="color: <?php echo esc_attr( $status_colors[ $viewing_event->status ] ); ?>;">
 						<?php echo esc_html( $status_labels[ $viewing_event->status ] ); ?>
 					</span>
 					<?php if ( $viewing_event->is_private ) : ?>
@@ -103,7 +103,7 @@ $is_multi_day = $viewing_event->start_date !== $viewing_event->end_date;
 				</div>
 			</div>
 			<?php if ( current_user_can( 'remember_event_data_export' ) ) : ?>
-				<div style="flex-shrink: 0;">
+				<div class="remember-member-detail-header__actions">
 					<?php
 					$export_url = wp_nonce_url(
 						admin_url(
@@ -116,7 +116,7 @@ $is_multi_day = $viewing_event->start_date !== $viewing_event->end_date;
 					<a href="<?php echo esc_url( $export_url ); ?>" class="button button-secondary">
 						<?php esc_html_e( 'Export accepted participants', 'remember' ); ?>
 					</a>
-					<p class="description" style="margin: 8px 0 0; max-width: 220px;">
+					<p class="description" style="margin: 8px 0 0;">
 						<?php esc_html_e( 'CSV of accepted members for external lists.', 'remember' ); ?>
 					</p>
 				</div>
@@ -135,7 +135,8 @@ $is_multi_day = $viewing_event->start_date !== $viewing_event->end_date;
 			<?php endif; ?>
 		</h3>
 		<?php if ( ! empty( $event_applications ) ) : ?>
-			<table class="wp-list-table widefat fixed striped">
+			<div class="remember-table-scroll">
+			<table class="wp-list-table widefat striped remember-responsive-table">
 				<thead>
 					<tr>
 						<th class="column-member"><?php esc_html_e( 'Member', 'remember' ); ?></th>
@@ -219,6 +220,7 @@ $is_multi_day = $viewing_event->start_date !== $viewing_event->end_date;
 					<?php endforeach; ?>
 				</tbody>
 			</table>
+			</div>
 		<?php else : ?>
 			<p class="description"><?php esc_html_e( 'No applications found for this event.', 'remember' ); ?></p>
 		<?php endif; ?>
@@ -246,7 +248,8 @@ $is_multi_day = $viewing_event->start_date !== $viewing_event->end_date;
 			<?php endif; ?>
 		</h3>
 		<?php if ( ! empty( $attendees ) ) : ?>
-			<table class="wp-list-table widefat fixed striped">
+			<div class="remember-table-scroll">
+			<table class="wp-list-table widefat striped remember-responsive-table">
 				<thead>
 					<tr>
 						<th class="column-member"><?php esc_html_e( 'Member', 'remember' ); ?></th>
@@ -320,6 +323,7 @@ $is_multi_day = $viewing_event->start_date !== $viewing_event->end_date;
 					<?php endforeach; ?>
 				</tbody>
 			</table>
+			</div>
 		<?php else : ?>
 			<p class="description"><?php esc_html_e( 'No attendees yet. Accepted applications will appear here.', 'remember' ); ?></p>
 		<?php endif; ?>

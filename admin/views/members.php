@@ -1141,7 +1141,8 @@ if ( $view_member_id > 0 ) {
 
 	<!-- Members List -->
 	<?php if ( ! empty( $members ) ) : ?>
-		<table class="wp-list-table widefat fixed striped">
+		<div class="remember-table-scroll">
+		<table class="wp-list-table widefat striped remember-responsive-table">
 			<thead>
 				<tr>
 					<th class="column-name"><?php esc_html_e( 'Name', 'remember' ); ?></th>
@@ -1206,6 +1207,7 @@ if ( $view_member_id > 0 ) {
 					<?php endforeach; ?>
 			</tbody>
 		</table>
+		</div>
 		
 		<p class="description" style="margin-top: 15px;">
 			<?php echo esc_html( sprintf( __( 'Showing %d member(s)', 'remember' ), count( $members ) ) ); ?>

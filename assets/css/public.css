@@ -105,7 +105,8 @@
 	margin-bottom: 1rem;
 }
 
-.remember-register-form .remember-register-row label {
+/* Direct child only — nested checkbox labels must not inherit field-label styles. */
+.remember-register-form .remember-register-row > label {
 	display: block;
 	margin: 0;
 	font-weight: 600;
@@ -114,6 +115,51 @@
 	justify-self: end;
 	max-width: 12.5rem;
 	white-space: nowrap;
+}
+
+/* Custom fields / long questions: label above control, wrap freely. */
+.remember-register-form .remember-register-row--stack {
+	grid-template-columns: 1fr;
+	align-items: start;
+	row-gap: 0.4rem;
+}
+
+.remember-register-form .remember-register-row--stack > label {
+	text-align: left;
+	justify-self: start;
+	max-width: none;
+	white-space: normal;
+}
+
+.remember-register-form .remember-register-row--stack .remember-register-input,
+.remember-register-form .remember-register-row--stack select.remember-register-input {
+	max-width: 100%;
+}
+
+.remember-register-form .remember-register-row--stack .remember-register-checkboxes {
+	width: 100%;
+	max-width: none;
+	margin: 0;
+}
+
+.remember-register-form .remember-checkbox-label {
+	display: flex;
+	align-items: flex-start;
+	gap: 0.5em;
+	margin: 0;
+	font-weight: normal;
+	line-height: 1.35;
+	text-align: left;
+	white-space: normal;
+	max-width: none;
+	cursor: pointer;
+}
+
+.remember-register-form .remember-checkbox-label input[type="checkbox"] {
+	flex: 0 0 auto;
+	margin: 0.15em 0 0;
+	width: 1.1em;
+	height: 1.1em;
 }
 
 .remember-timezone-picker {
@@ -317,10 +363,11 @@
 		grid-template-columns: 1fr;
 	}
 
-	.remember-register-form .remember-register-row label {
+	.remember-register-form .remember-register-row > label {
 		text-align: left;
 		justify-self: start;
 		max-width: none;
+		white-space: normal;
 		margin-bottom: 0.2rem;
 	}
 
@@ -925,6 +972,17 @@
 	flex-direction: column;
 	gap: 0.5em;
 	margin-top: 0.35em;
+	width: 100%;
+}
+
+.remember-pq-checkboxes.remember-checkbox-grid {
+	margin-top: 0.35em;
+}
+
+.remember-form-col-full .remember-form-control,
+.remember-form-col-full select.remember-form-control {
+	max-width: 100%;
+	width: 100%;
 }
 
 .remember-agreements-apply .remember-agreement-block {

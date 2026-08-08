@@ -571,14 +571,15 @@ class Remember_Profile_Questions {
 				}
 				echo '</th><td>';
 			} elseif ( $is_register ) {
-				echo '<div class="remember-register-row">';
+				// Stacked rows: custom questions are long; two-column register layout collides.
+				echo '<div class="remember-register-row remember-register-row--stack">';
 				echo '<label' . ( $is_multi ? '' : ' for="' . esc_attr( $id ) . '"' ) . '>' . esc_html( $label );
 				if ( $req ) {
 					echo ' <span class="required">*</span>';
 				}
 				echo '</label>';
 			} else {
-				echo '<div class="remember-form-row"><div class="remember-form-col">';
+				echo '<div class="remember-form-row"><div class="remember-form-col remember-form-col-full">';
 				echo '<label' . ( $is_multi ? ' class="remember-form-label"' : ' for="' . esc_attr( $id ) . '" class="remember-form-label"' ) . '>' . esc_html( $label );
 				if ( $req ) {
 					echo ' <span class="remember-required">*</span>';
@@ -594,7 +595,13 @@ class Remember_Profile_Questions {
 				}
 				echo '</select>';
 			} elseif ( $is_multi ) {
-				$box_class = $is_admin ? 'remember-pq-checkboxes' : ( $is_register ? 'remember-register-checkboxes' : 'remember-pq-checkboxes' );
+				if ( $is_admin ) {
+					$box_class = 'remember-pq-checkboxes';
+				} elseif ( $is_register ) {
+					$box_class = 'remember-register-checkboxes';
+				} else {
+					$box_class = 'remember-pq-checkboxes remember-checkbox-grid';
+				}
 				echo '<div class="' . esc_attr( $box_class ) . '" role="group" aria-label="' . esc_attr( $label ) . '">';
 				foreach ( self::parse_options( $q->options_json ) as $opt_i => $opt ) {
 					$cid = $id . '_' . $opt_i;
