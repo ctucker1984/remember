@@ -239,6 +239,8 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 			wp_die( __( 'You do not have sufficient permissions to perform this action.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
 		}
 
+		require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-clothing-sizes.php';
+
 		$cell_phone_check = isset( $_POST['cell_phone'] ) ? sanitize_text_field( wp_unslash( $_POST['cell_phone'] ) ) : '';
 		$emergency_phone_check = isset( $_POST['emergency_contact_phone'] ) ? sanitize_text_field( wp_unslash( $_POST['emergency_contact_phone'] ) ) : '';
 		if ( '' === $cell_phone_check ) {
@@ -329,6 +331,9 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 			'im_handle' => isset( $_POST['im_handle'] ) ? sanitize_text_field( wp_unslash( $_POST['im_handle'] ) ) : '',
 			'im_type' => isset( $_POST['im_type'] ) ? sanitize_text_field( wp_unslash( $_POST['im_type'] ) ) : 'telegram',
 			'interests' => isset( $_POST['interests'] ) ? wp_kses_post( wp_unslash( $_POST['interests'] ) ) : '',
+			'shirt_size' => isset( $_POST['shirt_size'] ) ? Remember_Clothing_Sizes::sanitize( 'shirt', wp_unslash( $_POST['shirt_size'] ) ) : '',
+			'pants_size' => isset( $_POST['pants_size'] ) ? Remember_Clothing_Sizes::sanitize( 'pants', wp_unslash( $_POST['pants_size'] ) ) : '',
+			'shoe_size' => isset( $_POST['shoe_size'] ) ? Remember_Clothing_Sizes::sanitize( 'shoe', wp_unslash( $_POST['shoe_size'] ) ) : '',
 			'emergency_contact_first' => isset( $_POST['emergency_contact_first'] ) ? sanitize_text_field( wp_unslash( $_POST['emergency_contact_first'] ) ) : '',
 			'emergency_contact_last' => isset( $_POST['emergency_contact_last'] ) ? sanitize_text_field( wp_unslash( $_POST['emergency_contact_last'] ) ) : '',
 			'emergency_contact_phone' => isset( $_POST['emergency_contact_phone'] ) ? sanitize_text_field( wp_unslash( $_POST['emergency_contact_phone'] ) ) : '',

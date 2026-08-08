@@ -15,6 +15,7 @@ require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-member.p
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-countries.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-import-export.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-image-uploader.php';
+require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-clothing-sizes.php';
 
 $user = wp_get_current_user();
 $member_model = new Remember_Member();
@@ -97,6 +98,9 @@ if ( isset( $_POST['remember_profile_action'] ) && check_admin_referer( 'remembe
 		'im_handle'                   => isset( $_POST['im_handle'] ) ? sanitize_text_field( wp_unslash( $_POST['im_handle'] ) ) : '',
 		'im_type'                     => isset( $_POST['im_type'] ) ? sanitize_text_field( wp_unslash( $_POST['im_type'] ) ) : 'telegram',
 		'interests'                   => isset( $_POST['interests'] ) ? wp_kses_post( wp_unslash( $_POST['interests'] ) ) : '',
+		'shirt_size'                  => isset( $_POST['shirt_size'] ) ? Remember_Clothing_Sizes::sanitize( 'shirt', wp_unslash( $_POST['shirt_size'] ) ) : '',
+		'pants_size'                  => isset( $_POST['pants_size'] ) ? Remember_Clothing_Sizes::sanitize( 'pants', wp_unslash( $_POST['pants_size'] ) ) : '',
+		'shoe_size'                   => isset( $_POST['shoe_size'] ) ? Remember_Clothing_Sizes::sanitize( 'shoe', wp_unslash( $_POST['shoe_size'] ) ) : '',
 		'emergency_contact_first'     => isset( $_POST['emergency_contact_first'] ) ? sanitize_text_field( wp_unslash( $_POST['emergency_contact_first'] ) ) : '',
 		'emergency_contact_last'      => isset( $_POST['emergency_contact_last'] ) ? sanitize_text_field( wp_unslash( $_POST['emergency_contact_last'] ) ) : '',
 		'emergency_contact_phone'     => isset( $_POST['emergency_contact_phone'] ) ? sanitize_text_field( wp_unslash( $_POST['emergency_contact_phone'] ) ) : '',
@@ -665,6 +669,54 @@ if ( ! empty( $selected_allergy_ids ) ) {
 			</div>
 
 			<div class="remember-form-section">
+				<h3 class="remember-form-section-title"><?php esc_html_e( 'Clothing Sizes', 'remember' ); ?></h3>
+				<p class="remember-form-help"><?php esc_html_e( 'US men\'s sizes. Shirt and pants: S-4XL. Shoes: 6-15.', 'remember' ); ?></p>
+				<div class="remember-form-row">
+					<div class="remember-form-col">
+						<label for="shirt_size" class="remember-form-label"><?php esc_html_e( 'Shirt', 'remember' ); ?></label>
+						<?php
+						echo Remember_Clothing_Sizes::dropdown(
+							'shirt',
+							$profile && isset( $profile->shirt_size ) ? $profile->shirt_size : '',
+							'shirt_size',
+							'shirt_size',
+							false,
+							'remember-form-control'
+						);
+						?>
+					</div>
+					<div class="remember-form-col">
+						<label for="pants_size" class="remember-form-label"><?php esc_html_e( 'Pants', 'remember' ); ?></label>
+						<?php
+						echo Remember_Clothing_Sizes::dropdown(
+							'pants',
+							$profile && isset( $profile->pants_size ) ? $profile->pants_size : '',
+							'pants_size',
+							'pants_size',
+							false,
+							'remember-form-control'
+						);
+						?>
+					</div>
+				</div>
+				<div class="remember-form-row">
+					<div class="remember-form-col">
+						<label for="shoe_size" class="remember-form-label"><?php esc_html_e( 'Shoes', 'remember' ); ?></label>
+						<?php
+						echo Remember_Clothing_Sizes::dropdown(
+							'shoe',
+							$profile && isset( $profile->shoe_size ) ? $profile->shoe_size : '',
+							'shoe_size',
+							'shoe_size',
+							false,
+							'remember-form-control'
+						);
+						?>
+					</div>
+				</div>
+			</div>
+
+			<div class="remember-form-section">
 				<h3 class="remember-form-section-title"><?php esc_html_e( 'Interests', 'remember' ); ?></h3>
 				<div class="remember-form-row">
 					<div class="remember-form-col remember-form-col-full">
@@ -903,6 +955,35 @@ if ( ! empty( $selected_allergy_ids ) ) {
 						<span class="remember-profile-view-value"><?php echo esc_html( ! empty( $selected_allergy_names ) ? implode( ', ', $selected_allergy_names ) : __( 'None Selected', 'remember' ) ); ?></span>
 					</div>
 				</div>
+
+				<?php
+				$has_sizes = ( ! empty( $profile->shirt_size ) || ! empty( $profile->pants_size ) || ! empty( $profile->shoe_size ) );
+				if ( $has_sizes ) :
+					?>
+					<div class="remember-form-section">
+						<h3 class="remember-form-section-title"><?php esc_html_e( 'Clothing Sizes', 'remember' ); ?></h3>
+						<div class="remember-profile-view-grid">
+							<?php if ( ! empty( $profile->shirt_size ) ) : ?>
+								<div class="remember-profile-view-item">
+									<strong class="remember-profile-view-label"><?php esc_html_e( 'Shirt', 'remember' ); ?></strong>
+									<span class="remember-profile-view-value"><?php echo esc_html( $profile->shirt_size ); ?></span>
+								</div>
+							<?php endif; ?>
+							<?php if ( ! empty( $profile->pants_size ) ) : ?>
+								<div class="remember-profile-view-item">
+									<strong class="remember-profile-view-label"><?php esc_html_e( 'Pants', 'remember' ); ?></strong>
+									<span class="remember-profile-view-value"><?php echo esc_html( $profile->pants_size ); ?></span>
+								</div>
+							<?php endif; ?>
+							<?php if ( ! empty( $profile->shoe_size ) ) : ?>
+								<div class="remember-profile-view-item">
+									<strong class="remember-profile-view-label"><?php esc_html_e( 'Shoes', 'remember' ); ?></strong>
+									<span class="remember-profile-view-value"><?php echo esc_html( $profile->shoe_size ); ?></span>
+								</div>
+							<?php endif; ?>
+						</div>
+					</div>
+				<?php endif; ?>
 
 				<?php if ( ! empty( $profile->im_handle ) ) : ?>
 					<div class="remember-form-section">

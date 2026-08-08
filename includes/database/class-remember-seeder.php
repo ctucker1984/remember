@@ -55,6 +55,7 @@ class Remember_Seeder {
 			'seed_social_media_platforms',
 			'seed_dietary_restrictions',
 			'seed_allergies',
+			'seed_clothing_size_options',
 			'seed_medical_accommodations',
 			'seed_notification_settings',
 			'seed_payment_processors',
@@ -72,6 +73,15 @@ class Remember_Seeder {
 	 */
 	public function ensure_notification_settings() {
 		$this->seed_notification_settings();
+	}
+
+	/**
+	 * Ensure clothing size option rows exist (safe for upgrades).
+	 *
+	 * @return void
+	 */
+	public function ensure_clothing_size_options() {
+		$this->seed_clothing_size_options();
 	}
 
 	/**
@@ -310,6 +320,41 @@ class Remember_Seeder {
 						'is_active'    => 1,
 						'sort_order'   => $index,
 						'created_at'   => current_time( 'mysql' ),
+					)
+				);
+			}
+		}
+	}
+
+	/**
+	 * Seed clothing size options (shirt/pants S–4XL, shoes 6–15).
+	 */
+	private function seed_clothing_size_options() {
+		require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-clothing-sizes.php';
+
+		$table_name = $this->prefix . 'clothing_size_options';
+		$defaults   = Remember_Clothing_Sizes::defaults();
+
+		foreach ( $defaults as $category => $codes ) {
+			foreach ( $codes as $index => $code ) {
+				$existing = $this->wpdb->get_var(
+					$this->wpdb->prepare(
+						"SELECT option_id FROM {$table_name} WHERE size_category = %s AND size_code = %s",
+						$category,
+						$code
+					)
+				);
+				if ( $existing ) {
+					continue;
+				}
+				$this->wpdb->insert(
+					$table_name,
+					array(
+						'size_category' => $category,
+						'size_code'     => $code,
+						'is_active'     => 1,
+						'sort_order'    => (int) $index,
+						'created_at'    => current_time( 'mysql' ),
 					)
 				);
 			}

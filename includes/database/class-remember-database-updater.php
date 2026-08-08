@@ -657,6 +657,48 @@ class Remember_Database_Updater {
 			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.18.0' ) );
 		}
 
+		// Update to 1.19.0 — clothing size options + profile shirt/pants/shoe columns.
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.19.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.19.0' ) );
+
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-database.php';
+			$db = new Remember_Database();
+			$db->create_clothing_size_options_table();
+
+			$profiles_table = $wpdb->prefix . 'remember_member_profiles';
+			if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $profiles_table ) ) === $profiles_table ) {
+				$cols = $wpdb->get_col( "SHOW COLUMNS FROM {$profiles_table}", 0 );
+				if ( is_array( $cols ) ) {
+					$size_cols = array(
+						'shirt_size' => "ADD COLUMN shirt_size VARCHAR(20) DEFAULT NULL AFTER interests",
+						'pants_size' => "ADD COLUMN pants_size VARCHAR(20) DEFAULT NULL AFTER shirt_size",
+						'shoe_size'  => "ADD COLUMN shoe_size VARCHAR(20) DEFAULT NULL AFTER pants_size",
+					);
+					foreach ( $size_cols as $col_name => $alter_sql ) {
+						if ( ! in_array( $col_name, $cols, true ) ) {
+							$ok = $wpdb->query( "ALTER TABLE {$profiles_table} {$alter_sql}" );
+							if ( false === $ok ) {
+								Remember_Logger::error(
+									"Failed to add {$col_name} to remember_member_profiles",
+									array( 'error' => $wpdb->last_error )
+								);
+							} else {
+								Remember_Logger::info( "Added {$col_name} to remember_member_profiles" );
+								$cols[] = $col_name;
+							}
+						}
+					}
+				}
+			}
+
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-seeder.php';
+			$seeder = new Remember_Seeder();
+			$seeder->ensure_clothing_size_options();
+
+			update_option( 'remember_db_version', '1.19.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.19.0' ) );
+		}
+
 		Remember_Logger::activation_debug(
 			'update_schema: exit',
 			array( 'remember_db_version' => get_option( 'remember_db_version', '0.0.0' ) )

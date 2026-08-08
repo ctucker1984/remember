@@ -272,6 +272,27 @@ if ( $photo_max_bytes < 1 ) {
 				<input type="text" id="im_handle" name="im_handle" class="regular-text" value="<?php echo esc_attr( $view_profile ? $view_profile->im_handle : '' ); ?>" placeholder="<?php esc_attr_e( 'Handle', 'remember' ); ?>" style="margin-left: 10px;">
 			</td>
 		</tr>
+		<?php
+		require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-clothing-sizes.php';
+		$shirt_size = $view_profile && isset( $view_profile->shirt_size ) ? $view_profile->shirt_size : '';
+		$pants_size = $view_profile && isset( $view_profile->pants_size ) ? $view_profile->pants_size : '';
+		$shoe_size  = $view_profile && isset( $view_profile->shoe_size ) ? $view_profile->shoe_size : '';
+		?>
+		<tr>
+			<th><label for="shirt_size"><?php esc_html_e( 'Shirt Size', 'remember' ); ?></label></th>
+			<td><?php echo Remember_Clothing_Sizes::dropdown( 'shirt', $shirt_size, 'shirt_size', 'shirt_size' ); ?></td>
+		</tr>
+		<tr>
+			<th><label for="pants_size"><?php esc_html_e( 'Pants Size', 'remember' ); ?></label></th>
+			<td><?php echo Remember_Clothing_Sizes::dropdown( 'pants', $pants_size, 'pants_size', 'pants_size' ); ?></td>
+		</tr>
+		<tr>
+			<th><label for="shoe_size"><?php esc_html_e( 'Shoe Size', 'remember' ); ?></label></th>
+			<td>
+				<?php echo Remember_Clothing_Sizes::dropdown( 'shoe', $shoe_size, 'shoe_size', 'shoe_size' ); ?>
+				<p class="description"><?php esc_html_e( 'US men\'s sizes. Shirt/pants: S-4XL. Shoes: 6-15.', 'remember' ); ?></p>
+			</td>
+		</tr>
 		<tr>
 			<th><label for="interests"><?php esc_html_e( 'Interests', 'remember' ); ?></label></th>
 			<td>

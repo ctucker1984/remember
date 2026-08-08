@@ -24,18 +24,9 @@
 
 **Ask:** American male sizes in dropdowns.
 
-**Plan**
-- Add profile columns (schema bump), e.g. `shirt_size`, `pants_size`, `shoe_size` (VARCHAR storing canonical codes).
-- Seed fixed option lists (US men’s):
-  - Shirt: XS–5XL (confirm exact set with you).
-  - Pants: waist 28–48 even, and/or letter sizes — **confirm**.
-  - Shoes: US 6–16 including half sizes — **confirm**.
-- Surface on: admin member edit, front profile, and (once B lands) registration.
-- Optional later: “prefer not to say” / blank if optional.
+**Locked (2026-08-07):** Shirt S–4XL; Pants S–4XL; Shoes US 6–15 (whole). Optional on profile for now.
 
-**Open questions**
-- Exact enum lists and whether any field is required at registration vs profile-only.
-- Women’s / unisex later, or male-only for v1?
+**Done in schema `1.19.0`:** `remember_clothing_size_options` seed table + `shirt_size` / `pants_size` / `shoe_size` on `member_profiles`; admin + front profile dropdowns. Registration surface lands with the rest of slice B.
 
 ---
 

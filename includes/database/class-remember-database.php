@@ -60,6 +60,7 @@ class Remember_Database {
 			'member_dietary_restrictions'    => 'create_member_dietary_restrictions_table',
 			'allergies'                      => 'create_allergies_table',
 			'member_allergies'               => 'create_member_allergies_table',
+			'clothing_size_options'          => 'create_clothing_size_options_table',
 			'medical_accommodations'         => 'create_medical_accommodations_table',
 			'member_medical_accommodations'  => 'create_member_medical_accommodations_table',
 			'roles'                          => 'create_roles_table',
@@ -144,6 +145,9 @@ class Remember_Database {
 			im_handle VARCHAR(100) DEFAULT NULL,
 			im_type VARCHAR(50) DEFAULT 'telegram',
 			interests TEXT DEFAULT NULL,
+			shirt_size VARCHAR(20) DEFAULT NULL,
+			pants_size VARCHAR(20) DEFAULT NULL,
+			shoe_size VARCHAR(20) DEFAULT NULL,
 			emergency_contact_first VARCHAR(100) NOT NULL,
 			emergency_contact_last VARCHAR(100) NOT NULL,
 			emergency_contact_phone VARCHAR(50) NOT NULL,
@@ -236,6 +240,28 @@ class Remember_Database {
 			restriction_id BIGINT(20) UNSIGNED NOT NULL,
 			PRIMARY KEY (member_id, restriction_id),
 			KEY restriction_id (restriction_id)
+		) $charset_collate;";
+
+		dbDelta( $sql );
+	}
+
+	/**
+	 * Create clothing size options table (shirt / pants / shoe catalogs).
+	 */
+	public function create_clothing_size_options_table() {
+		$table_name      = $this->prefix . 'clothing_size_options';
+		$charset_collate = $this->wpdb->get_charset_collate();
+
+		$sql = "CREATE TABLE $table_name (
+			option_id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+			size_category ENUM('shirt','pants','shoe') NOT NULL,
+			size_code VARCHAR(20) NOT NULL,
+			is_active TINYINT(1) DEFAULT 1,
+			sort_order INT(11) DEFAULT 0,
+			created_at DATETIME NOT NULL,
+			PRIMARY KEY (option_id),
+			UNIQUE KEY category_code (size_category, size_code),
+			KEY size_category (size_category)
 		) $charset_collate;";
 
 		dbDelta( $sql );

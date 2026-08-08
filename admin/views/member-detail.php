@@ -173,6 +173,26 @@ if ( $is_editing && ! current_user_can( 'remember_update_members' ) ) {
 						</td>
 					</tr>
 					<tr>
+						<th><?php esc_html_e( 'Clothing Sizes', 'remember' ); ?></th>
+						<td>
+							<?php
+							$size_bits = array();
+							if ( $view_profile && ! empty( $view_profile->shirt_size ) ) {
+								$size_bits[] = sprintf( /* translators: %s: shirt size */ __( 'Shirt: %s', 'remember' ), $view_profile->shirt_size );
+							}
+							if ( $view_profile && ! empty( $view_profile->pants_size ) ) {
+								$size_bits[] = sprintf( /* translators: %s: pants size */ __( 'Pants: %s', 'remember' ), $view_profile->pants_size );
+							}
+							if ( $view_profile && ! empty( $view_profile->shoe_size ) ) {
+								$size_bits[] = sprintf( /* translators: %s: shoe size */ __( 'Shoes: %s', 'remember' ), $view_profile->shoe_size );
+							}
+							echo $size_bits
+								? esc_html( implode( ' · ', $size_bits ) )
+								: '<span class="description">' . esc_html__( 'Not provided', 'remember' ) . '</span>';
+							?>
+						</td>
+					</tr>
+					<tr>
 						<th><?php esc_html_e( 'Interests', 'remember' ); ?></th>
 						<td>
 							<?php
