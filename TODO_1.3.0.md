@@ -6,7 +6,7 @@
 ## Upgrade safety
 
 - [x] Deactivate → replace → silent reactivate on zip **upload overwrite**
-- [ ] **Note for sites still on ≤1.2.0:** deactivate reMember once before first install of 1.3.0 (or ship a 1.2.1 hotfix with only the upgrader).
+- [x] **Note for sites still on ≤1.2.0:** deactivate reMember once before first install of 1.3.0 (called out in 1.3.0 release notes).
 
 ## E — Profile custom fields (questionnaires)
 
@@ -33,3 +33,5 @@
 - [x] Member dashboard cancel: leave invoice alone (no void/refund radios); admin can **unwind billing** later
 - [x] Admin member edit: only nickname, display name, legal first/last, cell phone required (address/IM/emergency/custom optional)
 - [x] Cap `remember_event_data_export` (Event Admin + System Admin); event detail **Export accepted participants** CSV (profile + custom short names + role + add-on qty columns). Schema bump `1.26.0` (cap grant)
+- [x] Cap `remember_import_export` (System Admin by default; assignable) gates Settings → Import/Export
+- [x] Richer member CSV (nickname, sizes, dietary/allergies/medical, timezone from user meta) + Custom Fields definition import/export. Schema `1.27.0`

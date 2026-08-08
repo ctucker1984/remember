@@ -50,6 +50,7 @@ class Remember_Capabilities {
 		$capabilities['remember_access_settings']    = __( 'Access Settings', 'remember' );
 		$capabilities['remember_view_reports']       = __( 'View Reports', 'remember' );
 		$capabilities['remember_event_data_export']  = __( 'Export Event Data', 'remember' );
+		$capabilities['remember_import_export']      = __( 'Import / Export Data', 'remember' );
 
 		return $capabilities;
 	}

@@ -904,6 +904,42 @@ class Remember_Database_Updater {
 			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.26.0' ) );
 		}
 
+		// Update to 1.27.0 — bulk Import/Export capability (System Admin; assignable).
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.27.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.27.0' ) );
+
+			require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-capabilities.php';
+			require_once plugin_dir_path( __FILE__ ) . '../models/class-role.php';
+
+			Remember_Capabilities::setup_capabilities();
+
+			$role_model = new Remember_Role();
+			$cap        = 'remember_import_export';
+			$role_id    = (int) $wpdb->get_var(
+				$wpdb->prepare(
+					"SELECT role_id FROM {$wpdb->prefix}remember_roles WHERE role_name = %s",
+					'System Administrator'
+				)
+			);
+			if ( $role_id > 0 ) {
+				$role_model->add_capability( $role_id, $cap );
+				$member_ids = $wpdb->get_col(
+					$wpdb->prepare(
+						"SELECT DISTINCT member_id FROM {$wpdb->prefix}remember_member_roles WHERE role_id = %d",
+						$role_id
+					)
+				);
+				if ( is_array( $member_ids ) ) {
+					foreach ( $member_ids as $member_id ) {
+						Remember_Capabilities::sync_user_capabilities_from_roles( (int) $member_id );
+					}
+				}
+			}
+
+			update_option( 'remember_db_version', '1.27.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.27.0' ) );
+		}
+
 		Remember_Logger::activation_debug(
 			'update_schema: exit',
 			array( 'remember_db_version' => get_option( 'remember_db_version', '0.0.0' ) )

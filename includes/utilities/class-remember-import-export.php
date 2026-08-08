@@ -47,11 +47,12 @@ class Remember_Import_Export {
 		$headers = self::member_csv_headers();
 		fputcsv( $output, $headers );
 
-		// Add example row (core columns only; custom field keys are empty).
+		// Example row (core columns; custom field short-name columns empty).
 		$example = array(
-			'', // User ID - leave blank for new users
+			'', // User ID
 			'john.doe@example.com',
 			'John Doe',
+			'Ghost',
 			'John',
 			'Doe',
 			'pending_vetting',
@@ -62,15 +63,21 @@ class Remember_Import_Export {
 			'CA',
 			'12345',
 			'US',
-			'+1-555-123-4567',
+			'+15551234567',
 			'America/Los_Angeles',
 			'@johndoe',
 			'telegram',
+			'L',
+			'L',
+			'10',
 			'Gaming, Hiking',
 			'Jane',
 			'Doe',
-			'+1-555-987-6543',
+			'+15559876543',
 			'Spouse',
+			'Vegetarian',
+			'Peanuts',
+			'',
 		);
 		while ( count( $example ) < count( $headers ) ) {
 			$example[] = '';
@@ -82,12 +89,7 @@ class Remember_Import_Export {
 	}
 
 	/**
-	 * Export members to CSV.
-	 *
-	 * @return void
-	 */
-	/**
-	 * Member CSV column headers (core + custom profile question field keys).
+	 * Member CSV column headers (core + custom profile question short names).
 	 *
 	 * @return array<int, string>
 	 */
@@ -97,6 +99,7 @@ class Remember_Import_Export {
 			'User ID',
 			'Email',
 			'Display Name',
+			'Nickname',
 			'First Name',
 			'Last Name',
 			'Status',
@@ -111,15 +114,26 @@ class Remember_Import_Export {
 			'Timezone',
 			'IM Handle',
 			'IM Type',
+			'Shirt Size',
+			'Pants Size',
+			'Shoe Size',
 			'Interests',
 			'Emergency Contact First',
 			'Emergency Contact Last',
 			'Emergency Contact Phone',
 			'Emergency Contact Relationship',
+			'Dietary Restrictions',
+			'Allergies',
+			'Medical Accommodations',
 		);
 		return array_merge( $headers, Remember_Profile_Questions::export_field_keys() );
 	}
 
+	/**
+	 * Export members to CSV.
+	 *
+	 * @return void
+	 */
 	public static function export_members() {
 		$member_model = new Remember_Member();
 		$members = $member_model->get_all();
@@ -157,11 +171,17 @@ class Remember_Import_Export {
 				)
 			);
 
+			$timezone = get_user_meta( $user->ID, 'timezone_string', true );
+			if ( '' === (string) $timezone && $profile && ! empty( $profile->timezone ) ) {
+				$timezone = $profile->timezone;
+			}
+
 			$custom = Remember_Profile_Questions::get_responses_by_field_key( (int) $member->member_id );
 			$row    = array(
 				$member->member_id,
 				$user->user_email,
 				$user->display_name,
+				get_user_meta( $user->ID, 'nickname', true ),
 				$user->first_name,
 				$user->last_name,
 				$member->status,
@@ -173,14 +193,20 @@ class Remember_Import_Export {
 				$profile->address_postal ?? '',
 				$profile->address_country ?? '',
 				$profile->cell_phone ?? '',
-				$profile->timezone ?? '',
+				$timezone,
 				$profile->im_handle ?? '',
 				$profile->im_type ?? '',
+				$profile->shirt_size ?? '',
+				$profile->pants_size ?? '',
+				$profile->shoe_size ?? '',
 				$profile->interests ?? '',
 				$profile->emergency_contact_first ?? '',
 				$profile->emergency_contact_last ?? '',
 				$profile->emergency_contact_phone ?? '',
 				$profile->emergency_contact_relationship ?? '',
+				self::member_list_labels( (int) $member->member_id, 'dietary' ),
+				self::member_list_labels( (int) $member->member_id, 'allergies' ),
+				self::member_list_labels( (int) $member->member_id, 'medical' ),
 			);
 			foreach ( $field_keys as $fkey ) {
 				$row[] = isset( $custom[ $fkey ] ) ? $custom[ $fkey ] : '';
@@ -649,6 +675,19 @@ class Remember_Import_Export {
 				}
 			}
 			
+			if ( array_key_exists( 'Nickname', $row_data ) ) {
+				$nick = sanitize_text_field( (string) $row_data['Nickname'] );
+				if ( '' !== $nick ) {
+					update_user_meta( $user_id, 'nickname', $nick );
+				}
+			}
+			if ( array_key_exists( 'Timezone', $row_data ) ) {
+				$tz = sanitize_text_field( (string) $row_data['Timezone'] );
+				if ( '' !== $tz ) {
+					update_user_meta( $user_id, 'timezone_string', $tz );
+				}
+			}
+
 			// Create or update profile
 			global $wpdb;
 			$profile = $wpdb->get_row(
@@ -657,6 +696,11 @@ class Remember_Import_Export {
 					$user_id
 				)
 			);
+
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-clothing-sizes.php';
+			$tz_for_profile = array_key_exists( 'Timezone', $row_data )
+				? sanitize_text_field( (string) $row_data['Timezone'] )
+				: '';
 			
 			$profile_data = array_merge(
 				self::member_import_legal_names( $row_data, $user_id ),
@@ -667,10 +711,13 @@ class Remember_Import_Export {
 					'address_postal'                 => $row_data['Postal Code'] ?? '',
 					'address_country'                => $row_data['Country'] ?? 'US',
 					'cell_phone'                     => $row_data['Cell Phone'] ?? '',
-					'timezone'                       => $row_data['Timezone'] ?? '',
+					'timezone'                       => $tz_for_profile,
 					'im_handle'                      => $row_data['IM Handle'] ?? '',
 					'im_type'                        => $row_data['IM Type'] ?? 'telegram',
-					'interests'                      => $row_data['Interests'] ?? '',
+					'shirt_size'                     => Remember_Clothing_Sizes::sanitize( 'shirt', $row_data['Shirt Size'] ?? '' ),
+					'pants_size'                     => Remember_Clothing_Sizes::sanitize( 'pants', $row_data['Pants Size'] ?? '' ),
+					'shoe_size'                      => Remember_Clothing_Sizes::sanitize( 'shoe', $row_data['Shoe Size'] ?? '' ),
+					'interests'                      => isset( $row_data['Interests'] ) ? wp_kses_post( $row_data['Interests'] ) : '',
 					'emergency_contact_first'        => $row_data['Emergency Contact First'] ?? '',
 					'emergency_contact_last'         => $row_data['Emergency Contact Last'] ?? '',
 					'emergency_contact_phone'        => $row_data['Emergency Contact Phone'] ?? '',
@@ -683,18 +730,25 @@ class Remember_Import_Export {
 				$wpdb->update(
 					$wpdb->prefix . 'remember_member_profiles',
 					$profile_data,
-					array( 'member_id' => $user_id ),
-					array( '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s' ),
-					array( '%d' )
+					array( 'member_id' => $user_id )
 				);
 			} else {
-				$profile_data['member_id'] = $user_id;
+				$profile_data['member_id']  = $user_id;
 				$profile_data['created_at'] = current_time( 'mysql' );
 				$wpdb->insert(
 					$wpdb->prefix . 'remember_member_profiles',
-					$profile_data,
-					array( '%d', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s' )
+					$profile_data
 				);
+			}
+
+			if ( array_key_exists( 'Dietary Restrictions', $row_data ) ) {
+				self::sync_member_list_from_csv( (int) $user_id, 'dietary', (string) $row_data['Dietary Restrictions'] );
+			}
+			if ( array_key_exists( 'Allergies', $row_data ) ) {
+				self::sync_member_list_from_csv( (int) $user_id, 'allergies', (string) $row_data['Allergies'] );
+			}
+			if ( array_key_exists( 'Medical Accommodations', $row_data ) ) {
+				self::sync_member_list_from_csv( (int) $user_id, 'medical', (string) $row_data['Medical Accommodations'] );
 			}
 
 			require_once plugin_dir_path( __FILE__ ) . 'class-remember-profile-questions.php';
@@ -1184,6 +1238,316 @@ class Remember_Import_Export {
 
 		fclose( $output );
 		exit;
+	}
+
+	/**
+	 * CSV headers for custom field definitions.
+	 *
+	 * @return string[]
+	 */
+	public static function profile_questions_csv_headers() {
+		return array(
+			'Short Name',
+			'Question',
+			'Type',
+			'Options',
+			'Required',
+			'Active',
+			'Order',
+		);
+	}
+
+	/**
+	 * Download template CSV for custom field definitions.
+	 *
+	 * @return void
+	 */
+	public static function download_profile_questions_template() {
+		$filename = 'custom-fields-template.csv';
+		header( 'Content-Type: text/csv; charset=utf-8' );
+		header( 'Content-Disposition: attachment; filename=' . $filename );
+		header( 'Pragma: no-cache' );
+		header( 'Expires: 0' );
+		$output = fopen( 'php://output', 'w' );
+		fprintf( $output, chr( 0xEF ) . chr( 0xBB ) . chr( 0xBF ) );
+		fputcsv( $output, self::profile_questions_csv_headers() );
+		fputcsv(
+			$output,
+			array(
+				'ice_cream_flavor',
+				'What is your favorite ice cream?',
+				'select',
+				'vanilla|Vanilla;chocolate|Chocolate',
+				'Yes',
+				'Yes',
+				'10',
+			)
+		);
+		fclose( $output );
+		exit;
+	}
+
+	/**
+	 * Export custom field definitions to CSV.
+	 *
+	 * @return void
+	 */
+	public static function export_profile_questions() {
+		require_once plugin_dir_path( __FILE__ ) . 'class-remember-profile-questions.php';
+		require_once plugin_dir_path( __FILE__ ) . '../models/class-profile-question.php';
+
+		$model = new Remember_Profile_Question();
+		$rows  = $model->get_all_ordered();
+		if ( ! is_array( $rows ) ) {
+			$rows = array();
+		}
+
+		$filename = 'custom-fields-export-' . gmdate( 'Y-m-d-H-i-s' ) . '.csv';
+		header( 'Content-Type: text/csv; charset=utf-8' );
+		header( 'Content-Disposition: attachment; filename=' . $filename );
+		header( 'Pragma: no-cache' );
+		header( 'Expires: 0' );
+		$output = fopen( 'php://output', 'w' );
+		fprintf( $output, chr( 0xEF ) . chr( 0xBB ) . chr( 0xBF ) );
+		fputcsv( $output, self::profile_questions_csv_headers() );
+
+		foreach ( $rows as $q ) {
+			$opt_parts = array();
+			foreach ( Remember_Profile_Questions::parse_options( $q->options_json ) as $opt ) {
+				$opt_parts[] = $opt['key'] . '|' . $opt['label'];
+			}
+			fputcsv(
+				$output,
+				array(
+					$q->field_key,
+					$q->label,
+					$q->field_type,
+					implode( ';', $opt_parts ),
+					! empty( $q->is_required ) ? 'Yes' : 'No',
+					! empty( $q->is_active ) ? 'Yes' : 'No',
+					isset( $q->sort_order ) ? (int) $q->sort_order : 0,
+				)
+			);
+		}
+		fclose( $output );
+		exit;
+	}
+
+	/**
+	 * Import custom field definitions from CSV (upsert by Short Name).
+	 *
+	 * @param string $file_path Path to CSV.
+	 * @return array{success:int,error:int,errors:string[]}
+	 */
+	public static function import_profile_questions( $file_path ) {
+		$results = array(
+			'success' => 0,
+			'error'   => 0,
+			'errors'  => array(),
+		);
+
+		if ( ! file_exists( $file_path ) ) {
+			$results['errors'][] = __( 'File not found.', 'remember' );
+			return $results;
+		}
+
+		$handle = fopen( $file_path, 'r' );
+		if ( false === $handle ) {
+			$results['errors'][] = __( 'Could not open file for reading.', 'remember' );
+			return $results;
+		}
+
+		$bom = fread( $handle, 3 );
+		if ( $bom !== chr( 0xEF ) . chr( 0xBB ) . chr( 0xBF ) ) {
+			rewind( $handle );
+		}
+
+		$headers = self::read_csv_line( $handle );
+		if ( false === $headers ) {
+			fclose( $handle );
+			$results['errors'][] = __( 'Could not read CSV headers.', 'remember' );
+			return $results;
+		}
+
+		require_once plugin_dir_path( __FILE__ ) . 'class-remember-profile-questions.php';
+		require_once plugin_dir_path( __FILE__ ) . '../models/class-profile-question.php';
+		$model      = new Remember_Profile_Question();
+		$row_number = 1;
+
+		while ( ( $data = self::read_csv_line( $handle ) ) !== false ) {
+			$row_number++;
+			if ( count( $data ) < 2 ) {
+				continue;
+			}
+			while ( count( $data ) < count( $headers ) ) {
+				$data[] = '';
+			}
+			$row_data = array_combine( $headers, array_slice( $data, 0, count( $headers ) ) );
+			if ( ! is_array( $row_data ) ) {
+				$results['error']++;
+				$results['errors'][] = sprintf( __( 'Row %d: Could not parse columns.', 'remember' ), $row_number );
+				continue;
+			}
+
+			$label = trim( (string) ( $row_data['Question'] ?? '' ) );
+			$key   = Remember_Profile_Questions::sanitize_field_key( (string) ( $row_data['Short Name'] ?? '' ) );
+			if ( '' === $key && '' !== $label ) {
+				$key = Remember_Profile_Questions::suggest_field_key_from_label( $label );
+			}
+			if ( '' === $key || '' === $label ) {
+				$results['error']++;
+				$results['errors'][] = sprintf( __( 'Row %d: Short Name and Question are required.', 'remember' ), $row_number );
+				continue;
+			}
+
+			$type = sanitize_key( (string) ( $row_data['Type'] ?? 'text' ) );
+			if ( ! in_array( $type, array( 'text', 'select', 'multiselect' ), true ) ) {
+				$type = 'text';
+			}
+
+			$options_raw = trim( (string) ( $row_data['Options'] ?? '' ) );
+			$options     = null;
+			if ( Remember_Profile_Questions::type_uses_options( $type ) ) {
+				$opt_rows = array();
+				foreach ( preg_split( '/\s*;\s*/', $options_raw ) as $chunk ) {
+					$chunk = trim( (string) $chunk );
+					if ( '' === $chunk ) {
+						continue;
+					}
+					if ( false !== strpos( $chunk, '|' ) ) {
+						list( $okey, $olabel ) = array_map( 'trim', explode( '|', $chunk, 2 ) );
+					} else {
+						$okey   = $chunk;
+						$olabel = $chunk;
+					}
+					$okey = Remember_Profile_Questions::sanitize_field_key( $okey );
+					if ( '' === $okey ) {
+						continue;
+					}
+					$opt_rows[] = array(
+						'key'   => $okey,
+						'label' => sanitize_text_field( $olabel ),
+					);
+				}
+				$options = Remember_Profile_Questions::encode_options( $opt_rows );
+				if ( null === $options ) {
+					$results['error']++;
+					$results['errors'][] = sprintf( __( 'Row %d: Options required for type %s.', 'remember' ), $row_number, $type );
+					continue;
+				}
+			}
+
+			$required = self::csv_yes_no( $row_data['Required'] ?? 'No' );
+			$active   = self::csv_yes_no( $row_data['Active'] ?? 'Yes', true );
+			$order    = isset( $row_data['Order'] ) ? intval( $row_data['Order'] ) : 0;
+
+			$existing = $model->get_by_field_key( $key );
+			$payload  = array(
+				'label'        => $label,
+				'field_key'    => $key,
+				'field_type'   => $type,
+				'options_json' => $options,
+				'is_required'  => $required ? 1 : 0,
+				'is_active'    => $active ? 1 : 0,
+				'sort_order'   => $order,
+				'updated_at'   => current_time( 'mysql' ),
+			);
+
+			if ( $existing ) {
+				$ok = $model->update( (int) $existing->question_id, $payload );
+				$ok = ( false !== $ok );
+			} else {
+				$payload['created_at'] = current_time( 'mysql' );
+				$ok                    = (bool) $model->insert( $payload );
+			}
+
+			if ( $ok ) {
+				$results['success']++;
+			} else {
+				$results['error']++;
+				$results['errors'][] = sprintf( __( 'Row %d: Could not save custom field %s.', 'remember' ), $row_number, $key );
+			}
+		}
+
+		fclose( $handle );
+		return $results;
+	}
+
+	/**
+	 * Parse Yes/No CSV cell.
+	 *
+	 * @param mixed $value   Raw value.
+	 * @param bool  $default Default when empty.
+	 * @return bool
+	 */
+	private static function csv_yes_no( $value, $default = false ) {
+		$v = strtolower( trim( (string) $value ) );
+		if ( '' === $v ) {
+			return (bool) $default;
+		}
+		return in_array( $v, array( '1', 'yes', 'y', 'true' ), true );
+	}
+
+	/**
+	 * Replace member dietary / allergy / medical selections from a comma-separated label list.
+	 *
+	 * @param int    $member_id Member ID.
+	 * @param string $type      dietary|allergies|medical.
+	 * @param string $csv       Labels.
+	 * @return void
+	 */
+	private static function sync_member_list_from_csv( $member_id, $type, $csv ) {
+		global $wpdb;
+		$member_id = absint( $member_id );
+		if ( $member_id <= 0 ) {
+			return;
+		}
+
+		$labels = array();
+		foreach ( explode( ',', (string) $csv ) as $part ) {
+			$part = trim( $part );
+			if ( '' !== $part ) {
+				$labels[] = $part;
+			}
+		}
+
+		if ( 'dietary' === $type ) {
+			$catalog = $wpdb->prefix . 'remember_dietary_restrictions';
+			$junction = $wpdb->prefix . 'remember_member_dietary_restrictions';
+			$id_col   = 'restriction_id';
+			$name_col = 'restriction_name';
+		} elseif ( 'allergies' === $type ) {
+			$catalog  = $wpdb->prefix . 'remember_allergies';
+			$junction = $wpdb->prefix . 'remember_member_allergies';
+			$id_col   = 'allergy_id';
+			$name_col = 'allergy_name';
+		} else {
+			$catalog  = $wpdb->prefix . 'remember_medical_accommodations';
+			$junction = $wpdb->prefix . 'remember_member_medical_accommodations';
+			$id_col   = 'accommodation_id';
+			$name_col = 'accommodation_name';
+		}
+
+		$wpdb->delete( $junction, array( 'member_id' => $member_id ), array( '%d' ) );
+		foreach ( $labels as $label ) {
+			$id = $wpdb->get_var(
+				$wpdb->prepare(
+					"SELECT {$id_col} FROM {$catalog} WHERE {$name_col} = %s LIMIT 1", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- column/table names are fixed.
+					$label
+				)
+			);
+			if ( ! $id ) {
+				continue;
+			}
+			$wpdb->insert(
+				$junction,
+				array(
+					'member_id' => $member_id,
+					$id_col     => (int) $id,
+				),
+				array( '%d', '%d' )
+			);
+		}
 	}
 
 	/**

@@ -160,7 +160,7 @@ Enable `WP_DEBUG` as needed; logging uses `Remember_Logger`.
 
 ## Changelog
 
-### 1.3.0 (in progress)
+### 1.3.0
 
 - **Version** bumped to `1.3.0` (`REMEMBER_VERSION`).
 - **Upgrade safety:** On zip Upload → Replace, silently deactivate reMember before clearing `remember/`, then silently reactivate (matches dashboard update behavior). Does not help sites still running ≤1.2.0 until this version is installed once.
@@ -169,6 +169,8 @@ Enable `WP_DEBUG` as needed; logging uses `Remember_Logger`.
 - **Allow reapply:** Admin can supersede declined/cancelled applications so the member may apply again (schema `1.25.0`).
 - **Admin profile flexibility:** Member edit only requires nickname, display name, legal first/last, and cell phone.
 - **Event participant CSV:** On admin event detail, export accepted participants (profile, custom field short names/keys, role, per–add-on quantities). Capability `remember_event_data_export` (Event Administrator + System Administrator). Schema `1.26.0`.
+- **Import/Export capability:** Settings → Import/Export requires `remember_import_export` (System Administrator by default; assignable on Roles). Schema `1.27.0`.
+- **Member / custom-field CSV:** Member export includes nickname, sizes, dietary/allergies/medical, timezone, and custom Short name columns; separate Custom Fields definition export/import for demo→prod moves.
 
 ### 1.2.0
 

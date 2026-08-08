@@ -214,7 +214,7 @@ class Remember_Admin {
 			array(
 				'slug'  => 'remember-import-export',
 				'label' => __( 'Import/Export', 'remember' ),
-				'caps'  => array( 'remember_access_settings' ),
+				'caps'  => array( 'remember_import_export' ),
 			),
 		);
 
@@ -422,7 +422,7 @@ class Remember_Admin {
 			'remember',
 			__( 'Import/Export', 'remember' ),
 			'',
-			'remember_access_settings',
+			'remember_import_export',
 			'remember-import-export',
 			array( $this, 'display_import_export_page' )
 		);
@@ -466,6 +466,7 @@ class Remember_Admin {
 	private function get_settings_menu_capability() {
 		foreach ( array(
 			'remember_access_settings',
+			'remember_import_export',
 			'remember_read_locations',
 			'remember_read_roles',
 			'remember_read_events',
@@ -492,7 +493,7 @@ class Remember_Admin {
 			array( 'remember-products', array( 'remember_access_settings' ) ),
 			array( 'remember-profile-questions', array( 'remember_access_settings' ) ),
 			array( 'remember-agreements', array( 'remember_access_settings' ) ),
-			array( 'remember-import-export', array( 'remember_access_settings' ) ),
+			array( 'remember-import-export', array( 'remember_import_export' ) ),
 		);
 		foreach ( $candidates as $pair ) {
 			if ( $exclude_settings && 'remember-settings' === $pair[0] ) {
@@ -753,8 +754,7 @@ class Remember_Admin {
 	 * @since    1.0.0
 	 */
 	public function display_import_export_page() {
-		// Check capability
-		if ( ! current_user_can( 'remember_access_settings' ) ) {
+		if ( ! current_user_can( 'remember_import_export' ) ) {
 			wp_die( __( 'You do not have sufficient permissions to access this page.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
 		}
 		
@@ -801,7 +801,7 @@ class Remember_Admin {
 			return;
 		}
 
-		if ( ! current_user_can( 'remember_access_settings' ) ) {
+		if ( ! current_user_can( 'remember_import_export' ) ) {
 			return;
 		}
 
@@ -821,6 +821,8 @@ class Remember_Admin {
 				Remember_Import_Export::download_events_template();
 			} elseif ( 'download_locations_template' === $action ) {
 				Remember_Import_Export::download_locations_template();
+			} elseif ( 'download_profile_questions_template' === $action ) {
+				Remember_Import_Export::download_profile_questions_template();
 			}
 			// Valid downloads exit inside the handler; unknown actions fall through to the page.
 		}
@@ -831,7 +833,11 @@ class Remember_Admin {
 		}
 
 		$action = sanitize_text_field( wp_unslash( $_POST['remember_import_export_action'] ) );
-		if ( ! in_array( $action, array( 'export_members', 'export_events', 'export_locations' ), true ) ) {
+		if ( ! in_array(
+			$action,
+			array( 'export_members', 'export_events', 'export_locations', 'export_profile_questions' ),
+			true
+		) ) {
 			return;
 		}
 
@@ -841,8 +847,10 @@ class Remember_Admin {
 			Remember_Import_Export::export_members();
 		} elseif ( 'export_events' === $action ) {
 			Remember_Import_Export::export_events();
-		} else {
+		} elseif ( 'export_locations' === $action ) {
 			Remember_Import_Export::export_locations();
+		} else {
+			Remember_Import_Export::export_profile_questions();
 		}
 	}
 

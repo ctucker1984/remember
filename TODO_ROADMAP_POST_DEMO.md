@@ -1,7 +1,7 @@
 # Post-demo roadmap (business meeting notes)
 
 **Captured:** 2026-08-07  
-**Status:** A–D shipped in **1.2.0**. **E** (custom fields) and **F** (agreements) implemented on `v1.3.0`.  
+**Status:** A–D shipped in **1.2.0**. **E** (custom fields) and **F** (agreements) shipped in **1.3.0**.  
 **Source:** Live demo feedback.
 
 ---
@@ -125,4 +125,4 @@
 | 10 Custom fields | Done (1.3.0) | + multiselect |
 | 11 Agreements | Done (1.3.0) | + reapply / cancel billing UX |
 
-**Likely next product work:** ship/tag **1.3.0**; then ideas beyond this doc (DocuSign, per-event questionnaires, notifications polish).
+**Likely next product work:** ideas beyond this doc (DocuSign, per-event questionnaires, notifications polish).
