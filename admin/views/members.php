@@ -662,6 +662,10 @@ if ( $view_member_id > 0 ) {
 		$view_member_id
 	) );
 	
+	// Refresh amounts / lines from the active billing provider before the ledger.
+	require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-provider.php';
+	Remember_Billing_Provider::sync_member_payments( $view_member_id );
+
 	// Get payments for billing register
 	$view_payments = $payment_model->get_by_member( $view_member_id );
 	

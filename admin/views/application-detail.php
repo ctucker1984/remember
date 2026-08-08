@@ -11,6 +11,7 @@ if ( ! defined( 'WPINC' ) ) {
 	die;
 }
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-messaging.php';
+require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-template.php';
 $subtotal_disclaimer = Remember_Billing_Messaging::get_subtotal_disclaimer();
 
 // Status labels and colors
@@ -235,9 +236,9 @@ $status_colors = array(
 						</td>
 					</tr>
 					<tr>
-						<th><?php esc_html_e( 'Amount Paid:', 'remember' ); ?></th>
+						<th><?php esc_html_e( 'Payment/Credit:', 'remember' ); ?></th>
 						<td>
-							$<?php echo esc_html( number_format( $viewing_payment->amount_paid, 2 ) ); ?>
+							$<?php echo esc_html( number_format( Remember_Billing_Template::get_payment_and_credit_total( $viewing_payment ), 2 ) ); ?>
 						</td>
 					</tr>
 					<tr>

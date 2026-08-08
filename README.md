@@ -145,26 +145,29 @@ reMember adds granular capabilities (`remember_read_events`, `remember_create_me
 
 Enable `WP_DEBUG` as needed; logging uses `Remember_Logger`.
 
-**Branching note:** Release work for this line lives on branch `v1.2.0`. Prefer clear conventional commits so the changelog below stays easy to inventory across machines.
+**Branching note:** `v1.2.0` is the release branch for this line; merge to `master` after tagging. Prefer clear conventional commits for the changelog.
 
 **Accounting providers:** One active billing provider per site (`quickbooks` or `xero`). Parallel stacks; see [`XERO_PLAN.md`](XERO_PLAN.md).
 
 ### Installing / upgrading from a GitHub Release
 
-1. Download **`remember.zip`** (or `remember-x.y.z.zip`) from the release **Assets** — not “Source code (zip)”.
-2. GitHub’s source archive unpacks as `remember-1.1.1/`, which fatals if `remember/` is already installed.
-3. Our release zip always unpacks to **`wp-content/plugins/remember/`**.
-4. Build locally: `bash bin/build-plugin-zip.sh` → `dist/remember.zip`, then attach that file when publishing a GitHub Release.
+1. Download **`remember-x.y.z.zip`** from the release **Assets** — not GitHub’s auto “Source code (zip)”.
+2. Our zip filename is versioned, but it unpacks to **`remember/`** (WordPress-safe). GitHub’s source archive unpacks as `remember-<tag>/` and breaks upgrades — ignore it.
+3. Build locally: `bash bin/build-plugin-zip.sh` → `dist/remember-<version>.zip`, then attach on the GitHub Release.
 
 ---
 
 ## Changelog
 
-### 1.2.0 (in progress)
+### 1.2.0
 
-- **Admission tickets:** Printable HTML admission ticket + receipt for accepted applications (site logo / optional override, event + payment status, line items). Adverse stamps only: **PAYMENT REQUIRED** / **VOID**.
-- **Emails:** Sends ticket-ready mail on accept; paid-ticket mail when billing status becomes `paid`; balance-due reminder + Applications blast. Schema `1.18.0`.
-- **Member / admin:** View/print/download from member dashboard and application detail; void ticket from admin.
+- **Version** bumped to `1.2.0` (`REMEMBER_VERSION`).
+- **Admission tickets:** Printable HTML ticket + receipt; stamps **PAYMENT REQUIRED** / **VOID**; member/admin print; emails on accept / paid / balance-due. Schema `1.18.0`.
+- **Polish:** Rich text for locations, event description, Interests; single timezone combobox; emergency phone required; admin Declined / member Cancelled with void–refund–leave invoice prompt and ticket VOID.
+- **Registration / profile:** Full profile on register; shared required-field policy; clothing sizes shirt/pants S–6XL, shoes 6–15. Schema `1.19.0` / `1.21.0`.
+- **Events:** Per event×role add-on max qty (0 = hide); attendee-only event details. Schema `1.20.0` / `1.22.0`.
+- **Billing:** Email Xero/QBO invoice on accept (Settings toggle; soft-fail); sync on member detail + Billing list; Xero credit notes credit the ledger; Payment/Credit column includes credits; sort by document date.
+- **Release packaging:** `bin/build-plugin-zip.sh` → `remember-1.2.0.zip` unpacks to `remember/`. Ignore GitHub’s auto “Source code” zip.
 
 ### 1.1.2
 
@@ -180,7 +183,7 @@ Enable `WP_DEBUG` as needed; logging uses `Remember_Logger`.
 - **Version** bumped to `1.1.1` (`REMEMBER_VERSION`).
 - **Member billing:** Invoice # links to the **customer** Xero online invoice (`in.xero.com`) when `xero_online_invoice_url` is stored on the payment (schema `1.17.0`, filled on invoice create/sync). Admin deep-links unchanged. QuickBooks member rows stay unlinked.
 - **Fix:** Xero payment sync no longer treats auth errors like “Refresh token not found” as a missing invoice (that was wiping invoice # and amounts on the dashboard). QuickBooks missing-invoice detection tightened the same way.
-- **Release packaging:** `bin/build-plugin-zip.sh` builds a WordPress zip with root folder `remember/` (never a versioned folder). Attach `dist/remember.zip` on the GitHub Release.
+- **Release packaging:** `bin/build-plugin-zip.sh` builds `remember-x.y.z.zip` with root folder `remember/` (versioned filename; unpack path is not). Ignore GitHub’s auto “Source code” zip.
 
 ### 1.1.0
 
