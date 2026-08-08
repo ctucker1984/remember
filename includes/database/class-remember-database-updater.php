@@ -769,6 +769,29 @@ class Remember_Database_Updater {
 			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.21.0' ) );
 		}
 
+		// Update to 1.22.0 — attendee-only event details.
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.22.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.22.0' ) );
+
+			$events_table = $wpdb->prefix . 'remember_events';
+			if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $events_table ) ) === $events_table ) {
+				$cols = $wpdb->get_col( "SHOW COLUMNS FROM {$events_table}", 0 );
+				if ( is_array( $cols ) && ! in_array( 'attendee_details', $cols, true ) ) {
+					$ok = $wpdb->query(
+						"ALTER TABLE {$events_table} ADD COLUMN attendee_details TEXT DEFAULT NULL AFTER event_description"
+					);
+					if ( false === $ok ) {
+						Remember_Logger::error( 'Failed to add attendee_details', array( 'error' => $wpdb->last_error ) );
+					} else {
+						Remember_Logger::info( 'Added attendee_details to remember_events' );
+					}
+				}
+			}
+
+			update_option( 'remember_db_version', '1.22.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.22.0' ) );
+		}
+
 		Remember_Logger::activation_debug(
 			'update_schema: exit',
 			array( 'remember_db_version' => get_option( 'remember_db_version', '0.0.0' ) )

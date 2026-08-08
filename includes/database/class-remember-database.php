@@ -449,6 +449,7 @@ class Remember_Database {
 			event_id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
 			event_name VARCHAR(255) NOT NULL,
 			event_description TEXT DEFAULT NULL,
+			attendee_details TEXT DEFAULT NULL,
 			location_id BIGINT(20) UNSIGNED DEFAULT NULL,
 			start_date DATE NOT NULL,
 			end_date DATE NOT NULL,

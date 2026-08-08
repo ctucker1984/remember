@@ -26,7 +26,7 @@
 ## C — Events
 
 - [x] Add-on max qty per event × event-role (0 = hide); schema `1.20.0`
-- [ ] Attendee-only event details field + front-end gate
+- [x] Attendee-only event details (`attendee_details`, schema `1.22.0`) + accepted-only gate
 
 ## D — Billing
 

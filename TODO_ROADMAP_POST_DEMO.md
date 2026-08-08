@@ -123,18 +123,7 @@
 
 ## 9. Attendee-only event details
 
-**Today:** Event name/description/location/dates are public on event detail; only attendee directory is gated to accepted+vetted.
-
-**Plan**
-- Split event content:
-  - **Public:** marketing summary (optional short field or truncated description).
-  - **Attendee-only:** logistics detail (new rich-text field `attendee_details` or similar).
-- Front event detail: show attendee-only block only if current member has `accepted` application for that event.
-- Admin events UI: two editors (public vs attendee-only).
-
-**Open questions**
-- Migrate existing `event_description` → public, attendee, or both?
-- Are location address / exact venue attendee-only too?
+**Done (schema `1.22.0`):** `attendee_details` rich text on events; admin Public description + Attendee-only details editors; front event detail shows attendee block only when the member has an `accepted` application. Existing `event_description` stays public (no content migration).
 
 ---
 

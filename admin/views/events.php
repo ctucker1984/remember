@@ -227,6 +227,7 @@ if ( isset( $_POST['remember_event_action'] ) && check_admin_referer( 'remember_
 		$data = array(
 			'event_name'        => sanitize_text_field( wp_unslash( $_POST['event_name'] ) ),
 			'event_description' => isset( $_POST['event_description'] ) ? wp_kses_post( wp_unslash( $_POST['event_description'] ) ) : '',
+			'attendee_details'  => isset( $_POST['attendee_details'] ) ? wp_kses_post( wp_unslash( $_POST['attendee_details'] ) ) : '',
 			'location_id'       => ! empty( $_POST['location_id'] ) ? absint( $_POST['location_id'] ) : null,
 			'start_date'        => sanitize_text_field( wp_unslash( $_POST['start_date'] ) ),
 			'end_date'          => sanitize_text_field( wp_unslash( $_POST['end_date'] ) ),
@@ -258,6 +259,7 @@ if ( isset( $_POST['remember_event_action'] ) && check_admin_referer( 'remember_
 		$data = array(
 			'event_name'        => sanitize_text_field( wp_unslash( $_POST['event_name'] ) ),
 			'event_description' => isset( $_POST['event_description'] ) ? wp_kses_post( wp_unslash( $_POST['event_description'] ) ) : '',
+			'attendee_details'  => isset( $_POST['attendee_details'] ) ? wp_kses_post( wp_unslash( $_POST['attendee_details'] ) ) : '',
 			'location_id'       => ! empty( $_POST['location_id'] ) ? absint( $_POST['location_id'] ) : null,
 			'start_date'        => sanitize_text_field( wp_unslash( $_POST['start_date'] ) ),
 			'end_date'          => sanitize_text_field( wp_unslash( $_POST['end_date'] ) ),
@@ -399,7 +401,26 @@ if ( isset( $_GET['view'] ) ) {
 								)
 							);
 							?>
-							<p class="description"><?php esc_html_e( 'Shown to everyone browsing the event. Use Attendee details (below, when available) for logistics only accepted attendees should see.', 'remember' ); ?></p>
+							<p class="description"><?php esc_html_e( 'Shown to everyone browsing the event.', 'remember' ); ?></p>
+						</td>
+					</tr>
+					<tr>
+						<th><label for="attendee_details"><?php esc_html_e( 'Attendee-only details', 'remember' ); ?></label></th>
+						<td>
+							<?php
+							wp_editor(
+								isset( $editing_event->attendee_details ) ? $editing_event->attendee_details : '',
+								'attendee_details',
+								array(
+									'textarea_name' => 'attendee_details',
+									'textarea_rows' => 8,
+									'media_buttons' => false,
+									'teeny'         => true,
+									'quicktags'     => true,
+								)
+							);
+							?>
+							<p class="description"><?php esc_html_e( 'Logistics and private instructions. Visible only to members with an accepted application for this event.', 'remember' ); ?></p>
 						</td>
 					</tr>
 					<tr>
@@ -561,6 +582,26 @@ if ( isset( $_GET['view'] ) ) {
 								)
 							);
 							?>
+							<p class="description"><?php esc_html_e( 'Shown to everyone browsing the event.', 'remember' ); ?></p>
+						</td>
+					</tr>
+					<tr>
+						<th><label for="attendee_details_new"><?php esc_html_e( 'Attendee-only details', 'remember' ); ?></label></th>
+						<td>
+							<?php
+							wp_editor(
+								'',
+								'attendee_details_new',
+								array(
+									'textarea_name' => 'attendee_details',
+									'textarea_rows' => 8,
+									'media_buttons' => false,
+									'teeny'         => true,
+									'quicktags'     => true,
+								)
+							);
+							?>
+							<p class="description"><?php esc_html_e( 'Logistics and private instructions. Visible only to members with an accepted application for this event.', 'remember' ); ?></p>
 						</td>
 					</tr>
 					<tr>

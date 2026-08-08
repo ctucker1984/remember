@@ -85,10 +85,20 @@ $is_multi_day = $viewing_event->start_date !== $viewing_event->end_date;
 						</p>
 					<?php endif; ?>
 					<?php if ( ! empty( $viewing_event->event_description ) ) : ?>
-						<p style="margin: 5px 0;">
-							<strong><?php esc_html_e( 'Description:', 'remember' ); ?></strong>
-							<?php echo esc_html( $viewing_event->event_description ); ?>
-						</p>
+						<div style="margin: 10px 0;">
+							<strong><?php esc_html_e( 'Public description:', 'remember' ); ?></strong>
+							<div class="remember-richtext" style="margin-top: 6px;">
+								<?php echo wp_kses_post( wpautop( $viewing_event->event_description ) ); ?>
+							</div>
+						</div>
+					<?php endif; ?>
+					<?php if ( ! empty( $viewing_event->attendee_details ) ) : ?>
+						<div style="margin: 10px 0;">
+							<strong><?php esc_html_e( 'Attendee-only details:', 'remember' ); ?></strong>
+							<div class="remember-richtext" style="margin-top: 6px;">
+								<?php echo wp_kses_post( wpautop( $viewing_event->attendee_details ) ); ?>
+							</div>
+						</div>
 					<?php endif; ?>
 				</div>
 			</div>

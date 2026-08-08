@@ -81,6 +81,16 @@ $is_multi_day = ( $event->start_date !== $event->end_date );
 		<?php endif; ?>
 	</div>
 
+	<?php if ( $is_accepted && ! empty( $event->attendee_details ) ) : ?>
+		<div class="remember-event-attendee-details">
+			<h3><?php esc_html_e( 'Attendee details', 'remember' ); ?></h3>
+			<p class="remember-form-help"><?php esc_html_e( 'Visible only to accepted attendees for this event.', 'remember' ); ?></p>
+			<div class="remember-richtext">
+				<?php echo wp_kses_post( wpautop( $event->attendee_details ) ); ?>
+			</div>
+		</div>
+	<?php endif; ?>
+
 	<div class="remember-event-detail-info">
 		<div class="remember-event-info-grid">
 			<div class="remember-event-info-item">
