@@ -346,7 +346,7 @@ $remember_reg_im_type  = $remember_reg_val( 'im_type', 'telegram' );
 			<?php endif; ?>
 
 			<h3 class="remember-register-section-title"><?php esc_html_e( 'Interests', 'remember' ); ?></h3>
-			<p class="remember-register-section-help"><?php esc_html_e( 'Optional.', 'remember' ); ?></p>
+			<p class="remember-register-section-help"><?php esc_html_e( 'What are you trying to get out of this event? Optional.', 'remember' ); ?></p>
 			<div class="remember-register-editor">
 				<?php
 				if ( ! wp_script_is( 'editor', 'enqueued' ) && ! wp_script_is( 'editor', 'done' ) ) {

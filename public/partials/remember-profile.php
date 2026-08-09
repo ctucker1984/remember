@@ -650,6 +650,7 @@ if ( ! empty( $selected_allergy_ids ) ) {
 
 			<div class="remember-form-section">
 				<h3 class="remember-form-section-title"><?php esc_html_e( 'Interests', 'remember' ); ?></h3>
+				<p class="remember-form-help"><?php esc_html_e( 'What are you trying to get out of this event?', 'remember' ); ?></p>
 				<div class="remember-form-row">
 					<div class="remember-form-col remember-form-col-full">
 						<label for="interests" class="remember-form-label"><?php esc_html_e( 'Interests', 'remember' ); ?></label>
