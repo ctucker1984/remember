@@ -368,7 +368,7 @@ $remember_reg_im_type  = $remember_reg_val( 'im_type', 'telegram' );
 			</div>
 
 			<h3 class="remember-register-section-title"><?php esc_html_e( 'Privacy', 'remember' ); ?></h3>
-			<p class="remember-register-section-help"><?php esc_html_e( 'These switches control what other accepted event attendees can see about you. Nothing here is shared until you are accepted into an event. Consider sharing at least your photo and Instant Messenger so others can recognize and connect with you.', 'remember' ); ?></p>
+			<p class="remember-register-section-help"><?php esc_html_e( 'Optional. Consider allowing other event attendees to see at least your photo and IM so that you can begin networking with them. Use these controls to do that.', 'remember' ); ?></p>
 			<div class="remember-register-checkboxes">
 				<label class="remember-checkbox-label">
 					<input type="checkbox" name="share_photo_with_events" value="1">
