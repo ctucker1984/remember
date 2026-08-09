@@ -62,7 +62,7 @@ $allergies = $wpdb->get_results(
 	"SELECT * FROM {$wpdb->prefix}remember_allergies WHERE is_active = 1 ORDER BY sort_order ASC, allergy_name ASC"
 );
 
-$remember_reg_timezone = $remember_reg_val( 'timezone', 'America/Los_Angeles' );
+$remember_reg_timezone = $remember_reg_val( 'timezone', '' );
 $remember_reg_country  = $remember_reg_val( 'address_country', 'US' );
 $remember_reg_im_type  = $remember_reg_val( 'im_type', 'telegram' );
 
@@ -154,7 +154,7 @@ $remember_reg_im_type  = $remember_reg_val( 'im_type', 'telegram' );
 			<div class="remember-register-row">
 				<label for="remember_reg_timezone"><?php esc_html_e( 'Time Zone', 'remember' ); ?> <span class="required">*</span></label>
 				<?php echo Remember_Timezone::dropdown( $remember_reg_timezone, 'remember_reg_timezone', 'remember_reg_timezone', true, 'remember-register-input' ); ?>
-				<p class="remember-register-help"><?php esc_html_e( 'Used to display scheduled times in your local time.', 'remember' ); ?></p>
+				<p class="remember-register-help"><?php esc_html_e( 'Choose your own time zone. Appointments and event times are shown in your local time — picking the wrong zone can cause missed appointments.', 'remember' ); ?></p>
 			</div>
 
 			<div class="remember-register-row">

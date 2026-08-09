@@ -149,9 +149,7 @@ class Remember_Timezone {
 	 * @return string HTML for dropdown.
 	 */
 	public static function dropdown( $selected = '', $name = 'timezone_string', $id = 'timezone_string', $required = false, $class = 'regular-text' ) {
-		if ( empty( $selected ) ) {
-			$selected = 'America/Los_Angeles'; // Default
-		}
+		$selected = is_string( $selected ) ? trim( $selected ) : '';
 
 		$classes = trim( $class . ' remember-timezone-select' );
 
@@ -164,6 +162,14 @@ class Remember_Timezone {
 			esc_attr( $classes ),
 			$required ? ' required' : ''
 		);
+
+		// Empty choice so registration is not pre-filtered to a default city.
+		if ( '' === $selected ) {
+			$html .= sprintf(
+				'<option value="" selected="selected">%s</option>',
+				esc_html__( 'Select your time zone…', 'remember' )
+			);
+		}
 
 		// WordPress hierarchical list (continent/region optgroups) — source data for the combobox.
 		$html .= wp_timezone_choice( $selected, get_user_locale() );

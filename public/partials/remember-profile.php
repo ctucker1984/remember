@@ -448,7 +448,7 @@ if ( ! empty( $selected_allergy_ids ) ) {
 							<span class="remember-required">*</span>
 						</label>
 						<?php echo Remember_Timezone::dropdown( $selected_timezone, 'timezone_string', 'timezone_string', true ); ?>
-						<p class="remember-form-help"><?php esc_html_e( 'Used to display scheduled times in your local time.', 'remember' ); ?></p>
+						<p class="remember-form-help"><?php esc_html_e( 'Choose your own time zone. Appointments and event times are shown in your local time — picking the wrong zone can cause missed appointments.', 'remember' ); ?></p>
 					</div>
 				</div>
 			</div>
