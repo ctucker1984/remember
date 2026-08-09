@@ -237,15 +237,16 @@ class Remember_Public {
 		}
 
 		$has_photo = ! empty( $_FILES['photo_file']['name'] );
-		if ( $has_photo ) {
-			$file_size = isset( $_FILES['photo_file']['size'] ) ? absint( $_FILES['photo_file']['size'] ) : 0;
-			if ( $file_size > 0 && $file_size > $photo_max_bytes ) {
-				$this->redirect_member_registration( 'photo_too_large' );
-			}
-			$upload_err = isset( $_FILES['photo_file']['error'] ) ? (int) $_FILES['photo_file']['error'] : UPLOAD_ERR_NO_FILE;
-			if ( UPLOAD_ERR_OK !== $upload_err && UPLOAD_ERR_NO_FILE !== $upload_err ) {
-				$this->redirect_member_registration( 'photo_failed' );
-			}
+		if ( ! $has_photo ) {
+			$this->redirect_member_registration( 'photo_required' );
+		}
+		$file_size = isset( $_FILES['photo_file']['size'] ) ? absint( $_FILES['photo_file']['size'] ) : 0;
+		if ( $file_size > 0 && $file_size > $photo_max_bytes ) {
+			$this->redirect_member_registration( 'photo_too_large' );
+		}
+		$upload_err = isset( $_FILES['photo_file']['error'] ) ? (int) $_FILES['photo_file']['error'] : UPLOAD_ERR_NO_FILE;
+		if ( UPLOAD_ERR_OK !== $upload_err ) {
+			$this->redirect_member_registration( 'photo_failed' );
 		}
 
 		require_once plugin_dir_path( __FILE__ ) . '../includes/models/class-member.php';
@@ -383,6 +384,7 @@ class Remember_Public {
 			'create_failed'    => __( 'Could not create your account. Please try again or contact support.', 'remember' ),
 			'member_failed'    => __( 'Could not complete member setup. Please contact support.', 'remember' ),
 			'profile_failed'   => __( 'Could not save your profile. Please contact support.', 'remember' ),
+			'photo_required'   => __( 'A profile photo is required to register.', 'remember' ),
 			'photo_too_large'  => __( 'That photo is too large. Please choose a smaller image and try again.', 'remember' ),
 			'photo_failed'     => __( 'That photo could not be uploaded. Please try a different JPEG, PNG, or GIF.', 'remember' ),
 		);

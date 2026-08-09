@@ -235,12 +235,12 @@ $remember_reg_im_type  = $remember_reg_val( 'im_type', 'telegram' );
 				<input type="text" name="remember_reg_emergency_contact_relationship" id="remember_reg_emergency_contact_relationship" required class="remember-register-input" value="<?php echo esc_attr( $remember_reg_val( 'emergency_contact_relationship' ) ); ?>" placeholder="<?php esc_attr_e( 'e.g., Spouse, Parent, Friend', 'remember' ); ?>" />
 			</div>
 
-			<h3 class="remember-register-section-title"><?php esc_html_e( 'Profile Photo', 'remember' ); ?></h3>
+			<h3 class="remember-register-section-title"><?php esc_html_e( 'Profile Photo', 'remember' ); ?> <span class="required">*</span></h3>
 
 			<div class="remember-register-row remember-register-row--photo">
-				<span class="remember-register-label"><?php esc_html_e( 'Photo', 'remember' ); ?></span>
+				<span class="remember-register-label"><?php esc_html_e( 'Photo', 'remember' ); ?> <span class="required">*</span></span>
 				<div class="remember-profile-photo-edit" data-output-size="<?php echo esc_attr( (string) $photo_max_dimensions ); ?>">
-					<p class="remember-register-help"><?php esc_html_e( 'Optional. Drag to recenter and use zoom to frame the photo.', 'remember' ); ?></p>
+					<p class="remember-register-help"><?php esc_html_e( 'Required. Drag to recenter and use zoom to frame the photo.', 'remember' ); ?></p>
 					<div class="remember-profile-photo-cropper" hidden>
 						<div class="remember-profile-photo-cropper-viewport" aria-label="<?php esc_attr_e( 'Photo framing preview', 'remember' ); ?>">
 							<img src="" alt="" class="remember-profile-photo-cropper-image" draggable="false">
@@ -254,8 +254,8 @@ $remember_reg_im_type  = $remember_reg_val( 'im_type', 'telegram' );
 							<?php esc_html_e( 'Clear selected photo', 'remember' ); ?>
 						</button>
 					</div>
-					<label for="remember_reg_photo_file" class="remember-form-label"><?php esc_html_e( 'Upload photo', 'remember' ); ?></label>
-					<input type="file" id="remember_reg_photo_file" name="photo_file" class="remember-form-control remember-form-control-file remember-register-input" accept="image/jpeg,image/png,image/gif">
+					<label for="remember_reg_photo_file" class="remember-form-label"><?php esc_html_e( 'Upload photo', 'remember' ); ?> <span class="required">*</span></label>
+					<input type="file" id="remember_reg_photo_file" name="photo_file" class="remember-form-control remember-form-control-file remember-register-input" accept="image/jpeg,image/png,image/gif" required>
 					<p class="remember-register-help">
 						<?php
 						echo esc_html(
