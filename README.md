@@ -2,7 +2,7 @@
 
 WordPress membership communities: **members**, **events**, **locations**, **applications**, **vetting**, **admission tickets**, and **billing** with **QuickBooks Online** or **Xero**. Extends WordPress users with custom tables, an admin UI under **reMember**, and front-end pages via shortcodes.
 
-**Version:** 1.3.1  
+**Version:** 1.3.2  
 **Requires:** WordPress 5.0+  
 **License:** [GPL v2 or later](https://www.gnu.org/licenses/gpl-2.0.html)  
 **Source:** [github.com/ctucker1984/remember](https://github.com/ctucker1984/remember)
@@ -48,6 +48,16 @@ Then add members via **Members → Add New**, **Convert WP User**, or the public
 ---
 
 ## Changelog
+
+### 1.3.2
+
+- **Fix:** Country is required on registration and profile (defaults to US). Closes [#17](https://github.com/ctucker1984/remember/issues/17).
+- **Enhancement:** Interests prompt asks what the member wants from the event. Closes [#16](https://github.com/ctucker1984/remember/issues/16).
+- **Fix:** Time zone starts empty at registration and opens unfiltered; clearer importance copy. Closes [#13](https://github.com/ctucker1984/remember/issues/13).
+- **Enhancement:** Dietary, medical, and allergy catalogs include None and require a response. Closes [#15](https://github.com/ctucker1984/remember/issues/15).
+- **Enhancement:** Expanded allergies seed list (incl. pomegranate, grapefruit). Closes [#19](https://github.com/ctucker1984/remember/issues/19).
+- **Enhancement:** Privacy copy explains sharing and encourages photo + IM for networking. Closes [#18](https://github.com/ctucker1984/remember/issues/18).
+- **Enhancement:** Profile photo required at registration. Closes [#14](https://github.com/ctucker1984/remember/issues/14).
 
 ### 1.3.1
 
