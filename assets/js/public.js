@@ -332,9 +332,44 @@
 		});
 	}
 
+	/**
+	 * Require at least one checkbox in dietary / medical / allergy groups.
+	 * Selecting "None" clears other options in the same group (and vice versa).
+	 */
+	function initRequireOneCheckboxGroups() {
+		$('[data-remember-require-one]').each(function() {
+			var $group = $(this);
+			var $boxes = $group.find('input[type="checkbox"]');
+			if (!$boxes.length) {
+				return;
+			}
+
+			function syncRequired() {
+				var anyChecked = $boxes.filter(':checked').length > 0;
+				$boxes.prop('required', false);
+				if (!anyChecked) {
+					$boxes.first().prop('required', true);
+				}
+			}
+
+			$boxes.on('change', function() {
+				var $changed = $(this);
+				if ($changed.is('[data-remember-none]') && $changed.is(':checked')) {
+					$boxes.not($changed).prop('checked', false);
+				} else if (!$changed.is('[data-remember-none]') && $changed.is(':checked')) {
+					$boxes.filter('[data-remember-none]').prop('checked', false);
+				}
+				syncRequired();
+			});
+
+			syncRequired();
+		});
+	}
+
 	$(function() {
 		initDisplayNameNicknameSync();
 		initProfilePhotoCropper();
+		initRequireOneCheckboxGroups();
 		if (typeof window.rememberInitTimezoneComboboxes === 'function') {
 			window.rememberInitTimezoneComboboxes();
 		}

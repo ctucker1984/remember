@@ -62,6 +62,11 @@ if ( isset( $_POST['remember_profile_action'] ) && check_admin_referer( 'remembe
 		wp_safe_redirect( add_query_arg( array( 'edit' => '1', 'remember_profile_error' => 'custom_field' ) ) );
 		exit;
 	}
+	$missing_health = Remember_Profile_Fields::first_missing_required_health_catalog();
+	if ( '' !== $missing_health ) {
+		wp_safe_redirect( add_query_arg( array( 'edit' => '1', 'remember_profile_error' => $missing_health ) ) );
+		exit;
+	}
 
 	$photo_error   = '';
 	$has_new_photo = ! empty( $_FILES['photo_file']['name'] );
@@ -531,12 +536,12 @@ if ( ! empty( $selected_allergy_ids ) ) {
 
 			<?php if ( ! empty( $dietary_restrictions ) ) : ?>
 				<div class="remember-form-section">
-					<h3 class="remember-form-section-title"><?php esc_html_e( 'Dietary Restrictions', 'remember' ); ?></h3>
-					<p class="remember-form-help"><?php esc_html_e( 'Select any that apply. Used by event organizers — not shown to other participants.', 'remember' ); ?></p>
-					<div class="remember-checkbox-grid">
+					<h3 class="remember-form-section-title"><?php esc_html_e( 'Dietary Restrictions', 'remember' ); ?> <span class="remember-required">*</span></h3>
+					<p class="remember-form-help"><?php esc_html_e( 'Required. Select at least one — choose None if none apply. Used by event organizers — not shown to other participants.', 'remember' ); ?></p>
+					<div class="remember-checkbox-grid" data-remember-require-one="1">
 						<?php foreach ( $dietary_restrictions as $restriction ) : ?>
 							<label class="remember-checkbox-label">
-								<input type="checkbox" name="dietary_restrictions[]" value="<?php echo esc_attr( $restriction->restriction_id ); ?>" <?php checked( in_array( (string) $restriction->restriction_id, array_map( 'strval', (array) $selected_dietary_ids ), true ) ); ?>>
+								<input type="checkbox" name="dietary_restrictions[]" value="<?php echo esc_attr( $restriction->restriction_id ); ?>" <?php checked( in_array( (string) $restriction->restriction_id, array_map( 'strval', (array) $selected_dietary_ids ), true ) ); ?><?php echo ( 'None' === $restriction->restriction_name ) ? ' data-remember-none="1"' : ''; ?>>
 								<span><?php echo esc_html( $restriction->restriction_name ); ?></span>
 							</label>
 						<?php endforeach; ?>
@@ -546,12 +551,12 @@ if ( ! empty( $selected_allergy_ids ) ) {
 
 			<?php if ( ! empty( $medical_accommodations ) ) : ?>
 				<div class="remember-form-section">
-					<h3 class="remember-form-section-title"><?php esc_html_e( 'Medical Accommodations', 'remember' ); ?></h3>
-					<p class="remember-form-help"><?php esc_html_e( 'Select any that apply. Used by event organizers — not shown to other participants.', 'remember' ); ?></p>
-					<div class="remember-checkbox-grid">
+					<h3 class="remember-form-section-title"><?php esc_html_e( 'Medical Accommodations', 'remember' ); ?> <span class="remember-required">*</span></h3>
+					<p class="remember-form-help"><?php esc_html_e( 'Required. Select at least one — choose None if none apply. Used by event organizers — not shown to other participants.', 'remember' ); ?></p>
+					<div class="remember-checkbox-grid" data-remember-require-one="1">
 						<?php foreach ( $medical_accommodations as $accommodation ) : ?>
 							<label class="remember-checkbox-label">
-								<input type="checkbox" name="medical_accommodations[]" value="<?php echo esc_attr( $accommodation->accommodation_id ); ?>" <?php checked( in_array( (string) $accommodation->accommodation_id, array_map( 'strval', (array) $selected_medical_ids ), true ) ); ?>>
+								<input type="checkbox" name="medical_accommodations[]" value="<?php echo esc_attr( $accommodation->accommodation_id ); ?>" <?php checked( in_array( (string) $accommodation->accommodation_id, array_map( 'strval', (array) $selected_medical_ids ), true ) ); ?><?php echo ( 'None' === $accommodation->accommodation_name ) ? ' data-remember-none="1"' : ''; ?>>
 								<span>
 									<?php echo esc_html( $accommodation->accommodation_name ); ?>
 									<?php if ( ! empty( $accommodation->description ) ) : ?>
@@ -566,12 +571,12 @@ if ( ! empty( $selected_allergy_ids ) ) {
 
 			<?php if ( ! empty( $allergies ) ) : ?>
 				<div class="remember-form-section">
-					<h3 class="remember-form-section-title"><?php esc_html_e( 'Known Allergies', 'remember' ); ?></h3>
-					<p class="remember-form-help"><?php esc_html_e( 'Select any that apply. Used by event organizers — not shown to other participants.', 'remember' ); ?></p>
-					<div class="remember-checkbox-grid">
+					<h3 class="remember-form-section-title"><?php esc_html_e( 'Known Allergies', 'remember' ); ?> <span class="remember-required">*</span></h3>
+					<p class="remember-form-help"><?php esc_html_e( 'Required. Select at least one — choose None if none apply. Used by event organizers — not shown to other participants.', 'remember' ); ?></p>
+					<div class="remember-checkbox-grid" data-remember-require-one="1">
 						<?php foreach ( $allergies as $allergy ) : ?>
 							<label class="remember-checkbox-label">
-								<input type="checkbox" name="allergies[]" value="<?php echo esc_attr( $allergy->allergy_id ); ?>" <?php checked( in_array( (string) $allergy->allergy_id, array_map( 'strval', (array) $selected_allergy_ids ), true ) ); ?>>
+								<input type="checkbox" name="allergies[]" value="<?php echo esc_attr( $allergy->allergy_id ); ?>" <?php checked( in_array( (string) $allergy->allergy_id, array_map( 'strval', (array) $selected_allergy_ids ), true ) ); ?><?php echo ( 'None' === $allergy->allergy_name ) ? ' data-remember-none="1"' : ''; ?>>
 								<span><?php echo esc_html( $allergy->allergy_name ); ?></span>
 							</label>
 						<?php endforeach; ?>

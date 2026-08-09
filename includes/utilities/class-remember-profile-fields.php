@@ -76,6 +76,9 @@ class Remember_Profile_Fields {
 			'emergency_contact_last'         => __( 'Emergency Contact Last Name', 'remember' ),
 			'emergency_contact_phone'        => __( 'Emergency Contact Phone', 'remember' ),
 			'emergency_contact_relationship' => __( 'Emergency Contact Relationship', 'remember' ),
+			'dietary_restrictions'           => __( 'Dietary Restrictions', 'remember' ),
+			'medical_accommodations'         => __( 'Medical Accommodations', 'remember' ),
+			'allergies'                      => __( 'Known Allergies', 'remember' ),
 		);
 	}
 
@@ -231,6 +234,53 @@ class Remember_Profile_Fields {
 				return $key;
 			}
 		}
+		return '';
+	}
+
+	/**
+	 * Whether at least one ID was posted for a checkbox catalog field.
+	 *
+	 * @param string $post_key POST array key (e.g. dietary_restrictions).
+	 * @return bool
+	 */
+	private static function request_has_catalog_selection( $post_key ) {
+		if ( ! isset( $_POST[ $post_key ] ) || ! is_array( $_POST[ $post_key ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+			return false;
+		}
+		foreach ( $_POST[ $post_key ] as $raw_id ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+			if ( absint( $raw_id ) > 0 ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * First missing required health catalog (dietary / medical / allergies), or empty string.
+	 *
+	 * Skips a catalog when it has no active options (nothing to choose).
+	 *
+	 * @return string Field key: dietary_restrictions|medical_accommodations|allergies|''.
+	 */
+	public static function first_missing_required_health_catalog() {
+		global $wpdb;
+
+		$checks = array(
+			'dietary_restrictions'    => $wpdb->prefix . 'remember_dietary_restrictions',
+			'medical_accommodations'  => $wpdb->prefix . 'remember_medical_accommodations',
+			'allergies'               => $wpdb->prefix . 'remember_allergies',
+		);
+
+		foreach ( $checks as $post_key => $table ) {
+			$active = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE is_active = 1" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from fixed map.
+			if ( $active < 1 ) {
+				continue;
+			}
+			if ( ! self::request_has_catalog_selection( $post_key ) ) {
+				return $post_key;
+			}
+		}
+
 		return '';
 	}
 

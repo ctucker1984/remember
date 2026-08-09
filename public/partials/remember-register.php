@@ -307,12 +307,12 @@ $remember_reg_im_type  = $remember_reg_val( 'im_type', 'telegram' );
 			<?php endif; ?>
 
 			<?php if ( ! empty( $dietary_restrictions ) ) : ?>
-				<h3 class="remember-register-section-title"><?php esc_html_e( 'Dietary Restrictions', 'remember' ); ?></h3>
-				<p class="remember-register-section-help"><?php esc_html_e( 'Optional. For event organizers — not shown to other participants.', 'remember' ); ?></p>
-				<div class="remember-register-checkboxes">
+				<h3 class="remember-register-section-title"><?php esc_html_e( 'Dietary Restrictions', 'remember' ); ?> <span class="required">*</span></h3>
+				<p class="remember-register-section-help"><?php esc_html_e( 'Required. Select at least one — choose None if none apply. For event organizers — not shown to other participants.', 'remember' ); ?></p>
+				<div class="remember-register-checkboxes" data-remember-require-one="1">
 					<?php foreach ( $dietary_restrictions as $restriction ) : ?>
 						<label class="remember-checkbox-label">
-							<input type="checkbox" name="dietary_restrictions[]" value="<?php echo esc_attr( $restriction->restriction_id ); ?>">
+							<input type="checkbox" name="dietary_restrictions[]" value="<?php echo esc_attr( $restriction->restriction_id ); ?>"<?php echo ( 'None' === $restriction->restriction_name ) ? ' data-remember-none="1"' : ''; ?>>
 							<span><?php echo esc_html( $restriction->restriction_name ); ?></span>
 						</label>
 					<?php endforeach; ?>
@@ -320,12 +320,12 @@ $remember_reg_im_type  = $remember_reg_val( 'im_type', 'telegram' );
 			<?php endif; ?>
 
 			<?php if ( ! empty( $medical_accommodations ) ) : ?>
-				<h3 class="remember-register-section-title"><?php esc_html_e( 'Medical Accommodations', 'remember' ); ?></h3>
-				<p class="remember-register-section-help"><?php esc_html_e( 'Optional. For event organizers — not shown to other participants.', 'remember' ); ?></p>
-				<div class="remember-register-checkboxes">
+				<h3 class="remember-register-section-title"><?php esc_html_e( 'Medical Accommodations', 'remember' ); ?> <span class="required">*</span></h3>
+				<p class="remember-register-section-help"><?php esc_html_e( 'Required. Select at least one — choose None if none apply. For event organizers — not shown to other participants.', 'remember' ); ?></p>
+				<div class="remember-register-checkboxes" data-remember-require-one="1">
 					<?php foreach ( $medical_accommodations as $accommodation ) : ?>
 						<label class="remember-checkbox-label">
-							<input type="checkbox" name="medical_accommodations[]" value="<?php echo esc_attr( $accommodation->accommodation_id ); ?>">
+							<input type="checkbox" name="medical_accommodations[]" value="<?php echo esc_attr( $accommodation->accommodation_id ); ?>"<?php echo ( 'None' === $accommodation->accommodation_name ) ? ' data-remember-none="1"' : ''; ?>>
 							<span><?php echo esc_html( $accommodation->accommodation_name ); ?></span>
 						</label>
 					<?php endforeach; ?>
@@ -333,12 +333,12 @@ $remember_reg_im_type  = $remember_reg_val( 'im_type', 'telegram' );
 			<?php endif; ?>
 
 			<?php if ( ! empty( $allergies ) ) : ?>
-				<h3 class="remember-register-section-title"><?php esc_html_e( 'Known Allergies', 'remember' ); ?></h3>
-				<p class="remember-register-section-help"><?php esc_html_e( 'Optional. For event organizers — not shown to other participants.', 'remember' ); ?></p>
-				<div class="remember-register-checkboxes">
+				<h3 class="remember-register-section-title"><?php esc_html_e( 'Known Allergies', 'remember' ); ?> <span class="required">*</span></h3>
+				<p class="remember-register-section-help"><?php esc_html_e( 'Required. Select at least one — choose None if none apply. For event organizers — not shown to other participants.', 'remember' ); ?></p>
+				<div class="remember-register-checkboxes" data-remember-require-one="1">
 					<?php foreach ( $allergies as $allergy ) : ?>
 						<label class="remember-checkbox-label">
-							<input type="checkbox" name="allergies[]" value="<?php echo esc_attr( $allergy->allergy_id ); ?>">
+							<input type="checkbox" name="allergies[]" value="<?php echo esc_attr( $allergy->allergy_id ); ?>"<?php echo ( 'None' === $allergy->allergy_name ) ? ' data-remember-none="1"' : ''; ?>>
 							<span><?php echo esc_html( $allergy->allergy_name ); ?></span>
 						</label>
 					<?php endforeach; ?>

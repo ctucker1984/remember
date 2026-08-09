@@ -193,6 +193,9 @@ class Remember_Public {
 		if ( null !== Remember_Profile_Questions::first_missing_required( $pq_answers ) ) {
 			$this->redirect_member_registration( 'missing_fields' );
 		}
+		if ( '' !== Remember_Profile_Fields::first_missing_required_health_catalog() ) {
+			$this->redirect_member_registration( 'missing_fields' );
+		}
 
 		if ( ! Remember_Timezone::is_valid_timezone( $timezone ) ) {
 			$this->redirect_member_registration( 'invalid_timezone' );

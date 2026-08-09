@@ -85,6 +85,17 @@ class Remember_Seeder {
 	}
 
 	/**
+	 * Ensure dietary / allergy / medical catalog rows exist (safe for upgrades).
+	 *
+	 * @return void
+	 */
+	public function ensure_health_catalog_options() {
+		$this->seed_dietary_restrictions();
+		$this->seed_allergies();
+		$this->seed_medical_accommodations();
+	}
+
+	/**
 	 * Seed default location.
 	 */
 	private function seed_default_location() {
@@ -264,6 +275,7 @@ class Remember_Seeder {
 		$table_name = $this->prefix . 'dietary_restrictions';
 		
 		$restrictions = array(
+			__( 'None', 'remember' ),
 			__( 'Vegetarian', 'remember' ),
 			__( 'Vegan', 'remember' ),
 			__( 'Gluten-Free', 'remember' ),
@@ -299,6 +311,7 @@ class Remember_Seeder {
 		$table_name = $this->prefix . 'allergies';
 		
 		$allergies = array(
+			__( 'None', 'remember' ),
 			__( 'Peanuts', 'remember' ),
 			__( 'Tree Nuts', 'remember' ),
 			__( 'Shellfish', 'remember' ),
@@ -369,6 +382,10 @@ class Remember_Seeder {
 		$table_name = $this->prefix . 'medical_accommodations';
 		
 		$accommodations = array(
+			array(
+				'name'        => __( 'None', 'remember' ),
+				'description' => '',
+			),
 			array(
 				'name'        => __( 'CPAP Machine', 'remember' ),
 				'description' => __( 'Requires CPAP machine for sleep', 'remember' ),
