@@ -27,6 +27,8 @@ class Remember_Database_Updater {
 	public static function update_schema() {
 		global $wpdb;
 		require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-logger.php';
+		// Migrations may create tables via dbDelta outside plugin activation.
+		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 
 		Remember_Logger::activation_debug(
 			'update_schema: enter',
@@ -963,6 +965,12 @@ class Remember_Database_Updater {
 			update_option( 'remember_db_version', '1.29.0' );
 			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.29.0' ) );
 		}
+
+		// Always re-ensure health catalogs (idempotent). Catches sites that stalled mid-migration
+		// or activated before catalog seed rows were added.
+		require_once plugin_dir_path( __FILE__ ) . 'class-remember-seeder.php';
+		$seeder = new Remember_Seeder();
+		$seeder->ensure_health_catalog_options();
 
 		Remember_Logger::activation_debug(
 			'update_schema: exit',

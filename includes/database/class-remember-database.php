@@ -653,6 +653,8 @@ class Remember_Database {
 	 * Create Xero item mappings table (roles + catalog products).
 	 */
 	public function create_xero_item_mappings_table() {
+		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+
 		$table_name      = $this->prefix . 'xero_item_mappings';
 		$charset_collate = $this->wpdb->get_charset_collate();
 
