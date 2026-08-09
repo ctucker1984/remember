@@ -715,7 +715,7 @@ if ( ! empty( $selected_allergy_ids ) ) {
 
 			<div class="remember-form-section">
 				<h3 class="remember-form-section-title"><?php esc_html_e( 'Privacy Settings', 'remember' ); ?></h3>
-				<p class="remember-form-help"><?php esc_html_e( 'Control what is shared with other members when you are accepted into events.', 'remember' ); ?></p>
+				<p class="remember-form-help"><?php esc_html_e( 'These switches control what other accepted event attendees can see about you. Nothing here is shared until you are accepted into an event. Consider sharing at least your photo and Instant Messenger so others can recognize and connect with you.', 'remember' ); ?></p>
 				<div class="remember-privacy-checkboxes">
 					<label class="remember-checkbox-label">
 						<input type="checkbox" name="share_photo_with_events" value="1" <?php checked( $profile && isset( $profile->share_photo_with_events ) ? $profile->share_photo_with_events : 0, 1 ); ?>>
