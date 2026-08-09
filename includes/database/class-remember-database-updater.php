@@ -952,6 +952,18 @@ class Remember_Database_Updater {
 			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.28.0' ) );
 		}
 
+		// Update to 1.29.0 — expanded allergies catalog (incl. pomegranate, grapefruit).
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.29.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.29.0' ) );
+
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-seeder.php';
+			$seeder = new Remember_Seeder();
+			$seeder->ensure_health_catalog_options();
+
+			update_option( 'remember_db_version', '1.29.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.29.0' ) );
+		}
+
 		Remember_Logger::activation_debug(
 			'update_schema: exit',
 			array( 'remember_db_version' => get_option( 'remember_db_version', '0.0.0' ) )
