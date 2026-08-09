@@ -194,14 +194,15 @@ $remember_reg_im_type  = $remember_reg_val( 'im_type', 'telegram' );
 			</div>
 
 			<div class="remember-register-row">
-				<label for="remember_reg_address_country"><?php esc_html_e( 'Country', 'remember' ); ?></label>
+				<label for="remember_reg_address_country"><?php esc_html_e( 'Country', 'remember' ); ?> <span class="required">*</span></label>
 				<?php
 				echo Remember_Countries::dropdown(
 					'remember_reg_address_country',
 					$remember_reg_country,
 					array(
-						'id'    => 'remember_reg_address_country',
-						'class' => 'remember-register-input',
+						'id'       => 'remember_reg_address_country',
+						'class'    => 'remember-register-input',
+						'required' => true,
 					)
 				);
 				?>

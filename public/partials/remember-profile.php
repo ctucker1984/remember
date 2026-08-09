@@ -479,10 +479,18 @@ if ( ! empty( $selected_allergy_ids ) ) {
 							value="<?php echo esc_attr( $profile ? $profile->address_postal : '' ); ?>">
 					</div>
 					<div class="remember-form-col">
-						<label for="address_country" class="remember-form-label"><?php esc_html_e( 'Country', 'remember' ); ?></label>
-						<?php 
+						<label for="address_country" class="remember-form-label"><?php esc_html_e( 'Country', 'remember' ); ?> <span class="remember-required">*</span></label>
+						<?php
 						$selected_country = $profile && $profile->address_country ? $profile->address_country : 'US';
-						echo Remember_Countries::dropdown( 'address_country', $selected_country, array( 'id' => 'address_country', 'class' => 'remember-form-control' ) );
+						echo Remember_Countries::dropdown(
+							'address_country',
+							$selected_country,
+							array(
+								'id'       => 'address_country',
+								'class'    => 'remember-form-control',
+								'required' => true,
+							)
+						);
 						?>
 					</div>
 				</div>
