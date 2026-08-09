@@ -278,14 +278,25 @@ class Remember_Seeder {
 			__( 'None', 'remember' ),
 			__( 'Vegetarian', 'remember' ),
 			__( 'Vegan', 'remember' ),
+			__( 'Pescatarian', 'remember' ),
 			__( 'Gluten-Free', 'remember' ),
+			__( 'Celiac', 'remember' ),
 			__( 'Dairy-Free', 'remember' ),
+			__( 'Egg-Free', 'remember' ),
+			__( 'Soy-Free', 'remember' ),
 			__( 'Kosher', 'remember' ),
 			__( 'Halal', 'remember' ),
 			__( 'No Nuts', 'remember' ),
 			__( 'No Shellfish', 'remember' ),
+			__( 'No Pork', 'remember' ),
+			__( 'No Beef', 'remember' ),
+			__( 'No Alcohol', 'remember' ),
 			__( 'Low Sodium', 'remember' ),
 			__( 'Diabetic', 'remember' ),
+			__( 'Sugar-Free / No Added Sugar', 'remember' ),
+			__( 'Low-FODMAP', 'remember' ),
+			__( 'Keto / Low-Carb', 'remember' ),
+			__( 'Soft Foods Only', 'remember' ),
 		);
 
 		foreach ( $restrictions as $index => $restriction ) {
@@ -446,6 +457,38 @@ class Remember_Seeder {
 			array(
 				'name'        => __( 'Medical Equipment Storage', 'remember' ),
 				'description' => __( 'Requires secure storage for medical equipment', 'remember' ),
+			),
+			array(
+				'name'        => __( 'Ground Floor / Elevator Access', 'remember' ),
+				'description' => __( 'Needs ground-floor lodging or reliable elevator access', 'remember' ),
+			),
+			array(
+				'name'        => __( 'ADA-Accessible Restroom', 'remember' ),
+				'description' => __( 'Requires ADA-accessible restroom facilities', 'remember' ),
+			),
+			array(
+				'name'        => __( 'Shower Chair / Grab Bars', 'remember' ),
+				'description' => __( 'Needs shower chair and/or grab bars in bathing area', 'remember' ),
+			),
+			array(
+				'name'        => __( 'Refrigerator for Medication', 'remember' ),
+				'description' => __( 'Needs refrigerated storage for medication', 'remember' ),
+			),
+			array(
+				'name'        => __( 'Quiet / Low-Stimulus Room', 'remember' ),
+				'description' => __( 'Prefers a quiet or low-stimulus sleeping/meeting space', 'remember' ),
+			),
+			array(
+				'name'        => __( 'Extra Time Between Sessions', 'remember' ),
+				'description' => __( 'Needs additional transition time between scheduled activities', 'remember' ),
+			),
+			array(
+				'name'        => __( 'Nearby Hospital Access', 'remember' ),
+				'description' => __( 'Needs proximity to hospital or urgent medical care', 'remember' ),
+			),
+			array(
+				'name'        => __( 'Allergy-Friendly Environment', 'remember' ),
+				'description' => __( 'Needs reduced allergen exposure in lodging or common areas', 'remember' ),
 			),
 		);
 

@@ -56,8 +56,10 @@ Then add members via **Members → Add New**, **Convert WP User**, or the public
 - **Fix:** Time zone starts empty at registration and opens unfiltered; clearer importance copy. Closes [#13](https://github.com/ctucker1984/remember/issues/13).
 - **Enhancement:** Dietary, medical, and allergy catalogs include None and require a response. Closes [#15](https://github.com/ctucker1984/remember/issues/15).
 - **Enhancement:** Expanded allergies seed list (incl. pomegranate, grapefruit). Closes [#19](https://github.com/ctucker1984/remember/issues/19).
+- **Enhancement:** Expanded dietary restrictions and medical accommodations for event planning coverage.
 - **Enhancement:** Privacy copy explains sharing and encourages photo + IM for networking. Closes [#18](https://github.com/ctucker1984/remember/issues/18).
 - **Enhancement:** Profile photo required at registration. Closes [#14](https://github.com/ctucker1984/remember/issues/14).
+- **Fix:** Load `dbDelta` before admin schema migrations so upgrades are not stalled mid-chain.
 
 ### 1.3.1
 
