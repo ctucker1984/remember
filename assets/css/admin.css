@@ -221,6 +221,7 @@
 .remember-applications,
 .remember-vetting,
 .remember-payments,
+.remember-billing,
 .remember-locations,
 .remember-roles,
 .remember-settings {
@@ -233,6 +234,7 @@
 .remember-applications h1,
 .remember-vetting h1,
 .remember-payments h1,
+.remember-billing h1,
 .remember-locations h1,
 .remember-roles h1,
 .remember-settings h1 {

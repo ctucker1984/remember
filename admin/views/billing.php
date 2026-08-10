@@ -54,12 +54,12 @@ if ( ! empty( $filter_status ) ) {
 	</div>
 
 	<!-- Filters -->
-	<div class="remember-filters" style="margin: 20px 0; padding: 15px; background: #fff; border: 1px solid #ccd0d4; border-radius: 4px;">
+	<div class="remember-filters">
 		<form method="get" action="">
 			<input type="hidden" name="page" value="remember-billing">
 			
 			<label for="filter_status"><?php esc_html_e( 'Filter by Status:', 'remember' ); ?></label>
-			<select id="filter_status" name="filter_status" style="margin-right: 20px;">
+			<select id="filter_status" name="filter_status">
 				<option value=""><?php esc_html_e( 'All Statuses', 'remember' ); ?></option>
 				<?php foreach ( $status_labels as $status => $label ) : ?>
 					<option value="<?php echo esc_attr( $status ); ?>" <?php selected( $filter_status, $status ); ?>>

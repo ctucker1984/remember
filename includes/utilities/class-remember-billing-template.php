@@ -243,24 +243,21 @@ class Remember_Billing_Template {
 			return;
 		}
 
-		$table_classes = array( 'remember-billing-payments-table' );
-		$table_classes[] = 'wp-list-table';
-		$table_classes[] = 'widefat';
-		$table_classes[] = 'fixed';
-		$table_classes[] = 'striped';
+		$table_classes = array( 'remember-billing-payments-table', 'wp-list-table', 'widefat', 'striped', 'remember-responsive-table' );
 		if ( '' !== $table_extra ) {
 			$table_classes[] = $table_extra;
 		}
 
 		?>
+		<div class="remember-table-scroll">
 		<table class="<?php echo esc_attr( implode( ' ', $table_classes ) ); ?>">
 			<thead>
 				<tr>
 					<th class="column-member"><?php esc_html_e( 'Member', 'remember' ); ?></th>
 					<th class="column-qb-invoice"><?php esc_html_e( 'Invoice #', 'remember' ); ?></th>
-					<th class="column-amount"><?php esc_html_e( 'Subtotal Amount', 'remember' ); ?></th>
-					<th class="column-paid"><?php esc_html_e( 'Payment/Credit', 'remember' ); ?></th>
-					<th class="column-due"><?php esc_html_e( 'Amount Due', 'remember' ); ?></th>
+					<th class="column-amount remember-num"><?php esc_html_e( 'Subtotal Amount', 'remember' ); ?></th>
+					<th class="column-paid remember-num"><?php esc_html_e( 'Payment/Credit', 'remember' ); ?></th>
+					<th class="column-due remember-num"><?php esc_html_e( 'Amount Due', 'remember' ); ?></th>
 					<th class="column-status"><?php esc_html_e( 'Status', 'remember' ); ?></th>
 					<th class="column-method"><?php esc_html_e( 'Method', 'remember' ); ?></th>
 					<th class="column-date"><?php esc_html_e( 'Date', 'remember' ); ?></th>
@@ -288,13 +285,13 @@ class Remember_Billing_Template {
 						<td class="column-qb-invoice">
 							<?php self::render_invoice_number_cell( $payment ); ?>
 						</td>
-						<td class="column-amount">
+						<td class="column-amount remember-num">
 							<strong>$<?php echo esc_html( number_format( (float) $payment->total_amount, 2 ) ); ?></strong>
 						</td>
-						<td class="column-paid">
+						<td class="column-paid remember-num">
 							$<?php echo esc_html( number_format( self::get_payment_and_credit_total( $payment ), 2 ) ); ?>
 						</td>
-						<td class="column-due">
+						<td class="column-due remember-num">
 							<strong style="color: <?php echo (float) $payment->amount_due > 0 ? '#dc3232' : '#46b450'; ?>;">
 								$<?php echo esc_html( number_format( (float) $payment->amount_due, 2 ) ); ?>
 							</strong>
@@ -321,6 +318,7 @@ class Remember_Billing_Template {
 				<?php endforeach; ?>
 			</tbody>
 		</table>
+		</div>
 		<?php
 	}
 
