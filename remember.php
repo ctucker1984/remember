@@ -4,6 +4,7 @@
  * Plugin URI: https://github.com/ctucker1984/remember
  * Description: Membership communities for WordPress — member profiles, events and locations, applications and vetting, admission tickets, and billing with QuickBooks Online or Xero.
  * Version: 1.3.2
+ * Update URI: https://github.com/ctucker1984/remember
  * Author: ctucker1984
  * Author URI: https://github.com/ctucker1984
  * License: GPL v2 or later
