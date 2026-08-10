@@ -760,12 +760,12 @@ $status_colors = array(
 	</div>
 
 	<!-- Filters -->
-	<div class="remember-filters" style="margin: 20px 0; padding: 15px; background: #fff; border: 1px solid #ccd0d4; border-radius: 4px;">
+	<div class="remember-filters">
 		<form method="get" action="">
 			<input type="hidden" name="page" value="remember-applications">
 			
 			<label for="filter_event"><?php esc_html_e( 'Filter by Event:', 'remember' ); ?></label>
-			<select id="filter_event" name="filter_event" style="margin-right: 20px;">
+			<select id="filter_event" name="filter_event">
 				<option value="0"><?php esc_html_e( 'All Events', 'remember' ); ?></option>
 				<?php foreach ( $events as $event ) : ?>
 					<option value="<?php echo esc_attr( $event->event_id ); ?>" <?php selected( $filter_event, $event->event_id ); ?>>
@@ -775,7 +775,7 @@ $status_colors = array(
 			</select>
 
 			<label for="filter_status"><?php esc_html_e( 'Filter by Status:', 'remember' ); ?></label>
-			<select id="filter_status" name="filter_status" style="margin-right: 20px;">
+			<select id="filter_status" name="filter_status">
 				<option value=""><?php esc_html_e( 'All Statuses', 'remember' ); ?></option>
 				<?php foreach ( $status_labels as $status => $label ) : ?>
 					<option value="<?php echo esc_attr( $status ); ?>" <?php selected( $filter_status, $status ); ?>>
@@ -790,7 +790,7 @@ $status_colors = array(
 			<?php endif; ?>
 		</form>
 		<?php if ( current_user_can( 'remember_update_applications' ) ) : ?>
-			<form method="post" action="" style="margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
+			<form method="post" action="" class="remember-filters__blast">
 				<?php wp_nonce_field( 'remember_application_action', 'remember_application_nonce' ); ?>
 				<input type="hidden" name="remember_application_action" value="blast_balance_due">
 				<input type="hidden" name="blast_event_id" value="<?php echo esc_attr( $filter_event ); ?>">
@@ -802,7 +802,8 @@ $status_colors = array(
 
 	<!-- Applications List -->
 	<?php if ( ! empty( $applications ) ) : ?>
-		<table class="wp-list-table widefat fixed striped">
+		<div class="remember-table-scroll">
+		<table class="wp-list-table widefat striped remember-responsive-table">
 			<thead>
 				<tr>
 					<th class="column-event"><?php esc_html_e( 'Event', 'remember' ); ?></th>
@@ -871,21 +872,20 @@ $status_colors = array(
 							<?php echo esc_html( date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), strtotime( $application->applied_at ) ) ); ?>
 						</td>
 						<td class="column-actions">
+							<div class="remember-row-actions">
 							<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-applications&view=' . $application->application_id ) ); ?>"><?php esc_html_e( 'View', 'remember' ); ?></a>
 							<?php if ( Remember_Ticket::is_eligible( $application ) ) : ?>
-								|
 								<a href="<?php echo esc_url( Remember_Ticket::get_ticket_url( $application->application_id ) ); ?>" target="_blank" rel="noopener noreferrer"><?php esc_html_e( 'Ticket', 'remember' ); ?></a>
 							<?php endif; ?>
 							<?php if ( 'pending' === $application->status || 'waitlisted' === $application->status ) : ?>
-								|
-								<form method="post" action="" style="display: inline;">
+								<form method="post" action="">
 									<?php wp_nonce_field( 'remember_application_action', 'remember_application_nonce' ); ?>
 									<input type="hidden" name="remember_application_action" value="accept">
 									<input type="hidden" name="application_id" value="<?php echo esc_attr( $application->application_id ); ?>">
 									<input type="submit" class="button button-small" value="<?php esc_attr_e( 'Accept', 'remember' ); ?>" onclick="return confirm('<?php esc_attr_e( 'Accept this application?', 'remember' ); ?>');">
 								</form>
 								
-								<form method="post" action="" style="display: inline;">
+								<form method="post" action="">
 									<?php wp_nonce_field( 'remember_application_action', 'remember_application_nonce' ); ?>
 									<input type="hidden" name="remember_application_action" value="decline">
 									<input type="hidden" name="application_id" value="<?php echo esc_attr( $application->application_id ); ?>">
@@ -894,7 +894,7 @@ $status_colors = array(
 								</form>
 								
 								<?php if ( 'pending' === $application->status ) : ?>
-									<form method="post" action="" style="display: inline;">
+									<form method="post" action="">
 										<?php wp_nonce_field( 'remember_application_action', 'remember_application_nonce' ); ?>
 										<input type="hidden" name="remember_application_action" value="waitlist">
 										<input type="hidden" name="application_id" value="<?php echo esc_attr( $application->application_id ); ?>">
@@ -903,16 +903,14 @@ $status_colors = array(
 								<?php endif; ?>
 							<?php else : ?>
 								<?php if ( 'accepted' === $application->status ) : ?>
-									|
 									<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-applications&view=' . $application->application_id ) ); ?>"><?php esc_html_e( 'Decline…', 'remember' ); ?></a>
-									|
-									<form method="post" action="" style="display: inline;">
+									<form method="post" action="">
 										<?php wp_nonce_field( 'remember_application_action', 'remember_application_nonce' ); ?>
 										<input type="hidden" name="remember_application_action" value="reopen_pending">
 										<input type="hidden" name="application_id" value="<?php echo esc_attr( $application->application_id ); ?>">
 										<input type="submit" class="button button-small" value="<?php esc_attr_e( 'Move to Pending', 'remember' ); ?>" onclick="return confirm('<?php esc_attr_e( 'Move this accepted application back to pending?', 'remember' ); ?>');">
 									</form>
-									<form method="post" action="" style="display: inline;">
+									<form method="post" action="">
 										<?php wp_nonce_field( 'remember_application_action', 'remember_application_nonce' ); ?>
 										<input type="hidden" name="remember_application_action" value="reprocess_billing">
 										<input type="hidden" name="application_id" value="<?php echo esc_attr( $application->application_id ); ?>">
@@ -922,11 +920,13 @@ $status_colors = array(
 									<span class="description"><?php esc_html_e( 'Processed', 'remember' ); ?></span>
 								<?php endif; ?>
 							<?php endif; ?>
+							</div>
 						</td>
 					</tr>
 				<?php endforeach; ?>
 			</tbody>
 		</table>
+		</div>
 		
 		<p class="description" style="margin-top: 15px;">
 			<?php echo esc_html( sprintf( __( 'Showing %d application(s)', 'remember' ), count( $applications ) ) ); ?>

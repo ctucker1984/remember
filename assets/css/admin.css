@@ -1034,11 +1034,34 @@
 	margin: 0;
 }
 
+.remember-filters {
+	margin: 20px 0;
+	padding: 15px;
+	background: #fff;
+	border: 1px solid #ccd0d4;
+	border-radius: 4px;
+	box-sizing: border-box;
+	max-width: 100%;
+}
+
+.remember-filters__blast {
+	margin-top: 12px;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	align-items: center;
+}
+
 .remember-row-actions {
 	display: flex;
 	flex-wrap: wrap;
 	align-items: center;
 	gap: 6px;
+}
+
+.remember-row-actions form {
+	display: inline-block;
+	margin: 0;
 }
 
 .remember-filters form {
