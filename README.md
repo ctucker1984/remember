@@ -60,6 +60,7 @@ Then add members via **Members → Add New**, **Convert WP User**, or the public
 - **Enhancement:** Privacy copy explains sharing and encourages photo + IM for networking. Closes [#18](https://github.com/ctucker1984/remember/issues/18).
 - **Enhancement:** Profile photo required at registration. Closes [#14](https://github.com/ctucker1984/remember/issues/14).
 - **Fix:** Load `dbDelta` before admin schema migrations so upgrades are not stalled mid-chain.
+- **Fix:** Admin mobile — vetting detail, applications list, and billing register. Closes [#8](https://github.com/ctucker1984/remember/issues/8), [#9](https://github.com/ctucker1984/remember/issues/9), [#10](https://github.com/ctucker1984/remember/issues/10).
 
 ### 1.3.1
 
