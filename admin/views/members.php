@@ -1170,13 +1170,13 @@ if ( $view_member_id > 0 ) {
 					$vetting = $vetting_model->get_by_member( $member->member_id );
 						?>
 						<tr>
-						<td class="column-name">
+						<td class="column-name" data-label="<?php echo esc_attr__( 'Name', 'remember' ); ?>">
 							<strong><a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-members&view=' . $member->member_id ) ); ?>"><?php echo esc_html( $user->display_name ); ?></a></strong>
 							<?php if ( $profile ) : ?>
 								<br><span class="description"><?php echo esc_html( Remember_Import_Export::member_list_legal_name_line( $profile, (int) $member->member_id ) ); ?></span>
 							<?php endif; ?>
 						</td>
-						<td class="column-email">
+						<td class="column-email" data-label="<?php echo esc_attr__( 'Contact', 'remember' ); ?>">
 							<?php if ( ! empty( $user->user_email ) ) : ?>
 								<span class="dashicons dashicons-email-alt" style="font-size: 14px; vertical-align: middle; color: #666; margin-right: 4px;"></span>
 								<a href="mailto:<?php echo esc_attr( $user->user_email ); ?>" style="text-decoration: none;"><?php echo esc_html( $user->user_email ); ?></a>
@@ -1187,15 +1187,15 @@ if ( $view_member_id > 0 ) {
 								<a href="tel:<?php echo esc_attr( preg_replace( '/[^0-9+]/', '', $profile->cell_phone ) ); ?>" style="text-decoration: none;"><?php echo esc_html( $profile->cell_phone ); ?></a>
 							<?php endif; ?>
 						</td>
-						<td class="column-status">
+						<td class="column-status" data-label="<?php echo esc_attr__( 'Status', 'remember' ); ?>">
 							<span style="color: <?php echo esc_attr( $status_colors[ $member->status ] ); ?>; font-weight: bold;">
 								<?php echo esc_html( $status_labels[ $member->status ] ); ?>
 								</span>
 							</td>
-						<td class="column-joined">
+						<td class="column-joined" data-label="<?php echo esc_attr__( 'Joined', 'remember' ); ?>">
 							<?php echo esc_html( date_i18n( get_option( 'date_format' ), strtotime( $member->created_at ) ) ); ?>
 						</td>
-						<td class="column-actions">
+						<td class="column-actions" data-label="<?php echo esc_attr__( 'Actions', 'remember' ); ?>">
 							<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-members&view=' . $member->member_id ) ); ?>"><?php esc_html_e( 'View Profile', 'remember' ); ?></a>
 							<?php 
 							// Only show vetting link if there's a non-completed case

@@ -341,13 +341,13 @@ if ( $is_editing && ! current_user_can( 'remember_update_members' ) ) {
 								$decider = ! empty( $case->primary_vetter_id ) ? get_user_by( 'ID', $case->primary_vetter_id ) : null;
 							?>
 								<tr>
-									<td><?php echo esc_html( date_i18n( get_option( 'date_format' ), strtotime( $case->created_at ) ) ); ?></td>
-									<td>
+									<td data-label="<?php echo esc_attr__( 'Case Start', 'remember' ); ?>"><?php echo esc_html( date_i18n( get_option( 'date_format' ), strtotime( $case->created_at ) ) ); ?></td>
+									<td data-label="<?php echo esc_attr__( 'Status', 'remember' ); ?>">
 										<span style="color: <?php echo esc_attr( $vetting_status_colors[ $case->status ] ); ?>; font-weight: bold;">
 											<?php echo esc_html( $vetting_status_labels[ $case->status ] ); ?>
 										</span>
 									</td>
-									<td>
+									<td data-label="<?php echo esc_attr__( 'Decision', 'remember' ); ?>">
 										<?php if ( 'completed' === $case->status && ! empty( $case->decision ) && 'pending' !== $case->decision ) : ?>
 											<span style="color: <?php echo 'accepted' === $case->decision ? '#46b450' : '#dc3232'; ?>; font-weight: bold;">
 												<?php echo esc_html( $vetting_decision_labels[ $case->decision ] ); ?>
@@ -356,17 +356,17 @@ if ( $is_editing && ! current_user_can( 'remember_update_members' ) ) {
 											<span class="description">—</span>
 										<?php endif; ?>
 									</td>
-									<td>
+									<td data-label="<?php echo esc_attr__( 'Decision Date', 'remember' ); ?>">
 										<?php if ( ! empty( $case->decision_date ) ) : ?>
 											<?php echo esc_html( date_i18n( get_option( 'date_format' ), strtotime( $case->decision_date ) ) ); ?>
 										<?php else : ?>
 											<span class="description">—</span>
 										<?php endif; ?>
 									</td>
-									<td>
+									<td data-label="<?php echo esc_attr__( 'Decider', 'remember' ); ?>">
 										<?php echo $decider ? esc_html( $decider->display_name ) : '<span class="description">—</span>'; ?>
 									</td>
-									<td>
+									<td data-label="<?php echo esc_attr__( 'Actions', 'remember' ); ?>">
 										<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-vetting&view=' . $case->vetting_id ) ); ?>" class="button button-small">
 											<?php esc_html_e( 'View', 'remember' ); ?>
 										</a>
@@ -404,8 +404,8 @@ if ( $is_editing && ! current_user_can( 'remember_update_members' ) ) {
 					<tbody>
 						<?php foreach ( $billing_register as $entry ) : ?>
 							<tr>
-								<td><?php echo esc_html( date_i18n( get_option( 'date_format' ), strtotime( $entry['date'] ) ) ); ?></td>
-								<td>
+								<td data-label="<?php echo esc_attr__( 'Date', 'remember' ); ?>"><?php echo esc_html( date_i18n( get_option( 'date_format' ), strtotime( $entry['date'] ) ) ); ?></td>
+								<td data-label="<?php echo esc_attr__( 'Type', 'remember' ); ?>">
 									<?php if ( 'invoice' === $entry['type'] ) : ?>
 										<span style="color: #d63638;"><?php esc_html_e( 'Invoice', 'remember' ); ?></span>
 									<?php elseif ( 'refund' === $entry['type'] ) : ?>
@@ -414,7 +414,7 @@ if ( $is_editing && ! current_user_can( 'remember_update_members' ) ) {
 										<span style="color: #00a32a;"><?php esc_html_e( 'Payment', 'remember' ); ?></span>
 									<?php endif; ?>
 								</td>
-								<td>
+								<td data-label="<?php echo esc_attr__( 'Description', 'remember' ); ?>">
 									<?php if ( 'invoice' === $entry['type'] && ! empty( $entry['invoice_url'] ) && ! empty( $entry['invoice_number'] ) ) : ?>
 										<?php
 										$desc   = (string) $entry['description'];
@@ -437,29 +437,29 @@ if ( $is_editing && ! current_user_can( 'remember_update_members' ) ) {
 										<?php echo esc_html( $entry['description'] ); ?>
 									<?php endif; ?>
 								</td>
-								<td style="text-align: right;">
+								<td class="remember-num" data-label="<?php echo esc_attr__( 'Debit', 'remember' ); ?>">
 									<?php if ( $entry['debit'] > 0 ) : ?>
 										<?php echo esc_html( number_format( $entry['debit'], 2 ) ); ?>
 									<?php else : ?>
 										&mdash;
 									<?php endif; ?>
 								</td>
-								<td style="text-align: right;">
+								<td class="remember-num" data-label="<?php echo esc_attr__( 'Credit', 'remember' ); ?>">
 									<?php if ( $entry['credit'] > 0 ) : ?>
 										<?php echo esc_html( number_format( $entry['credit'], 2 ) ); ?>
 									<?php else : ?>
 										&mdash;
 									<?php endif; ?>
 								</td>
-								<td style="text-align: right; font-weight: <?php echo $entry['balance'] > 0 ? 'bold' : 'normal'; ?>;">
-									<?php 
+								<td class="remember-num" data-label="<?php echo esc_attr__( 'Balance', 'remember' ); ?>" style="font-weight: <?php echo $entry['balance'] > 0 ? 'bold' : 'normal'; ?>;">
+									<?php
 									$balance_color = $entry['balance'] > 0 ? '#d63638' : ( $entry['balance'] < 0 ? '#00a32a' : '#666' );
 									?>
 									<span style="color: <?php echo esc_attr( $balance_color ); ?>;">
 										<?php echo esc_html( number_format( $entry['balance'], 2 ) ); ?>
 									</span>
 								</td>
-								<td>
+								<td data-label="<?php echo esc_attr__( 'Status', 'remember' ); ?>">
 									<?php
 									$status_labels_billing = array(
 										'pending' => __( 'Pending', 'remember' ),
@@ -486,20 +486,17 @@ if ( $is_editing && ! current_user_can( 'remember_update_members' ) ) {
 						<?php endforeach; ?>
 					</tbody>
 					<tfoot>
-						<tr style="background: #f9f9f9; font-weight: bold;">
-							<td colspan="3" style="text-align: right; padding: 10px;">
-								<?php esc_html_e( 'Current Balance:', 'remember' ); ?>
-							</td>
-							<td colspan="3" style="text-align: right; padding: 10px;">
-								<?php 
+						<tr>
+							<td colspan="7" data-label="<?php echo esc_attr__( 'Current Balance', 'remember' ); ?>">
+								<strong><?php esc_html_e( 'Current Balance:', 'remember' ); ?></strong>
+								<?php
 								$current_balance = $running_balance;
 								$balance_color = $current_balance > 0 ? '#d63638' : ( $current_balance < 0 ? '#00a32a' : '#666' );
 								?>
-								<span style="color: <?php echo esc_attr( $balance_color ); ?>; font-size: 16px;">
+								<span style="color: <?php echo esc_attr( $balance_color ); ?>; font-size: 16px; font-weight: bold; margin-left: 8px;">
 									<?php echo esc_html( number_format( $current_balance, 2 ) ); ?>
 								</span>
 							</td>
-							<td></td>
 						</tr>
 					</tfoot>
 				</table>

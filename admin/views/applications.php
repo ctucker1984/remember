@@ -838,14 +838,14 @@ $status_colors = array(
 					}
 				?>
 					<tr>
-						<td class="column-event">
+						<td class="column-event" data-label="<?php echo esc_attr__( 'Event', 'remember' ); ?>">
 							<?php if ( $event ) : ?>
 								<strong><a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-events&view=' . $event->event_id ) ); ?>"><?php echo esc_html( $event->event_name ); ?></a></strong>
 							<?php else : ?>
 								<span class="description">—</span>
 							<?php endif; ?>
 						</td>
-						<td class="column-member">
+						<td class="column-member" data-label="<?php echo esc_attr__( 'Member', 'remember' ); ?>">
 							<?php if ( $user ) : ?>
 								<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-members&view=' . $application->member_id ) ); ?>">
 									<strong><?php echo esc_html( $user->display_name ); ?></strong>
@@ -855,23 +855,23 @@ $status_colors = array(
 								<span class="description"><?php esc_html_e( 'Member not found', 'remember' ); ?></span>
 							<?php endif; ?>
 						</td>
-						<td class="column-role">
+						<td class="column-role" data-label="<?php echo esc_attr__( 'Role', 'remember' ); ?>">
 							<?php echo $event_role ? esc_html( $event_role->role_name ) : '<span class="description">—</span>'; ?>
 						</td>
-						<td class="column-status">
+						<td class="column-status" data-label="<?php echo esc_attr__( 'Status', 'remember' ); ?>">
 							<span style="color: <?php echo esc_attr( $status_colors[ $application->status ] ); ?>; font-weight: bold;">
 								<?php echo esc_html( $status_labels[ $application->status ] ); ?>
 							</span>
 						</td>
-						<td class="column-billing">
+						<td class="column-billing" data-label="<?php echo esc_attr__( 'Billing', 'remember' ); ?>">
 							<span style="color: <?php echo esc_attr( $billing_color ); ?>; font-weight: bold;">
 								<?php echo esc_html( $billing_label ); ?>
 							</span>
 						</td>
-						<td class="column-date">
+						<td class="column-date" data-label="<?php echo esc_attr__( 'Applied', 'remember' ); ?>">
 							<?php echo esc_html( date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), strtotime( $application->applied_at ) ) ); ?>
 						</td>
-						<td class="column-actions">
+						<td class="column-actions" data-label="<?php echo esc_attr__( 'Actions', 'remember' ); ?>">
 							<div class="remember-row-actions">
 							<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-applications&view=' . $application->application_id ) ); ?>"><?php esc_html_e( 'View', 'remember' ); ?></a>
 							<?php if ( Remember_Ticket::is_eligible( $application ) ) : ?>

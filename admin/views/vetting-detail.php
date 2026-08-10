@@ -247,7 +247,7 @@ if ( ! defined( 'WPINC' ) ) {
 						);
 					?>
 						<tr>
-							<td>
+							<td data-label="<?php echo esc_attr__( 'Event', 'remember' ); ?>">
 								<?php if ( $event ) : ?>
 									<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-events&view=' . $event->event_id ) ); ?>">
 										<strong><?php echo esc_html( $event->event_name ); ?></strong>
@@ -256,14 +256,14 @@ if ( ! defined( 'WPINC' ) ) {
 									<span class="description">—</span>
 								<?php endif; ?>
 							</td>
-							<td><?php echo $event_role ? esc_html( $event_role->role_name ) : '<span class="description">—</span>'; ?></td>
-							<td>
+							<td data-label="<?php echo esc_attr__( 'Role', 'remember' ); ?>"><?php echo $event_role ? esc_html( $event_role->role_name ) : '<span class="description">—</span>'; ?></td>
+							<td data-label="<?php echo esc_attr__( 'Status', 'remember' ); ?>">
 								<span style="color: <?php echo esc_attr( $app_status_colors[ $app->status ] ); ?>; font-weight: bold;">
 									<?php echo esc_html( $app_status_labels[ $app->status ] ); ?>
 								</span>
 							</td>
-							<td><?php echo esc_html( date_i18n( get_option( 'date_format' ), strtotime( $app->applied_at ) ) ); ?></td>
-							<td>
+							<td data-label="<?php echo esc_attr__( 'Applied', 'remember' ); ?>"><?php echo esc_html( date_i18n( get_option( 'date_format' ), strtotime( $app->applied_at ) ) ); ?></td>
+							<td data-label="<?php echo esc_attr__( 'Actions', 'remember' ); ?>">
 								<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-applications&view=' . $app->application_id ) ); ?>">
 									<?php esc_html_e( 'View', 'remember' ); ?>
 								</a>

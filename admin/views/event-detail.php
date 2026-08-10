@@ -188,7 +188,7 @@ $is_multi_day = $viewing_event->start_date !== $viewing_event->end_date;
 						}
 					?>
 						<tr>
-							<td class="column-member">
+							<td class="column-member" data-label="<?php echo esc_attr__( 'Member', 'remember' ); ?>">
 								<?php if ( $user ) : ?>
 									<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-members&view=' . $application->member_id ) ); ?>">
 										<strong><?php echo esc_html( $user->display_name ); ?></strong>
@@ -200,18 +200,18 @@ $is_multi_day = $viewing_event->start_date !== $viewing_event->end_date;
 									<span class="description"><?php esc_html_e( 'Member not found', 'remember' ); ?></span>
 								<?php endif; ?>
 							</td>
-							<td class="column-role">
+							<td class="column-role" data-label="<?php echo esc_attr__( 'Role', 'remember' ); ?>">
 								<?php echo $event_role ? esc_html( $event_role->role_name ) : '<span class="description">—</span>'; ?>
 							</td>
-							<td class="column-status">
+							<td class="column-status" data-label="<?php echo esc_attr__( 'Status', 'remember' ); ?>">
 								<span style="color: <?php echo esc_attr( $app_status_colors[ $application->status ] ); ?>;">
 									<?php echo esc_html( $app_status_labels[ $application->status ] ); ?>
 								</span>
 							</td>
-							<td class="column-date">
+							<td class="column-date" data-label="<?php echo esc_attr__( 'Applied', 'remember' ); ?>">
 								<?php echo esc_html( date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), strtotime( $application->applied_at ) ) ); ?>
 							</td>
-							<td class="column-actions">
+							<td class="column-actions" data-label="<?php echo esc_attr__( 'Actions', 'remember' ); ?>">
 								<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-applications&view=' . $application->application_id ) ); ?>">
 									<?php esc_html_e( 'View', 'remember' ); ?>
 								</a>
@@ -299,7 +299,7 @@ $is_multi_day = $viewing_event->start_date !== $viewing_event->end_date;
 						}
 					?>
 						<tr>
-							<td class="column-member">
+							<td class="column-member" data-label="<?php echo esc_attr__( 'Member', 'remember' ); ?>">
 								<?php if ( $user ) : ?>
 									<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-members&view=' . $attendee->member_id ) ); ?>">
 										<strong><?php echo esc_html( $user->display_name ); ?></strong>
@@ -311,10 +311,10 @@ $is_multi_day = $viewing_event->start_date !== $viewing_event->end_date;
 									<span class="description"><?php esc_html_e( 'Member not found', 'remember' ); ?></span>
 								<?php endif; ?>
 							</td>
-							<td class="column-role">
+							<td class="column-role" data-label="<?php echo esc_attr__( 'Role', 'remember' ); ?>">
 								<?php echo $event_role ? esc_html( $event_role->role_name ) : '<span class="description">—</span>'; ?>
 							</td>
-							<td class="column-actions">
+							<td class="column-actions" data-label="<?php echo esc_attr__( 'Actions', 'remember' ); ?>">
 								<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-members&view=' . $attendee->member_id ) ); ?>">
 									<?php esc_html_e( 'View Profile', 'remember' ); ?>
 								</a>
