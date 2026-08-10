@@ -852,6 +852,7 @@ class Remember_Database {
 			field_type VARCHAR(20) NOT NULL DEFAULT 'text',
 			options_json LONGTEXT DEFAULT NULL,
 			is_required TINYINT(1) NOT NULL DEFAULT 0,
+			required_when_json LONGTEXT DEFAULT NULL,
 			sort_order INT(11) NOT NULL DEFAULT 0,
 			is_active TINYINT(1) NOT NULL DEFAULT 1,
 			created_at DATETIME NOT NULL,

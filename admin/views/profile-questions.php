@@ -54,9 +54,26 @@ if ( isset( $_POST['remember_pq_action'] ) && check_admin_referer( 'remember_pq_
 	if ( '' === $field_key && '' !== $label ) {
 		$field_key = Remember_Profile_Questions::suggest_field_key_from_label( $label );
 	}
-	$is_required = ! empty( $_POST['is_required'] ) ? 1 : 0;
+	$req_mode = isset( $_POST['required_mode'] ) ? sanitize_text_field( wp_unslash( $_POST['required_mode'] ) ) : 'optional';
+	if ( ! in_array( $req_mode, array( 'optional', 'always', 'when' ), true ) ) {
+		$req_mode = 'optional';
+	}
+	$is_required = ( 'always' === $req_mode ) ? 1 : 0;
 	$is_active   = ! empty( $_POST['is_active'] ) ? 1 : 0;
 	$sort_order  = isset( $_POST['sort_order'] ) ? absint( $_POST['sort_order'] ) : 0;
+
+	$required_when_json = null;
+	if ( 'when' === $req_mode ) {
+		$when_key = isset( $_POST['required_when_field'] ) ? Remember_Profile_Questions::sanitize_field_key( wp_unslash( $_POST['required_when_field'] ) ) : '';
+		$when_vals_raw = isset( $_POST['required_when_values'] ) && is_array( $_POST['required_when_values'] )
+			? wp_unslash( $_POST['required_when_values'] ) // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+			: array();
+		$when_vals = array();
+		foreach ( $when_vals_raw as $wv ) {
+			$when_vals[] = Remember_Profile_Questions::sanitize_field_key( (string) $wv );
+		}
+		$required_when_json = Remember_Profile_Questions::encode_required_when( $when_key, $when_vals );
+	}
 
 	$option_pairs = array();
 	if ( Remember_Profile_Questions::type_uses_options( $field_type ) && isset( $_POST['option_label'] ) && is_array( $_POST['option_label'] ) ) {
@@ -94,11 +111,30 @@ if ( isset( $_POST['remember_pq_action'] ) && check_admin_referer( 'remember_pq_
 		$error = __( 'Please enter a short name for spreadsheets (for example ice_cream_flavor).', 'remember' );
 	} elseif ( Remember_Profile_Questions::type_uses_options( $field_type ) && empty( Remember_Profile_Questions::parse_options( $options ) ) ) {
 		$error = __( 'Add at least one choice with a label and a key (for example Vanilla / vanilla).', 'remember' );
+	} elseif ( 'when' === $req_mode && null === $required_when_json ) {
+		$error = __( 'Choose an earlier pick-one or pick-several field and at least one choice that makes this field required.', 'remember' );
 	}
 
 	$exclude_id = ( 'update' === $action && isset( $_POST['question_id'] ) ) ? absint( $_POST['question_id'] ) : 0;
 	if ( '' === $error && $model->field_key_exists( $field_key, $exclude_id ) ) {
 		$error = __( 'That short name is already used by another field. Pick a different one.', 'remember' );
+	}
+	if ( '' === $error && 'when' === $req_mode && null !== $required_when_json ) {
+		$when_rule = Remember_Profile_Questions::parse_required_when( $required_when_json );
+		$gate_q    = $when_rule ? $model->get_by_field_key( $when_rule['field_key'] ) : null;
+		if ( ! $gate_q || (int) $gate_q->question_id === $exclude_id ) {
+			$error = __( 'The “required when” field must be a different custom field.', 'remember' );
+		} elseif ( ! Remember_Profile_Questions::type_uses_options( $gate_q->field_type ) ) {
+			$error = __( 'The “required when” field must be a pick-one or pick-several question.', 'remember' );
+		} else {
+			$allowed_keys = wp_list_pluck( Remember_Profile_Questions::parse_options( $gate_q->options_json ), 'key' );
+			foreach ( $when_rule['values'] as $wv ) {
+				if ( ! in_array( $wv, $allowed_keys, true ) ) {
+					$error = __( 'One of the “required when” choices is not valid for that field.', 'remember' );
+					break;
+				}
+			}
+		}
 	}
 
 	if ( '' !== $error ) {
@@ -106,15 +142,16 @@ if ( isset( $_POST['remember_pq_action'] ) && check_admin_referer( 'remember_pq_
 	} elseif ( 'add' === $action ) {
 		$new_id = $model->insert(
 			array(
-				'label'        => $label,
-				'field_key'    => $field_key,
-				'field_type'   => $field_type,
-				'options_json' => $options,
-				'is_required'  => $is_required,
-				'is_active'    => $is_active,
-				'sort_order'   => $sort_order,
-				'created_at'   => current_time( 'mysql' ),
-				'updated_at'   => current_time( 'mysql' ),
+				'label'              => $label,
+				'field_key'          => $field_key,
+				'field_type'         => $field_type,
+				'options_json'       => $options,
+				'is_required'        => $is_required,
+				'required_when_json' => $required_when_json,
+				'is_active'          => $is_active,
+				'sort_order'         => $sort_order,
+				'created_at'         => current_time( 'mysql' ),
+				'updated_at'         => current_time( 'mysql' ),
 			)
 		);
 		if ( $new_id ) {
@@ -126,14 +163,15 @@ if ( isset( $_POST['remember_pq_action'] ) && check_admin_referer( 'remember_pq_
 		$ok = $model->update(
 			$exclude_id,
 			array(
-				'label'        => $label,
-				'field_key'    => $field_key,
-				'field_type'   => $field_type,
-				'options_json' => $options,
-				'is_required'  => $is_required,
-				'is_active'    => $is_active,
-				'sort_order'   => $sort_order,
-				'updated_at'   => current_time( 'mysql' ),
+				'label'              => $label,
+				'field_key'          => $field_key,
+				'field_type'         => $field_type,
+				'options_json'       => $options,
+				'is_required'        => $is_required,
+				'required_when_json' => $required_when_json,
+				'is_active'          => $is_active,
+				'sort_order'         => $sort_order,
+				'updated_at'         => current_time( 'mysql' ),
 			)
 		);
 		if ( false !== $ok ) {
@@ -147,20 +185,48 @@ if ( isset( $_POST['remember_pq_action'] ) && check_admin_referer( 'remember_pq_
 
 $questions = $model->get_all_ordered();
 
+$remember_pq_gate_meta = array();
+foreach ( $questions as $gq ) {
+	if ( ! Remember_Profile_Questions::type_uses_options( $gq->field_type ) ) {
+		continue;
+	}
+	$remember_pq_gate_meta[ (string) $gq->field_key ] = array(
+		'label'   => (string) $gq->label,
+		'options' => Remember_Profile_Questions::parse_options( $gq->options_json ),
+	);
+}
+
 /**
  * Shared form fields for add / edit.
  *
  * @param object|null $row Editing row or null for add.
  */
-$remember_pq_render_form = static function ( $row ) {
+$remember_pq_render_form = function ( $row ) use ( $remember_pq_gate_meta ) {
 	$is_edit       = is_object( $row );
 	$label         = $is_edit ? $row->label : '';
 	$field_key     = $is_edit ? $row->field_key : '';
 	$field_type    = $is_edit ? $row->field_type : 'text';
 	$choice_rows   = $is_edit ? Remember_Profile_Questions::parse_options( $row->options_json ) : array();
-	$is_required   = $is_edit ? ! empty( $row->is_required ) : false;
+	$when_rule     = $is_edit ? Remember_Profile_Questions::parse_required_when( isset( $row->required_when_json ) ? $row->required_when_json : null ) : null;
+	if ( $when_rule ) {
+		$req_mode = 'when';
+	} elseif ( $is_edit && ! empty( $row->is_required ) ) {
+		$req_mode = 'always';
+	} else {
+		$req_mode = 'optional';
+	}
+	$when_field    = $when_rule ? $when_rule['field_key'] : '';
+	$when_values   = $when_rule ? $when_rule['values'] : array();
 	$is_active     = $is_edit ? ! empty( $row->is_active ) : true;
 	$sort_order    = $is_edit ? (int) $row->sort_order : 0;
+	$self_key      = $is_edit ? (string) $row->field_key : '';
+	$gate_choices  = array();
+	foreach ( $remember_pq_gate_meta as $gk => $meta ) {
+		if ( $self_key !== '' && $gk === $self_key ) {
+			continue;
+		}
+		$gate_choices[ $gk ] = $meta;
+	}
 	if ( empty( $choice_rows ) ) {
 		$choice_rows = array(
 			array(
@@ -227,10 +293,55 @@ $remember_pq_render_form = static function ( $row ) {
 		<tr>
 			<th scope="row"><?php esc_html_e( 'Required?', 'remember' ); ?></th>
 			<td>
-				<label>
-					<input type="checkbox" name="is_required" value="1" <?php checked( $is_required ); ?>>
-					<?php esc_html_e( 'Members must answer this', 'remember' ); ?>
-				</label>
+				<fieldset>
+					<label style="display:block;margin-bottom:6px;">
+						<input type="radio" name="required_mode" value="optional" <?php checked( $req_mode, 'optional' ); ?>>
+						<?php esc_html_e( 'Optional', 'remember' ); ?>
+					</label>
+					<label style="display:block;margin-bottom:6px;">
+						<input type="radio" name="required_mode" value="always" <?php checked( $req_mode, 'always' ); ?>>
+						<?php esc_html_e( 'Always required', 'remember' ); ?>
+					</label>
+					<label style="display:block;margin-bottom:6px;">
+						<input type="radio" name="required_mode" value="when" <?php checked( $req_mode, 'when' ); ?> <?php disabled( empty( $gate_choices ) ); ?>>
+						<?php esc_html_e( 'Required when another field matches…', 'remember' ); ?>
+					</label>
+				</fieldset>
+				<?php if ( empty( $gate_choices ) ) : ?>
+					<p class="description"><?php esc_html_e( 'Add a pick-one or pick-several field first if you want conditional requirements.', 'remember' ); ?></p>
+				<?php else : ?>
+					<div class="remember-pq-when-wrap" style="<?php echo 'when' === $req_mode ? '' : 'display:none;'; ?>">
+						<p>
+							<label for="required_when_field"><?php esc_html_e( 'When this field is', 'remember' ); ?></label>
+							<select name="required_when_field" id="required_when_field">
+								<option value=""><?php esc_html_e( '— Select field —', 'remember' ); ?></option>
+								<?php foreach ( $gate_choices as $gk => $meta ) : ?>
+									<option value="<?php echo esc_attr( $gk ); ?>" <?php selected( $when_field, $gk ); ?>>
+										<?php echo esc_html( $meta['label'] . ' (' . $gk . ')' ); ?>
+									</option>
+								<?php endforeach; ?>
+							</select>
+						</p>
+						<div id="remember-pq-when-values">
+							<?php
+							$opts_for_when = ( $when_field && isset( $gate_choices[ $when_field ] ) )
+								? $gate_choices[ $when_field ]['options']
+								: array();
+							if ( ! empty( $opts_for_when ) ) :
+								?>
+								<p class="description" style="margin-bottom:6px;"><?php esc_html_e( 'Any of these choices (member must answer this field):', 'remember' ); ?></p>
+								<?php foreach ( $opts_for_when as $opt ) : ?>
+									<label style="display:block;margin-bottom:4px;">
+										<input type="checkbox" name="required_when_values[]" value="<?php echo esc_attr( $opt['key'] ); ?>" <?php checked( in_array( $opt['key'], $when_values, true ) ); ?>>
+										<?php echo esc_html( $opt['label'] ); ?>
+									</label>
+								<?php endforeach; ?>
+							<?php else : ?>
+								<p class="description"><?php esc_html_e( 'Select a field to choose which answers make this required.', 'remember' ); ?></p>
+							<?php endif; ?>
+						</div>
+					</div>
+				<?php endif; ?>
 			</td>
 		</tr>
 		<tr>
@@ -260,7 +371,7 @@ $remember_pq_render_form = static function ( $row ) {
 			</th>
 			<td>
 				<input type="number" name="sort_order" id="sort_order" value="<?php echo esc_attr( (string) $sort_order ); ?>" class="small-text">
-				<p class="description"><?php esc_html_e( 'Lower numbers appear first.', 'remember' ); ?></p>
+				<p class="description"><?php esc_html_e( 'Lower numbers appear first. Put the gating field (e.g. preferred role) above fields that depend on it.', 'remember' ); ?></p>
 			</td>
 		</tr>
 	</table>
@@ -330,7 +441,19 @@ $remember_pq_render_form = static function ( $row ) {
 							}
 							?>
 						</td>
-						<td><?php echo ! empty( $q->is_required ) ? esc_html__( 'Yes', 'remember' ) : esc_html__( 'No', 'remember' ); ?></td>
+						<td>
+							<?php
+							$when = Remember_Profile_Questions::parse_required_when( isset( $q->required_when_json ) ? $q->required_when_json : null );
+							if ( $when ) {
+								esc_html_e( 'When…', 'remember' );
+								echo ' <code>' . esc_html( $when['field_key'] ) . '</code>';
+							} elseif ( ! empty( $q->is_required ) ) {
+								esc_html_e( 'Always', 'remember' );
+							} else {
+								esc_html_e( 'No', 'remember' );
+							}
+							?>
+						</td>
 						<td><?php echo ! empty( $q->is_active ) ? esc_html__( 'Yes', 'remember' ) : esc_html__( 'No', 'remember' ); ?></td>
 						<td><?php echo esc_html( (string) $q->sort_order ); ?></td>
 						<td>
@@ -346,6 +469,8 @@ $remember_pq_render_form = static function ( $row ) {
 </div>
 <script>
 (function () {
+	var gateMeta = <?php echo wp_json_encode( $remember_pq_gate_meta ); ?>;
+
 	function slugify(text) {
 		return String(text || '')
 			.toLowerCase()
@@ -360,6 +485,30 @@ $remember_pq_render_form = static function ( $row ) {
 		document.querySelectorAll('.remember-pq-options-row').forEach(function (row) {
 			row.style.display = show ? '' : 'none';
 		});
+	}
+	function toggleWhen() {
+		var wrap = document.querySelector('.remember-pq-when-wrap');
+		if (!wrap) return;
+		var checked = document.querySelector('input[name="required_mode"]:checked');
+		wrap.style.display = (checked && checked.value === 'when') ? '' : 'none';
+	}
+	function renderWhenValues(fieldKey, preserveChecked) {
+		var box = document.getElementById('remember-pq-when-values');
+		if (!box) return;
+		var meta = gateMeta[fieldKey];
+		if (!meta || !meta.options || !meta.options.length) {
+			box.innerHTML = '<p class="description"><?php echo esc_js( __( 'Select a field to choose which answers make this required.', 'remember' ) ); ?></p>';
+			return;
+		}
+		var html = '<p class="description" style="margin-bottom:6px;"><?php echo esc_js( __( 'Any of these choices (member must answer this field):', 'remember' ) ); ?></p>';
+		meta.options.forEach(function (opt) {
+			var checked = preserveChecked && preserveChecked.indexOf(opt.key) !== -1 ? ' checked' : '';
+			html += '<label style="display:block;margin-bottom:4px;">';
+			html += '<input type="checkbox" name="required_when_values[]" value="' + String(opt.key).replace(/"/g, '&quot;') + '"' + checked + '> ';
+			html += String(opt.label || opt.key).replace(/</g, '&lt;');
+			html += '</label>';
+		});
+		box.innerHTML = html;
 	}
 	function bindChoiceRow(row) {
 		var labelInput = row.querySelector('.remember-pq-choice-label');
@@ -416,6 +565,16 @@ $remember_pq_render_form = static function ( $row ) {
 				clone.querySelectorAll('input').forEach(function (input) { input.value = ''; });
 				list.appendChild(clone);
 				bindChoiceRow(clone);
+			});
+		}
+		document.querySelectorAll('input[name="required_mode"]').forEach(function (radio) {
+			radio.addEventListener('change', toggleWhen);
+		});
+		toggleWhen();
+		var whenField = document.getElementById('required_when_field');
+		if (whenField) {
+			whenField.addEventListener('change', function () {
+				renderWhenValues(whenField.value, []);
 			});
 		}
 	});

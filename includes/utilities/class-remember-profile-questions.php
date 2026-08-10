@@ -36,6 +36,150 @@ class Remember_Profile_Questions {
 	}
 
 	/**
+	 * Parse required_when_json into a normalized rule, or null if unset/invalid.
+	 *
+	 * Stored shape: { "field_key": "preferred_role", "values": ["role_a", "role_b"] }
+	 * Also accepts legacy { "value": "role_a" } and { "any_of": [ { "field_key", "value"|"values" } ] }.
+	 *
+	 * @param mixed $json JSON string, array, or null.
+	 * @return array{field_key:string,values:array<int,string>}|null
+	 */
+	public static function parse_required_when( $json ) {
+		if ( null === $json || '' === $json ) {
+			return null;
+		}
+		$data = is_array( $json ) ? $json : json_decode( (string) $json, true );
+		if ( ! is_array( $data ) ) {
+			return null;
+		}
+
+		$field_key = isset( $data['field_key'] ) ? self::sanitize_field_key( (string) $data['field_key'] ) : '';
+		$values    = array();
+
+		if ( ! empty( $data['values'] ) && is_array( $data['values'] ) ) {
+			foreach ( $data['values'] as $item ) {
+				$key = self::sanitize_field_key( (string) $item );
+				if ( '' !== $key ) {
+					$values[] = $key;
+				}
+			}
+		} elseif ( isset( $data['value'] ) && '' !== (string) $data['value'] ) {
+			$key = self::sanitize_field_key( (string) $data['value'] );
+			if ( '' !== $key ) {
+				$values[] = $key;
+			}
+		}
+
+		if ( ( '' === $field_key || empty( $values ) ) && ! empty( $data['any_of'] ) && is_array( $data['any_of'] ) ) {
+			foreach ( $data['any_of'] as $clause ) {
+				if ( ! is_array( $clause ) ) {
+					continue;
+				}
+				if ( '' === $field_key && isset( $clause['field_key'] ) ) {
+					$field_key = self::sanitize_field_key( (string) $clause['field_key'] );
+				}
+				if ( isset( $clause['value'] ) && '' !== (string) $clause['value'] ) {
+					$key = self::sanitize_field_key( (string) $clause['value'] );
+					if ( '' !== $key ) {
+						$values[] = $key;
+					}
+				}
+				if ( ! empty( $clause['values'] ) && is_array( $clause['values'] ) ) {
+					foreach ( $clause['values'] as $item ) {
+						$key = self::sanitize_field_key( (string) $item );
+						if ( '' !== $key ) {
+							$values[] = $key;
+						}
+					}
+				}
+			}
+		}
+
+		$values = array_values( array_unique( $values ) );
+		if ( '' === $field_key || empty( $values ) ) {
+			return null;
+		}
+
+		return array(
+			'field_key' => $field_key,
+			'values'    => $values,
+		);
+	}
+
+	/**
+	 * Encode a required-when rule for storage.
+	 *
+	 * @param string               $field_key Gate field short name.
+	 * @param array<int, string>   $values    Choice keys that trigger requirement.
+	 * @return string|null JSON or null if invalid.
+	 */
+	public static function encode_required_when( $field_key, $values ) {
+		$rule = self::parse_required_when(
+			array(
+				'field_key' => $field_key,
+				'values'    => is_array( $values ) ? $values : array(),
+			)
+		);
+		if ( null === $rule ) {
+			return null;
+		}
+		return wp_json_encode( $rule );
+	}
+
+	/**
+	 * Whether a required-when rule matches current answers (by question_id).
+	 *
+	 * If the gate field itself is conditionally inactive, this returns false.
+	 *
+	 * @param array{field_key:string,values:array<int,string>} $rule    Rule.
+	 * @param array<int, string>                               $answers question_id => value.
+	 * @param int                                              $depth   Recursion guard.
+	 * @return bool
+	 */
+	public static function required_when_matches( $rule, $answers, $depth = 0 ) {
+		if ( $depth > 10 || ! is_array( $rule ) || empty( $rule['field_key'] ) || empty( $rule['values'] ) ) {
+			return false;
+		}
+		$gate = self::question_model()->get_by_field_key( $rule['field_key'] );
+		if ( ! $gate || empty( $gate->is_active ) ) {
+			return false;
+		}
+		$gate_rule = self::parse_required_when( isset( $gate->required_when_json ) ? $gate->required_when_json : null );
+		if ( null !== $gate_rule && ! self::required_when_matches( $gate_rule, $answers, $depth + 1 ) ) {
+			return false;
+		}
+		$qid = (int) $gate->question_id;
+		$val = isset( $answers[ $qid ] ) ? (string) $answers[ $qid ] : '';
+		if ( 'multiselect' === $gate->field_type ) {
+			$picked = self::decode_multi_keys( $val );
+			return ! empty( array_intersect( $picked, $rule['values'] ) );
+		}
+		$val = trim( $val );
+		return '' !== $val && in_array( $val, $rule['values'], true );
+	}
+
+	/**
+	 * Whether this question must be answered given current answers.
+	 *
+	 * Conditional rules take precedence: when required_when is set, the field is
+	 * required only if the gate matches (is_required is ignored for enforcement).
+	 *
+	 * @param object             $q       Question row.
+	 * @param array<int, string> $answers question_id => value.
+	 * @return bool
+	 */
+	public static function is_effectively_required( $q, $answers ) {
+		if ( ! is_object( $q ) ) {
+			return false;
+		}
+		$rule = self::parse_required_when( isset( $q->required_when_json ) ? $q->required_when_json : null );
+		if ( null !== $rule ) {
+			return self::required_when_matches( $rule, $answers );
+		}
+		return ! empty( $q->is_required );
+	}
+
+	/**
 	 * Decode a multiselect stored value to option keys.
 	 *
 	 * Accepts JSON array, pipe-separated, or comma-separated keys.
@@ -361,6 +505,8 @@ class Remember_Profile_Questions {
 	/**
 	 * First missing required custom answer, or null.
 	 *
+	 * Honors always-required and required_when conditional rules.
+	 *
 	 * @param array<int, string>|null $answers From collect_from_request().
 	 * @return string|null Question label if missing.
 	 */
@@ -370,7 +516,7 @@ class Remember_Profile_Questions {
 		}
 		$model = self::question_model();
 		foreach ( $model->get_active() as $q ) {
-			if ( empty( $q->is_required ) ) {
+			if ( ! self::is_effectively_required( $q, $answers ) ) {
 				continue;
 			}
 			$qid = (int) $q->question_id;
@@ -542,48 +688,62 @@ class Remember_Profile_Questions {
 			echo '<div class="remember-form-section"><h3 class="remember-form-section-title">' . esc_html__( 'Additional questions', 'remember' ) . '</h3>';
 		}
 
+		// Map stored responses to answers for conditional required evaluation on profile edit.
+		$answer_map = $responses;
 		foreach ( $qs as $q ) {
 			$qid   = (int) $q->question_id;
 			$name  = 'remember_pq_' . $qid;
 			$id    = $name;
 			$value = isset( $responses[ $qid ] ) ? $responses[ $qid ] : '';
+			$rule  = self::parse_required_when( isset( $q->required_when_json ) ? $q->required_when_json : null );
 			// Admin member edit does not enforce custom-field required flags.
-			$req   = ! empty( $q->is_required ) && ! $is_admin;
+			$req   = ! $is_admin && self::is_effectively_required( $q, $answer_map );
+			$always_required = ! $is_admin && null === $rule && ! empty( $q->is_required );
 			$label = (string) $q->label;
 
 			$is_multi = ( 'multiselect' === $q->field_type );
 			$multi_selected = $is_multi ? self::decode_multi_keys( $value ) : array();
 
+			$wrap_attrs  = ' class="remember-pq-field"';
+			$wrap_attrs .= ' data-remember-pq-id="' . esc_attr( (string) $qid ) . '"';
+			$wrap_attrs .= ' data-remember-pq-key="' . esc_attr( (string) $q->field_key ) . '"';
+			$wrap_attrs .= ' data-remember-pq-type="' . esc_attr( (string) $q->field_type ) . '"';
+			if ( $always_required ) {
+				$wrap_attrs .= ' data-remember-pq-always-required="1"';
+			}
+			if ( $rule && ! $is_admin ) {
+				$wrap_attrs .= ' data-remember-pq-when="' . esc_attr( wp_json_encode( $rule ) ) . '"';
+			}
+			$hidden = ( $rule && ! $is_admin && ! $req );
+
 			if ( $is_admin ) {
-				echo '<tr><th scope="row">';
+				echo '<tr' . $wrap_attrs . '><th scope="row">';
 				if ( $is_multi ) {
 					echo '<span>' . esc_html( $label );
 					if ( $req ) {
-						echo ' <span class="description" style="color:#b32d2e;">*</span>';
+						echo ' <span class="description remember-pq-req-mark" style="color:#b32d2e;">*</span>';
 					}
 					echo '</span>';
 				} else {
 					echo '<label for="' . esc_attr( $id ) . '">' . esc_html( $label );
 					if ( $req ) {
-						echo ' <span class="description" style="color:#b32d2e;">*</span>';
+						echo ' <span class="description remember-pq-req-mark" style="color:#b32d2e;">*</span>';
 					}
 					echo '</label>';
 				}
 				echo '</th><td>';
 			} elseif ( $is_register ) {
 				// Stacked rows: custom questions are long; two-column register layout collides.
+				echo '<div' . $wrap_attrs . ( $hidden ? ' hidden' : '' ) . '>';
 				echo '<div class="remember-register-row remember-register-row--stack">';
 				echo '<label' . ( $is_multi ? '' : ' for="' . esc_attr( $id ) . '"' ) . '>' . esc_html( $label );
-				if ( $req ) {
-					echo ' <span class="required">*</span>';
-				}
+				echo ' <span class="required remember-pq-req-mark"' . ( $req ? '' : ' hidden' ) . '>*</span>';
 				echo '</label>';
 			} else {
+				echo '<div' . $wrap_attrs . ( $hidden ? ' hidden' : '' ) . '>';
 				echo '<div class="remember-form-row"><div class="remember-form-col remember-form-col-full">';
 				echo '<label' . ( $is_multi ? ' class="remember-form-label"' : ' for="' . esc_attr( $id ) . '" class="remember-form-label"' ) . '>' . esc_html( $label );
-				if ( $req ) {
-					echo ' <span class="remember-required">*</span>';
-				}
+				echo ' <span class="remember-required remember-pq-req-mark"' . ( $req ? '' : ' hidden' ) . '>*</span>';
 				echo '</label>';
 			}
 
@@ -602,7 +762,7 @@ class Remember_Profile_Questions {
 				} else {
 					$box_class = 'remember-pq-checkboxes remember-checkbox-grid';
 				}
-				echo '<div class="' . esc_attr( $box_class ) . '" role="group" aria-label="' . esc_attr( $label ) . '">';
+				echo '<div class="' . esc_attr( $box_class ) . '" role="group" aria-label="' . esc_attr( $label ) . '"' . ( $req ? ' data-remember-pq-require-one="1"' : '' ) . '>';
 				foreach ( self::parse_options( $q->options_json ) as $opt_i => $opt ) {
 					$cid = $id . '_' . $opt_i;
 					echo '<label class="remember-checkbox-label" for="' . esc_attr( $cid ) . '">';
@@ -619,9 +779,9 @@ class Remember_Profile_Questions {
 				echo '<p class="description">' . esc_html__( 'Short name:', 'remember' ) . ' <code>' . esc_html( $q->field_key ) . '</code></p>';
 				echo '</td></tr>';
 			} elseif ( $is_register ) {
-				echo '</div>';
-			} else {
 				echo '</div></div>';
+			} else {
+				echo '</div></div></div>';
 			}
 		}
 

@@ -366,10 +366,105 @@
 		});
 	}
 
+	/**
+	 * Conditional custom profile fields: show/hide + required when a gate field matches.
+	 */
+	function initConditionalProfileQuestions() {
+		var $fields = $('.remember-pq-field[data-remember-pq-when]');
+		if (!$fields.length) {
+			return;
+		}
+
+		function getFieldValues($field) {
+			var type = $field.data('remember-pq-type');
+			if (type === 'multiselect') {
+				return $field.find('input[type="checkbox"]:checked').map(function() {
+					return $(this).val();
+				}).get();
+			}
+			var $input = $field.find('select, input[type="text"]').first();
+			var val = $input.length ? String($input.val() || '') : '';
+			return val ? [val] : [];
+		}
+
+		function gateMatches(rule) {
+			if (!rule || !rule.field_key || !rule.values || !rule.values.length) {
+				return false;
+			}
+			var $gate = $('.remember-pq-field[data-remember-pq-key="' + rule.field_key + '"]');
+			if (!$gate.length || $gate.prop('hidden')) {
+				return false;
+			}
+			var picked = getFieldValues($gate);
+			for (var i = 0; i < picked.length; i++) {
+				if (rule.values.indexOf(picked[i]) !== -1) {
+					return true;
+				}
+			}
+			return false;
+		}
+
+		function syncMultiRequire($field, required) {
+			var $group = $field.find('[role="group"]').first();
+			var $boxes = $field.find('input[type="checkbox"]');
+			if (!$boxes.length) {
+				return;
+			}
+			if (required) {
+				$group.attr('data-remember-pq-require-one', '1');
+				var any = $boxes.filter(':checked').length > 0;
+				$boxes.prop('required', false);
+				if (!any) {
+					$boxes.first().prop('required', true);
+				}
+			} else {
+				$group.removeAttr('data-remember-pq-require-one');
+				$boxes.prop('required', false);
+			}
+		}
+
+		function syncField($field) {
+			var raw = $field.attr('data-remember-pq-when');
+			var rule = null;
+			try {
+				rule = raw ? JSON.parse(raw) : null;
+			} catch (e) {
+				rule = null;
+			}
+			var active = gateMatches(rule);
+			$field.prop('hidden', !active);
+			$field.find('.remember-pq-req-mark').prop('hidden', !active);
+
+			var type = $field.data('remember-pq-type');
+			if (type === 'multiselect') {
+				syncMultiRequire($field, active);
+			} else {
+				$field.find('select, input[type="text"]').prop('required', !!active);
+			}
+		}
+
+		function syncAll() {
+			// Two passes so nested conditionals settle when a mid-chain gate hides.
+			$fields.each(function() {
+				syncField($(this));
+			});
+			$fields.each(function() {
+				syncField($(this));
+			});
+		}
+
+		$(document).on('change', '.remember-pq-field select, .remember-pq-field input[type="checkbox"], .remember-pq-field input[type="text"]', function() {
+			syncAll();
+		});
+
+		syncAll();
+	}
+
 	$(function() {
 		initDisplayNameNicknameSync();
 		initProfilePhotoCropper();
 		initRequireOneCheckboxGroups();
+		initConditionalProfileQuestions();
 		if (typeof window.rememberInitTimezoneComboboxes === 'function') {
 			window.rememberInitTimezoneComboboxes();
 		}

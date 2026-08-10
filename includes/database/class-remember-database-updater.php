@@ -978,6 +978,32 @@ class Remember_Database_Updater {
 			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.30.0' ) );
 		}
 
+		// Update to 1.31.0 — conditional required_when for custom profile fields (#11).
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.31.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.31.0' ) );
+
+			$table = $wpdb->prefix . 'remember_profile_questions';
+			if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) === $table ) {
+				$cols = $wpdb->get_col( "SHOW COLUMNS FROM {$table}", 0 );
+				if ( is_array( $cols ) && ! in_array( 'required_when_json', $cols, true ) ) {
+					$ok = $wpdb->query(
+						"ALTER TABLE {$table} ADD COLUMN required_when_json LONGTEXT DEFAULT NULL AFTER is_required"
+					);
+					if ( false === $ok ) {
+						Remember_Logger::error(
+							'Failed to add required_when_json to remember_profile_questions',
+							array( 'error' => $wpdb->last_error )
+						);
+					} else {
+						Remember_Logger::info( 'Added required_when_json to remember_profile_questions' );
+					}
+				}
+			}
+
+			update_option( 'remember_db_version', '1.31.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.31.0' ) );
+		}
+
 		// Always re-ensure health catalogs (idempotent). Catches sites that stalled mid-migration
 		// or activated before catalog seed rows were added.
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-seeder.php';
