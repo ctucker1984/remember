@@ -59,13 +59,16 @@ Then add members via **Members → Add New**, **Convert WP User**, or the public
 - **Enhancement:** Expanded dietary restrictions and medical accommodations for event planning coverage.
 - **Enhancement:** Privacy copy explains sharing and encourages photo + IM for networking. Closes [#18](https://github.com/ctucker1984/remember/issues/18).
 - **Enhancement:** Profile photo required at registration. Closes [#14](https://github.com/ctucker1984/remember/issues/14).
+- **Enhancement:** Custom profile fields can be required only when an earlier pick-one / pick-several field matches chosen values. Closes [#11](https://github.com/ctucker1984/remember/issues/11).
 - **Fix:** Load `dbDelta` before admin schema migrations so upgrades are not stalled mid-chain.
-- **Fix:** Admin mobile — vetting detail, applications list, and billing register. Closes [#8](https://github.com/ctucker1984/remember/issues/8), [#9](https://github.com/ctucker1984/remember/issues/9), [#10](https://github.com/ctucker1984/remember/issues/10).
+- **Fix:** Admin mobile — vetting, applications, billing, and related tables stack into labeled cards. Closes [#8](https://github.com/ctucker1984/remember/issues/8), [#9](https://github.com/ctucker1984/remember/issues/9), [#10](https://github.com/ctucker1984/remember/issues/10).
+- **Chore:** Plugin header `Update URI` points at the GitHub repository.
 
 ### 1.3.1
 
 - **Fix:** Custom fields on registration/profile no longer collide with the two-column register layout. Closes [#6](https://github.com/ctucker1984/remember/issues/6).
-- **Fix:** Admin mobile layout — member/event headers stack; wide tables scroll horizontally. Closes [#7](https://github.com/ctucker1984/remember/issues/7).
+- **Fix:** Admin mobile layout — member/event headers stack; wide tables scroll on small screens. Closes [#7](https://github.com/ctucker1984/remember/issues/7).
+- **Docs:** Slim root README; remove planning markdown from the release tree.
 
 ### 1.3.0
 
