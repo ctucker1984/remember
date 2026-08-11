@@ -45,6 +45,15 @@ if ( isset( $_GET['xero_oauth_error'] ) && 'nocreds' === $_GET['xero_oauth_error
 	echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Save your Client ID and Client Secret before connecting to Xero.', 'remember' ) . '</p></div>';
 }
 
+// All settings mutations require remember_access_settings (not nonce alone).
+if ( isset( $_POST['remember_settings_action'] ) && ! current_user_can( 'remember_access_settings' ) ) {
+	wp_die(
+		esc_html__( 'You do not have sufficient permissions to perform this action.', 'remember' ),
+		esc_html__( 'Access Denied', 'remember' ),
+		array( 'response' => 403 )
+	);
+}
+
 $qb_oauth_notice = get_transient( 'remember_qb_oauth_notice_' . get_current_user_id() );
 if ( $qb_oauth_notice && is_array( $qb_oauth_notice ) && ! empty( $qb_oauth_notice['message'] ) ) {
 	delete_transient( 'remember_qb_oauth_notice_' . get_current_user_id() );
