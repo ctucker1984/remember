@@ -589,12 +589,12 @@ if ( ! empty( $selected_allergy_ids ) ) {
 				<div class="remember-form-row">
 					<div class="remember-form-col">
 						<label for="im_type" class="remember-form-label"><?php esc_html_e( 'IM Type', 'remember' ); ?></label>
+						<?php
+						require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-im-platforms.php';
+						$im_selected = ( $profile && ! empty( $profile->im_type ) ) ? $profile->im_type : Remember_Im_Platforms::default_key();
+						?>
 						<select id="im_type" name="im_type" class="remember-form-control" required>
-							<option value="telegram" <?php selected( $profile && $profile->im_type ? $profile->im_type : 'telegram', 'telegram' ); ?>><?php esc_html_e( 'Telegram', 'remember' ); ?></option>
-							<option value="discord" <?php selected( $profile && $profile->im_type ? $profile->im_type : 'telegram', 'discord' ); ?>><?php esc_html_e( 'Discord', 'remember' ); ?></option>
-							<option value="signal" <?php selected( $profile && $profile->im_type ? $profile->im_type : 'telegram', 'signal' ); ?>><?php esc_html_e( 'Signal', 'remember' ); ?></option>
-							<option value="whatsapp" <?php selected( $profile && $profile->im_type ? $profile->im_type : 'telegram', 'whatsapp' ); ?>><?php esc_html_e( 'WhatsApp', 'remember' ); ?></option>
-							<option value="other" <?php selected( $profile && $profile->im_type ? $profile->im_type : 'telegram', 'other' ); ?>><?php esc_html_e( 'Other', 'remember' ); ?></option>
+							<?php Remember_Im_Platforms::render_options( $im_selected ); ?>
 						</select>
 					</div>
 					<div class="remember-form-col">
@@ -934,7 +934,10 @@ if ( ! empty( $selected_allergy_ids ) ) {
 						<div class="remember-profile-view-grid">
 							<div class="remember-profile-view-item">
 								<strong class="remember-profile-view-label"><?php esc_html_e( 'IM Type', 'remember' ); ?></strong>
-								<span class="remember-profile-view-value"><?php echo esc_html( ucfirst( $profile->im_type ) ); ?></span>
+								<span class="remember-profile-view-value"><?php
+									require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-im-platforms.php';
+									echo esc_html( Remember_Im_Platforms::get_label( $profile->im_type ) );
+								?></span>
 							</div>
 							<div class="remember-profile-view-item">
 								<strong class="remember-profile-view-label"><?php esc_html_e( 'Handle', 'remember' ); ?></strong>

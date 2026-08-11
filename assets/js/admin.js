@@ -29,6 +29,10 @@
 		// Handle URL hash on page load
 		if (window.location.hash) {
 			var hash = window.location.hash;
+			// Combined Platforms tab replaced separate Social Media / IM tabs.
+			if (hash === '#social-media' || hash === '#im-platforms') {
+				hash = '#platforms';
+			}
 			var $tab = $('.remember-settings #remember-main-settings > .nav-tab-wrapper a[href="' + hash + '"]');
 			if ($tab.length) {
 				$tab.trigger('click');

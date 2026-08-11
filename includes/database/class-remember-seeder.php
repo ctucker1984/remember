@@ -53,6 +53,7 @@ class Remember_Seeder {
 			'seed_default_location',
 			'seed_default_roles',
 			'seed_social_media_platforms',
+			'seed_im_platforms',
 			'seed_dietary_restrictions',
 			'seed_allergies',
 			'seed_clothing_size_options',
@@ -265,6 +266,49 @@ class Remember_Seeder {
 					)
 				);
 			}
+		}
+	}
+
+	/**
+	 * Seed instant messenger platforms (idempotent).
+	 */
+	private function seed_im_platforms() {
+		$this->ensure_im_platforms();
+	}
+
+	/**
+	 * Ensure default IM platforms exist (safe for upgrades).
+	 *
+	 * @return void
+	 */
+	public function ensure_im_platforms() {
+		require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-im-platforms.php';
+		$table = $this->prefix . 'im_platforms';
+		if ( $this->wpdb->get_var( $this->wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
+			return;
+		}
+		$index = 0;
+		foreach ( Remember_Im_Platforms::defaults() as $key => $name ) {
+			$existing = $this->wpdb->get_var(
+				$this->wpdb->prepare(
+					"SELECT platform_id FROM {$table} WHERE platform_key = %s",
+					$key
+				)
+			);
+			if ( ! $existing ) {
+				$this->wpdb->insert(
+					$table,
+					array(
+						'platform_key'  => $key,
+						'platform_name' => $name,
+						'is_active'     => 1,
+						'sort_order'    => $index,
+						'created_at'    => current_time( 'mysql' ),
+					),
+					array( '%s', '%s', '%d', '%d', '%s' )
+				);
+			}
+			++$index;
 		}
 	}
 

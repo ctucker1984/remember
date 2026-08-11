@@ -262,12 +262,12 @@ if ( $photo_max_bytes < 1 ) {
 		<tr>
 			<th><label for="im_type"><?php esc_html_e( 'Instant Messenger', 'remember' ); ?></label></th>
 			<td>
+				<?php
+				require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-im-platforms.php';
+				$im_selected = ( $view_profile && ! empty( $view_profile->im_type ) ) ? $view_profile->im_type : Remember_Im_Platforms::default_key();
+				?>
 				<select id="im_type" name="im_type" style="width: 150px;">
-					<option value="telegram" <?php selected( $view_profile && $view_profile->im_type ? $view_profile->im_type : 'telegram', 'telegram' ); ?>><?php esc_html_e( 'Telegram', 'remember' ); ?></option>
-					<option value="discord" <?php selected( $view_profile && $view_profile->im_type ? $view_profile->im_type : 'telegram', 'discord' ); ?>><?php esc_html_e( 'Discord', 'remember' ); ?></option>
-					<option value="signal" <?php selected( $view_profile && $view_profile->im_type ? $view_profile->im_type : 'telegram', 'signal' ); ?>><?php esc_html_e( 'Signal', 'remember' ); ?></option>
-					<option value="whatsapp" <?php selected( $view_profile && $view_profile->im_type ? $view_profile->im_type : 'telegram', 'whatsapp' ); ?>><?php esc_html_e( 'WhatsApp', 'remember' ); ?></option>
-					<option value="other" <?php selected( $view_profile && $view_profile->im_type ? $view_profile->im_type : 'telegram', 'other' ); ?>><?php esc_html_e( 'Other', 'remember' ); ?></option>
+					<?php Remember_Im_Platforms::render_options( $im_selected ); ?>
 				</select>
 				<input type="text" id="im_handle" name="im_handle" class="regular-text" value="<?php echo esc_attr( $view_profile ? $view_profile->im_handle : '' ); ?>" placeholder="<?php esc_attr_e( 'Handle', 'remember' ); ?>" style="margin-left: 10px;">
 			</td>

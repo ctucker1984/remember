@@ -1004,11 +1004,28 @@ class Remember_Database_Updater {
 			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.31.0' ) );
 		}
 
+		// Update to 1.32.0 — admin-managed IM platforms (#20).
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.32.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.32.0' ) );
+
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-database.php';
+			$db = new Remember_Database();
+			$db->create_im_platforms_table();
+
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-seeder.php';
+			$seeder = new Remember_Seeder();
+			$seeder->ensure_im_platforms();
+
+			update_option( 'remember_db_version', '1.32.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.32.0' ) );
+		}
+
 		// Always re-ensure health catalogs (idempotent). Catches sites that stalled mid-migration
 		// or activated before catalog seed rows were added.
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-seeder.php';
 		$seeder = new Remember_Seeder();
 		$seeder->ensure_health_catalog_options();
+		$seeder->ensure_im_platforms();
 
 		Remember_Logger::activation_debug(
 			'update_schema: exit',

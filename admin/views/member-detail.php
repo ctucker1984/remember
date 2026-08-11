@@ -168,7 +168,10 @@ if ( $is_editing && ! current_user_can( 'remember_update_members' ) ) {
 						<th><?php esc_html_e( 'Instant Messenger', 'remember' ); ?></th>
 						<td>
 							<?php if ( $view_profile && $view_profile->im_handle ) : ?>
-								<?php echo esc_html( ucfirst( $view_profile->im_type ?: 'telegram' ) ); ?>: <?php echo esc_html( $view_profile->im_handle ); ?>
+								<?php
+								require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-im-platforms.php';
+								echo esc_html( Remember_Im_Platforms::get_label( $view_profile->im_type ?: Remember_Im_Platforms::default_key() ) );
+								?>: <?php echo esc_html( $view_profile->im_handle ); ?>
 							<?php else : ?>
 								<span class="description"><?php esc_html_e( 'Not provided', 'remember' ); ?></span>
 							<?php endif; ?>

@@ -64,7 +64,11 @@ $allergies = $wpdb->get_results(
 
 $remember_reg_timezone = $remember_reg_val( 'timezone', '' );
 $remember_reg_country  = $remember_reg_val( 'address_country', 'US' );
-$remember_reg_im_type  = $remember_reg_val( 'im_type', 'telegram' );
+$remember_reg_im_type  = $remember_reg_val( 'im_type', '' );
+require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-im-platforms.php';
+if ( '' === $remember_reg_im_type ) {
+	$remember_reg_im_type = Remember_Im_Platforms::default_key();
+}
 
 ?>
 <div class="remember-register remember-register-form">
@@ -161,11 +165,7 @@ $remember_reg_im_type  = $remember_reg_val( 'im_type', 'telegram' );
 				<label for="remember_reg_im_type"><?php esc_html_e( 'Instant Messenger', 'remember' ); ?> <span class="required">*</span></label>
 				<div class="remember-register-im">
 					<select id="remember_reg_im_type" name="remember_reg_im_type" class="remember-register-input remember-register-input--im-type" required>
-						<option value="telegram" <?php selected( $remember_reg_im_type, 'telegram' ); ?>><?php esc_html_e( 'Telegram', 'remember' ); ?></option>
-						<option value="discord" <?php selected( $remember_reg_im_type, 'discord' ); ?>><?php esc_html_e( 'Discord', 'remember' ); ?></option>
-						<option value="signal" <?php selected( $remember_reg_im_type, 'signal' ); ?>><?php esc_html_e( 'Signal', 'remember' ); ?></option>
-						<option value="whatsapp" <?php selected( $remember_reg_im_type, 'whatsapp' ); ?>><?php esc_html_e( 'WhatsApp', 'remember' ); ?></option>
-						<option value="other" <?php selected( $remember_reg_im_type, 'other' ); ?>><?php esc_html_e( 'Other', 'remember' ); ?></option>
+						<?php Remember_Im_Platforms::render_options( $remember_reg_im_type ); ?>
 					</select>
 					<input type="text" name="remember_reg_im_handle" id="remember_reg_im_handle" required class="remember-register-input remember-register-input--im-handle" value="<?php echo esc_attr( $remember_reg_val( 'im_handle' ) ); ?>" placeholder="<?php esc_attr_e( 'Handle / username', 'remember' ); ?>" />
 				</div>

@@ -156,9 +156,8 @@ class Remember_Profile_Fields {
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-clothing-sizes.php';
 
 		$im_type = self::post_text( array( 'im_type', 'remember_reg_im_type' ) );
-		if ( '' === $im_type ) {
-			$im_type = 'telegram';
-		}
+		require_once plugin_dir_path( __FILE__ ) . 'class-remember-im-platforms.php';
+		$im_type = Remember_Im_Platforms::sanitize_key_value( $im_type );
 
 		$country = self::post_text( array( 'address_country', 'remember_reg_address_country' ) );
 		if ( '' === $country ) {

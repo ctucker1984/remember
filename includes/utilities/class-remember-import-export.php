@@ -698,6 +698,7 @@ class Remember_Import_Export {
 			);
 
 			require_once plugin_dir_path( __FILE__ ) . 'class-remember-clothing-sizes.php';
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-im-platforms.php';
 			$tz_for_profile = array_key_exists( 'Timezone', $row_data )
 				? sanitize_text_field( (string) $row_data['Timezone'] )
 				: '';
@@ -713,7 +714,7 @@ class Remember_Import_Export {
 					'cell_phone'                     => $row_data['Cell Phone'] ?? '',
 					'timezone'                       => $tz_for_profile,
 					'im_handle'                      => $row_data['IM Handle'] ?? '',
-					'im_type'                        => $row_data['IM Type'] ?? 'telegram',
+					'im_type'                        => Remember_Im_Platforms::sanitize_key_value( $row_data['IM Type'] ?? '' ),
 					'shirt_size'                     => Remember_Clothing_Sizes::sanitize( 'shirt', $row_data['Shirt Size'] ?? '' ),
 					'pants_size'                     => Remember_Clothing_Sizes::sanitize( 'pants', $row_data['Pants Size'] ?? '' ),
 					'shoe_size'                      => Remember_Clothing_Sizes::sanitize( 'shoe', $row_data['Shoe Size'] ?? '' ),

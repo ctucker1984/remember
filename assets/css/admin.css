@@ -241,6 +241,45 @@
 	margin-bottom: 20px;
 }
 
+.remember-platforms-columns {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 20px;
+	align-items: start;
+}
+
+.remember-platforms-column > h3 {
+	margin: 0 0 12px;
+}
+
+.remember-platforms-card {
+	margin: 0 0 16px;
+	padding: 16px;
+	background: #fff;
+	border: 1px solid #ccd0d4;
+	border-radius: 4px;
+}
+
+.remember-platforms-card h4 {
+	margin: 0 0 12px;
+}
+
+.remember-platforms-table {
+	table-layout: auto;
+}
+
+.remember-platforms-table .regular-text {
+	width: 100%;
+	max-width: 100%;
+	box-sizing: border-box;
+}
+
+@media screen and (max-width: 1100px) {
+	.remember-platforms-columns {
+		grid-template-columns: 1fr;
+	}
+}
+
 /* Member Detail Grid Layout — use .remember-member-detail-grid--three-cols for Profile | Emergency | Health */
 .remember-member-detail-grid {
 	display: grid;

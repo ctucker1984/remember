@@ -55,6 +55,7 @@ class Remember_Database {
 			'members'                        => 'create_members_table',
 			'member_profiles'                => 'create_member_profiles_table',
 			'social_media_platforms'         => 'create_social_media_platforms_table',
+			'im_platforms'                   => 'create_im_platforms_table',
 			'member_social_media'            => 'create_member_social_media_table',
 			'dietary_restrictions'           => 'create_dietary_restrictions_table',
 			'member_dietary_restrictions'    => 'create_member_dietary_restrictions_table',
@@ -189,6 +190,27 @@ class Remember_Database {
 			created_at DATETIME NOT NULL,
 			PRIMARY KEY (platform_id),
 			UNIQUE KEY platform_name (platform_name)
+		) $charset_collate;";
+
+		dbDelta( $sql );
+	}
+
+	/**
+	 * Create instant messenger platforms catalog table.
+	 */
+	public function create_im_platforms_table() {
+		$table_name      = $this->prefix . 'im_platforms';
+		$charset_collate = $this->wpdb->get_charset_collate();
+
+		$sql = "CREATE TABLE $table_name (
+			platform_id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+			platform_key VARCHAR(50) NOT NULL,
+			platform_name VARCHAR(100) NOT NULL,
+			is_active TINYINT(1) DEFAULT 1,
+			sort_order INT(11) DEFAULT 0,
+			created_at DATETIME NOT NULL,
+			PRIMARY KEY (platform_id),
+			UNIQUE KEY platform_key (platform_key)
 		) $charset_collate;";
 
 		dbDelta( $sql );
