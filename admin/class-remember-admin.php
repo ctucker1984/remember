@@ -1329,8 +1329,19 @@ class Remember_Admin {
 		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-logger.php';
 		
 		Remember_Logger::debug( 'ajax_get_event_roles: Starting', array( 'POST' => $_POST ) );
-		
-		check_ajax_referer( 'remember_get_event_roles', 'nonce' );
+
+		// Admin vs front use different nonces so a front-end nonce cannot unlock the full role list.
+		$context       = isset( $_POST['context'] ) ? sanitize_key( wp_unslash( $_POST['context'] ) ) : 'front';
+		$is_admin_path = false;
+		if ( 'admin' === $context ) {
+			check_ajax_referer( 'remember_get_event_roles_admin', 'nonce' );
+			if ( ! current_user_can( 'remember_create_applications' ) && ! current_user_can( 'remember_update_applications' ) ) {
+				wp_send_json_error( array( 'message' => __( 'You do not have sufficient permissions.', 'remember' ) ) );
+			}
+			$is_admin_path = true;
+		} else {
+			check_ajax_referer( 'remember_get_event_roles', 'nonce' );
+		}
 		
 		$event_id = isset( $_POST['event_id'] ) ? absint( $_POST['event_id'] ) : 0;
 		Remember_Logger::debug( 'ajax_get_event_roles: Event ID', array( 'event_id' => $event_id ) );
@@ -1355,35 +1366,16 @@ class Remember_Admin {
 			'has_show_in_frontend' => $has_show_in_frontend,
 			'columns' => $columns 
 		) );
-		
-		// Check if this is a request from the admin area (not front-end)
-		// The HTTP_REFERER will tell us where the request came from
-		$referer = isset( $_SERVER['HTTP_REFERER'] ) ? $_SERVER['HTTP_REFERER'] : '';
-		$is_from_admin = ( strpos( $referer, '/wp-admin/' ) !== false );
-		
-		// Check if user can manage applications (create/update)
-		$can_create_apps = current_user_can( 'remember_create_applications' );
-		$can_update_apps = current_user_can( 'remember_update_applications' );
-		
-		// For front-end application forms, NEVER treat anyone as admin
-		// Only treat as admin if the request came from the admin area AND they can manage applications
-		// OR if they're a full WordPress administrator
-		$is_wordpress_admin = current_user_can( 'manage_options' );
-		$is_admin = ( ( $can_create_apps || $can_update_apps ) && $is_from_admin ) || $is_wordpress_admin;
-		
-		Remember_Logger::debug( 'ajax_get_event_roles: Admin check', array( 
-			'is_admin' => $is_admin,
-			'can_create_applications' => $can_create_apps,
-			'can_update_applications' => $can_update_apps,
-			'is_from_admin' => $is_from_admin,
-			'is_wordpress_admin' => $is_wordpress_admin,
-			'referer' => $referer,
-			'user_id' => get_current_user_id(),
-			'is_logged_in' => is_user_logged_in()
+
+		Remember_Logger::debug( 'ajax_get_event_roles: Path check', array(
+			'context'       => $context,
+			'is_admin_path' => $is_admin_path,
+			'user_id'       => get_current_user_id(),
+			'is_logged_in'  => is_user_logged_in(),
 		) );
 		
-		if ( $is_admin ) {
-			// Admin users get all roles
+		if ( $is_admin_path ) {
+			// Staff creating/editing applications in wp-admin: all event roles.
 			Remember_Logger::debug( 'ajax_get_event_roles: Admin path - getting all roles' );
 			$event_roles = $event_model->get_event_roles( $event_id );
 			Remember_Logger::debug( 'ajax_get_event_roles: Admin results', array( 

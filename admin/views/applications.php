@@ -962,7 +962,8 @@ jQuery(document).ready(function($) {
 			data: {
 				action: 'remember_get_event_roles',
 				event_id: selectedEventId,
-				nonce: '<?php echo wp_create_nonce( 'remember_get_event_roles' ); ?>'
+				context: 'admin',
+				nonce: '<?php echo esc_js( wp_create_nonce( 'remember_get_event_roles_admin' ) ); ?>'
 			},
 			success: function(response) {
 				if (response.success && response.data && response.data.length > 0) {
