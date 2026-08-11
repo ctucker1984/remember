@@ -1183,6 +1183,14 @@ class Remember_Admin {
 			return;
 		}
 
+		if ( ! current_user_can( 'remember_access_settings' ) ) {
+			wp_die(
+				esc_html__( 'You do not have sufficient permissions to perform this action.', 'remember' ),
+				esc_html__( 'Access Denied', 'remember' ),
+				array( 'response' => 403 )
+			);
+		}
+
 		if ( ! check_admin_referer( 'remember_setup_wizard', 'remember_setup_nonce' ) ) {
 			return;
 		}
@@ -1272,6 +1280,14 @@ class Remember_Admin {
 	 * @since    1.0.0
 	 */
 	public function display_setup_wizard() {
+		if ( ! current_user_can( 'remember_access_settings' ) ) {
+			wp_die(
+				esc_html__( 'You do not have sufficient permissions to access this page.', 'remember' ),
+				esc_html__( 'Access Denied', 'remember' ),
+				array( 'response' => 403 )
+			);
+		}
+
 		include_once 'views/setup-wizard.php';
 	}
 
