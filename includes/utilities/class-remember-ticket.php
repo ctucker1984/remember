@@ -70,7 +70,11 @@ class Remember_Ticket {
 			return false;
 		}
 
-		if ( user_can( $user_id, 'remember_view_applications' ) || user_can( $user_id, 'remember_update_applications' ) || user_can( $user_id, 'manage_options' ) ) {
+		// Staff with application read/update may view any eligible ticket; members may view their own.
+		if (
+			user_can( $user_id, 'remember_read_applications' )
+			|| user_can( $user_id, 'remember_update_applications' )
+		) {
 			return true;
 		}
 
