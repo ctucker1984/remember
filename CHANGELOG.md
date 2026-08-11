@@ -2,6 +2,15 @@
 
 All notable changes to reMember are listed here. The current plugin version is in `remember.php` (`REMEMBER_VERSION`) and [GitHub Releases](https://github.com/ctucker1984/remember/releases).
 
+## 1.3.3
+
+- **Security:** Attendees-only staff can no longer open arbitrary member profiles via `?view=` ID; detail and POST actions use the same shared-event scope as the list.
+- **Security:** Setup wizard, Settings, and Products mutations re-check `remember_access_settings` (not nonce alone).
+- **Fix:** Applications-only staff can open the admin dashboard (menu and page caps aligned).
+- **Fix:** Event-role AJAX uses separate admin/front nonces; no longer trusts Referer or `manage_options` for the full role list.
+- **Fix:** Staff ticket viewing uses `remember_read_applications` (replaced undefined `remember_view_applications`).
+- **Enhancement:** Admin-managed Instant Messenger platforms (DB 1.32.0); Social Media + IM combined in a two-column **Platforms** settings tab. Closes [#20](https://github.com/ctucker1984/remember/issues/20).
+
 ## 1.3.2
 
 - **Fix:** Country is required on registration and profile (defaults to US). Closes [#17](https://github.com/ctucker1984/remember/issues/17).
