@@ -481,7 +481,8 @@ class Remember {
 		}
 		return user_can( $user, 'remember_read_events' )
 			|| user_can( $user, 'remember_read_vetting' )
-			|| user_can( $user, 'remember_read_members' );
+			|| user_can( $user, 'remember_read_members' )
+			|| user_can( $user, 'remember_read_applications' );
 	}
 	
 	/**

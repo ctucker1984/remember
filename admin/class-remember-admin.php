@@ -528,8 +528,13 @@ class Remember_Admin {
 	 * @since    1.0.0
 	 */
 	public function display_dashboard_page() {
-		// Check capability
-		if ( ! current_user_can( 'remember_read_events' ) && ! current_user_can( 'remember_read_vetting' ) && ! current_user_can( 'remember_read_members' ) ) {
+		// Check capability — must stay aligned with menu $main_cap and user_can_access_remember_admin_main().
+		if (
+			! current_user_can( 'remember_read_events' )
+			&& ! current_user_can( 'remember_read_vetting' )
+			&& ! current_user_can( 'remember_read_members' )
+			&& ! current_user_can( 'remember_read_applications' )
+		) {
 			wp_die( __( 'You do not have sufficient permissions to access this page.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
 		}
 		
