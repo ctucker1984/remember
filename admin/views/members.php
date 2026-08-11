@@ -50,10 +50,26 @@ $status_colors = array(
 // Check if viewing a specific member
 $view_member_id = isset( $_GET['view'] ) ? absint( $_GET['view'] ) : 0;
 
+// Attendees-only staff may list/view only attendees on their events — compute early so view + mutations can enforce it.
+$current_user_id      = get_current_user_id();
+$has_members_access   = current_user_can( 'remember_read_members' );
+$has_attendees_access = current_user_can( 'remember_read_attendees' );
+$is_attendees_only    = $has_attendees_access && ! $has_members_access;
+
 // Handle form submissions
 if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember_member_action', 'remember_member_nonce' ) ) {
 	$action = sanitize_text_field( $_POST['remember_member_action'] );
 	$member_id = isset( $_POST['member_id'] ) ? absint( $_POST['member_id'] ) : 0;
+
+	// Attendees-only users must not mutate member records (create/update require remember_*_members anyway;
+	// this blocks any future attendees write caps or mistaken grants from acting out of scope).
+	if ( $is_attendees_only && $member_id > 0 && ! $member_model->guard_can_view_attendee( $current_user_id, $member_id ) ) {
+		wp_die(
+			esc_html__( 'You do not have permission to modify this member.', 'remember' ),
+			esc_html__( 'Access Denied', 'remember' ),
+			array( 'response' => 403 )
+		);
+	}
 	
 	if ( 'add' === $action ) {
 		// Check capability
@@ -572,10 +588,7 @@ if ( $filter_role > 0 ) {
 }
 
 // Check capabilities - if user has attendees access but not full members access, show only attendees
-$current_user_id = get_current_user_id();
-$has_members_access = current_user_can( 'remember_read_members' );
-$has_attendees_access = current_user_can( 'remember_read_attendees' );
-$is_attendees_only = $has_attendees_access && ! $has_members_access;
+// ($has_members_access / $has_attendees_access / $is_attendees_only / $current_user_id set earlier.)
 
 // Get members
 if ( $is_attendees_only ) {
@@ -599,6 +612,14 @@ if ( $is_attendees_only ) {
 
 // If viewing a specific member, show detail view
 if ( $view_member_id > 0 ) {
+	if ( $is_attendees_only && ! $member_model->guard_can_view_attendee( $current_user_id, $view_member_id ) ) {
+		wp_die(
+			esc_html__( 'You do not have permission to view this member.', 'remember' ),
+			esc_html__( 'Access Denied', 'remember' ),
+			array( 'response' => 403 )
+		);
+	}
+
 	$view_member = $member_model->get( $view_member_id );
 	if ( ! $view_member ) {
 		wp_die( __( 'Member not found.', 'remember' ) );
