@@ -387,6 +387,7 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 			'share_photo_with_events' => isset( $_POST['share_photo_with_events'] ) ? 1 : 0,
 			'member_number' => ( '' === $member_number ) ? null : $member_number,
 			'updated_at' => current_time( 'mysql' ),
+			'updated_by' => get_current_user_id(),
 		);
 		
 		// Check if profile exists

@@ -1057,6 +1057,43 @@ class Remember_Database_Updater {
 			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.33.0' ) );
 		}
 
+		// Update to 1.34.0 — profile updated_by for audit / apply confirmation (#22).
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.34.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.34.0' ) );
+
+			$profiles_table = $wpdb->prefix . 'remember_member_profiles';
+			$col            = $wpdb->get_results( $wpdb->prepare( 'SHOW COLUMNS FROM `' . $profiles_table . '` LIKE %s', 'updated_by' ) );
+			if ( empty( $col ) ) {
+				$ok = $wpdb->query(
+					"ALTER TABLE {$profiles_table} ADD COLUMN updated_by BIGINT(20) UNSIGNED DEFAULT NULL AFTER updated_at"
+				);
+				if ( false === $ok ) {
+					Remember_Logger::error(
+						'Failed to add updated_by to remember_member_profiles',
+						array( 'error' => $wpdb->last_error )
+					);
+				} else {
+					Remember_Logger::info( 'Added updated_by to remember_member_profiles' );
+				}
+			}
+
+			$index = $wpdb->get_results( "SHOW INDEX FROM `{$profiles_table}` WHERE Key_name = 'updated_by'" );
+			if ( empty( $index ) ) {
+				$ok = $wpdb->query( "ALTER TABLE {$profiles_table} ADD KEY updated_by (updated_by)" );
+				if ( false === $ok ) {
+					Remember_Logger::error(
+						'Failed to add key on updated_by',
+						array( 'error' => $wpdb->last_error )
+					);
+				} else {
+					Remember_Logger::info( 'Added key on updated_by' );
+				}
+			}
+
+			update_option( 'remember_db_version', '1.34.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.34.0' ) );
+		}
+
 		// Always re-ensure health catalogs (idempotent). Catches sites that stalled mid-migration
 		// or activated before catalog seed rows were added.
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-seeder.php';

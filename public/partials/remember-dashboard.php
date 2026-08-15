@@ -43,9 +43,17 @@ if ( isset( $_POST['remember_member_application_action'] ) && check_admin_refere
 
 	if ( $application && absint( $application->member_id ) === absint( $member_id_for_queries ) ) {
 		if ( 'update_application' === $member_action && in_array( $application->status, array( 'pending', 'waitlisted' ), true ) ) {
+			require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-audit.php';
+			$currency_error = Remember_Profile_Audit::validate_application_confirmation(
+				isset( $_POST['remember_profile_currency_confirm'] ) ? wp_unslash( $_POST['remember_profile_currency_confirm'] ) : '',
+				(int) $member_id_for_queries
+			);
+			if ( '' !== $currency_error ) {
+				echo '<div class="remember-notice remember-error"><p>' . esc_html( $currency_error ) . '</p></div>';
+			} else {
+			global $wpdb;
 			$new_event_role_id = isset( $_POST['event_role_id'] ) ? absint( $_POST['event_role_id'] ) : 0;
 			if ( $new_event_role_id > 0 ) {
-				global $wpdb;
 				$event_role_exists = $wpdb->get_var(
 					$wpdb->prepare(
 						"SELECT COUNT(*) FROM {$wpdb->prefix}remember_event_roles WHERE event_role_id = %d AND event_id = %d",
@@ -105,6 +113,9 @@ if ( isset( $_POST['remember_member_application_action'] ) && check_admin_refere
 						array( '%d', '%d', '%d', '%f', '%f', '%s' )
 					);
 				}
+			}
+			Remember_Profile_Audit::touch_updated( (int) $member_id_for_queries, get_current_user_id() );
+			echo '<div class="remember-notice remember-notice-success"><p>' . esc_html__( 'Application updated. Your profile currency confirmation was recorded.', 'remember' ) . '</p></div>';
 			}
 		} elseif ( 'withdraw_application' === $member_action && 'accepted' === $application->status ) {
 			require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-unwind.php';
@@ -313,7 +324,12 @@ foreach ( $selected_application_addons as $selected_addon_row ) {
 						<?php endif; ?>
 					</div>
 
-					<button type="submit" class="remember-button remember-button-primary"><?php esc_html_e( 'Save Application Changes', 'remember' ); ?></button>
+					<?php
+					require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-audit.php';
+					Remember_Profile_Audit::render_confirm_field( 'remember_dashboard_profile_currency_confirm' );
+					?>
+
+					<button type="submit" class="remember-button remember-button-primary" disabled><?php esc_html_e( 'Save Application Changes', 'remember' ); ?></button>
 				</form>
 			<?php elseif ( 'accepted' === $selected_application->status || ! empty( $selected_application->ticket_voided ) ) : ?>
 				<?php

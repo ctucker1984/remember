@@ -219,6 +219,24 @@ if ( $photo_max_bytes < 1 ) {
 				<p class="description"><?php esc_html_e( 'Optional. Unique alphanumeric ID assigned by staff. Members can view it but cannot change it.', 'remember' ); ?></p>
 			</td>
 		</tr>
+		<?php
+		require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-audit.php';
+		$remember_created_display = Remember_Profile_Audit::format_datetime( $view_profile && isset( $view_profile->created_at ) ? $view_profile->created_at : '', get_current_user_id() );
+		$remember_updated_display = Remember_Profile_Audit::format_datetime( $view_profile && isset( $view_profile->updated_at ) ? $view_profile->updated_at : '', get_current_user_id() );
+		$remember_updated_by_name = Remember_Profile_Audit::format_updated_by_name( $view_profile && isset( $view_profile->updated_by ) ? $view_profile->updated_by : 0 );
+		?>
+		<tr>
+			<th><?php esc_html_e( 'Profile created', 'remember' ); ?></th>
+			<td><span class="description"><?php echo '' !== $remember_created_display ? esc_html( $remember_created_display ) : esc_html__( '—', 'remember' ); ?></span></td>
+		</tr>
+		<tr>
+			<th><?php esc_html_e( 'Profile updated', 'remember' ); ?></th>
+			<td><span class="description"><?php echo '' !== $remember_updated_display ? esc_html( $remember_updated_display ) : esc_html__( '—', 'remember' ); ?></span></td>
+		</tr>
+		<tr>
+			<th><?php esc_html_e( 'Updated by', 'remember' ); ?></th>
+			<td><span class="description"><?php echo '' !== $remember_updated_by_name ? esc_html( $remember_updated_by_name ) : esc_html__( '—', 'remember' ); ?></span></td>
+		</tr>
 		<tr>
 			<th><label for="address_street"><?php esc_html_e( 'Street Address', 'remember' ); ?></label></th>
 			<td>

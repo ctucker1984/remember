@@ -103,8 +103,9 @@ class Remember_Member extends Remember_Base_Model {
 					'emergency_contact_relationship' => '',
 					'created_at'                     => current_time( 'mysql' ),
 					'updated_at'                     => current_time( 'mysql' ),
+					'updated_by'                     => get_current_user_id() ? get_current_user_id() : $user_id,
 				),
-				array( '%d', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s' )
+				array( '%d', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%d' )
 			);
 		}
 

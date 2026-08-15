@@ -199,6 +199,7 @@ class Remember {
 		$this->loader->add_action( 'init', $plugin_public, 'register_shortcodes' );
 		$this->loader->add_action( 'template_redirect', $plugin_public, 'maybe_process_member_registration', 1 );
 		$this->loader->add_action( 'template_redirect', $plugin_public, 'maybe_output_admission_ticket', 0 );
+		$this->loader->add_action( 'wp_ajax_remember_profile_currency_status', $plugin_public, 'ajax_profile_currency_status' );
 		$this->loader->add_action( 'remember_member_profile_saved', $this, 'maybe_sync_member_profile_to_qb', 10, 1 );
 		$this->loader->add_action( 'remember_payment_status_changed', $this, 'on_payment_status_changed', 10, 4 );
 

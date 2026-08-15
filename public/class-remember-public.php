@@ -71,8 +71,12 @@ class Remember_Public {
 		);
 		wp_enqueue_script( $this->plugin_name, plugin_dir_url( __FILE__ ) . '../assets/js/public.js', array( 'jquery', $this->plugin_name . '-timezone' ), $this->version, true );
 		wp_localize_script( $this->plugin_name, 'rememberPublic', array(
-			'ajaxurl' => admin_url( 'admin-ajax.php' ),
-			'nonce'   => wp_create_nonce( 'remember_public_nonce' ),
+			'ajaxurl'              => admin_url( 'admin-ajax.php' ),
+			'nonce'                => wp_create_nonce( 'remember_public_nonce' ),
+			'profileCurrencyNonce' => wp_create_nonce( 'remember_profile_currency_status' ),
+			'i18n'                 => array(
+				'profileStale' => __( 'Save your profile first (within the last 24 hours), then type the confirmation phrase.', 'remember' ),
+			),
 		) );
 
 		// Interests uses wp_editor on profile edit and public registration.
@@ -296,6 +300,7 @@ class Remember_Public {
 		$profile_row['member_id']  = $user_id;
 		$profile_row['created_at'] = current_time( 'mysql' );
 		$profile_row['updated_at'] = current_time( 'mysql' );
+		$profile_row['updated_by'] = $user_id;
 
 		$profile_inserted = $wpdb->insert( $wpdb->prefix . 'remember_member_profiles', $profile_row );
 
@@ -526,6 +531,31 @@ class Remember_Public {
 		$event_id = $atts['event_id'];
 		include plugin_dir_path( __FILE__ ) . 'partials/remember-apply.php';
 		return ob_get_clean();
+	}
+
+	/**
+	 * AJAX: whether the current member's profile was saved within 24 hours.
+	 *
+	 * @return void
+	 */
+	public function ajax_profile_currency_status() {
+		check_ajax_referer( 'remember_profile_currency_status', 'nonce' );
+
+		if ( ! is_user_logged_in() ) {
+			wp_send_json_error( array( 'message' => __( 'You must be logged in.', 'remember' ) ), 403 );
+		}
+
+		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-profile-audit.php';
+		$member_id  = get_current_user_id();
+		$updated_at = Remember_Profile_Audit::get_profile_updated_at( $member_id );
+		$fresh      = Remember_Profile_Audit::is_profile_fresh( $member_id );
+
+		wp_send_json_success(
+			array(
+				'fresh'      => $fresh,
+				'updated_at' => $updated_at,
+			)
+		);
 	}
 
 	/**

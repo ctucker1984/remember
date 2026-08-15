@@ -460,11 +460,100 @@
 		syncAll();
 	}
 
+	function normalizeProfileConfirmPhrase(value) {
+		return String(value || '')
+			.toLowerCase()
+			.replace(/\s+/g, ' ')
+			.trim()
+			.replace(/[.,!?;:'"\s]+$/g, '')
+			.trim();
+	}
+
+	function initProfileCurrencyConfirm() {
+		var ajaxUrl = (typeof rememberPublic !== 'undefined' && rememberPublic.ajaxurl) ? rememberPublic.ajaxurl : '';
+		var nonce = (typeof rememberPublic !== 'undefined' && rememberPublic.profileCurrencyNonce) ? rememberPublic.profileCurrencyNonce : '';
+		var staleMsg = (typeof rememberPublic !== 'undefined' && rememberPublic.i18n && rememberPublic.i18n.profileStale)
+			? rememberPublic.i18n.profileStale
+			: 'Save your profile first (within the last 24 hours), then type the confirmation phrase.';
+
+		$('.remember-profile-currency-confirm').each(function() {
+			var $wrap = $(this);
+			var $input = $wrap.find('.remember-profile-currency-confirm__input');
+			var $status = $wrap.find('.remember-profile-currency-confirm__status');
+			var $form = $wrap.closest('form');
+			if (!$input.length || !$form.length) {
+				return;
+			}
+			var $submit = $form.find('button[type="submit"].remember-button-primary, button[type="submit"]').first();
+			var expected = normalizeProfileConfirmPhrase($input.data('remember-confirm-phrase') || 'my profile is current');
+			var fresh = $wrap.attr('data-remember-profile-fresh') === '1';
+			var checking = false;
+
+			function setStatus(message) {
+				if (!message) {
+					$status.prop('hidden', true).text('');
+					return;
+				}
+				$status.prop('hidden', false).text(message);
+			}
+
+			function sync() {
+				var phraseOk = normalizeProfileConfirmPhrase($input.val()) === expected;
+				var unlocked = phraseOk && fresh;
+				$submit.prop('disabled', !unlocked);
+				$submit.toggleClass('remember-button-disabled', !unlocked);
+				if (phraseOk && !fresh) {
+					setStatus(staleMsg);
+				} else {
+					setStatus('');
+				}
+			}
+
+			function refreshFreshness() {
+				if (!ajaxUrl || !nonce || checking) {
+					sync();
+					return;
+				}
+				checking = true;
+				$.post(ajaxUrl, {
+					action: 'remember_profile_currency_status',
+					nonce: nonce
+				}).done(function(resp) {
+					if (resp && resp.success && resp.data) {
+						fresh = !!resp.data.fresh;
+						$wrap.attr('data-remember-profile-fresh', fresh ? '1' : '0');
+						if (resp.data.updated_at) {
+							$wrap.attr('data-remember-profile-updated-at', resp.data.updated_at);
+						}
+					}
+				}).always(function() {
+					checking = false;
+					sync();
+				});
+			}
+
+			$input.on('input change keyup', sync);
+			$(window).on('focus', refreshFreshness);
+			$(document).on('visibilitychange', function() {
+				if (!document.hidden) {
+					refreshFreshness();
+				}
+			});
+			$wrap.find('a[target="_blank"]').on('click', function() {
+				// After returning from profile edit, re-check freshness.
+				window.setTimeout(refreshFreshness, 500);
+			});
+
+			refreshFreshness();
+		});
+	}
+
 	$(function() {
 		initDisplayNameNicknameSync();
 		initProfilePhotoCropper();
 		initRequireOneCheckboxGroups();
 		initConditionalProfileQuestions();
+		initProfileCurrencyConfirm();
 		if (typeof window.rememberInitTimezoneComboboxes === 'function') {
 			window.rememberInitTimezoneComboboxes();
 		}

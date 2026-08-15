@@ -18,6 +18,7 @@ require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-merchand
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-vetting-workflow.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-messaging.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-agreements.php';
+require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-audit.php';
 
 // $event_id should be set by shortcode handler
 if ( ! isset( $event_id ) ) {
@@ -52,6 +53,13 @@ if ( isset( $_POST['remember_apply_action'] ) && check_admin_referer( 'remember_
 			if ( $agreement_error ) {
 				$submission_error = $agreement_error;
 			} else {
+				$currency_error = Remember_Profile_Audit::validate_application_confirmation(
+					isset( $_POST['remember_profile_currency_confirm'] ) ? wp_unslash( $_POST['remember_profile_currency_confirm'] ) : '',
+					$member_id
+				);
+				if ( $currency_error ) {
+					$submission_error = $currency_error;
+				} else {
 			$data = array(
 				'event_id'      => $event_id,
 				'member_id'     => $member_id,
@@ -64,6 +72,7 @@ if ( isset( $_POST['remember_apply_action'] ) && check_admin_referer( 'remember_
 
 			if ( $new_application_id ) {
 				Remember_Agreements::save_apply_acceptances( $new_application_id, $event_id );
+				Remember_Profile_Audit::touch_updated( $member_id, $member_id );
 
 				// Save selected add-ons for this application (role-aware max qty; 0 = not offered).
 				if ( isset( $_POST['event_addons'] ) && is_array( $_POST['event_addons'] ) ) {
@@ -120,6 +129,7 @@ if ( isset( $_POST['remember_apply_action'] ) && check_admin_referer( 'remember_
 			} else {
 				$submission_error = __( 'Failed to submit application. Please try again.', 'remember' );
 			}
+				}
 			}
 		}
 	} else {
@@ -240,8 +250,10 @@ if ( ! $selected_event ) {
 				</div>
 			</div>
 
+			<?php Remember_Profile_Audit::render_confirm_field( 'remember_apply_profile_currency_confirm' ); ?>
+
 			<div class="remember-form-group">
-				<button type="submit" class="remember-button remember-button-primary">
+				<button type="submit" class="remember-button remember-button-primary" disabled>
 					<?php esc_html_e( 'Submit Application', 'remember' ); ?>
 				</button>
 				<a href="<?php echo esc_url( get_permalink() . '?view=dashboard' ); ?>" class="remember-button remember-button-secondary">

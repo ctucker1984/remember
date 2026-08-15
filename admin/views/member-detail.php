@@ -136,6 +136,30 @@ if ( $is_editing && ! current_user_can( 'remember_update_members' ) ) {
 							<?php endif; ?>
 						</td>
 					</tr>
+					<?php
+					require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-audit.php';
+					$remember_created_display = Remember_Profile_Audit::format_datetime( $view_profile && isset( $view_profile->created_at ) ? $view_profile->created_at : '', get_current_user_id() );
+					$remember_updated_display = Remember_Profile_Audit::format_datetime( $view_profile && isset( $view_profile->updated_at ) ? $view_profile->updated_at : '', get_current_user_id() );
+					$remember_updated_by_name = Remember_Profile_Audit::format_updated_by_name( $view_profile && isset( $view_profile->updated_by ) ? $view_profile->updated_by : 0 );
+					?>
+					<tr>
+						<th><?php esc_html_e( 'Profile created', 'remember' ); ?></th>
+						<td>
+							<?php echo '' !== $remember_created_display ? esc_html( $remember_created_display ) : '<span class="description">' . esc_html__( '—', 'remember' ) . '</span>'; ?>
+						</td>
+					</tr>
+					<tr>
+						<th><?php esc_html_e( 'Profile updated', 'remember' ); ?></th>
+						<td>
+							<?php echo '' !== $remember_updated_display ? esc_html( $remember_updated_display ) : '<span class="description">' . esc_html__( '—', 'remember' ) . '</span>'; ?>
+						</td>
+					</tr>
+					<tr>
+						<th><?php esc_html_e( 'Updated by', 'remember' ); ?></th>
+						<td>
+							<?php echo '' !== $remember_updated_by_name ? esc_html( $remember_updated_by_name ) : '<span class="description">' . esc_html__( '—', 'remember' ) . '</span>'; ?>
+						</td>
+					</tr>
 					<tr>
 						<th><?php esc_html_e( 'Address', 'remember' ); ?></th>
 						<td>

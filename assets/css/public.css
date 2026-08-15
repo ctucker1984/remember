@@ -978,6 +978,38 @@
 	color: #1d2327;
 }
 
+.remember-profile-audit-meta {
+	margin: 1.25em 0 0;
+	padding-top: 0.85em;
+	border-top: 1px solid #eee;
+	font-size: 0.8125rem;
+	line-height: 1.45;
+	color: #8c8f94;
+	font-weight: 400;
+}
+
+.remember-profile-currency-confirm__help a {
+	color: #2271b1;
+	text-decoration: underline;
+}
+
+.remember-profile-currency-confirm__help strong {
+	font-weight: 700;
+	color: #1d2327;
+}
+
+.remember-profile-currency-confirm__status {
+	color: #b32d2e;
+}
+
+.remember-button-primary:disabled,
+.remember-button-primary.remember-button-disabled,
+button.remember-button-primary:disabled {
+	opacity: 0.45;
+	cursor: not-allowed;
+	pointer-events: none;
+}
+
 .remember-form-col .remember-form-control {
 	max-width: 100%;
 }

@@ -169,9 +169,11 @@ class Remember_Database {
 			member_number VARCHAR(50) DEFAULT NULL,
 			created_at DATETIME NOT NULL,
 			updated_at DATETIME NOT NULL,
+			updated_by BIGINT(20) UNSIGNED DEFAULT NULL,
 			PRIMARY KEY (profile_id),
 			UNIQUE KEY member_id (member_id),
-			UNIQUE KEY member_number (member_number)
+			UNIQUE KEY member_number (member_number),
+			KEY updated_by (updated_by)
 		) $charset_collate;";
 
 		dbDelta( $sql );

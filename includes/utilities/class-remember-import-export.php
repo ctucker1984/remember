@@ -724,6 +724,7 @@ class Remember_Import_Export {
 					'emergency_contact_phone'        => $row_data['Emergency Contact Phone'] ?? '',
 					'emergency_contact_relationship' => $row_data['Emergency Contact Relationship'] ?? '',
 					'updated_at'                     => current_time( 'mysql' ),
+					'updated_by'                     => get_current_user_id() ? get_current_user_id() : null,
 				)
 			);
 			

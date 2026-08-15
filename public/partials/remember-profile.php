@@ -102,6 +102,7 @@ if ( isset( $_POST['remember_profile_action'] ) && check_admin_referer( 'remembe
 	}
 
 	$profile_data['updated_at'] = current_time( 'mysql' );
+	$profile_data['updated_by'] = get_current_user_id();
 
 	if ( $profile ) {
 		$wpdb->update(
@@ -448,6 +449,37 @@ if ( ! empty( $selected_allergy_ids ) ) {
 							value="<?php echo esc_attr( $profile ? $profile->legal_last_name : get_user_meta( $user->ID, 'last_name', true ) ); ?>" required>
 					</div>
 				</div>
+				<?php
+				require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-audit.php';
+				$remember_created_display = Remember_Profile_Audit::format_datetime( $profile && isset( $profile->created_at ) ? $profile->created_at : '', (int) $user->ID );
+				$remember_updated_display = Remember_Profile_Audit::format_datetime( $profile && isset( $profile->updated_at ) ? $profile->updated_at : '', (int) $user->ID );
+				$remember_updated_by_name = Remember_Profile_Audit::format_updated_by_name( $profile && isset( $profile->updated_by ) ? $profile->updated_by : 0 );
+				$remember_audit_bits      = array();
+				if ( '' !== $remember_created_display ) {
+					$remember_audit_bits[] = sprintf(
+						/* translators: %s: formatted datetime */
+						__( 'Created %s', 'remember' ),
+						$remember_created_display
+					);
+				}
+				if ( '' !== $remember_updated_display ) {
+					$remember_audit_bits[] = sprintf(
+						/* translators: %s: formatted datetime */
+						__( 'Updated %s', 'remember' ),
+						$remember_updated_display
+					);
+				}
+				if ( '' !== $remember_updated_by_name ) {
+					$remember_audit_bits[] = sprintf(
+						/* translators: %s: display name */
+						__( 'by %s', 'remember' ),
+						$remember_updated_by_name
+					);
+				}
+				if ( ! empty( $remember_audit_bits ) ) :
+					?>
+					<p class="remember-profile-audit-meta"><?php echo esc_html( implode( ' · ', $remember_audit_bits ) ); ?></p>
+				<?php endif; ?>
 			</div>
 
 			<div class="remember-form-section">
@@ -838,6 +870,37 @@ if ( ! empty( $selected_allergy_ids ) ) {
 							</div>
 						<?php endif; ?>
 					</div>
+					<?php
+					require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-audit.php';
+					$remember_created_display = Remember_Profile_Audit::format_datetime( isset( $profile->created_at ) ? $profile->created_at : '', (int) $user->ID );
+					$remember_updated_display = Remember_Profile_Audit::format_datetime( isset( $profile->updated_at ) ? $profile->updated_at : '', (int) $user->ID );
+					$remember_updated_by_name = Remember_Profile_Audit::format_updated_by_name( isset( $profile->updated_by ) ? $profile->updated_by : 0 );
+					$remember_audit_bits      = array();
+					if ( '' !== $remember_created_display ) {
+						$remember_audit_bits[] = sprintf(
+							/* translators: %s: formatted datetime */
+							__( 'Created %s', 'remember' ),
+							$remember_created_display
+						);
+					}
+					if ( '' !== $remember_updated_display ) {
+						$remember_audit_bits[] = sprintf(
+							/* translators: %s: formatted datetime */
+							__( 'Updated %s', 'remember' ),
+							$remember_updated_display
+						);
+					}
+					if ( '' !== $remember_updated_by_name ) {
+						$remember_audit_bits[] = sprintf(
+							/* translators: %s: display name */
+							__( 'by %s', 'remember' ),
+							$remember_updated_by_name
+						);
+					}
+					if ( ! empty( $remember_audit_bits ) ) :
+						?>
+						<p class="remember-profile-audit-meta"><?php echo esc_html( implode( ' · ', $remember_audit_bits ) ); ?></p>
+					<?php endif; ?>
 				</div>
 
 				<?php if ( ! empty( $profile->address_street ) || ! empty( $profile->address_city ) || ! empty( $profile->address_state ) || ! empty( $profile->address_postal ) || ! empty( $profile->address_country ) ) : ?>
