@@ -671,7 +671,7 @@ if ( ! empty( $selected_allergy_ids ) ) {
 								'textarea_rows' => 6,
 								'media_buttons' => false,
 								'teeny'         => true,
-								'quicktags'     => true,
+								'quicktags'     => false,
 								'editor_class'  => 'remember-form-control',
 							)
 						);

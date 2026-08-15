@@ -306,7 +306,7 @@ if ( $photo_max_bytes < 1 ) {
 						'textarea_rows' => 6,
 						'media_buttons' => false,
 						'teeny'         => true,
-						'quicktags'     => true,
+						'quicktags'     => false,
 					)
 				);
 				?>

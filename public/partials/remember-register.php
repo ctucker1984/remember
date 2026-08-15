@@ -361,7 +361,7 @@ if ( '' === $remember_reg_im_type ) {
 						'textarea_rows' => 6,
 						'media_buttons' => false,
 						'teeny'         => true,
-						'quicktags'     => true,
+						'quicktags'     => false,
 					)
 				);
 				?>
