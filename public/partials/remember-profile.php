@@ -416,6 +416,21 @@ if ( ! empty( $selected_allergy_ids ) ) {
 				<h3 class="remember-form-section-title"><?php esc_html_e( 'Basic Information', 'remember' ); ?></h3>
 				<p class="remember-form-help"><?php esc_html_e( 'Legal name is for admin and vetting only — not shown to other members.', 'remember' ); ?></p>
 				<div class="remember-form-row">
+					<div class="remember-form-col remember-form-col-full">
+						<span class="remember-form-label"><?php esc_html_e( 'Member Number', 'remember' ); ?></span>
+						<p class="remember-profile-member-number">
+							<?php
+							if ( $profile && ! empty( $profile->member_number ) ) {
+								echo esc_html( $profile->member_number );
+							} else {
+								esc_html_e( 'Not assigned', 'remember' );
+							}
+							?>
+						</p>
+						<p class="remember-form-help"><?php esc_html_e( 'Assigned by staff. You can view it here but cannot change it.', 'remember' ); ?></p>
+					</div>
+				</div>
+				<div class="remember-form-row">
 					<div class="remember-form-col">
 						<label for="legal_first_name" class="remember-form-label">
 							<?php esc_html_e( 'Legal First Name', 'remember' ); ?>
@@ -781,6 +796,18 @@ if ( ! empty( $selected_allergy_ids ) ) {
 						<div class="remember-profile-view-item">
 							<strong class="remember-profile-view-label"><?php esc_html_e( 'Display Name', 'remember' ); ?></strong>
 							<span class="remember-profile-view-value"><?php echo esc_html( $user->display_name ); ?></span>
+						</div>
+						<div class="remember-profile-view-item">
+							<strong class="remember-profile-view-label"><?php esc_html_e( 'Member Number', 'remember' ); ?></strong>
+							<span class="remember-profile-view-value">
+								<?php
+								if ( ! empty( $profile->member_number ) ) {
+									echo esc_html( $profile->member_number );
+								} else {
+									esc_html_e( 'Not assigned', 'remember' );
+								}
+								?>
+							</span>
 						</div>
 						<?php
 						$remember_legal_name_line = trim( Remember_Import_Export::member_list_legal_name_line( $profile, (int) $user->ID ) );

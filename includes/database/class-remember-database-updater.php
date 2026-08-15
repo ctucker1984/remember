@@ -1020,6 +1020,43 @@ class Remember_Database_Updater {
 			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.32.0' ) );
 		}
 
+		// Update to 1.33.0 — unique alphanumeric member_number (#21).
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.33.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.33.0' ) );
+
+			$profiles_table = $wpdb->prefix . 'remember_member_profiles';
+			$col            = $wpdb->get_results( $wpdb->prepare( 'SHOW COLUMNS FROM `' . $profiles_table . '` LIKE %s', 'member_number' ) );
+			if ( empty( $col ) ) {
+				$ok = $wpdb->query(
+					"ALTER TABLE {$profiles_table} ADD COLUMN member_number VARCHAR(50) DEFAULT NULL AFTER share_photo_with_events"
+				);
+				if ( false === $ok ) {
+					Remember_Logger::error(
+						'Failed to add member_number to remember_member_profiles',
+						array( 'error' => $wpdb->last_error )
+					);
+				} else {
+					Remember_Logger::info( 'Added member_number to remember_member_profiles' );
+				}
+			}
+
+			$index = $wpdb->get_results( "SHOW INDEX FROM `{$profiles_table}` WHERE Key_name = 'member_number'" );
+			if ( empty( $index ) ) {
+				$ok = $wpdb->query( "ALTER TABLE {$profiles_table} ADD UNIQUE KEY member_number (member_number)" );
+				if ( false === $ok ) {
+					Remember_Logger::error(
+						'Failed to add unique key on member_number',
+						array( 'error' => $wpdb->last_error )
+					);
+				} else {
+					Remember_Logger::info( 'Added unique key on member_number' );
+				}
+			}
+
+			update_option( 'remember_db_version', '1.33.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.33.0' ) );
+		}
+
 		// Always re-ensure health catalogs (idempotent). Catches sites that stalled mid-migration
 		// or activated before catalog seed rows were added.
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-seeder.php';

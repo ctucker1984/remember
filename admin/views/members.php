@@ -265,6 +265,17 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 		$pq_answers    = Remember_Profile_Questions::collect_from_request();
 		// Admin: only nickname, display name, legal first/last, cell phone are required.
 		$missing_key = Remember_Profile_Fields::first_missing_required( $profile_check, $meta_check, 'admin' );
+
+		$member_number = Remember_Profile_Fields::sanitize_member_number(
+			isset( $_POST['member_number'] ) ? wp_unslash( $_POST['member_number'] ) : ''
+		);
+		$member_number_error = '';
+		if ( null === $member_number ) {
+			$member_number_error = __( 'Member number must be alphanumeric (letters and numbers only).', 'remember' );
+		} elseif ( '' !== $member_number && Remember_Profile_Fields::is_member_number_taken( $member_number, $member_id ) ) {
+			$member_number_error = __( 'That member number is already assigned to another member.', 'remember' );
+		}
+
 		if ( '' !== $missing_key ) {
 			$labels = Remember_Profile_Fields::labels();
 			$label  = isset( $labels[ $missing_key ] ) ? $labels[ $missing_key ] : __( 'Required field', 'remember' );
@@ -275,6 +286,8 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 					$label
 				)
 			) . '</p></div>';
+		} elseif ( '' !== $member_number_error ) {
+			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html( $member_number_error ) . '</p></div>';
 		} else {
 		
 		global $wpdb;
@@ -372,6 +385,7 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 			'share_im_with_events' => isset( $_POST['share_im_with_events'] ) ? 1 : 0,
 			'share_interests_with_events' => isset( $_POST['share_interests_with_events'] ) ? 1 : 0,
 			'share_photo_with_events' => isset( $_POST['share_photo_with_events'] ) ? 1 : 0,
+			'member_number' => ( '' === $member_number ) ? null : $member_number,
 			'updated_at' => current_time( 'mysql' ),
 		);
 		

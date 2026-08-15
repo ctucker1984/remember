@@ -127,6 +127,16 @@ if ( $is_editing && ! current_user_can( 'remember_update_members' ) ) {
 						</td>
 					</tr>
 					<tr>
+						<th><?php esc_html_e( 'Member Number', 'remember' ); ?></th>
+						<td>
+							<?php if ( $view_profile && ! empty( $view_profile->member_number ) ) : ?>
+								<?php echo esc_html( $view_profile->member_number ); ?>
+							<?php else : ?>
+								<span class="description"><?php esc_html_e( 'Not assigned', 'remember' ); ?></span>
+							<?php endif; ?>
+						</td>
+					</tr>
+					<tr>
 						<th><?php esc_html_e( 'Address', 'remember' ); ?></th>
 						<td>
 							<?php if ( $view_profile && $view_profile->address_street ) : ?>

@@ -372,4 +372,47 @@ class Remember_Profile_Fields {
 			}
 		}
 	}
+
+	/**
+	 * Sanitize a member number: empty string, alphanumeric string, or null if invalid.
+	 *
+	 * @param mixed $raw Raw input.
+	 * @return string|null Empty string when cleared, alphanumeric value, or null when invalid.
+	 */
+	public static function sanitize_member_number( $raw ) {
+		$value = sanitize_text_field( (string) $raw );
+		$value = trim( $value );
+		if ( '' === $value ) {
+			return '';
+		}
+		if ( ! preg_match( '/^[A-Za-z0-9]+$/', $value ) ) {
+			return null;
+		}
+		return $value;
+	}
+
+	/**
+	 * Whether another member already has this member number.
+	 *
+	 * @param string $member_number      Candidate number (non-empty).
+	 * @param int    $exclude_member_id  Member ID to ignore (current member).
+	 * @return bool
+	 */
+	public static function is_member_number_taken( $member_number, $exclude_member_id = 0 ) {
+		global $wpdb;
+		$member_number = (string) $member_number;
+		if ( '' === $member_number ) {
+			return false;
+		}
+		$exclude_member_id = absint( $exclude_member_id );
+		$sql               = "SELECT member_id FROM {$wpdb->prefix}remember_member_profiles WHERE member_number = %s";
+		$params            = array( $member_number );
+		if ( $exclude_member_id > 0 ) {
+			$sql     .= ' AND member_id <> %d';
+			$params[] = $exclude_member_id;
+		}
+		$sql .= ' LIMIT 1';
+		$found = $wpdb->get_var( $wpdb->prepare( $sql, $params ) );
+		return ! empty( $found );
+	}
 }

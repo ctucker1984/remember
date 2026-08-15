@@ -213,6 +213,13 @@ if ( $photo_max_bytes < 1 ) {
 			</td>
 		</tr>
 		<tr>
+			<th><label for="member_number"><?php esc_html_e( 'Member Number', 'remember' ); ?></label></th>
+			<td>
+				<input type="text" id="member_number" name="member_number" class="regular-text" pattern="[A-Za-z0-9]*" maxlength="50" value="<?php echo esc_attr( $view_profile && ! empty( $view_profile->member_number ) ? $view_profile->member_number : '' ); ?>" autocomplete="off">
+				<p class="description"><?php esc_html_e( 'Optional. Unique alphanumeric ID assigned by staff. Members can view it but cannot change it.', 'remember' ); ?></p>
+			</td>
+		</tr>
+		<tr>
 			<th><label for="address_street"><?php esc_html_e( 'Street Address', 'remember' ); ?></label></th>
 			<td>
 				<input type="text" id="address_street" name="address_street" class="regular-text" value="<?php echo esc_attr( $view_profile ? $view_profile->address_street : '' ); ?>">
