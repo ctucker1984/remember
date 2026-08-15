@@ -8,6 +8,11 @@
  * files are deleted/replaced under an active plugin. This class mirrors the
  * core deactivate → replace → silent reactivate flow for remember/remember.php.
  *
+ * Also hardens Upload → Replace when the destination is a git/dev tree: WordPress
+ * refuses to clear destinations with unwritable files (often `.git/objects` mode
+ * 444, or `dist/` from local zip builds). We purge non-release paths, chmod the
+ * tree writable, and retry the wipe when core’s clear_destination fails.
+ *
  * @package    reMember
  * @subpackage reMember/includes/utilities
  */
@@ -24,6 +29,7 @@ class Remember_Plugin_Upgrader {
 
 	const PLUGIN_BASENAME = 'remember/remember.php';
 	const TRANSIENT_KEY   = 'remember_reactivate_after_upgrade';
+	const PENDING_KEY     = 'remember_upgrade_pending_replace';
 
 	/**
 	 * Register hooks (call from main plugin bootstrap).
@@ -31,9 +37,31 @@ class Remember_Plugin_Upgrader {
 	 * @return void
 	 */
 	public static function init() {
-		add_filter( 'upgrader_clear_destination', array( __CLASS__, 'deactivate_before_clear_destination' ), 1, 4 );
+		add_filter( 'upgrader_source_selection', array( __CLASS__, 'flag_remember_package' ), 10, 4 );
+		add_filter( 'upgrader_pre_install', array( __CLASS__, 'prepare_remember_destination' ), 10, 2 );
+		add_filter( 'upgrader_clear_destination', array( __CLASS__, 'after_clear_destination' ), 1, 4 );
 		add_action( 'upgrader_overwrote_package', array( __CLASS__, 'maybe_reactivate_after_overwrite' ), 10, 3 );
 		add_action( 'upgrader_process_complete', array( __CLASS__, 'maybe_reactivate_after_process' ), 10, 2 );
+	}
+
+	/**
+	 * Paths that must never block a release overwrite (dev / build artifacts).
+	 *
+	 * @return string[]
+	 */
+	private static function non_release_basenames() {
+		return array(
+			'.git',
+			'.github',
+			'.vscode',
+			'.cursor',
+			'.idea',
+			'dist',
+			'bin',
+			'.DS_Store',
+			'.gitignore',
+			'.gitattributes',
+		);
 	}
 
 	/**
@@ -67,10 +95,73 @@ class Remember_Plugin_Upgrader {
 	}
 
 	/**
-	 * Silently deactivate reMember before its directory is wiped during overwrite/upgrade.
+	 * Absolute path to the installed remember plugin directory, if present.
 	 *
-	 * Hooked early on {@see 'upgrader_clear_destination'} so upload-overwrite installs
-	 * (which skip Plugin_Upgrader::deactivate_plugin_before_upgrade) are covered.
+	 * @return string
+	 */
+	private static function installed_remember_dir() {
+		if ( ! defined( 'WP_PLUGIN_DIR' ) ) {
+			return '';
+		}
+		$dir = trailingslashit( WP_PLUGIN_DIR ) . 'remember';
+		return is_dir( $dir ) ? untrailingslashit( $dir ) : '';
+	}
+
+	/**
+	 * Mark when the package being installed is reMember (so pre_install can prepare).
+	 *
+	 * @param string      $source        Source path.
+	 * @param string      $remote_source Remote source.
+	 * @param WP_Upgrader $upgrader      Upgrader instance.
+	 * @param array       $args          Extra args.
+	 * @return string|WP_Error
+	 */
+	public static function flag_remember_package( $source, $remote_source, $upgrader, $args = array() ) {
+		unset( $remote_source, $upgrader, $args );
+		if ( is_wp_error( $source ) ) {
+			return $source;
+		}
+		$source_path = trailingslashit( (string) $source );
+		if ( file_exists( $source_path . 'remember.php' ) ) {
+			$data = get_plugin_data( $source_path . 'remember.php', false, false );
+			if ( self::is_remember_plugin_data( $data ) ) {
+				set_transient( self::PENDING_KEY, 1, 30 * MINUTE_IN_SECONDS );
+			}
+		}
+		return $source;
+	}
+
+	/**
+	 * Before install: deactivate and scrub non-release junk so clear_destination can succeed.
+	 *
+	 * @param bool|WP_Error $response   Pre-install response.
+	 * @param array         $hook_extra Hook extras.
+	 * @return bool|WP_Error
+	 */
+	public static function prepare_remember_destination( $response, $hook_extra ) {
+		if ( is_wp_error( $response ) ) {
+			return $response;
+		}
+		if ( empty( $hook_extra['type'] ) || 'plugin' !== $hook_extra['type'] ) {
+			return $response;
+		}
+		if ( ! get_transient( self::PENDING_KEY ) ) {
+			return $response;
+		}
+
+		self::deactivate_for_upgrade();
+
+		$dir = self::installed_remember_dir();
+		if ( '' !== $dir ) {
+			self::purge_non_release_paths( $dir );
+			self::ensure_tree_writable( $dir );
+		}
+
+		return $response;
+	}
+
+	/**
+	 * After core clear_destination: on failure, scrub + chmod + retry wipe.
 	 *
 	 * @param bool|WP_Error $removed            Clear result.
 	 * @param string        $local_destination  Local destination.
@@ -78,27 +169,58 @@ class Remember_Plugin_Upgrader {
 	 * @param array         $hook_extra         Upgrader hook extras.
 	 * @return bool|WP_Error
 	 */
-	public static function deactivate_before_clear_destination( $removed, $local_destination, $remote_destination, $hook_extra ) {
-		if ( is_wp_error( $removed ) ) {
-			return $removed;
-		}
-		if ( wp_doing_cron() ) {
-			return $removed;
-		}
+	public static function after_clear_destination( $removed, $local_destination, $remote_destination, $hook_extra ) {
+		unset( $local_destination, $hook_extra );
 		if ( ! self::is_remember_destination( $remote_destination ) ) {
 			return $removed;
 		}
-		if ( ! function_exists( 'is_plugin_active' ) || ! function_exists( 'deactivate_plugins' ) ) {
+
+		// Deactivate if we somehow skipped pre_install (still set reactivate flag).
+		self::deactivate_for_upgrade();
+
+		if ( true === $removed ) {
 			return $removed;
+		}
+
+		self::purge_non_release_paths( $remote_destination );
+		self::ensure_tree_writable( $remote_destination );
+
+		global $wp_filesystem;
+		if ( $wp_filesystem instanceof WP_Filesystem_Base ) {
+			if ( ! $wp_filesystem->exists( $remote_destination ) ) {
+				return true;
+			}
+			if ( $wp_filesystem->delete( $remote_destination, true ) ) {
+				return true;
+			}
+		}
+
+		if ( self::force_delete_directory( $remote_destination ) ) {
+			return true;
+		}
+
+		return $removed;
+	}
+
+	/**
+	 * Silently deactivate reMember and store a reactivate flag.
+	 *
+	 * @return void
+	 */
+	private static function deactivate_for_upgrade() {
+		if ( wp_doing_cron() ) {
+			return;
+		}
+		if ( ! function_exists( 'is_plugin_active' ) || ! function_exists( 'deactivate_plugins' ) ) {
+			return;
 		}
 
 		$plugin = self::PLUGIN_BASENAME;
 		if ( ! is_plugin_active( $plugin ) && ! is_plugin_active_for_network( $plugin ) ) {
-			return $removed;
+			return;
 		}
 
 		$network_wide = is_multisite() && is_plugin_active_for_network( $plugin );
-		// Silent: do not run deactivation hooks mid-upgrade.
 		deactivate_plugins( $plugin, true, $network_wide );
 
 		set_transient(
@@ -109,8 +231,131 @@ class Remember_Plugin_Upgrader {
 			),
 			HOUR_IN_SECONDS
 		);
+	}
 
-		return $removed;
+	/**
+	 * Delete known non-release directories/files under the plugin root.
+	 *
+	 * @param string $destination Plugin directory path.
+	 * @return void
+	 */
+	private static function purge_non_release_paths( $destination ) {
+		$destination = untrailingslashit( str_replace( '\\', '/', (string) $destination ) );
+		if ( '' === $destination || 'remember' !== basename( $destination ) ) {
+			return;
+		}
+
+		global $wp_filesystem;
+		foreach ( self::non_release_basenames() as $name ) {
+			$path = $destination . '/' . $name;
+			if ( $wp_filesystem instanceof WP_Filesystem_Base && $wp_filesystem->exists( $path ) ) {
+				$wp_filesystem->chmod( $path, ( $wp_filesystem->is_dir( $path ) ? FS_CHMOD_DIR : FS_CHMOD_FILE ) );
+				$wp_filesystem->delete( $path, true );
+			}
+			if ( file_exists( $path ) || is_dir( $path ) ) {
+				self::force_delete_directory( $path );
+			}
+		}
+	}
+
+	/**
+	 * Recursively chmod a tree so WP_Filesystem can delete it.
+	 *
+	 * @param string $destination Directory path.
+	 * @return void
+	 */
+	private static function ensure_tree_writable( $destination ) {
+		$destination = untrailingslashit( (string) $destination );
+		if ( '' === $destination || ! file_exists( $destination ) ) {
+			return;
+		}
+
+		global $wp_filesystem;
+		if ( $wp_filesystem instanceof WP_Filesystem_Base ) {
+			$files = $wp_filesystem->dirlist( $destination, true, true );
+			if ( is_array( $files ) ) {
+				self::chmod_dirlist( $destination, $files );
+			}
+		}
+
+		// PHP fallback for read-only git objects (often 0444).
+		if ( is_dir( $destination ) ) {
+			$iterator = new RecursiveIteratorIterator(
+				new RecursiveDirectoryIterator( $destination, FilesystemIterator::SKIP_DOTS ),
+				RecursiveIteratorIterator::CHILD_FIRST
+			);
+			foreach ( $iterator as $item ) {
+				$path = $item->getPathname();
+				if ( $item->isDir() ) {
+					@chmod( $path, 0755 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+				} else {
+					@chmod( $path, 0644 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+				}
+			}
+			@chmod( $destination, 0755 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		}
+	}
+
+	/**
+	 * Apply chmod using a WP_Filesystem dirlist tree.
+	 *
+	 * @param string $base    Base path.
+	 * @param array  $dirlist Dirlist array.
+	 * @return void
+	 */
+	private static function chmod_dirlist( $base, $dirlist ) {
+		global $wp_filesystem;
+		foreach ( $dirlist as $name => $details ) {
+			$path = trailingslashit( $base ) . $name;
+			$type = isset( $details['type'] ) ? $details['type'] : 'f';
+			$wp_filesystem->chmod( $path, ( 'd' === $type ? FS_CHMOD_DIR : FS_CHMOD_FILE ) );
+			if ( 'd' === $type && ! empty( $details['files'] ) && is_array( $details['files'] ) ) {
+				self::chmod_dirlist( $path, $details['files'] );
+			}
+		}
+	}
+
+	/**
+	 * Force-delete a file or directory with PHP when WP_Filesystem fails.
+	 *
+	 * @param string $path Path.
+	 * @return bool
+	 */
+	private static function force_delete_directory( $path ) {
+		$path = (string) $path;
+		if ( '' === $path || ! file_exists( $path ) ) {
+			return true;
+		}
+
+		if ( is_file( $path ) || is_link( $path ) ) {
+			@chmod( $path, 0644 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			return @unlink( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		}
+
+		if ( ! is_dir( $path ) ) {
+			return false;
+		}
+
+		try {
+			$iterator = new RecursiveIteratorIterator(
+				new RecursiveDirectoryIterator( $path, FilesystemIterator::SKIP_DOTS ),
+				RecursiveIteratorIterator::CHILD_FIRST
+			);
+			foreach ( $iterator as $item ) {
+				$item_path = $item->getPathname();
+				if ( $item->isDir() ) {
+					@chmod( $item_path, 0755 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+					@rmdir( $item_path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+				} else {
+					@chmod( $item_path, 0644 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+					@unlink( $item_path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+				}
+			}
+			@chmod( $path, 0755 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			return @rmdir( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		} catch ( Exception $e ) {
+			return false;
+		}
 	}
 
 	/**
@@ -123,6 +368,7 @@ class Remember_Plugin_Upgrader {
 	 */
 	public static function maybe_reactivate_after_overwrite( $package, $plugin_data, $package_type ) {
 		unset( $package );
+		delete_transient( self::PENDING_KEY );
 		if ( 'plugin' !== $package_type || ! self::is_remember_plugin_data( $plugin_data ) ) {
 			return;
 		}
@@ -138,6 +384,7 @@ class Remember_Plugin_Upgrader {
 	 */
 	public static function maybe_reactivate_after_process( $upgrader, $hook_extra ) {
 		unset( $upgrader );
+		delete_transient( self::PENDING_KEY );
 		if ( empty( $hook_extra['type'] ) || 'plugin' !== $hook_extra['type'] ) {
 			return;
 		}
@@ -176,7 +423,6 @@ class Remember_Plugin_Upgrader {
 			return;
 		}
 
-		// Silent activate (same as core update iframe reactivation).
 		$result = activate_plugin( $plugin, '', $network_wide, true );
 		if ( is_wp_error( $result ) && class_exists( 'Remember_Logger', false ) ) {
 			Remember_Logger::warning(
