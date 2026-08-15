@@ -2,6 +2,13 @@
 
 All notable changes to reMember are listed here. The current plugin version is in `remember.php` (`REMEMBER_VERSION`) and [GitHub Releases](https://github.com/ctucker1984/remember/releases).
 
+## 1.3.4
+
+- **Enhancement:** Admin-assignable unique alphanumeric member number; members see it read-only. Closes [#21](https://github.com/ctucker1984/remember/issues/21).
+- **Enhancement:** Event apply and dashboard application edits require profile-currency confirmation (phrase + profile saved within 24 hours); profile `updated_by` audit fields. Closes [#22](https://github.com/ctucker1984/remember/issues/22).
+- **Fix:** Interests editors (profile, registration, admin) show Visual only — Code tab hidden.
+- **Fix:** Long profile edit forms no longer clip custom fields or force horizontal overflow.
+
 ## 1.3.3
 
 - **Security:** Attendees-only staff can no longer open arbitrary member profiles via `?view=` ID; detail and POST actions use the same shared-event scope as the list.
