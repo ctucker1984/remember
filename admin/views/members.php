@@ -387,7 +387,7 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 		);
 
 		// Emergency contact stays unchanged unless the editor is allowed to see it.
-		if ( current_user_can( 'remember_read_emergency_contact' ) ) {
+		if ( current_user_can( 'remember_access_emergency_contact' ) ) {
 			$profile_data['emergency_contact_first']        = isset( $_POST['emergency_contact_first'] ) ? sanitize_text_field( wp_unslash( $_POST['emergency_contact_first'] ) ) : '';
 			$profile_data['emergency_contact_last']         = isset( $_POST['emergency_contact_last'] ) ? sanitize_text_field( wp_unslash( $_POST['emergency_contact_last'] ) ) : '';
 			$profile_data['emergency_contact_phone']        = isset( $_POST['emergency_contact_phone'] ) ? sanitize_text_field( wp_unslash( $_POST['emergency_contact_phone'] ) ) : '';
@@ -439,7 +439,7 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 			
 			// Update dietary / medical / allergies only when the editor may see health data.
 			// Without the cap, skip these writes so a forged POST cannot wipe or change them.
-			if ( current_user_can( 'remember_read_health' ) ) {
+			if ( current_user_can( 'remember_access_health' ) ) {
 				$wpdb->delete( $wpdb->prefix . 'remember_member_dietary_restrictions', array( 'member_id' => $member_id ) );
 				if ( isset( $_POST['dietary_restrictions'] ) && is_array( $_POST['dietary_restrictions'] ) ) {
 					foreach ( $_POST['dietary_restrictions'] as $restriction_id ) {

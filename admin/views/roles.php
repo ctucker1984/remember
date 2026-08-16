@@ -123,8 +123,89 @@ if ( isset( $_POST['remember_role_action'] ) && check_admin_referer( 'remember_r
 $event_roles = $role_model->get_event_roles();
 $system_roles = $role_model->get_system_roles();
 
-// Get all available capabilities
-$all_capabilities = Remember_Capabilities::get_all_capabilities();
+// Capability matrix data for add / edit forms
+$capability_modules   = Remember_Capabilities::get_capability_modules();
+$capability_actions   = Remember_Capabilities::get_capability_actions();
+$special_capabilities = Remember_Capabilities::get_special_capabilities();
+
+/**
+ * Render the Create / Read / Edit / Delete matrix plus special caps.
+ *
+ * @param array<int, string> $selected Capability keys currently granted.
+ * @return void
+ */
+$remember_render_capability_matrix = function ( $selected = array() ) use ( $capability_modules, $capability_actions, $special_capabilities ) {
+	$selected = is_array( $selected ) ? $selected : array();
+	?>
+	<div class="remember-cap-matrix-wrap">
+		<table class="remember-cap-matrix" role="grid">
+			<thead>
+				<tr>
+					<th scope="col" class="remember-cap-matrix__module"><?php esc_html_e( 'Capability', 'remember' ); ?></th>
+					<?php foreach ( $capability_actions as $action_label ) : ?>
+						<th scope="col" class="remember-cap-matrix__action"><?php echo esc_html( $action_label ); ?></th>
+					<?php endforeach; ?>
+				</tr>
+			</thead>
+			<tbody>
+				<?php foreach ( $capability_modules as $module => $module_label ) : ?>
+					<tr>
+						<th scope="row"><?php echo esc_html( $module_label ); ?></th>
+						<?php foreach ( $capability_actions as $action => $action_label ) : ?>
+							<?php
+							$cap = "remember_{$action}_{$module}";
+							$id  = 'cap_' . $cap;
+							?>
+							<td>
+								<label class="screen-reader-text" for="<?php echo esc_attr( $id ); ?>">
+									<?php
+									printf(
+										/* translators: 1: action (Create/Read/Edit/Delete), 2: module name */
+										esc_html__( '%1$s %2$s', 'remember' ),
+										esc_html( $action_label ),
+										esc_html( $module_label )
+									);
+									?>
+								</label>
+								<input
+									type="checkbox"
+									id="<?php echo esc_attr( $id ); ?>"
+									name="capabilities[]"
+									value="<?php echo esc_attr( $cap ); ?>"
+									<?php checked( in_array( $cap, $selected, true ) ); ?>
+								>
+							</td>
+						<?php endforeach; ?>
+					</tr>
+				<?php endforeach; ?>
+			</tbody>
+		</table>
+
+		<?php if ( ! empty( $special_capabilities ) ) : ?>
+			<div class="remember-cap-special">
+				<h4 class="remember-cap-special__title"><?php esc_html_e( 'Other', 'remember' ); ?></h4>
+				<ul class="remember-cap-special__list">
+					<?php foreach ( $special_capabilities as $cap => $label ) : ?>
+						<?php $id = 'cap_' . $cap; ?>
+						<li>
+							<label for="<?php echo esc_attr( $id ); ?>">
+								<input
+									type="checkbox"
+									id="<?php echo esc_attr( $id ); ?>"
+									name="capabilities[]"
+									value="<?php echo esc_attr( $cap ); ?>"
+									<?php checked( in_array( $cap, $selected, true ) ); ?>
+								>
+								<?php echo esc_html( $label ); ?>
+							</label>
+						</li>
+					<?php endforeach; ?>
+				</ul>
+			</div>
+		<?php endif; ?>
+	</div>
+	<?php
+};
 
 // Check if editing capabilities for a role
 $editing_role_id = isset( $_GET['edit_capabilities'] ) ? absint( $_GET['edit_capabilities'] ) : 0;
@@ -185,14 +266,7 @@ $editing_role_capabilities = $editing_role ? $role_model->get_capabilities( $edi
 						<th><label><?php esc_html_e( 'Capabilities', 'remember' ); ?></label></th>
 						<td>
 							<p class="description"><?php esc_html_e( 'Select capabilities for this role. System roles typically have capabilities; event roles typically do not.', 'remember' ); ?></p>
-							<fieldset style="border: 1px solid #ccd0d4; padding: 10px; margin-top: 10px;">
-								<?php foreach ( $all_capabilities as $cap => $label ) : ?>
-									<label style="display: block; margin: 5px 0;">
-										<input type="checkbox" name="capabilities[]" value="<?php echo esc_attr( $cap ); ?>">
-										<?php echo esc_html( $label ); ?>
-									</label>
-								<?php endforeach; ?>
-							</fieldset>
+							<?php $remember_render_capability_matrix( array() ); ?>
 						</td>
 					</tr>
 				</table>
@@ -364,14 +438,7 @@ $editing_role_capabilities = $editing_role ? $role_model->get_capabilities( $edi
 						<th><label><?php esc_html_e( 'Capabilities', 'remember' ); ?></label></th>
 						<td>
 							<p class="description"><?php esc_html_e( 'Select the capabilities this role should have. Members with this role will be able to perform these actions.', 'remember' ); ?></p>
-							<fieldset style="border: 1px solid #ccd0d4; padding: 10px; margin-top: 10px;">
-								<?php foreach ( $all_capabilities as $cap => $label ) : ?>
-									<label style="display: block; margin: 5px 0;">
-										<input type="checkbox" name="capabilities[]" value="<?php echo esc_attr( $cap ); ?>" <?php checked( in_array( $cap, $editing_role_capabilities, true ) ); ?>>
-										<?php echo esc_html( $label ); ?>
-									</label>
-								<?php endforeach; ?>
-							</fieldset>
+							<?php $remember_render_capability_matrix( $editing_role_capabilities ); ?>
 						</td>
 					</tr>
 				</table>

@@ -101,7 +101,7 @@ $remember_print_name  = $view_user ? (string) $view_user->display_name : '';
 									<span class="remember-print-menu__label"><?php esc_html_e( 'Confidential profile', 'remember' ); ?></span>
 									<span class="remember-print-menu__hint">
 										<?php
-										if ( current_user_can( 'remember_read_emergency_contact' ) ) {
+										if ( current_user_can( 'remember_access_emergency_contact' ) ) {
 											esc_html_e( 'Staff record, including emergency contact', 'remember' );
 										} else {
 											esc_html_e( 'Staff record of what you are allowed to see', 'remember' );
@@ -284,7 +284,7 @@ $remember_print_name  = $view_user ? (string) $view_user->display_name : '';
 				</table>
 			</div>
 
-			<?php if ( current_user_can( 'remember_read_emergency_contact' ) ) : ?>
+			<?php if ( current_user_can( 'remember_access_emergency_contact' ) ) : ?>
 			<!-- Emergency Contact — confidential printout only; excluded from the event card. -->
 			<div class="remember-member-detail-section remember-member-detail-emergency-card">
 				<h3><?php esc_html_e( 'Emergency Contact', 'remember' ); ?></h3>
@@ -315,7 +315,7 @@ $remember_print_name  = $view_user ? (string) $view_user->display_name : '';
 			</div>
 			<?php endif; ?>
 
-			<?php if ( current_user_can( 'remember_read_health' ) ) : ?>
+			<?php if ( current_user_can( 'remember_access_health' ) ) : ?>
 			<!-- Dietary, Allergies, Medical: stacked in the third column; always show all three cards -->
 			<div class="remember-member-detail-health-column">
 				<div class="remember-member-detail-section remember-member-detail-health-card">

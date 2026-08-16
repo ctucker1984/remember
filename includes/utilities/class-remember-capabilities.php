@@ -20,6 +20,57 @@ if ( ! defined( 'WPINC' ) ) {
 class Remember_Capabilities {
 
 	/**
+	 * Modules that expose Create / Read / Update / Delete capabilities.
+	 *
+	 * @return array<string, string> module_key => label
+	 */
+	public static function get_capability_modules() {
+		return array(
+			'members'      => __( 'Members', 'remember' ),
+			'attendees'    => __( 'Attendees', 'remember' ),
+			'events'       => __( 'Events', 'remember' ),
+			'applications' => __( 'Applications', 'remember' ),
+			'vetting'      => __( 'Vetting', 'remember' ),
+			'billing'      => __( 'Billing', 'remember' ),
+			'locations'    => __( 'Locations', 'remember' ),
+			'roles'        => __( 'Roles', 'remember' ),
+		);
+	}
+
+	/**
+	 * CRUD actions shown as matrix columns.
+	 *
+	 * Keys match the capability suffix (remember_{action}_{module}). Column
+	 * labels use "Edit" for update because that is how staff think about it.
+	 *
+	 * @return array<string, string> action_key => column label
+	 */
+	public static function get_capability_actions() {
+		return array(
+			'create' => __( 'Create', 'remember' ),
+			'read'   => __( 'Read', 'remember' ),
+			'update' => __( 'Edit', 'remember' ),
+			'delete' => __( 'Delete', 'remember' ),
+		);
+	}
+
+	/**
+	 * Non-CRUD capabilities shown as a flat list under the matrix.
+	 *
+	 * @return array<string, string> capability => label
+	 */
+	public static function get_special_capabilities() {
+		return array(
+			'remember_access_settings'        => __( 'Access Settings', 'remember' ),
+			'remember_view_reports'           => __( 'View Reports', 'remember' ),
+			'remember_event_data_export'      => __( 'Export Event Data', 'remember' ),
+			'remember_import_export'          => __( 'Import / Export Data', 'remember' ),
+			'remember_access_emergency_contact' => __( 'Access Emergency Contact', 'remember' ),
+			'remember_access_health'            => __( 'Access Health Information', 'remember' ),
+		);
+	}
+
+	/**
 	 * Get all available plugin capabilities.
 	 *
 	 * @return array Array of capability => label pairs.
@@ -27,34 +78,14 @@ class Remember_Capabilities {
 	public static function get_all_capabilities() {
 		$capabilities = array();
 
-		// CRUD capabilities for each module
-		$modules = array(
-			'members'     => __( 'Members', 'remember' ),
-			'attendees'   => __( 'Attendees', 'remember' ),
-			'events'      => __( 'Events', 'remember' ),
-			'applications' => __( 'Applications', 'remember' ),
-			'vetting'     => __( 'Vetting', 'remember' ),
-			'billing'     => __( 'Billing', 'remember' ),
-			'locations'   => __( 'Locations', 'remember' ),
-			'roles'       => __( 'Roles', 'remember' ),
-		);
-
-		foreach ( $modules as $module => $label ) {
+		foreach ( self::get_capability_modules() as $module => $label ) {
 			$capabilities[ "remember_create_{$module}" ] = sprintf( __( 'Create %s', 'remember' ), $label );
 			$capabilities[ "remember_read_{$module}" ]   = sprintf( __( 'Read %s', 'remember' ), $label );
 			$capabilities[ "remember_update_{$module}" ] = sprintf( __( 'Update %s', 'remember' ), $label );
 			$capabilities[ "remember_delete_{$module}" ] = sprintf( __( 'Delete %s', 'remember' ), $label );
 		}
 
-		// Non-CRUD capabilities
-		$capabilities['remember_access_settings']         = __( 'Access Settings', 'remember' );
-		$capabilities['remember_view_reports']            = __( 'View Reports', 'remember' );
-		$capabilities['remember_event_data_export']       = __( 'Export Event Data', 'remember' );
-		$capabilities['remember_import_export']           = __( 'Import / Export Data', 'remember' );
-		$capabilities['remember_read_emergency_contact']  = __( 'Read Emergency Contact', 'remember' );
-		$capabilities['remember_read_health']             = __( 'Read Health Information', 'remember' );
-
-		return $capabilities;
+		return array_merge( $capabilities, self::get_special_capabilities() );
 	}
 
 	/**

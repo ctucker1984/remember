@@ -346,7 +346,7 @@ if ( $photo_max_bytes < 1 ) {
 	echo '</table>';
 	?>
 	
-	<?php if ( current_user_can( 'remember_read_emergency_contact' ) ) : ?>
+	<?php if ( current_user_can( 'remember_access_emergency_contact' ) ) : ?>
 	<!-- Emergency Contact -->
 	<h3><?php esc_html_e( 'Emergency Contact', 'remember' ); ?></h3>
 	<table class="form-table">
@@ -400,7 +400,7 @@ if ( $photo_max_bytes < 1 ) {
 		</table>
 	<?php endif; ?>
 	
-	<?php if ( current_user_can( 'remember_read_health' ) ) : ?>
+	<?php if ( current_user_can( 'remember_access_health' ) ) : ?>
 	<!-- Dietary Restrictions -->
 	<?php if ( ! empty( $dietary_restrictions ) ) : ?>
 		<h3><?php esc_html_e( 'Dietary Restrictions', 'remember' ); ?></h3>

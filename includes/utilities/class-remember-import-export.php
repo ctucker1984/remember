@@ -72,10 +72,10 @@ class Remember_Import_Export {
 			'10',
 			'Gaming, Hiking',
 		);
-		if ( current_user_can( 'remember_read_emergency_contact' ) ) {
+		if ( current_user_can( 'remember_access_emergency_contact' ) ) {
 			$example = array_merge( $example, array( 'Jane', 'Doe', '+15559876543', 'Spouse' ) );
 		}
-		if ( current_user_can( 'remember_read_health' ) ) {
+		if ( current_user_can( 'remember_access_health' ) ) {
 			$example = array_merge( $example, array( 'Vegetarian', 'Peanuts', '' ) );
 		}
 		while ( count( $example ) < count( $headers ) ) {
@@ -121,7 +121,7 @@ class Remember_Import_Export {
 			'Shoe Size',
 			'Interests',
 		);
-		if ( current_user_can( 'remember_read_emergency_contact' ) ) {
+		if ( current_user_can( 'remember_access_emergency_contact' ) ) {
 			$headers = array_merge(
 				$headers,
 				array(
@@ -132,7 +132,7 @@ class Remember_Import_Export {
 				)
 			);
 		}
-		if ( current_user_can( 'remember_read_health' ) ) {
+		if ( current_user_can( 'remember_access_health' ) ) {
 			$headers = array_merge(
 				$headers,
 				array(
@@ -217,13 +217,13 @@ class Remember_Import_Export {
 				$profile->shoe_size ?? '',
 				$profile->interests ?? '',
 			);
-			if ( current_user_can( 'remember_read_emergency_contact' ) ) {
+			if ( current_user_can( 'remember_access_emergency_contact' ) ) {
 				$row[] = $profile->emergency_contact_first ?? '';
 				$row[] = $profile->emergency_contact_last ?? '';
 				$row[] = $profile->emergency_contact_phone ?? '';
 				$row[] = $profile->emergency_contact_relationship ?? '';
 			}
-			if ( current_user_can( 'remember_read_health' ) ) {
+			if ( current_user_can( 'remember_access_health' ) ) {
 				$row[] = self::member_list_labels( (int) $member->member_id, 'dietary' );
 				$row[] = self::member_list_labels( (int) $member->member_id, 'allergies' );
 				$row[] = self::member_list_labels( (int) $member->member_id, 'medical' );
@@ -744,7 +744,7 @@ class Remember_Import_Export {
 				)
 			);
 
-			if ( current_user_can( 'remember_read_emergency_contact' ) ) {
+			if ( current_user_can( 'remember_access_emergency_contact' ) ) {
 				$profile_data['emergency_contact_first']        = $row_data['Emergency Contact First'] ?? '';
 				$profile_data['emergency_contact_last']         = $row_data['Emergency Contact Last'] ?? '';
 				$profile_data['emergency_contact_phone']        = $row_data['Emergency Contact Phone'] ?? '';
@@ -766,7 +766,7 @@ class Remember_Import_Export {
 				);
 			}
 
-			if ( current_user_can( 'remember_read_health' ) ) {
+			if ( current_user_can( 'remember_access_health' ) ) {
 				if ( array_key_exists( 'Dietary Restrictions', $row_data ) ) {
 					self::sync_member_list_from_csv( (int) $user_id, 'dietary', (string) $row_data['Dietary Restrictions'] );
 				}
@@ -1136,7 +1136,7 @@ class Remember_Import_Export {
 			'Pants Size',
 			'Shoe Size',
 		);
-		if ( current_user_can( 'remember_read_emergency_contact' ) ) {
+		if ( current_user_can( 'remember_access_emergency_contact' ) ) {
 			$headers = array_merge(
 				$headers,
 				array(
@@ -1147,7 +1147,7 @@ class Remember_Import_Export {
 				)
 			);
 		}
-		if ( current_user_can( 'remember_read_health' ) ) {
+		if ( current_user_can( 'remember_access_health' ) ) {
 			$headers = array_merge(
 				$headers,
 				array(
@@ -1257,13 +1257,13 @@ class Remember_Import_Export {
 				$profile->pants_size ?? '',
 				$profile->shoe_size ?? '',
 			);
-			if ( current_user_can( 'remember_read_emergency_contact' ) ) {
+			if ( current_user_can( 'remember_access_emergency_contact' ) ) {
 				$row[] = $profile->emergency_contact_first ?? '';
 				$row[] = $profile->emergency_contact_last ?? '';
 				$row[] = $profile->emergency_contact_phone ?? '';
 				$row[] = $profile->emergency_contact_relationship ?? '';
 			}
-			if ( current_user_can( 'remember_read_health' ) ) {
+			if ( current_user_can( 'remember_access_health' ) ) {
 				$row[] = self::member_list_labels( (int) $app->member_id, 'dietary' );
 				$row[] = self::member_list_labels( (int) $app->member_id, 'allergies' );
 				$row[] = self::member_list_labels( (int) $app->member_id, 'medical' );

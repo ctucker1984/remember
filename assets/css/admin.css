@@ -249,6 +249,92 @@
 	margin-bottom: 20px;
 }
 
+/* Role capability matrix: modules as rows, Create / Read / Edit / Delete as columns. */
+.remember-cap-matrix-wrap {
+	margin-top: 10px;
+	max-width: 640px;
+}
+
+.remember-cap-matrix {
+	width: 100%;
+	border-collapse: collapse;
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+	overflow: hidden;
+}
+
+.remember-cap-matrix th,
+.remember-cap-matrix td {
+	padding: 8px 10px;
+	border-bottom: 1px solid #e0e0e0;
+	text-align: center;
+	vertical-align: middle;
+}
+
+.remember-cap-matrix thead th {
+	background: #f6f7f7;
+	font-weight: 600;
+	font-size: 12px;
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
+	color: #1d2327;
+}
+
+.remember-cap-matrix__module {
+	text-align: left !important;
+	width: 40%;
+}
+
+.remember-cap-matrix tbody th {
+	text-align: left;
+	font-weight: 500;
+	color: #1d2327;
+}
+
+.remember-cap-matrix tbody tr:nth-child(even) {
+	background: #fafafa;
+}
+
+.remember-cap-matrix tbody tr:last-child th,
+.remember-cap-matrix tbody tr:last-child td {
+	border-bottom: 0;
+}
+
+.remember-cap-matrix input[type="checkbox"] {
+	margin: 0;
+}
+
+.remember-cap-special {
+	margin-top: 16px;
+	padding: 12px 14px;
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+}
+
+.remember-cap-special__title {
+	margin: 0 0 8px;
+	font-size: 13px;
+	font-weight: 600;
+}
+
+.remember-cap-special__list {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+	gap: 6px 16px;
+}
+
+.remember-cap-special__list label {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	margin: 0;
+}
+
 .remember-platforms-columns {
 	display: grid;
 	grid-template-columns: repeat(2, minmax(0, 1fr));
