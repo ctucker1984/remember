@@ -797,35 +797,66 @@ class Remember_Profile_Questions {
 	 * @return bool True if any rows were rendered.
 	 */
 	public static function render_detail_rows( $member_id ) {
-		$model = self::question_model();
-		$qs    = $model->get_all_ordered();
-		if ( empty( $qs ) ) {
+		$rows = self::detail_rows_for( $member_id );
+		if ( empty( $rows ) ) {
 			return false;
 		}
-		$map = self::get_responses_map( $member_id );
-		$any = false;
-		foreach ( $qs as $q ) {
-			if ( empty( $q->is_active ) && ! isset( $map[ (int) $q->question_id ] ) ) {
-				continue;
+		echo '<table class="form-table" role="presentation"><tbody>';
+		foreach ( $rows as $row ) {
+			$q       = $row['question'];
+			$display = self::display_value( $q, $row['value'] );
+			// The event-card printout keeps only rows an admin has opted in.
+			$classes = empty( $q->show_on_event_card ) ? 'remember-pq-row' : 'remember-pq-row remember-pq-row--event';
+			echo '<tr class="' . esc_attr( $classes ) . '"><th scope="row">' . esc_html( $q->label ) . '</th><td>';
+			echo '' !== $display ? esc_html( $display ) : '<span class="description">—</span>';
+			echo '</td></tr>';
+		}
+		echo '</tbody></table>';
+		return true;
+	}
+
+	/**
+	 * Whether any of this member's custom answers are cleared for the event card.
+	 *
+	 * @param int $member_id Member ID.
+	 * @return bool
+	 */
+	public static function has_event_card_rows( $member_id ) {
+		foreach ( self::detail_rows_for( $member_id ) as $row ) {
+			if ( ! empty( $row['question']->show_on_event_card ) ) {
+				return true;
 			}
+		}
+		return false;
+	}
+
+	/**
+	 * Questions worth showing on a member's detail view, paired with their answers.
+	 *
+	 * A retired question stays visible only while the member still has an answer on file.
+	 *
+	 * @param int $member_id Member ID.
+	 * @return array<int, array{question:object,value:string}>
+	 */
+	private static function detail_rows_for( $member_id ) {
+		$qs = self::question_model()->get_all_ordered();
+		if ( empty( $qs ) ) {
+			return array();
+		}
+		$map  = self::get_responses_map( $member_id );
+		$rows = array();
+		foreach ( $qs as $q ) {
 			$qid = (int) $q->question_id;
 			$val = isset( $map[ $qid ] ) ? $map[ $qid ] : '';
 			if ( '' === $val && empty( $q->is_active ) ) {
 				continue;
 			}
-			if ( ! $any ) {
-				echo '<table class="form-table" role="presentation"><tbody>';
-				$any = true;
-			}
-			$display = self::display_value( $q, $val );
-			echo '<tr><th scope="row">' . esc_html( $q->label ) . '</th><td>';
-			echo '' !== $display ? esc_html( $display ) : '<span class="description">—</span>';
-			echo '</td></tr>';
+			$rows[] = array(
+				'question' => $q,
+				'value'    => $val,
+			);
 		}
-		if ( $any ) {
-			echo '</tbody></table>';
-		}
-		return $any;
+		return $rows;
 	}
 
 	/**

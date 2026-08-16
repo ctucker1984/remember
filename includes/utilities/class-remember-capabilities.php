@@ -47,10 +47,12 @@ class Remember_Capabilities {
 		}
 
 		// Non-CRUD capabilities
-		$capabilities['remember_access_settings']    = __( 'Access Settings', 'remember' );
-		$capabilities['remember_view_reports']       = __( 'View Reports', 'remember' );
-		$capabilities['remember_event_data_export']  = __( 'Export Event Data', 'remember' );
-		$capabilities['remember_import_export']      = __( 'Import / Export Data', 'remember' );
+		$capabilities['remember_access_settings']         = __( 'Access Settings', 'remember' );
+		$capabilities['remember_view_reports']            = __( 'View Reports', 'remember' );
+		$capabilities['remember_event_data_export']       = __( 'Export Event Data', 'remember' );
+		$capabilities['remember_import_export']           = __( 'Import / Export Data', 'remember' );
+		$capabilities['remember_read_emergency_contact']  = __( 'Read Emergency Contact', 'remember' );
+		$capabilities['remember_read_health']             = __( 'Read Health Information', 'remember' );
 
 		return $capabilities;
 	}

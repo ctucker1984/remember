@@ -102,6 +102,95 @@
 			$(this).prop('disabled', true);
 		});
 
+		// Member profile print formats. The choice only sets data-print-mode; the
+		// print stylesheet decides what each format shows. document.title becomes
+		// the Save-as-PDF filename in Chromium/Safari.
+		var $printMenu = $('.remember-print-menu');
+		if ($printMenu.length) {
+			var $printToggle = $printMenu.find('.remember-print-menu__toggle');
+			var $printList = $printMenu.find('.remember-print-menu__list');
+			var $printDetail = $('.remember-member-detail');
+			var defaultPrintMode = $printDetail.attr('data-print-mode') || 'confidential';
+			var originalDocumentTitle = document.title;
+
+			var closePrintMenu = function() {
+				$printList.prop('hidden', true);
+				$printToggle.attr('aria-expanded', 'false');
+			};
+
+			var sanitizePrintFilenamePart = function(value) {
+				return String(value || 'member')
+					.trim()
+					.replace(/\s+/g, '_')
+					.replace(/[\\/:*?"<>|]+/g, '')
+					.replace(/_+/g, '_')
+					.replace(/^_|_$/g, '') || 'member';
+			};
+
+			var printDateStamp = function() {
+				var now = new Date();
+				var yy = String(now.getFullYear()).slice(-2);
+				var mm = String(now.getMonth() + 1).padStart(2, '0');
+				var dd = String(now.getDate()).padStart(2, '0');
+				return yy + mm + dd;
+			};
+
+			var setPrintDocumentTitle = function(mode) {
+				var name = sanitizePrintFilenamePart($printDetail.attr('data-print-display-name'));
+				var stamp = printDateStamp();
+				if (mode === 'event') {
+					document.title = name + '_event_card_' + stamp;
+				} else {
+					document.title = name + '_member_full_profile_' + stamp;
+				}
+			};
+
+			$printToggle.on('click', function(e) {
+				e.preventDefault();
+				if ($printToggle.attr('aria-expanded') === 'true') {
+					closePrintMenu();
+					return;
+				}
+				$printList.prop('hidden', false);
+				$printToggle.attr('aria-expanded', 'true');
+			});
+
+			$printList.on('click', 'button[data-print-mode]', function(e) {
+				e.preventDefault();
+				var mode = $(this).attr('data-print-mode');
+				$printDetail.attr('data-print-mode', mode);
+				closePrintMenu();
+				setPrintDocumentTitle(mode);
+				// Yield once so the new mode is styled before the print snapshot.
+				window.setTimeout(function() {
+					window.print();
+				}, 0);
+			});
+
+			$(document).on('click', function(e) {
+				if (!$(e.target).closest('.remember-print-menu').length) {
+					closePrintMenu();
+				}
+			});
+
+			$(document).on('keydown', function(e) {
+				if (e.key === 'Escape') {
+					closePrintMenu();
+				}
+			});
+
+			// Ctrl/Cmd+P still gets a useful filename for the default confidential sheet.
+			$(window).on('beforeprint', function() {
+				setPrintDocumentTitle($printDetail.attr('data-print-mode') || defaultPrintMode);
+			});
+
+			// Return to the default format so an unprompted Ctrl-P stays predictable.
+			$(window).on('afterprint', function() {
+				$printDetail.attr('data-print-mode', defaultPrintMode);
+				document.title = originalDocumentTitle;
+			});
+		}
+
 		if (typeof window.rememberInitTimezoneComboboxes === 'function') {
 			window.rememberInitTimezoneComboboxes();
 		}

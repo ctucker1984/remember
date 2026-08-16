@@ -71,14 +71,13 @@ class Remember_Import_Export {
 			'L',
 			'10',
 			'Gaming, Hiking',
-			'Jane',
-			'Doe',
-			'+15559876543',
-			'Spouse',
-			'Vegetarian',
-			'Peanuts',
-			'',
 		);
+		if ( current_user_can( 'remember_read_emergency_contact' ) ) {
+			$example = array_merge( $example, array( 'Jane', 'Doe', '+15559876543', 'Spouse' ) );
+		}
+		if ( current_user_can( 'remember_read_health' ) ) {
+			$example = array_merge( $example, array( 'Vegetarian', 'Peanuts', '' ) );
+		}
 		while ( count( $example ) < count( $headers ) ) {
 			$example[] = '';
 		}
@@ -90,6 +89,9 @@ class Remember_Import_Export {
 
 	/**
 	 * Member CSV column headers (core + custom profile question short names).
+	 *
+	 * Emergency contact and health columns are included only when the current
+	 * user may read them, so exports and templates never leak those fields.
 	 *
 	 * @return array<int, string>
 	 */
@@ -118,14 +120,28 @@ class Remember_Import_Export {
 			'Pants Size',
 			'Shoe Size',
 			'Interests',
-			'Emergency Contact First',
-			'Emergency Contact Last',
-			'Emergency Contact Phone',
-			'Emergency Contact Relationship',
-			'Dietary Restrictions',
-			'Allergies',
-			'Medical Accommodations',
 		);
+		if ( current_user_can( 'remember_read_emergency_contact' ) ) {
+			$headers = array_merge(
+				$headers,
+				array(
+					'Emergency Contact First',
+					'Emergency Contact Last',
+					'Emergency Contact Phone',
+					'Emergency Contact Relationship',
+				)
+			);
+		}
+		if ( current_user_can( 'remember_read_health' ) ) {
+			$headers = array_merge(
+				$headers,
+				array(
+					'Dietary Restrictions',
+					'Allergies',
+					'Medical Accommodations',
+				)
+			);
+		}
 		return array_merge( $headers, Remember_Profile_Questions::export_field_keys() );
 	}
 
@@ -200,14 +216,18 @@ class Remember_Import_Export {
 				$profile->pants_size ?? '',
 				$profile->shoe_size ?? '',
 				$profile->interests ?? '',
-				$profile->emergency_contact_first ?? '',
-				$profile->emergency_contact_last ?? '',
-				$profile->emergency_contact_phone ?? '',
-				$profile->emergency_contact_relationship ?? '',
-				self::member_list_labels( (int) $member->member_id, 'dietary' ),
-				self::member_list_labels( (int) $member->member_id, 'allergies' ),
-				self::member_list_labels( (int) $member->member_id, 'medical' ),
 			);
+			if ( current_user_can( 'remember_read_emergency_contact' ) ) {
+				$row[] = $profile->emergency_contact_first ?? '';
+				$row[] = $profile->emergency_contact_last ?? '';
+				$row[] = $profile->emergency_contact_phone ?? '';
+				$row[] = $profile->emergency_contact_relationship ?? '';
+			}
+			if ( current_user_can( 'remember_read_health' ) ) {
+				$row[] = self::member_list_labels( (int) $member->member_id, 'dietary' );
+				$row[] = self::member_list_labels( (int) $member->member_id, 'allergies' );
+				$row[] = self::member_list_labels( (int) $member->member_id, 'medical' );
+			}
 			foreach ( $field_keys as $fkey ) {
 				$row[] = isset( $custom[ $fkey ] ) ? $custom[ $fkey ] : '';
 			}
@@ -719,14 +739,17 @@ class Remember_Import_Export {
 					'pants_size'                     => Remember_Clothing_Sizes::sanitize( 'pants', $row_data['Pants Size'] ?? '' ),
 					'shoe_size'                      => Remember_Clothing_Sizes::sanitize( 'shoe', $row_data['Shoe Size'] ?? '' ),
 					'interests'                      => isset( $row_data['Interests'] ) ? wp_kses_post( $row_data['Interests'] ) : '',
-					'emergency_contact_first'        => $row_data['Emergency Contact First'] ?? '',
-					'emergency_contact_last'         => $row_data['Emergency Contact Last'] ?? '',
-					'emergency_contact_phone'        => $row_data['Emergency Contact Phone'] ?? '',
-					'emergency_contact_relationship' => $row_data['Emergency Contact Relationship'] ?? '',
 					'updated_at'                     => current_time( 'mysql' ),
 					'updated_by'                     => get_current_user_id() ? get_current_user_id() : null,
 				)
 			);
+
+			if ( current_user_can( 'remember_read_emergency_contact' ) ) {
+				$profile_data['emergency_contact_first']        = $row_data['Emergency Contact First'] ?? '';
+				$profile_data['emergency_contact_last']         = $row_data['Emergency Contact Last'] ?? '';
+				$profile_data['emergency_contact_phone']        = $row_data['Emergency Contact Phone'] ?? '';
+				$profile_data['emergency_contact_relationship'] = $row_data['Emergency Contact Relationship'] ?? '';
+			}
 			
 			if ( $profile ) {
 				$wpdb->update(
@@ -743,14 +766,16 @@ class Remember_Import_Export {
 				);
 			}
 
-			if ( array_key_exists( 'Dietary Restrictions', $row_data ) ) {
-				self::sync_member_list_from_csv( (int) $user_id, 'dietary', (string) $row_data['Dietary Restrictions'] );
-			}
-			if ( array_key_exists( 'Allergies', $row_data ) ) {
-				self::sync_member_list_from_csv( (int) $user_id, 'allergies', (string) $row_data['Allergies'] );
-			}
-			if ( array_key_exists( 'Medical Accommodations', $row_data ) ) {
-				self::sync_member_list_from_csv( (int) $user_id, 'medical', (string) $row_data['Medical Accommodations'] );
+			if ( current_user_can( 'remember_read_health' ) ) {
+				if ( array_key_exists( 'Dietary Restrictions', $row_data ) ) {
+					self::sync_member_list_from_csv( (int) $user_id, 'dietary', (string) $row_data['Dietary Restrictions'] );
+				}
+				if ( array_key_exists( 'Allergies', $row_data ) ) {
+					self::sync_member_list_from_csv( (int) $user_id, 'allergies', (string) $row_data['Allergies'] );
+				}
+				if ( array_key_exists( 'Medical Accommodations', $row_data ) ) {
+					self::sync_member_list_from_csv( (int) $user_id, 'medical', (string) $row_data['Medical Accommodations'] );
+				}
 			}
 
 			require_once plugin_dir_path( __FILE__ ) . 'class-remember-profile-questions.php';
@@ -1110,14 +1135,28 @@ class Remember_Import_Export {
 			'Shirt Size',
 			'Pants Size',
 			'Shoe Size',
-			'Emergency Contact First',
-			'Emergency Contact Last',
-			'Emergency Contact Phone',
-			'Emergency Contact Relationship',
-			'Dietary Restrictions',
-			'Allergies',
-			'Medical Accommodations',
 		);
+		if ( current_user_can( 'remember_read_emergency_contact' ) ) {
+			$headers = array_merge(
+				$headers,
+				array(
+					'Emergency Contact First',
+					'Emergency Contact Last',
+					'Emergency Contact Phone',
+					'Emergency Contact Relationship',
+				)
+			);
+		}
+		if ( current_user_can( 'remember_read_health' ) ) {
+			$headers = array_merge(
+				$headers,
+				array(
+					'Dietary Restrictions',
+					'Allergies',
+					'Medical Accommodations',
+				)
+			);
+		}
 		$headers = array_merge( $headers, $field_keys );
 		foreach ( $addons as $addon ) {
 			$headers[] = (string) $addon->merchandise_name;
@@ -1217,14 +1256,18 @@ class Remember_Import_Export {
 				$profile->shirt_size ?? '',
 				$profile->pants_size ?? '',
 				$profile->shoe_size ?? '',
-				$profile->emergency_contact_first ?? '',
-				$profile->emergency_contact_last ?? '',
-				$profile->emergency_contact_phone ?? '',
-				$profile->emergency_contact_relationship ?? '',
-				self::member_list_labels( (int) $app->member_id, 'dietary' ),
-				self::member_list_labels( (int) $app->member_id, 'allergies' ),
-				self::member_list_labels( (int) $app->member_id, 'medical' ),
 			);
+			if ( current_user_can( 'remember_read_emergency_contact' ) ) {
+				$row[] = $profile->emergency_contact_first ?? '';
+				$row[] = $profile->emergency_contact_last ?? '';
+				$row[] = $profile->emergency_contact_phone ?? '';
+				$row[] = $profile->emergency_contact_relationship ?? '';
+			}
+			if ( current_user_can( 'remember_read_health' ) ) {
+				$row[] = self::member_list_labels( (int) $app->member_id, 'dietary' );
+				$row[] = self::member_list_labels( (int) $app->member_id, 'allergies' );
+				$row[] = self::member_list_labels( (int) $app->member_id, 'medical' );
+			}
 
 			foreach ( $field_keys as $fkey ) {
 				$row[] = isset( $custom[ $fkey ] ) ? $custom[ $fkey ] : '';
@@ -1255,6 +1298,7 @@ class Remember_Import_Export {
 			'Options',
 			'Required',
 			'Active',
+			'Event Card',
 			'Order',
 		);
 	}
@@ -1282,6 +1326,7 @@ class Remember_Import_Export {
 				'vanilla|Vanilla;chocolate|Chocolate',
 				'Yes',
 				'Yes',
+				'No',
 				'10',
 			)
 		);
@@ -1327,6 +1372,7 @@ class Remember_Import_Export {
 					implode( ';', $opt_parts ),
 					! empty( $q->is_required ) ? 'Yes' : 'No',
 					! empty( $q->is_active ) ? 'Yes' : 'No',
+					! empty( $q->show_on_event_card ) ? 'Yes' : 'No',
 					isset( $q->sort_order ) ? (int) $q->sort_order : 0,
 				)
 			);
@@ -1442,6 +1488,11 @@ class Remember_Import_Export {
 			$required = self::csv_yes_no( $row_data['Required'] ?? 'No' );
 			$active   = self::csv_yes_no( $row_data['Active'] ?? 'Yes', true );
 			$order    = isset( $row_data['Order'] ) ? intval( $row_data['Order'] ) : 0;
+			// A CSV written before this column existed leaves the flag alone rather than
+			// silently clearing an admin's decision about what may be posted publicly.
+			$event_card = array_key_exists( 'Event Card', $row_data )
+				? ( self::csv_yes_no( $row_data['Event Card'] ) ? 1 : 0 )
+				: null;
 
 			$existing = $model->get_by_field_key( $key );
 			$payload  = array(
@@ -1454,6 +1505,9 @@ class Remember_Import_Export {
 				'sort_order'   => $order,
 				'updated_at'   => current_time( 'mysql' ),
 			);
+			if ( null !== $event_card ) {
+				$payload['show_on_event_card'] = $event_card;
+			}
 
 			if ( $existing ) {
 				$ok = $model->update( (int) $existing->question_id, $payload );

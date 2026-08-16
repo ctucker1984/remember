@@ -375,10 +375,6 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 			'shirt_size' => isset( $_POST['shirt_size'] ) ? Remember_Clothing_Sizes::sanitize( 'shirt', wp_unslash( $_POST['shirt_size'] ) ) : '',
 			'pants_size' => isset( $_POST['pants_size'] ) ? Remember_Clothing_Sizes::sanitize( 'pants', wp_unslash( $_POST['pants_size'] ) ) : '',
 			'shoe_size' => isset( $_POST['shoe_size'] ) ? Remember_Clothing_Sizes::sanitize( 'shoe', wp_unslash( $_POST['shoe_size'] ) ) : '',
-			'emergency_contact_first' => isset( $_POST['emergency_contact_first'] ) ? sanitize_text_field( wp_unslash( $_POST['emergency_contact_first'] ) ) : '',
-			'emergency_contact_last' => isset( $_POST['emergency_contact_last'] ) ? sanitize_text_field( wp_unslash( $_POST['emergency_contact_last'] ) ) : '',
-			'emergency_contact_phone' => isset( $_POST['emergency_contact_phone'] ) ? sanitize_text_field( wp_unslash( $_POST['emergency_contact_phone'] ) ) : '',
-			'emergency_contact_relationship' => isset( $_POST['emergency_contact_relationship'] ) ? sanitize_text_field( wp_unslash( $_POST['emergency_contact_relationship'] ) ) : '',
 			'share_email_with_events' => isset( $_POST['share_email_with_events'] ) ? 1 : 0,
 			'share_phone_with_events' => isset( $_POST['share_phone_with_events'] ) ? 1 : 0,
 			'share_location_with_events' => isset( $_POST['share_location_with_events'] ) ? 1 : 0,
@@ -389,6 +385,14 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 			'updated_at' => current_time( 'mysql' ),
 			'updated_by' => get_current_user_id(),
 		);
+
+		// Emergency contact stays unchanged unless the editor is allowed to see it.
+		if ( current_user_can( 'remember_read_emergency_contact' ) ) {
+			$profile_data['emergency_contact_first']        = isset( $_POST['emergency_contact_first'] ) ? sanitize_text_field( wp_unslash( $_POST['emergency_contact_first'] ) ) : '';
+			$profile_data['emergency_contact_last']         = isset( $_POST['emergency_contact_last'] ) ? sanitize_text_field( wp_unslash( $_POST['emergency_contact_last'] ) ) : '';
+			$profile_data['emergency_contact_phone']        = isset( $_POST['emergency_contact_phone'] ) ? sanitize_text_field( wp_unslash( $_POST['emergency_contact_phone'] ) ) : '';
+			$profile_data['emergency_contact_relationship'] = isset( $_POST['emergency_contact_relationship'] ) ? sanitize_text_field( wp_unslash( $_POST['emergency_contact_relationship'] ) ) : '';
+		}
 		
 		// Check if profile exists
 		$existing_profile = $wpdb->get_row( $wpdb->prepare(
@@ -433,45 +437,46 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 				}
 			}
 			
-			// Update dietary restrictions
-			$wpdb->delete( $wpdb->prefix . 'remember_member_dietary_restrictions', array( 'member_id' => $member_id ) );
-			if ( isset( $_POST['dietary_restrictions'] ) && is_array( $_POST['dietary_restrictions'] ) ) {
-				foreach ( $_POST['dietary_restrictions'] as $restriction_id ) {
-					$wpdb->insert(
-						$wpdb->prefix . 'remember_member_dietary_restrictions',
-						array(
-							'member_id' => $member_id,
-							'restriction_id' => absint( $restriction_id ),
-						)
-					);
+			// Update dietary / medical / allergies only when the editor may see health data.
+			// Without the cap, skip these writes so a forged POST cannot wipe or change them.
+			if ( current_user_can( 'remember_read_health' ) ) {
+				$wpdb->delete( $wpdb->prefix . 'remember_member_dietary_restrictions', array( 'member_id' => $member_id ) );
+				if ( isset( $_POST['dietary_restrictions'] ) && is_array( $_POST['dietary_restrictions'] ) ) {
+					foreach ( $_POST['dietary_restrictions'] as $restriction_id ) {
+						$wpdb->insert(
+							$wpdb->prefix . 'remember_member_dietary_restrictions',
+							array(
+								'member_id' => $member_id,
+								'restriction_id' => absint( $restriction_id ),
+							)
+						);
+					}
 				}
-			}
-			
-			// Update medical accommodations
-			$wpdb->delete( $wpdb->prefix . 'remember_member_medical_accommodations', array( 'member_id' => $member_id ) );
-			if ( isset( $_POST['medical_accommodations'] ) && is_array( $_POST['medical_accommodations'] ) ) {
-				foreach ( $_POST['medical_accommodations'] as $accommodation_id ) {
-					$wpdb->insert(
-						$wpdb->prefix . 'remember_member_medical_accommodations',
-						array(
-							'member_id' => $member_id,
-							'accommodation_id' => absint( $accommodation_id ),
-						)
-					);
+
+				$wpdb->delete( $wpdb->prefix . 'remember_member_medical_accommodations', array( 'member_id' => $member_id ) );
+				if ( isset( $_POST['medical_accommodations'] ) && is_array( $_POST['medical_accommodations'] ) ) {
+					foreach ( $_POST['medical_accommodations'] as $accommodation_id ) {
+						$wpdb->insert(
+							$wpdb->prefix . 'remember_member_medical_accommodations',
+							array(
+								'member_id' => $member_id,
+								'accommodation_id' => absint( $accommodation_id ),
+							)
+						);
+					}
 				}
-			}
-			
-			// Update allergies
-			$wpdb->delete( $wpdb->prefix . 'remember_member_allergies', array( 'member_id' => $member_id ) );
-			if ( isset( $_POST['allergies'] ) && is_array( $_POST['allergies'] ) ) {
-				foreach ( $_POST['allergies'] as $allergy_id ) {
-					$wpdb->insert(
-						$wpdb->prefix . 'remember_member_allergies',
-						array(
-							'member_id' => $member_id,
-							'allergy_id' => absint( $allergy_id ),
-						)
-					);
+
+				$wpdb->delete( $wpdb->prefix . 'remember_member_allergies', array( 'member_id' => $member_id ) );
+				if ( isset( $_POST['allergies'] ) && is_array( $_POST['allergies'] ) ) {
+					foreach ( $_POST['allergies'] as $allergy_id ) {
+						$wpdb->insert(
+							$wpdb->prefix . 'remember_member_allergies',
+							array(
+								'member_id' => $member_id,
+								'allergy_id' => absint( $allergy_id ),
+							)
+						);
+					}
 				}
 			}
 			

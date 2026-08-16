@@ -173,6 +173,8 @@ class Remember_Seeder {
 				// Members (read only)
 				'remember_read_members',
 				'remember_update_members',
+				// Dietary / allergies / medical for event planning (not emergency contact)
+				'remember_read_health',
 				// Vetting (read only)
 				'remember_read_vetting',
 			);
@@ -209,6 +211,9 @@ class Remember_Seeder {
 				// Members (read and update)
 				'remember_read_members',
 				'remember_update_members',
+				// Limited PII for vetting decisions
+				'remember_read_emergency_contact',
+				'remember_read_health',
 			);
 			$role_model->set_capabilities( $vetting_role_id, $vetting_capabilities );
 		}

@@ -4,6 +4,9 @@ All notable changes to reMember are listed here. The current plugin version is i
 
 ## 1.3.6
 
+- **Enhancement:** Member profiles print in two formats, chosen from a **Print** menu on the profile. *Confidential profile* is the full staff record — identity, profile, emergency contact, and health on page one, interests and custom fields on page two — with red CONFIDENTIAL banners repeated on every page. *Event card* is meant for posting at an event: photo, display name, event roles, interests, and custom fields, with no contact details, address, emergency contact, or health information. wp-admin chrome, action buttons, vetting cases, and the billing register stay off both. Save-as-PDF filenames use `{display_name}_member_full_profile_{yymmdd}.pdf` and `{display_name}_event_card_{yymmdd}.pdf`.
+- **Enhancement:** Custom profile fields gain a **Show on event card** setting on the Custom Profile Fields screen, off by default, so a question like "What medications do you take?" never reaches a publicly posted card unless you opt it in. The flag round-trips through the custom fields CSV. Database 1.35.0.
+- **Security:** Emergency contact and health information (dietary, allergies, medical) are gated behind `remember_read_emergency_contact` and `remember_read_health`. Without those caps, the fields are hidden on member view/edit, omitted from member and event CSV exports, and ignored on import and forged POSTs. Default grants: System Administrator and Vetting get both; Event Administrator gets health only (for event planning). Database 1.36.0.
 - **Fix:** Settings → Plugin Version reports the installed files (`REMEMBER_VERSION`), and the stored `remember_version` option is synced on admin load after Upload → Replace. Silent reactivation was leaving the option on the previous release.
 
 ## 1.3.5
