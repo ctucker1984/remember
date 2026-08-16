@@ -922,6 +922,12 @@
 	box-sizing: border-box;
 }
 
+/* Members write rich text only; the Visual/Code switcher stays out of the form. */
+.remember-profile-form-modern .wp-editor-tabs,
+.remember-register-form .wp-editor-tabs {
+	display: none;
+}
+
 .remember-form-section {
 	margin-bottom: 2em;
 	padding-bottom: 1.5em;

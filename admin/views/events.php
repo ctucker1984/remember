@@ -479,7 +479,7 @@ if ( isset( $_GET['view'] ) ) {
 									'textarea_rows' => 8,
 									'media_buttons' => false,
 									'teeny'         => true,
-									'quicktags'     => true,
+									'quicktags'     => false,
 								)
 							);
 							?>
@@ -498,7 +498,7 @@ if ( isset( $_GET['view'] ) ) {
 									'textarea_rows' => 8,
 									'media_buttons' => false,
 									'teeny'         => true,
-									'quicktags'     => true,
+									'quicktags'     => false,
 								)
 							);
 							?>
@@ -666,7 +666,7 @@ if ( isset( $_GET['view'] ) ) {
 									'textarea_rows' => 8,
 									'media_buttons' => false,
 									'teeny'         => true,
-									'quicktags'     => true,
+									'quicktags'     => false,
 								)
 							);
 							?>
@@ -685,7 +685,7 @@ if ( isset( $_GET['view'] ) ) {
 									'textarea_rows' => 8,
 									'media_buttons' => false,
 									'teeny'         => true,
-									'quicktags'     => true,
+									'quicktags'     => false,
 								)
 							);
 							?>

@@ -76,7 +76,7 @@ if ( $editing && ! empty( $revisions ) ) {
 	$latest_body = (string) $revisions[0]->body;
 }
 ?>
-<div class="wrap">
+<div class="wrap remember-agreements">
 	<h1><?php esc_html_e( 'Agreements', 'remember' ); ?></h1>
 	<p>
 		<?php esc_html_e( 'Library of versioned agreements (event rules, waivers, and similar). Attach specific revisions to events; applicants must acknowledge each one when they apply.', 'remember' ); ?>
@@ -167,6 +167,7 @@ if ( $editing && ! empty( $revisions ) ) {
 					'textarea_rows' => 12,
 					'media_buttons' => false,
 					'teeny'         => false,
+					'quicktags'     => false,
 				)
 			);
 			?>
@@ -197,6 +198,7 @@ if ( $editing && ! empty( $revisions ) ) {
 										'textarea_name' => 'body',
 										'textarea_rows' => 10,
 										'media_buttons' => false,
+										'quicktags'     => false,
 									)
 								);
 								?>

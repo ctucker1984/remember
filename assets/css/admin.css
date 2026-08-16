@@ -3,6 +3,14 @@
  * included in this file.
  */
 
+/* Staff write rich text only; the Visual/Code switcher stays out of reMember forms. */
+.remember-agreements .wp-editor-tabs,
+.remember-events .wp-editor-tabs,
+.remember-locations .wp-editor-tabs,
+.remember-member-edit-form .wp-editor-tabs {
+	display: none;
+}
+
 .remember-dashboard-stats-box {
 	background: #fff;
 	border: 1px solid #ccd0d4;

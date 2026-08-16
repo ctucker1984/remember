@@ -2,6 +2,10 @@
 
 All notable changes to reMember are listed here. The current plugin version is in `remember.php` (`REMEMBER_VERSION`) and [GitHub Releases](https://github.com/ctucker1984/remember/releases).
 
+## 1.3.5
+
+- **Fix:** Every rich-text field is Visual-only — the Visual/Code switcher is gone from events, locations, agreements, member edit, registration, and profile.
+
 ## 1.3.4
 
 - **Enhancement:** Admin-assignable unique alphanumeric member number; members see it read-only. Closes [#21](https://github.com/ctucker1984/remember/issues/21).
