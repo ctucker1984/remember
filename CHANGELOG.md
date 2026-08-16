@@ -4,6 +4,7 @@ All notable changes to reMember are listed here. The current plugin version is i
 
 ## 1.3.5
 
+- **Enhancement:** Updates arrive in the WordPress dashboard. reMember checks GitHub Releases and offers the packaged `remember-x.y.z.zip`, so Plugins → Update works like any other plugin (requires WordPress 5.8+).
 - **Fix:** Every rich-text field is Visual-only — the Visual/Code switcher is gone from events, locations, agreements, member edit, registration, and profile.
 
 ## 1.3.4
