@@ -16,6 +16,8 @@ WordPress membership communities: **members**, **events**, **locations**, **appl
 3. On activation the plugin creates tables, seeds default roles, and grants reMember capabilities to the WordPress **Administrator** role. It does **not** auto-create a member for the activating user.
 4. Use the **setup wizard** (or **reMember → Getting Started**) to create pages with shortcodes.
 
+**Updates:** From **1.3.5+**, new releases appear under **Plugins → Updates** in wp-admin (WordPress 5.8+). reMember reads [GitHub Releases](https://github.com/ctucker1984/remember/releases) and installs the packaged `remember-x.y.z.zip`. Getting to 1.3.5 itself still requires one manual upload.
+
 **Upgrade tip:** From **1.3.0+**, Upload → Replace deactivates reMember, replaces files, then reactivates. When upgrading **from ≤1.2.x**, deactivate reMember first, then upload and activate.
 
 ---

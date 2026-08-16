@@ -88,6 +88,13 @@ register_deactivation_hook( __FILE__, 'deactivate_remember' );
 require_once plugin_dir_path( __FILE__ ) . 'includes/utilities/class-remember-plugin-upgrader.php';
 Remember_Plugin_Upgrader::init();
 
+/*
+ * Offer dashboard updates from GitHub Releases. The Update URI header opts this
+ * plugin out of WordPress.org, so nothing else would ever report a new version.
+ */
+require_once plugin_dir_path( __FILE__ ) . 'includes/utilities/class-remember-github-updater.php';
+Remember_GitHub_Updater::init();
+
 /**
  * Begins execution of the plugin.
  *
