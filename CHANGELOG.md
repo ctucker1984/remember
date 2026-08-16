@@ -2,6 +2,10 @@
 
 All notable changes to reMember are listed here. The current plugin version is in `remember.php` (`REMEMBER_VERSION`) and [GitHub Releases](https://github.com/ctucker1984/remember/releases).
 
+## 1.3.6
+
+- **Fix:** Settings → Plugin Version reports the installed files (`REMEMBER_VERSION`), and the stored `remember_version` option is synced on admin load after Upload → Replace. Silent reactivation was leaving the option on the previous release.
+
 ## 1.3.5
 
 - **Enhancement:** Updates arrive in the WordPress dashboard. reMember checks GitHub Releases and offers the packaged `remember-x.y.z.zip`, so Plugins → Update works like any other plugin (requires WordPress 5.8+).
