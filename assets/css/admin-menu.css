@@ -1,0 +1,92 @@
+/**
+ * reMember admin left-menu Settings flyout.
+ */
+
+#adminmenu #toplevel_page_remember .remember-has-flyout {
+	position: relative;
+}
+
+#adminmenu #toplevel_page_remember .remember-has-flyout > a {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 6px;
+}
+
+#adminmenu #toplevel_page_remember .remember-flyout-caret {
+	margin-left: auto;
+	flex: 0 0 auto;
+	width: 16px;
+	height: 16px;
+	opacity: 0.7;
+	speak: never;
+}
+
+#adminmenu #toplevel_page_remember .remember-flyout-caret::before {
+	content: "\f345"; /* dashicons-arrow-right-alt2 */
+	font: normal 16px/1 dashicons;
+	display: block;
+}
+
+#adminmenu #toplevel_page_remember .remember-settings-flyout {
+	display: none;
+	position: absolute;
+	left: 100%;
+	top: -1px;
+	z-index: 100000;
+	min-width: 190px;
+	margin: 0;
+	padding: 4px 0;
+	list-style: none;
+	background: #2c3338;
+	border: 1px solid #1d2327;
+	box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+#adminmenu #toplevel_page_remember .remember-settings-flyout a {
+	display: block;
+	padding: 7px 12px;
+	line-height: 1.4;
+	color: #f0f0f1;
+	text-decoration: none;
+	white-space: nowrap;
+}
+
+#adminmenu #toplevel_page_remember .remember-settings-flyout a:hover,
+#adminmenu #toplevel_page_remember .remember-settings-flyout a:focus {
+	color: #72aee6;
+	background: #2271b1;
+	box-shadow: inset 4px 0 0 0 #72aee6;
+}
+
+#adminmenu #toplevel_page_remember .remember-settings-flyout .current a,
+#adminmenu #toplevel_page_remember .remember-settings-flyout a[aria-current="page"] {
+	color: #fff;
+	font-weight: 600;
+}
+
+#adminmenu #toplevel_page_remember .remember-has-flyout:hover > .remember-settings-flyout,
+#adminmenu #toplevel_page_remember .remember-has-flyout:focus-within > .remember-settings-flyout,
+#adminmenu #toplevel_page_remember .remember-has-flyout.is-flyout-open > .remember-settings-flyout {
+	display: block;
+}
+
+@media screen and (max-width: 782px) {
+	#adminmenu #toplevel_page_remember .remember-settings-flyout {
+		position: static;
+		display: none;
+		min-width: 0;
+		border: 0;
+		box-shadow: none;
+		background: transparent;
+		padding: 0 0 0 12px;
+	}
+
+	#adminmenu #toplevel_page_remember .remember-has-flyout.is-flyout-open > .remember-settings-flyout {
+		display: block;
+	}
+
+	#adminmenu #toplevel_page_remember .remember-settings-flyout a {
+		padding: 8px 12px;
+	}
+}

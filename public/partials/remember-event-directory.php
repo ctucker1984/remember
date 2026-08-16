@@ -180,7 +180,10 @@ foreach ( $event_roles as $event_role ) {
 						<?php if ( ! empty( $profile->share_im_with_events ) && ! empty( $profile->im_handle ) ) : ?>
 							<p>
 								<strong><?php esc_html_e( 'IM:', 'remember' ); ?></strong><br>
-								<?php echo esc_html( ucfirst( $profile->im_type ) ); ?>: <?php echo esc_html( $profile->im_handle ); ?>
+								<?php
+								require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-im-platforms.php';
+								echo esc_html( Remember_Im_Platforms::get_label( $profile->im_type ) );
+								?>: <?php echo esc_html( $profile->im_handle ); ?>
 							</p>
 						<?php endif; ?>
 

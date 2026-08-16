@@ -17,6 +17,8 @@ require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-applicat
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-merchandise.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-vetting-workflow.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-messaging.php';
+require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-agreements.php';
+require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-audit.php';
 
 // $event_id should be set by shortcode handler
 if ( ! isset( $event_id ) ) {
@@ -47,6 +49,17 @@ if ( isset( $_POST['remember_apply_action'] ) && check_admin_referer( 'remember_
 		if ( $existing ) {
 			$submission_error = __( 'You have already applied for this event and role.', 'remember' );
 		} else {
+			$agreement_error = Remember_Agreements::validate_apply_acceptances( $event_id );
+			if ( $agreement_error ) {
+				$submission_error = $agreement_error;
+			} else {
+				$currency_error = Remember_Profile_Audit::validate_application_confirmation(
+					isset( $_POST['remember_profile_currency_confirm'] ) ? wp_unslash( $_POST['remember_profile_currency_confirm'] ) : '',
+					$member_id
+				);
+				if ( $currency_error ) {
+					$submission_error = $currency_error;
+				} else {
 			$data = array(
 				'event_id'      => $event_id,
 				'member_id'     => $member_id,
@@ -58,6 +71,9 @@ if ( isset( $_POST['remember_apply_action'] ) && check_admin_referer( 'remember_
 			$new_application_id = $application_model->create( $data );
 
 			if ( $new_application_id ) {
+				Remember_Agreements::save_apply_acceptances( $new_application_id, $event_id );
+				Remember_Profile_Audit::touch_updated( $member_id, $member_id );
+
 				// Save selected add-ons for this application (role-aware max qty; 0 = not offered).
 				if ( isset( $_POST['event_addons'] ) && is_array( $_POST['event_addons'] ) ) {
 					global $wpdb;
@@ -112,6 +128,8 @@ if ( isset( $_POST['remember_apply_action'] ) && check_admin_referer( 'remember_
 				$submission_success = true;
 			} else {
 				$submission_error = __( 'Failed to submit application. Please try again.', 'remember' );
+			}
+				}
 			}
 		}
 	} else {
@@ -222,7 +240,20 @@ if ( ! $selected_event ) {
 			</div>
 
 			<div class="remember-form-group">
-				<button type="submit" class="remember-button remember-button-primary">
+				<label class="remember-form-label"><?php esc_html_e( 'Agreements', 'remember' ); ?></label>
+				<div id="remember-event-agreements">
+					<?php if ( $selected_event ) : ?>
+						<?php echo Remember_Agreements::render_apply_html( (int) $event_id ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in helper ?>
+					<?php else : ?>
+						<p class="remember-form-help"><?php esc_html_e( 'Select an event to see required agreements.', 'remember' ); ?></p>
+					<?php endif; ?>
+				</div>
+			</div>
+
+			<?php Remember_Profile_Audit::render_confirm_field( 'remember_apply_profile_currency_confirm' ); ?>
+
+			<div class="remember-form-group">
+				<button type="submit" class="remember-button remember-button-primary" disabled>
 					<?php esc_html_e( 'Submit Application', 'remember' ); ?>
 				</button>
 				<a href="<?php echo esc_url( get_permalink() . '?view=dashboard' ); ?>" class="remember-button remember-button-secondary">
@@ -238,6 +269,34 @@ if ( ! $selected_event ) {
 		var $roleSelect = $('#event_role_id');
 		var $eventSelect = $('#event_id');
 		var $addonsContainer = $('#remember-event-addons');
+		var $agreementsContainer = $('#remember-event-agreements');
+
+		function loadEventAgreements(selectedEventId) {
+			if (!selectedEventId) {
+				$agreementsContainer.html('<p class="remember-form-help"><?php echo esc_js( __( 'Select an event to see required agreements.', 'remember' ) ); ?></p>');
+				return;
+			}
+			$agreementsContainer.html('<p class="remember-form-help"><?php echo esc_js( __( 'Loading agreements...', 'remember' ) ); ?></p>');
+			$.ajax({
+				url: typeof rememberPublic !== 'undefined' && rememberPublic.ajaxurl ? rememberPublic.ajaxurl : ajaxurl,
+				type: 'POST',
+				data: {
+					action: 'remember_get_event_agreements',
+					event_id: selectedEventId,
+					nonce: '<?php echo esc_js( wp_create_nonce( 'remember_get_event_agreements' ) ); ?>'
+				},
+				success: function(response) {
+					if (response.success && response.data && response.data.html) {
+						$agreementsContainer.html(response.data.html);
+					} else {
+						$agreementsContainer.html('<p class="remember-form-help"><?php echo esc_js( __( 'No agreements are required for this event.', 'remember' ) ); ?></p>');
+					}
+				},
+				error: function() {
+					$agreementsContainer.html('<p class="remember-form-help"><?php echo esc_js( __( 'Error loading agreements.', 'remember' ) ); ?></p>');
+				}
+			});
+		}
 
 		// Load roles when event is selected or if pre-selected
 		function loadEventRoles(selectedEventId) {
@@ -339,6 +398,7 @@ if ( ! $selected_event ) {
 			var selectedEventId = $(this).val();
 			loadEventRoles(selectedEventId);
 			loadEventAddons(selectedEventId, '');
+			loadEventAgreements(selectedEventId);
 		});
 
 		$roleSelect.on('change', function() {

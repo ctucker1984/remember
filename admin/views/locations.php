@@ -284,7 +284,7 @@ function remember_format_address( $location ) {
 									'textarea_rows' => 8,
 									'media_buttons' => false,
 									'teeny'         => true,
-									'quicktags'     => true,
+									'quicktags'     => false,
 								)
 							);
 							?>
@@ -385,7 +385,7 @@ function remember_format_address( $location ) {
 									'textarea_rows' => 8,
 									'media_buttons' => false,
 									'teeny'         => true,
-									'quicktags'     => true,
+									'quicktags'     => false,
 								)
 							);
 							?>

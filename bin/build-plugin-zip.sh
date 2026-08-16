@@ -36,6 +36,10 @@ rsync -a \
 	zip -rq "$OUT_DIR/$ZIP_VERSIONED" remember
 )
 
+# Drop the stage tree so a Local/git checkout used as the live plugin dir does not
+# leave thousands of extra files under dist/stage/ that block WP Upload → Replace.
+rm -rf "$STAGE"
+
 # Sanity: archive must contain remember/remember.php, not remember-1.x.y/
 listing="$(unzip -l "$OUT_DIR/$ZIP_VERSIONED")"
 if ! grep -q 'remember/remember.php' <<<"$listing"; then

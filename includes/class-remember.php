@@ -143,7 +143,9 @@ class Remember {
 		$this->loader->add_action( 'admin_enqueue_scripts', $plugin_admin, 'enqueue_scripts' );
 		$this->loader->add_action( 'wp_ajax_remember_get_event_roles', $plugin_admin, 'ajax_get_event_roles' );
 		$this->loader->add_action( 'wp_ajax_remember_get_event_addons', $plugin_admin, 'ajax_get_event_addons' );
+		$this->loader->add_action( 'wp_ajax_remember_get_event_agreements', $plugin_admin, 'ajax_get_event_agreements' );
 		$this->loader->add_action( 'admin_menu', $plugin_admin, 'add_admin_menu' );
+		$this->loader->add_filter( 'submenu_file', $plugin_admin, 'highlight_settings_hub_submenu' );
 		$this->loader->add_action( 'wp_dashboard_setup', $plugin_admin, 'register_dashboard_widget' );
 		
 		// QuickBooks sync hooks
@@ -152,6 +154,7 @@ class Remember {
 
 		// Import/export CSV downloads must run before admin headers are sent.
 		$this->loader->add_action( 'admin_init', $plugin_admin, 'handle_import_export_requests', 1 );
+		$this->loader->add_action( 'admin_init', $plugin_admin, 'handle_event_participant_export', 1 );
 
 		// QuickBooks OAuth (redirect to Intuit + callback) must run before any admin HTML output.
 		$this->loader->add_action( 'admin_init', $plugin_admin, 'handle_quickbooks_oauth', 1 );
@@ -196,6 +199,7 @@ class Remember {
 		$this->loader->add_action( 'init', $plugin_public, 'register_shortcodes' );
 		$this->loader->add_action( 'template_redirect', $plugin_public, 'maybe_process_member_registration', 1 );
 		$this->loader->add_action( 'template_redirect', $plugin_public, 'maybe_output_admission_ticket', 0 );
+		$this->loader->add_action( 'wp_ajax_remember_profile_currency_status', $plugin_public, 'ajax_profile_currency_status' );
 		$this->loader->add_action( 'remember_member_profile_saved', $this, 'maybe_sync_member_profile_to_qb', 10, 1 );
 		$this->loader->add_action( 'remember_payment_status_changed', $this, 'on_payment_status_changed', 10, 4 );
 
@@ -478,7 +482,8 @@ class Remember {
 		}
 		return user_can( $user, 'remember_read_events' )
 			|| user_can( $user, 'remember_read_vetting' )
-			|| user_can( $user, 'remember_read_members' );
+			|| user_can( $user, 'remember_read_members' )
+			|| user_can( $user, 'remember_read_applications' );
 	}
 	
 	/**

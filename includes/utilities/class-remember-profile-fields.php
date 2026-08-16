@@ -31,6 +31,7 @@ class Remember_Profile_Fields {
 			'address_city',
 			'address_state',
 			'address_postal',
+			'address_country',
 			'cell_phone',
 			'im_handle',
 			'emergency_contact_first',
@@ -60,6 +61,7 @@ class Remember_Profile_Fields {
 	public static function labels() {
 		return array(
 			'nickname'                       => __( 'Nickname', 'remember' ),
+			'display_name'                   => __( 'Display name', 'remember' ),
 			'timezone_string'                => __( 'Time Zone', 'remember' ),
 			'legal_first_name'               => __( 'Legal First Name', 'remember' ),
 			'legal_last_name'                => __( 'Legal Last Name', 'remember' ),
@@ -67,25 +69,65 @@ class Remember_Profile_Fields {
 			'address_city'                   => __( 'City', 'remember' ),
 			'address_state'                  => __( 'State/Province', 'remember' ),
 			'address_postal'                 => __( 'Postal Code', 'remember' ),
+			'address_country'                => __( 'Country', 'remember' ),
 			'cell_phone'                     => __( 'Cell Phone', 'remember' ),
 			'im_handle'                      => __( 'Instant Messenger', 'remember' ),
 			'emergency_contact_first'        => __( 'Emergency Contact First Name', 'remember' ),
 			'emergency_contact_last'         => __( 'Emergency Contact Last Name', 'remember' ),
 			'emergency_contact_phone'        => __( 'Emergency Contact Phone', 'remember' ),
 			'emergency_contact_relationship' => __( 'Emergency Contact Relationship', 'remember' ),
+			'dietary_restrictions'           => __( 'Dietary Restrictions', 'remember' ),
+			'medical_accommodations'         => __( 'Medical Accommodations', 'remember' ),
+			'allergies'                      => __( 'Known Allergies', 'remember' ),
 		);
+	}
+
+	/**
+	 * Required profile keys for a form context.
+	 *
+	 * Admin member edit stays lean so staff can save incomplete records.
+	 *
+	 * @param string $context front|register|admin.
+	 * @return string[]
+	 */
+	public static function required_profile_keys_for_context( $context = 'front' ) {
+		if ( 'admin' === $context ) {
+			return array(
+				'legal_first_name',
+				'legal_last_name',
+				'cell_phone',
+			);
+		}
+		return self::required_profile_keys();
+	}
+
+	/**
+	 * Required meta keys for a form context.
+	 *
+	 * @param string $context front|register|admin.
+	 * @return string[]
+	 */
+	public static function required_meta_keys_for_context( $context = 'front' ) {
+		if ( 'admin' === $context ) {
+			return array(
+				'nickname',
+				'display_name',
+			);
+		}
+		return self::required_meta_keys();
 	}
 
 	/**
 	 * Whether a field key is required.
 	 *
-	 * @param string $key Field key.
+	 * @param string $key     Field key.
+	 * @param string $context front|register|admin.
 	 * @return bool
 	 */
-	public static function is_required( $key ) {
+	public static function is_required( $key, $context = 'front' ) {
 		$key = (string) $key;
-		return in_array( $key, self::required_profile_keys(), true )
-			|| in_array( $key, self::required_meta_keys(), true );
+		return in_array( $key, self::required_profile_keys_for_context( $context ), true )
+			|| in_array( $key, self::required_meta_keys_for_context( $context ), true );
 	}
 
 	/**
@@ -114,9 +156,8 @@ class Remember_Profile_Fields {
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-clothing-sizes.php';
 
 		$im_type = self::post_text( array( 'im_type', 'remember_reg_im_type' ) );
-		if ( '' === $im_type ) {
-			$im_type = 'telegram';
-		}
+		require_once plugin_dir_path( __FILE__ ) . 'class-remember-im-platforms.php';
+		$im_type = Remember_Im_Platforms::sanitize_key_value( $im_type );
 
 		$country = self::post_text( array( 'address_country', 'remember_reg_address_country' ) );
 		if ( '' === $country ) {
@@ -159,37 +200,86 @@ class Remember_Profile_Fields {
 	}
 
 	/**
-	 * Collect nickname + timezone from the request.
+	 * Collect nickname + timezone (+ display_name when posted) from the request.
 	 *
-	 * @return array{nickname:string,timezone_string:string}
+	 * @return array<string,string>
 	 */
 	public static function collect_meta_from_request() {
 		$nickname = self::post_text( array( 'nickname', 'remember_reg_display_name', 'remember_reg_nickname' ) );
 		$timezone = self::post_text( array( 'timezone_string', 'remember_reg_timezone' ) );
 		return array(
-			'nickname'         => $nickname,
-			'timezone_string'  => $timezone,
+			'nickname'        => $nickname,
+			'timezone_string' => $timezone,
+			'display_name'    => self::post_text( array( 'display_name' ) ),
 		);
 	}
 
 	/**
 	 * First missing required key among profile + meta, or empty string if complete.
 	 *
-	 * @param array<string,mixed> $profile_data Profile columns.
-	 * @param array<string,string> $meta_data    nickname + timezone_string.
+	 * @param array<string,mixed>  $profile_data Profile columns.
+	 * @param array<string,string> $meta_data    Meta keys from collect_meta_from_request().
+	 * @param string               $context      front|register|admin.
 	 * @return string
 	 */
-	public static function first_missing_required( array $profile_data, array $meta_data ) {
-		foreach ( self::required_meta_keys() as $key ) {
+	public static function first_missing_required( array $profile_data, array $meta_data, $context = 'front' ) {
+		foreach ( self::required_meta_keys_for_context( $context ) as $key ) {
 			if ( ! isset( $meta_data[ $key ] ) || '' === trim( (string) $meta_data[ $key ] ) ) {
 				return $key;
 			}
 		}
-		foreach ( self::required_profile_keys() as $key ) {
+		foreach ( self::required_profile_keys_for_context( $context ) as $key ) {
 			if ( ! isset( $profile_data[ $key ] ) || '' === trim( (string) $profile_data[ $key ] ) ) {
 				return $key;
 			}
 		}
+		return '';
+	}
+
+	/**
+	 * Whether at least one ID was posted for a checkbox catalog field.
+	 *
+	 * @param string $post_key POST array key (e.g. dietary_restrictions).
+	 * @return bool
+	 */
+	private static function request_has_catalog_selection( $post_key ) {
+		if ( ! isset( $_POST[ $post_key ] ) || ! is_array( $_POST[ $post_key ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+			return false;
+		}
+		foreach ( $_POST[ $post_key ] as $raw_id ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+			if ( absint( $raw_id ) > 0 ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * First missing required health catalog (dietary / medical / allergies), or empty string.
+	 *
+	 * Skips a catalog when it has no active options (nothing to choose).
+	 *
+	 * @return string Field key: dietary_restrictions|medical_accommodations|allergies|''.
+	 */
+	public static function first_missing_required_health_catalog() {
+		global $wpdb;
+
+		$checks = array(
+			'dietary_restrictions'    => $wpdb->prefix . 'remember_dietary_restrictions',
+			'medical_accommodations'  => $wpdb->prefix . 'remember_medical_accommodations',
+			'allergies'               => $wpdb->prefix . 'remember_allergies',
+		);
+
+		foreach ( $checks as $post_key => $table ) {
+			$active = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE is_active = 1" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from fixed map.
+			if ( $active < 1 ) {
+				continue;
+			}
+			if ( ! self::request_has_catalog_selection( $post_key ) ) {
+				return $post_key;
+			}
+		}
+
 		return '';
 	}
 
@@ -281,5 +371,48 @@ class Remember_Profile_Fields {
 				}
 			}
 		}
+	}
+
+	/**
+	 * Sanitize a member number: empty string, alphanumeric string, or null if invalid.
+	 *
+	 * @param mixed $raw Raw input.
+	 * @return string|null Empty string when cleared, alphanumeric value, or null when invalid.
+	 */
+	public static function sanitize_member_number( $raw ) {
+		$value = sanitize_text_field( (string) $raw );
+		$value = trim( $value );
+		if ( '' === $value ) {
+			return '';
+		}
+		if ( ! preg_match( '/^[A-Za-z0-9]+$/', $value ) ) {
+			return null;
+		}
+		return $value;
+	}
+
+	/**
+	 * Whether another member already has this member number.
+	 *
+	 * @param string $member_number      Candidate number (non-empty).
+	 * @param int    $exclude_member_id  Member ID to ignore (current member).
+	 * @return bool
+	 */
+	public static function is_member_number_taken( $member_number, $exclude_member_id = 0 ) {
+		global $wpdb;
+		$member_number = (string) $member_number;
+		if ( '' === $member_number ) {
+			return false;
+		}
+		$exclude_member_id = absint( $exclude_member_id );
+		$sql               = "SELECT member_id FROM {$wpdb->prefix}remember_member_profiles WHERE member_number = %s";
+		$params            = array( $member_number );
+		if ( $exclude_member_id > 0 ) {
+			$sql     .= ' AND member_id <> %d';
+			$params[] = $exclude_member_id;
+		}
+		$sql .= ' LIMIT 1';
+		$found = $wpdb->get_var( $wpdb->prepare( $sql, $params ) );
+		return ! empty( $found );
 	}
 }

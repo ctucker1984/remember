@@ -130,6 +130,68 @@ $status_colors = array(
 		</div>
 	</div>
 
+	<?php
+	require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-agreements.php';
+	$viewing_acceptances = Remember_Agreements::get_acceptances_for_application( (int) $viewing_application->application_id );
+	if ( ! empty( $viewing_acceptances ) ) :
+		$remember_acceptance_count = count( $viewing_acceptances );
+		?>
+		<details class="remember-application-detail-section remember-agreements-acknowledged" style="margin-bottom:20px;">
+			<summary>
+				<strong>
+					<?php
+					echo esc_html(
+						sprintf(
+							/* translators: %d: number of agreements */
+							_n( 'Agreements acknowledged (%d)', 'Agreements acknowledged (%d)', $remember_acceptance_count, 'remember' ),
+							$remember_acceptance_count
+						)
+					);
+					?>
+				</strong>
+			</summary>
+			<div class="remember-agreements-acknowledged-body">
+				<?php foreach ( $viewing_acceptances as $acc ) : ?>
+					<div style="border:1px solid #dcdcde;border-radius:3px;padding:12px 14px;margin:10px 0;background:#fff;">
+						<p style="margin:0 0 6px;">
+							<strong><?php echo esc_html( $acc->agreement_title ); ?></strong>
+							<span class="description">
+								<?php
+								echo esc_html(
+									sprintf(
+										/* translators: %d: revision number */
+										__( '(Revision %d)', 'remember' ),
+										(int) $acc->revision_number
+									)
+								);
+								?>
+							</span>
+						</p>
+						<p style="margin:0 0 8px;color:#50575e;">
+							<?php
+							echo esc_html(
+								sprintf(
+									/* translators: 1: typed legal name, 2: datetime */
+									__( 'Acknowledged by %1$s on %2$s', 'remember' ),
+									$acc->typed_legal_name,
+									date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), strtotime( $acc->accepted_at ) )
+								)
+							);
+							?>
+							<?php if ( ! empty( $acc->ip_address ) ) : ?>
+								<span class="description"> · IP <?php echo esc_html( $acc->ip_address ); ?></span>
+							<?php endif; ?>
+						</p>
+						<details>
+							<summary><?php esc_html_e( 'View agreement text', 'remember' ); ?></summary>
+							<div class="remember-richtext" style="margin-top:8px;"><?php echo wp_kses_post( wpautop( $acc->body ) ); ?></div>
+						</details>
+					</div>
+				<?php endforeach; ?>
+			</div>
+		</details>
+	<?php endif; ?>
+
 	<!-- Application Information Grid -->
 	<div class="remember-application-detail-grid">
 		<!-- Status History Section -->
@@ -303,13 +365,64 @@ $status_colors = array(
 	</div>
 
 	<!-- Action Buttons -->
-	<?php if ( 'pending' === $viewing_application->status || 'waitlisted' === $viewing_application->status || 'accepted' === $viewing_application->status ) : ?>
+	<?php
+	$remember_can_allow_reapply = in_array( $viewing_application->status, array( 'declined', 'cancelled' ), true )
+		&& empty( $viewing_application->superseded_at )
+		&& current_user_can( 'remember_update_applications' );
+	$remember_show_active_actions = in_array( $viewing_application->status, array( 'pending', 'waitlisted', 'accepted' ), true );
+	?>
+	<?php if ( $remember_show_active_actions || $remember_can_allow_reapply || ! empty( $viewing_application->superseded_at ) ) : ?>
 		<?php
 		require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-unwind.php';
 		$decline_has_invoice = Remember_Billing_Unwind::has_invoice( $viewing_application->application_id );
 		?>
 		<div style="background: #fff; border: 1px solid #ccd0d4; border-radius: 4px; padding: 20px; margin-top: 20px;">
 			<h3 style="margin-top: 0;"><?php esc_html_e( 'Actions', 'remember' ); ?></h3>
+
+			<?php if ( ! empty( $viewing_application->superseded_at ) ) : ?>
+				<p class="description" style="margin-top:0;">
+					<?php
+					echo esc_html(
+						sprintf(
+							/* translators: %s: datetime */
+							__( 'Reapply was allowed on %s. This record is historical; the member may submit a new application.', 'remember' ),
+							date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), strtotime( $viewing_application->superseded_at ) )
+						)
+					);
+					?>
+				</p>
+			<?php elseif ( $remember_can_allow_reapply ) : ?>
+				<form method="post" action="" style="margin: 0 0 16px;">
+					<?php wp_nonce_field( 'remember_application_action', 'remember_application_nonce' ); ?>
+					<input type="hidden" name="remember_application_action" value="allow_reapply">
+					<input type="hidden" name="application_id" value="<?php echo esc_attr( $viewing_application->application_id ); ?>">
+					<h4 style="margin: 0 0 8px;"><?php esc_html_e( 'Allow reapply', 'remember' ); ?></h4>
+					<p class="description" style="margin-top: 0;">
+						<?php esc_html_e( 'Lets this member apply again for the same event and role (and complete agreements again). Keeps this application for history.', 'remember' ); ?>
+					</p>
+					<p style="margin: 10px 0 0;">
+						<input type="submit" class="button button-primary" value="<?php esc_attr_e( 'Allow reapply', 'remember' ); ?>" onclick="return confirm('<?php echo esc_js( __( 'Allow this member to reapply for this event and role?', 'remember' ) ); ?>');">
+					</p>
+				</form>
+			<?php endif; ?>
+
+			<?php if ( in_array( $viewing_application->status, array( 'declined', 'cancelled' ), true ) && $decline_has_invoice && current_user_can( 'remember_update_applications' ) ) : ?>
+				<form method="post" action="" style="margin: 0 0 16px; padding-bottom: 16px; border-bottom: 1px solid #ddd;">
+					<?php wp_nonce_field( 'remember_application_action', 'remember_application_nonce' ); ?>
+					<input type="hidden" name="remember_application_action" value="unwind_billing">
+					<input type="hidden" name="application_id" value="<?php echo esc_attr( $viewing_application->application_id ); ?>">
+					<h4 style="margin: 0 0 8px;"><?php esc_html_e( 'Invoice / billing', 'remember' ); ?></h4>
+					<p class="description" style="margin-top: 0;">
+						<?php esc_html_e( 'Member cancels leave the invoice alone. Choose what should happen in the billing provider.', 'remember' ); ?>
+					</p>
+					<?php echo Remember_Billing_Unwind::render_action_radios( 'billing_action', true ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in helper. ?>
+					<p style="margin: 10px 0 0;">
+						<input type="submit" class="button" value="<?php esc_attr_e( 'Apply invoice action', 'remember' ); ?>" onclick="return confirm('<?php echo esc_js( __( 'Apply this invoice action in the billing provider?', 'remember' ) ); ?>');">
+					</p>
+				</form>
+			<?php endif; ?>
+
+			<?php if ( $remember_show_active_actions ) : ?>
 			<?php if ( 'pending' === $viewing_application->status || 'waitlisted' === $viewing_application->status ) : ?>
 				<form method="post" action="" style="display: inline-block; margin-right: 10px;">
 					<?php wp_nonce_field( 'remember_application_action', 'remember_application_nonce' ); ?>
@@ -389,6 +502,7 @@ $status_colors = array(
 					<input type="submit" class="button button-secondary" value="<?php esc_attr_e( 'Decline Application', 'remember' ); ?>" onclick="return confirm('<?php echo esc_js( __( 'Decline this application as admin? Choose invoice handling above before confirming.', 'remember' ) ); ?>');">
 				</p>
 			</form>
+			<?php endif; ?>
 		</div>
 	<?php endif; ?>
 </div>

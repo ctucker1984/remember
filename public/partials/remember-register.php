@@ -62,9 +62,13 @@ $allergies = $wpdb->get_results(
 	"SELECT * FROM {$wpdb->prefix}remember_allergies WHERE is_active = 1 ORDER BY sort_order ASC, allergy_name ASC"
 );
 
-$remember_reg_timezone = $remember_reg_val( 'timezone', 'America/Los_Angeles' );
+$remember_reg_timezone = $remember_reg_val( 'timezone', '' );
 $remember_reg_country  = $remember_reg_val( 'address_country', 'US' );
-$remember_reg_im_type  = $remember_reg_val( 'im_type', 'telegram' );
+$remember_reg_im_type  = $remember_reg_val( 'im_type', '' );
+require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-im-platforms.php';
+if ( '' === $remember_reg_im_type ) {
+	$remember_reg_im_type = Remember_Im_Platforms::default_key();
+}
 
 ?>
 <div class="remember-register remember-register-form">
@@ -154,18 +158,14 @@ $remember_reg_im_type  = $remember_reg_val( 'im_type', 'telegram' );
 			<div class="remember-register-row">
 				<label for="remember_reg_timezone"><?php esc_html_e( 'Time Zone', 'remember' ); ?> <span class="required">*</span></label>
 				<?php echo Remember_Timezone::dropdown( $remember_reg_timezone, 'remember_reg_timezone', 'remember_reg_timezone', true, 'remember-register-input' ); ?>
-				<p class="remember-register-help"><?php esc_html_e( 'Used to display scheduled times in your local time.', 'remember' ); ?></p>
+				<p class="remember-register-help"><?php esc_html_e( 'Choose your own time zone. Appointments and event times are shown in your local time — picking the wrong zone can cause missed appointments.', 'remember' ); ?></p>
 			</div>
 
 			<div class="remember-register-row">
 				<label for="remember_reg_im_type"><?php esc_html_e( 'Instant Messenger', 'remember' ); ?> <span class="required">*</span></label>
 				<div class="remember-register-im">
 					<select id="remember_reg_im_type" name="remember_reg_im_type" class="remember-register-input remember-register-input--im-type" required>
-						<option value="telegram" <?php selected( $remember_reg_im_type, 'telegram' ); ?>><?php esc_html_e( 'Telegram', 'remember' ); ?></option>
-						<option value="discord" <?php selected( $remember_reg_im_type, 'discord' ); ?>><?php esc_html_e( 'Discord', 'remember' ); ?></option>
-						<option value="signal" <?php selected( $remember_reg_im_type, 'signal' ); ?>><?php esc_html_e( 'Signal', 'remember' ); ?></option>
-						<option value="whatsapp" <?php selected( $remember_reg_im_type, 'whatsapp' ); ?>><?php esc_html_e( 'WhatsApp', 'remember' ); ?></option>
-						<option value="other" <?php selected( $remember_reg_im_type, 'other' ); ?>><?php esc_html_e( 'Other', 'remember' ); ?></option>
+						<?php Remember_Im_Platforms::render_options( $remember_reg_im_type ); ?>
 					</select>
 					<input type="text" name="remember_reg_im_handle" id="remember_reg_im_handle" required class="remember-register-input remember-register-input--im-handle" value="<?php echo esc_attr( $remember_reg_val( 'im_handle' ) ); ?>" placeholder="<?php esc_attr_e( 'Handle / username', 'remember' ); ?>" />
 				</div>
@@ -194,18 +194,24 @@ $remember_reg_im_type  = $remember_reg_val( 'im_type', 'telegram' );
 			</div>
 
 			<div class="remember-register-row">
-				<label for="remember_reg_address_country"><?php esc_html_e( 'Country', 'remember' ); ?></label>
+				<label for="remember_reg_address_country"><?php esc_html_e( 'Country', 'remember' ); ?> <span class="required">*</span></label>
 				<?php
 				echo Remember_Countries::dropdown(
 					'remember_reg_address_country',
 					$remember_reg_country,
 					array(
-						'id'    => 'remember_reg_address_country',
-						'class' => 'remember-register-input',
+						'id'       => 'remember_reg_address_country',
+						'class'    => 'remember-register-input',
+						'required' => true,
 					)
 				);
 				?>
 			</div>
+
+			<?php
+			require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-questions.php';
+			Remember_Profile_Questions::render_fields( 0, 'register' );
+			?>
 
 			<h3 class="remember-register-section-title"><?php esc_html_e( 'Emergency Contact', 'remember' ); ?></h3>
 
@@ -229,12 +235,12 @@ $remember_reg_im_type  = $remember_reg_val( 'im_type', 'telegram' );
 				<input type="text" name="remember_reg_emergency_contact_relationship" id="remember_reg_emergency_contact_relationship" required class="remember-register-input" value="<?php echo esc_attr( $remember_reg_val( 'emergency_contact_relationship' ) ); ?>" placeholder="<?php esc_attr_e( 'e.g., Spouse, Parent, Friend', 'remember' ); ?>" />
 			</div>
 
-			<h3 class="remember-register-section-title"><?php esc_html_e( 'Profile Photo', 'remember' ); ?></h3>
+			<h3 class="remember-register-section-title"><?php esc_html_e( 'Profile Photo', 'remember' ); ?> <span class="required">*</span></h3>
 
 			<div class="remember-register-row remember-register-row--photo">
-				<span class="remember-register-label"><?php esc_html_e( 'Photo', 'remember' ); ?></span>
+				<span class="remember-register-label"><?php esc_html_e( 'Photo', 'remember' ); ?> <span class="required">*</span></span>
 				<div class="remember-profile-photo-edit" data-output-size="<?php echo esc_attr( (string) $photo_max_dimensions ); ?>">
-					<p class="remember-register-help"><?php esc_html_e( 'Optional. Drag to recenter and use zoom to frame the photo.', 'remember' ); ?></p>
+					<p class="remember-register-help"><?php esc_html_e( 'Required. Drag to recenter and use zoom to frame the photo.', 'remember' ); ?></p>
 					<div class="remember-profile-photo-cropper" hidden>
 						<div class="remember-profile-photo-cropper-viewport" aria-label="<?php esc_attr_e( 'Photo framing preview', 'remember' ); ?>">
 							<img src="" alt="" class="remember-profile-photo-cropper-image" draggable="false">
@@ -248,8 +254,8 @@ $remember_reg_im_type  = $remember_reg_val( 'im_type', 'telegram' );
 							<?php esc_html_e( 'Clear selected photo', 'remember' ); ?>
 						</button>
 					</div>
-					<label for="remember_reg_photo_file" class="remember-form-label"><?php esc_html_e( 'Upload photo', 'remember' ); ?></label>
-					<input type="file" id="remember_reg_photo_file" name="photo_file" class="remember-form-control remember-form-control-file remember-register-input" accept="image/jpeg,image/png,image/gif">
+					<label for="remember_reg_photo_file" class="remember-form-label"><?php esc_html_e( 'Upload photo', 'remember' ); ?> <span class="required">*</span></label>
+					<input type="file" id="remember_reg_photo_file" name="photo_file" class="remember-form-control remember-form-control-file remember-register-input" accept="image/jpeg,image/png,image/gif" required>
 					<p class="remember-register-help">
 						<?php
 						echo esc_html(
@@ -301,12 +307,12 @@ $remember_reg_im_type  = $remember_reg_val( 'im_type', 'telegram' );
 			<?php endif; ?>
 
 			<?php if ( ! empty( $dietary_restrictions ) ) : ?>
-				<h3 class="remember-register-section-title"><?php esc_html_e( 'Dietary Restrictions', 'remember' ); ?></h3>
-				<p class="remember-register-section-help"><?php esc_html_e( 'Optional. For event organizers — not shown to other participants.', 'remember' ); ?></p>
-				<div class="remember-register-checkboxes">
+				<h3 class="remember-register-section-title"><?php esc_html_e( 'Dietary Restrictions', 'remember' ); ?> <span class="required">*</span></h3>
+				<p class="remember-register-section-help"><?php esc_html_e( 'Required. Select at least one — choose None if none apply. For event organizers — not shown to other participants.', 'remember' ); ?></p>
+				<div class="remember-register-checkboxes" data-remember-require-one="1">
 					<?php foreach ( $dietary_restrictions as $restriction ) : ?>
 						<label class="remember-checkbox-label">
-							<input type="checkbox" name="dietary_restrictions[]" value="<?php echo esc_attr( $restriction->restriction_id ); ?>">
+							<input type="checkbox" name="dietary_restrictions[]" value="<?php echo esc_attr( $restriction->restriction_id ); ?>"<?php echo ( 'None' === $restriction->restriction_name ) ? ' data-remember-none="1"' : ''; ?>>
 							<span><?php echo esc_html( $restriction->restriction_name ); ?></span>
 						</label>
 					<?php endforeach; ?>
@@ -314,12 +320,12 @@ $remember_reg_im_type  = $remember_reg_val( 'im_type', 'telegram' );
 			<?php endif; ?>
 
 			<?php if ( ! empty( $medical_accommodations ) ) : ?>
-				<h3 class="remember-register-section-title"><?php esc_html_e( 'Medical Accommodations', 'remember' ); ?></h3>
-				<p class="remember-register-section-help"><?php esc_html_e( 'Optional. For event organizers — not shown to other participants.', 'remember' ); ?></p>
-				<div class="remember-register-checkboxes">
+				<h3 class="remember-register-section-title"><?php esc_html_e( 'Medical Accommodations', 'remember' ); ?> <span class="required">*</span></h3>
+				<p class="remember-register-section-help"><?php esc_html_e( 'Required. Select at least one — choose None if none apply. For event organizers — not shown to other participants.', 'remember' ); ?></p>
+				<div class="remember-register-checkboxes" data-remember-require-one="1">
 					<?php foreach ( $medical_accommodations as $accommodation ) : ?>
 						<label class="remember-checkbox-label">
-							<input type="checkbox" name="medical_accommodations[]" value="<?php echo esc_attr( $accommodation->accommodation_id ); ?>">
+							<input type="checkbox" name="medical_accommodations[]" value="<?php echo esc_attr( $accommodation->accommodation_id ); ?>"<?php echo ( 'None' === $accommodation->accommodation_name ) ? ' data-remember-none="1"' : ''; ?>>
 							<span><?php echo esc_html( $accommodation->accommodation_name ); ?></span>
 						</label>
 					<?php endforeach; ?>
@@ -327,12 +333,12 @@ $remember_reg_im_type  = $remember_reg_val( 'im_type', 'telegram' );
 			<?php endif; ?>
 
 			<?php if ( ! empty( $allergies ) ) : ?>
-				<h3 class="remember-register-section-title"><?php esc_html_e( 'Known Allergies', 'remember' ); ?></h3>
-				<p class="remember-register-section-help"><?php esc_html_e( 'Optional. For event organizers — not shown to other participants.', 'remember' ); ?></p>
-				<div class="remember-register-checkboxes">
+				<h3 class="remember-register-section-title"><?php esc_html_e( 'Known Allergies', 'remember' ); ?> <span class="required">*</span></h3>
+				<p class="remember-register-section-help"><?php esc_html_e( 'Required. Select at least one — choose None if none apply. For event organizers — not shown to other participants.', 'remember' ); ?></p>
+				<div class="remember-register-checkboxes" data-remember-require-one="1">
 					<?php foreach ( $allergies as $allergy ) : ?>
 						<label class="remember-checkbox-label">
-							<input type="checkbox" name="allergies[]" value="<?php echo esc_attr( $allergy->allergy_id ); ?>">
+							<input type="checkbox" name="allergies[]" value="<?php echo esc_attr( $allergy->allergy_id ); ?>"<?php echo ( 'None' === $allergy->allergy_name ) ? ' data-remember-none="1"' : ''; ?>>
 							<span><?php echo esc_html( $allergy->allergy_name ); ?></span>
 						</label>
 					<?php endforeach; ?>
@@ -340,7 +346,7 @@ $remember_reg_im_type  = $remember_reg_val( 'im_type', 'telegram' );
 			<?php endif; ?>
 
 			<h3 class="remember-register-section-title"><?php esc_html_e( 'Interests', 'remember' ); ?></h3>
-			<p class="remember-register-section-help"><?php esc_html_e( 'Optional.', 'remember' ); ?></p>
+			<p class="remember-register-section-help"><?php esc_html_e( 'What are you trying to get out of this event? Optional.', 'remember' ); ?></p>
 			<div class="remember-register-editor">
 				<?php
 				if ( ! wp_script_is( 'editor', 'enqueued' ) && ! wp_script_is( 'editor', 'done' ) ) {
@@ -355,14 +361,14 @@ $remember_reg_im_type  = $remember_reg_val( 'im_type', 'telegram' );
 						'textarea_rows' => 6,
 						'media_buttons' => false,
 						'teeny'         => true,
-						'quicktags'     => true,
+						'quicktags'     => false,
 					)
 				);
 				?>
 			</div>
 
 			<h3 class="remember-register-section-title"><?php esc_html_e( 'Privacy', 'remember' ); ?></h3>
-			<p class="remember-register-section-help"><?php esc_html_e( 'Optional. Control what is shared with other members when you are accepted into events.', 'remember' ); ?></p>
+			<p class="remember-register-section-help"><?php esc_html_e( 'Optional. Consider allowing other event attendees to see at least your photo and IM so that you can begin networking with them. Use these controls to do that.', 'remember' ); ?></p>
 			<div class="remember-register-checkboxes">
 				<label class="remember-checkbox-label">
 					<input type="checkbox" name="share_photo_with_events" value="1">

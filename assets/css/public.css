@@ -105,7 +105,8 @@
 	margin-bottom: 1rem;
 }
 
-.remember-register-form .remember-register-row label {
+/* Direct child only — nested checkbox labels must not inherit field-label styles. */
+.remember-register-form .remember-register-row > label {
 	display: block;
 	margin: 0;
 	font-weight: 600;
@@ -114,6 +115,51 @@
 	justify-self: end;
 	max-width: 12.5rem;
 	white-space: nowrap;
+}
+
+/* Custom fields / long questions: label above control, wrap freely. */
+.remember-register-form .remember-register-row--stack {
+	grid-template-columns: 1fr;
+	align-items: start;
+	row-gap: 0.4rem;
+}
+
+.remember-register-form .remember-register-row--stack > label {
+	text-align: left;
+	justify-self: start;
+	max-width: none;
+	white-space: normal;
+}
+
+.remember-register-form .remember-register-row--stack .remember-register-input,
+.remember-register-form .remember-register-row--stack select.remember-register-input {
+	max-width: 100%;
+}
+
+.remember-register-form .remember-register-row--stack .remember-register-checkboxes {
+	width: 100%;
+	max-width: none;
+	margin: 0;
+}
+
+.remember-register-form .remember-checkbox-label {
+	display: flex;
+	align-items: flex-start;
+	gap: 0.5em;
+	margin: 0;
+	font-weight: normal;
+	line-height: 1.35;
+	text-align: left;
+	white-space: normal;
+	max-width: none;
+	cursor: pointer;
+}
+
+.remember-register-form .remember-checkbox-label input[type="checkbox"] {
+	flex: 0 0 auto;
+	margin: 0.15em 0 0;
+	width: 1.1em;
+	height: 1.1em;
 }
 
 .remember-timezone-picker {
@@ -317,10 +363,11 @@
 		grid-template-columns: 1fr;
 	}
 
-	.remember-register-form .remember-register-row label {
+	.remember-register-form .remember-register-row > label {
 		text-align: left;
 		justify-self: start;
 		max-width: none;
+		white-space: normal;
 		margin-bottom: 0.2rem;
 	}
 
@@ -658,6 +705,8 @@
 	margin-bottom: 0.5em;
 	font-weight: 600;
 	color: #1d2327;
+	overflow: visible;
+	line-height: 1.4;
 }
 
 .remember-required {
@@ -835,18 +884,55 @@
 	max-width: 100%;
 }
 
+/* Keep profile shortcode wrappers from clipping long edit forms. */
+.remember-profile-container,
+.remember-profile-container.wp-block-group,
+.remember-profile {
+	overflow: visible !important;
+	max-height: none !important;
+	height: auto !important;
+	max-width: 100%;
+	box-sizing: border-box;
+}
+
 .remember-profile-form-modern {
 	background: #fff;
 	border: 1px solid #ddd;
 	border-radius: 4px;
 	padding: 1.5em;
+	padding-bottom: 2em;
 	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+	overflow: visible;
+	max-height: none;
+	height: auto;
+	max-width: 100%;
+	box-sizing: border-box;
+}
+
+/* TinyMCE toolbars are a common source of horizontal page overflow. */
+.remember-profile-form-modern .wp-editor-wrap,
+.remember-profile-form-modern .mce-tinymce,
+.remember-profile-form-modern .mce-container,
+.remember-profile-form-modern .mce-toolbar,
+.remember-profile-form-modern .mce-toolbar-grp,
+.remember-register-form .wp-editor-wrap,
+.remember-register-form .mce-tinymce,
+.remember-register-form .mce-container {
+	max-width: 100% !important;
+	box-sizing: border-box;
+}
+
+/* Members write rich text only; the Visual/Code switcher stays out of the form. */
+.remember-profile-form-modern .wp-editor-tabs,
+.remember-register-form .wp-editor-tabs {
+	display: none;
 }
 
 .remember-form-section {
 	margin-bottom: 2em;
 	padding-bottom: 1.5em;
 	border-bottom: 1px solid #eee;
+	overflow: visible;
 }
 
 .remember-form-section:last-of-type {
@@ -865,9 +951,10 @@
 
 .remember-form-row {
 	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+	grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));
 	gap: 1em;
 	margin-bottom: 1em;
+	min-width: 0;
 }
 
 .remember-form-row:last-child {
@@ -877,6 +964,56 @@
 .remember-form-col {
 	display: flex;
 	flex-direction: column;
+	min-width: 0;
+}
+
+.remember-pq-field {
+	margin-bottom: 1em;
+	min-width: 0;
+	overflow: visible;
+}
+
+.remember-pq-field:last-child {
+	margin-bottom: 0;
+}
+
+.remember-profile-member-number {
+	margin: 0.25em 0 0;
+	font-size: 1em;
+	line-height: 1.5;
+	color: #1d2327;
+}
+
+.remember-profile-audit-meta {
+	margin: 1.25em 0 0;
+	padding-top: 0.85em;
+	border-top: 1px solid #eee;
+	font-size: 0.8125rem;
+	line-height: 1.45;
+	color: #8c8f94;
+	font-weight: 400;
+}
+
+.remember-profile-currency-confirm__help a {
+	color: #2271b1;
+	text-decoration: underline;
+}
+
+.remember-profile-currency-confirm__help strong {
+	font-weight: 700;
+	color: #1d2327;
+}
+
+.remember-profile-currency-confirm__status {
+	color: #b32d2e;
+}
+
+.remember-button-primary:disabled,
+.remember-button-primary.remember-button-disabled,
+button.remember-button-primary:disabled {
+	opacity: 0.45;
+	cursor: not-allowed;
+	pointer-events: none;
 }
 
 .remember-form-col .remember-form-control {
@@ -913,11 +1050,63 @@
 	flex-direction: column;
 	gap: 0.5em;
 	max-height: 220px;
+	overflow-x: hidden;
 	overflow-y: auto;
 	padding: 0.75em 1em;
 	border: 1px solid #c3c4c7;
 	border-radius: 4px;
 	background: #fff;
+	box-sizing: border-box;
+	width: 100%;
+	max-width: 100%;
+	min-width: 0;
+}
+
+.remember-pq-checkboxes {
+	display: flex;
+	flex-direction: column;
+	gap: 0.5em;
+	margin-top: 0.35em;
+	width: 100%;
+}
+
+.remember-pq-checkboxes.remember-checkbox-grid {
+	margin-top: 0.35em;
+}
+
+.remember-form-col-full .remember-form-control,
+.remember-form-col-full select.remember-form-control {
+	max-width: 100%;
+	width: 100%;
+}
+
+.remember-agreements-apply .remember-agreement-block {
+	border: 1px solid #dcdcde;
+	border-radius: 4px;
+	padding: 1em 1.1em;
+	margin: 0 0 1em;
+	background: #fff;
+}
+
+.remember-agreements-apply .remember-agreement-title {
+	margin: 0 0 0.6em;
+	font-size: 1.05em;
+}
+
+.remember-agreements-apply .remember-agreement-revision {
+	font-weight: normal;
+	color: #646970;
+	font-size: 0.9em;
+}
+
+.remember-agreements-apply .remember-agreement-body {
+	max-height: 220px;
+	overflow-y: auto;
+	margin: 0 0 0.9em;
+	padding: 0.75em 1em;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+	background: #f6f7f7;
 }
 
 .remember-checkbox-label {

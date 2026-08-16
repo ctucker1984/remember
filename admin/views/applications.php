@@ -377,6 +377,40 @@ if ( isset( $_POST['remember_application_action'] ) && check_admin_referer( 'rem
 			} else {
 				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to move application back to pending.', 'remember' ) . '</p></div>';
 			}
+		} elseif ( 'allow_reapply' === $action ) {
+			if ( ! current_user_can( 'remember_update_applications' ) ) {
+				wp_die( __( 'You do not have sufficient permissions to perform this action.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+			}
+			$result = $application_model->allow_reapply( $application_id );
+			if ( true === $result ) {
+				Remember_Logger::info( 'Application superseded for reapply', array( 'application_id' => $application_id ) );
+				echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Reapply allowed. The member can submit a new application for this event and role (including agreements). This record is kept for history.', 'remember' ) . '</p></div>';
+			} else {
+				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html( $result ) . '</p></div>';
+			}
+		} elseif ( 'unwind_billing' === $action ) {
+			if ( ! current_user_can( 'remember_update_applications' ) ) {
+				wp_die( __( 'You do not have sufficient permissions to perform this action.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+			}
+			require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-unwind.php';
+			$application = $application_model->get( $application_id );
+			if ( ! $application || ! in_array( $application->status, array( 'declined', 'cancelled' ), true ) ) {
+				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Invoice actions are available on declined or cancelled applications.', 'remember' ) . '</p></div>';
+			} else {
+				$billing_action = isset( $_POST['billing_action'] ) ? Remember_Billing_Unwind::sanitize_action( wp_unslash( $_POST['billing_action'] ) ) : 'leave';
+				$unwind         = Remember_Billing_Unwind::apply(
+					$application_id,
+					$billing_action,
+					sprintf( __( 'Admin invoice action on application #%d', 'remember' ), $application_id )
+				);
+				if ( is_wp_error( $unwind ) ) {
+					echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html( $unwind->get_error_message() ) . '</p></div>';
+				} elseif ( 'leave' === $billing_action ) {
+					echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Invoice left unaltered.', 'remember' ) . '</p></div>';
+				} else {
+					echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Billing action applied in the connected provider.', 'remember' ) . '</p></div>';
+				}
+			}
 		} elseif ( 'reprocess_billing' === $action ) {
 			// Check capability
 			if ( ! current_user_can( 'remember_update_applications' ) ) {
@@ -726,12 +760,12 @@ $status_colors = array(
 	</div>
 
 	<!-- Filters -->
-	<div class="remember-filters" style="margin: 20px 0; padding: 15px; background: #fff; border: 1px solid #ccd0d4; border-radius: 4px;">
+	<div class="remember-filters">
 		<form method="get" action="">
 			<input type="hidden" name="page" value="remember-applications">
 			
 			<label for="filter_event"><?php esc_html_e( 'Filter by Event:', 'remember' ); ?></label>
-			<select id="filter_event" name="filter_event" style="margin-right: 20px;">
+			<select id="filter_event" name="filter_event">
 				<option value="0"><?php esc_html_e( 'All Events', 'remember' ); ?></option>
 				<?php foreach ( $events as $event ) : ?>
 					<option value="<?php echo esc_attr( $event->event_id ); ?>" <?php selected( $filter_event, $event->event_id ); ?>>
@@ -741,7 +775,7 @@ $status_colors = array(
 			</select>
 
 			<label for="filter_status"><?php esc_html_e( 'Filter by Status:', 'remember' ); ?></label>
-			<select id="filter_status" name="filter_status" style="margin-right: 20px;">
+			<select id="filter_status" name="filter_status">
 				<option value=""><?php esc_html_e( 'All Statuses', 'remember' ); ?></option>
 				<?php foreach ( $status_labels as $status => $label ) : ?>
 					<option value="<?php echo esc_attr( $status ); ?>" <?php selected( $filter_status, $status ); ?>>
@@ -756,7 +790,7 @@ $status_colors = array(
 			<?php endif; ?>
 		</form>
 		<?php if ( current_user_can( 'remember_update_applications' ) ) : ?>
-			<form method="post" action="" style="margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
+			<form method="post" action="" class="remember-filters__blast">
 				<?php wp_nonce_field( 'remember_application_action', 'remember_application_nonce' ); ?>
 				<input type="hidden" name="remember_application_action" value="blast_balance_due">
 				<input type="hidden" name="blast_event_id" value="<?php echo esc_attr( $filter_event ); ?>">
@@ -768,7 +802,8 @@ $status_colors = array(
 
 	<!-- Applications List -->
 	<?php if ( ! empty( $applications ) ) : ?>
-		<table class="wp-list-table widefat fixed striped">
+		<div class="remember-table-scroll">
+		<table class="wp-list-table widefat striped remember-responsive-table">
 			<thead>
 				<tr>
 					<th class="column-event"><?php esc_html_e( 'Event', 'remember' ); ?></th>
@@ -803,14 +838,14 @@ $status_colors = array(
 					}
 				?>
 					<tr>
-						<td class="column-event">
+						<td class="column-event" data-label="<?php echo esc_attr__( 'Event', 'remember' ); ?>">
 							<?php if ( $event ) : ?>
 								<strong><a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-events&view=' . $event->event_id ) ); ?>"><?php echo esc_html( $event->event_name ); ?></a></strong>
 							<?php else : ?>
 								<span class="description">—</span>
 							<?php endif; ?>
 						</td>
-						<td class="column-member">
+						<td class="column-member" data-label="<?php echo esc_attr__( 'Member', 'remember' ); ?>">
 							<?php if ( $user ) : ?>
 								<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-members&view=' . $application->member_id ) ); ?>">
 									<strong><?php echo esc_html( $user->display_name ); ?></strong>
@@ -820,38 +855,37 @@ $status_colors = array(
 								<span class="description"><?php esc_html_e( 'Member not found', 'remember' ); ?></span>
 							<?php endif; ?>
 						</td>
-						<td class="column-role">
+						<td class="column-role" data-label="<?php echo esc_attr__( 'Role', 'remember' ); ?>">
 							<?php echo $event_role ? esc_html( $event_role->role_name ) : '<span class="description">—</span>'; ?>
 						</td>
-						<td class="column-status">
+						<td class="column-status" data-label="<?php echo esc_attr__( 'Status', 'remember' ); ?>">
 							<span style="color: <?php echo esc_attr( $status_colors[ $application->status ] ); ?>; font-weight: bold;">
 								<?php echo esc_html( $status_labels[ $application->status ] ); ?>
 							</span>
 						</td>
-						<td class="column-billing">
+						<td class="column-billing" data-label="<?php echo esc_attr__( 'Billing', 'remember' ); ?>">
 							<span style="color: <?php echo esc_attr( $billing_color ); ?>; font-weight: bold;">
 								<?php echo esc_html( $billing_label ); ?>
 							</span>
 						</td>
-						<td class="column-date">
+						<td class="column-date" data-label="<?php echo esc_attr__( 'Applied', 'remember' ); ?>">
 							<?php echo esc_html( date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), strtotime( $application->applied_at ) ) ); ?>
 						</td>
-						<td class="column-actions">
+						<td class="column-actions" data-label="<?php echo esc_attr__( 'Actions', 'remember' ); ?>">
+							<div class="remember-row-actions">
 							<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-applications&view=' . $application->application_id ) ); ?>"><?php esc_html_e( 'View', 'remember' ); ?></a>
 							<?php if ( Remember_Ticket::is_eligible( $application ) ) : ?>
-								|
 								<a href="<?php echo esc_url( Remember_Ticket::get_ticket_url( $application->application_id ) ); ?>" target="_blank" rel="noopener noreferrer"><?php esc_html_e( 'Ticket', 'remember' ); ?></a>
 							<?php endif; ?>
 							<?php if ( 'pending' === $application->status || 'waitlisted' === $application->status ) : ?>
-								|
-								<form method="post" action="" style="display: inline;">
+								<form method="post" action="">
 									<?php wp_nonce_field( 'remember_application_action', 'remember_application_nonce' ); ?>
 									<input type="hidden" name="remember_application_action" value="accept">
 									<input type="hidden" name="application_id" value="<?php echo esc_attr( $application->application_id ); ?>">
 									<input type="submit" class="button button-small" value="<?php esc_attr_e( 'Accept', 'remember' ); ?>" onclick="return confirm('<?php esc_attr_e( 'Accept this application?', 'remember' ); ?>');">
 								</form>
 								
-								<form method="post" action="" style="display: inline;">
+								<form method="post" action="">
 									<?php wp_nonce_field( 'remember_application_action', 'remember_application_nonce' ); ?>
 									<input type="hidden" name="remember_application_action" value="decline">
 									<input type="hidden" name="application_id" value="<?php echo esc_attr( $application->application_id ); ?>">
@@ -860,7 +894,7 @@ $status_colors = array(
 								</form>
 								
 								<?php if ( 'pending' === $application->status ) : ?>
-									<form method="post" action="" style="display: inline;">
+									<form method="post" action="">
 										<?php wp_nonce_field( 'remember_application_action', 'remember_application_nonce' ); ?>
 										<input type="hidden" name="remember_application_action" value="waitlist">
 										<input type="hidden" name="application_id" value="<?php echo esc_attr( $application->application_id ); ?>">
@@ -869,16 +903,14 @@ $status_colors = array(
 								<?php endif; ?>
 							<?php else : ?>
 								<?php if ( 'accepted' === $application->status ) : ?>
-									|
 									<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-applications&view=' . $application->application_id ) ); ?>"><?php esc_html_e( 'Decline…', 'remember' ); ?></a>
-									|
-									<form method="post" action="" style="display: inline;">
+									<form method="post" action="">
 										<?php wp_nonce_field( 'remember_application_action', 'remember_application_nonce' ); ?>
 										<input type="hidden" name="remember_application_action" value="reopen_pending">
 										<input type="hidden" name="application_id" value="<?php echo esc_attr( $application->application_id ); ?>">
 										<input type="submit" class="button button-small" value="<?php esc_attr_e( 'Move to Pending', 'remember' ); ?>" onclick="return confirm('<?php esc_attr_e( 'Move this accepted application back to pending?', 'remember' ); ?>');">
 									</form>
-									<form method="post" action="" style="display: inline;">
+									<form method="post" action="">
 										<?php wp_nonce_field( 'remember_application_action', 'remember_application_nonce' ); ?>
 										<input type="hidden" name="remember_application_action" value="reprocess_billing">
 										<input type="hidden" name="application_id" value="<?php echo esc_attr( $application->application_id ); ?>">
@@ -888,11 +920,13 @@ $status_colors = array(
 									<span class="description"><?php esc_html_e( 'Processed', 'remember' ); ?></span>
 								<?php endif; ?>
 							<?php endif; ?>
+							</div>
 						</td>
 					</tr>
 				<?php endforeach; ?>
 			</tbody>
 		</table>
+		</div>
 		
 		<p class="description" style="margin-top: 15px;">
 			<?php echo esc_html( sprintf( __( 'Showing %d application(s)', 'remember' ), count( $applications ) ) ); ?>
@@ -928,7 +962,8 @@ jQuery(document).ready(function($) {
 			data: {
 				action: 'remember_get_event_roles',
 				event_id: selectedEventId,
-				nonce: '<?php echo wp_create_nonce( 'remember_get_event_roles' ); ?>'
+				context: 'admin',
+				nonce: '<?php echo esc_js( wp_create_nonce( 'remember_get_event_roles_admin' ) ); ?>'
 			},
 			success: function(response) {
 				if (response.success && response.data && response.data.length > 0) {

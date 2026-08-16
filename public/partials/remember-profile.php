@@ -48,11 +48,23 @@ if ( ! isset( $is_edit ) ) {
 
 // Handle form submission
 if ( isset( $_POST['remember_profile_action'] ) && check_admin_referer( 'remember_profile_action', 'remember_profile_nonce' ) ) {
+	require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-questions.php';
 	$profile_data = Remember_Profile_Fields::collect_profile_data_from_request();
 	$meta_data    = Remember_Profile_Fields::collect_meta_from_request();
+	$pq_answers   = Remember_Profile_Questions::collect_from_request();
 	$missing      = Remember_Profile_Fields::first_missing_required( $profile_data, $meta_data );
 	if ( '' !== $missing ) {
 		wp_safe_redirect( add_query_arg( array( 'edit' => '1', 'remember_profile_error' => $missing ) ) );
+		exit;
+	}
+	$missing_pq = Remember_Profile_Questions::first_missing_required( $pq_answers );
+	if ( null !== $missing_pq ) {
+		wp_safe_redirect( add_query_arg( array( 'edit' => '1', 'remember_profile_error' => 'custom_field' ) ) );
+		exit;
+	}
+	$missing_health = Remember_Profile_Fields::first_missing_required_health_catalog();
+	if ( '' !== $missing_health ) {
+		wp_safe_redirect( add_query_arg( array( 'edit' => '1', 'remember_profile_error' => $missing_health ) ) );
 		exit;
 	}
 
@@ -90,6 +102,7 @@ if ( isset( $_POST['remember_profile_action'] ) && check_admin_referer( 'remembe
 	}
 
 	$profile_data['updated_at'] = current_time( 'mysql' );
+	$profile_data['updated_by'] = get_current_user_id();
 
 	if ( $profile ) {
 		$wpdb->update(
@@ -146,6 +159,7 @@ if ( isset( $_POST['remember_profile_action'] ) && check_admin_referer( 'remembe
 	}
 	
 	Remember_Profile_Fields::save_junctions_from_request( $user->ID );
+	Remember_Profile_Questions::save_for_member( $user->ID, $pq_answers );
 
 	do_action( 'remember_member_profile_saved', $user->ID );
 
@@ -403,6 +417,21 @@ if ( ! empty( $selected_allergy_ids ) ) {
 				<h3 class="remember-form-section-title"><?php esc_html_e( 'Basic Information', 'remember' ); ?></h3>
 				<p class="remember-form-help"><?php esc_html_e( 'Legal name is for admin and vetting only — not shown to other members.', 'remember' ); ?></p>
 				<div class="remember-form-row">
+					<div class="remember-form-col remember-form-col-full">
+						<span class="remember-form-label"><?php esc_html_e( 'Member Number', 'remember' ); ?></span>
+						<p class="remember-profile-member-number">
+							<?php
+							if ( $profile && ! empty( $profile->member_number ) ) {
+								echo esc_html( $profile->member_number );
+							} else {
+								esc_html_e( 'Not assigned', 'remember' );
+							}
+							?>
+						</p>
+						<p class="remember-form-help"><?php esc_html_e( 'Assigned by staff. You can view it here but cannot change it.', 'remember' ); ?></p>
+					</div>
+				</div>
+				<div class="remember-form-row">
 					<div class="remember-form-col">
 						<label for="legal_first_name" class="remember-form-label">
 							<?php esc_html_e( 'Legal First Name', 'remember' ); ?>
@@ -420,6 +449,37 @@ if ( ! empty( $selected_allergy_ids ) ) {
 							value="<?php echo esc_attr( $profile ? $profile->legal_last_name : get_user_meta( $user->ID, 'last_name', true ) ); ?>" required>
 					</div>
 				</div>
+				<?php
+				require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-audit.php';
+				$remember_created_display = Remember_Profile_Audit::format_datetime( $profile && isset( $profile->created_at ) ? $profile->created_at : '', (int) $user->ID );
+				$remember_updated_display = Remember_Profile_Audit::format_datetime( $profile && isset( $profile->updated_at ) ? $profile->updated_at : '', (int) $user->ID );
+				$remember_updated_by_name = Remember_Profile_Audit::format_updated_by_name( $profile && isset( $profile->updated_by ) ? $profile->updated_by : 0 );
+				$remember_audit_bits      = array();
+				if ( '' !== $remember_created_display ) {
+					$remember_audit_bits[] = sprintf(
+						/* translators: %s: formatted datetime */
+						__( 'Created %s', 'remember' ),
+						$remember_created_display
+					);
+				}
+				if ( '' !== $remember_updated_display ) {
+					$remember_audit_bits[] = sprintf(
+						/* translators: %s: formatted datetime */
+						__( 'Updated %s', 'remember' ),
+						$remember_updated_display
+					);
+				}
+				if ( '' !== $remember_updated_by_name ) {
+					$remember_audit_bits[] = sprintf(
+						/* translators: %s: display name */
+						__( 'by %s', 'remember' ),
+						$remember_updated_by_name
+					);
+				}
+				if ( ! empty( $remember_audit_bits ) ) :
+					?>
+					<p class="remember-profile-audit-meta"><?php echo esc_html( implode( ' · ', $remember_audit_bits ) ); ?></p>
+				<?php endif; ?>
 			</div>
 
 			<div class="remember-form-section">
@@ -440,7 +500,7 @@ if ( ! empty( $selected_allergy_ids ) ) {
 							<span class="remember-required">*</span>
 						</label>
 						<?php echo Remember_Timezone::dropdown( $selected_timezone, 'timezone_string', 'timezone_string', true ); ?>
-						<p class="remember-form-help"><?php esc_html_e( 'Used to display scheduled times in your local time.', 'remember' ); ?></p>
+						<p class="remember-form-help"><?php esc_html_e( 'Choose your own time zone. Appointments and event times are shown in your local time — picking the wrong zone can cause missed appointments.', 'remember' ); ?></p>
 					</div>
 				</div>
 			</div>
@@ -471,10 +531,18 @@ if ( ! empty( $selected_allergy_ids ) ) {
 							value="<?php echo esc_attr( $profile ? $profile->address_postal : '' ); ?>">
 					</div>
 					<div class="remember-form-col">
-						<label for="address_country" class="remember-form-label"><?php esc_html_e( 'Country', 'remember' ); ?></label>
-						<?php 
+						<label for="address_country" class="remember-form-label"><?php esc_html_e( 'Country', 'remember' ); ?> <span class="remember-required">*</span></label>
+						<?php
 						$selected_country = $profile && $profile->address_country ? $profile->address_country : 'US';
-						echo Remember_Countries::dropdown( 'address_country', $selected_country, array( 'id' => 'address_country', 'class' => 'remember-form-control' ) );
+						echo Remember_Countries::dropdown(
+							'address_country',
+							$selected_country,
+							array(
+								'id'       => 'address_country',
+								'class'    => 'remember-form-control',
+								'required' => true,
+							)
+						);
 						?>
 					</div>
 				</div>
@@ -515,12 +583,12 @@ if ( ! empty( $selected_allergy_ids ) ) {
 
 			<?php if ( ! empty( $dietary_restrictions ) ) : ?>
 				<div class="remember-form-section">
-					<h3 class="remember-form-section-title"><?php esc_html_e( 'Dietary Restrictions', 'remember' ); ?></h3>
-					<p class="remember-form-help"><?php esc_html_e( 'Select any that apply. Used by event organizers — not shown to other participants.', 'remember' ); ?></p>
-					<div class="remember-checkbox-grid">
+					<h3 class="remember-form-section-title"><?php esc_html_e( 'Dietary Restrictions', 'remember' ); ?> <span class="remember-required">*</span></h3>
+					<p class="remember-form-help"><?php esc_html_e( 'Required. Select at least one — choose None if none apply. Used by event organizers — not shown to other participants.', 'remember' ); ?></p>
+					<div class="remember-checkbox-grid" data-remember-require-one="1">
 						<?php foreach ( $dietary_restrictions as $restriction ) : ?>
 							<label class="remember-checkbox-label">
-								<input type="checkbox" name="dietary_restrictions[]" value="<?php echo esc_attr( $restriction->restriction_id ); ?>" <?php checked( in_array( (string) $restriction->restriction_id, array_map( 'strval', (array) $selected_dietary_ids ), true ) ); ?>>
+								<input type="checkbox" name="dietary_restrictions[]" value="<?php echo esc_attr( $restriction->restriction_id ); ?>" <?php checked( in_array( (string) $restriction->restriction_id, array_map( 'strval', (array) $selected_dietary_ids ), true ) ); ?><?php echo ( 'None' === $restriction->restriction_name ) ? ' data-remember-none="1"' : ''; ?>>
 								<span><?php echo esc_html( $restriction->restriction_name ); ?></span>
 							</label>
 						<?php endforeach; ?>
@@ -530,12 +598,12 @@ if ( ! empty( $selected_allergy_ids ) ) {
 
 			<?php if ( ! empty( $medical_accommodations ) ) : ?>
 				<div class="remember-form-section">
-					<h3 class="remember-form-section-title"><?php esc_html_e( 'Medical Accommodations', 'remember' ); ?></h3>
-					<p class="remember-form-help"><?php esc_html_e( 'Select any that apply. Used by event organizers — not shown to other participants.', 'remember' ); ?></p>
-					<div class="remember-checkbox-grid">
+					<h3 class="remember-form-section-title"><?php esc_html_e( 'Medical Accommodations', 'remember' ); ?> <span class="remember-required">*</span></h3>
+					<p class="remember-form-help"><?php esc_html_e( 'Required. Select at least one — choose None if none apply. Used by event organizers — not shown to other participants.', 'remember' ); ?></p>
+					<div class="remember-checkbox-grid" data-remember-require-one="1">
 						<?php foreach ( $medical_accommodations as $accommodation ) : ?>
 							<label class="remember-checkbox-label">
-								<input type="checkbox" name="medical_accommodations[]" value="<?php echo esc_attr( $accommodation->accommodation_id ); ?>" <?php checked( in_array( (string) $accommodation->accommodation_id, array_map( 'strval', (array) $selected_medical_ids ), true ) ); ?>>
+								<input type="checkbox" name="medical_accommodations[]" value="<?php echo esc_attr( $accommodation->accommodation_id ); ?>" <?php checked( in_array( (string) $accommodation->accommodation_id, array_map( 'strval', (array) $selected_medical_ids ), true ) ); ?><?php echo ( 'None' === $accommodation->accommodation_name ) ? ' data-remember-none="1"' : ''; ?>>
 								<span>
 									<?php echo esc_html( $accommodation->accommodation_name ); ?>
 									<?php if ( ! empty( $accommodation->description ) ) : ?>
@@ -550,12 +618,12 @@ if ( ! empty( $selected_allergy_ids ) ) {
 
 			<?php if ( ! empty( $allergies ) ) : ?>
 				<div class="remember-form-section">
-					<h3 class="remember-form-section-title"><?php esc_html_e( 'Known Allergies', 'remember' ); ?></h3>
-					<p class="remember-form-help"><?php esc_html_e( 'Select any that apply. Used by event organizers — not shown to other participants.', 'remember' ); ?></p>
-					<div class="remember-checkbox-grid">
+					<h3 class="remember-form-section-title"><?php esc_html_e( 'Known Allergies', 'remember' ); ?> <span class="remember-required">*</span></h3>
+					<p class="remember-form-help"><?php esc_html_e( 'Required. Select at least one — choose None if none apply. Used by event organizers — not shown to other participants.', 'remember' ); ?></p>
+					<div class="remember-checkbox-grid" data-remember-require-one="1">
 						<?php foreach ( $allergies as $allergy ) : ?>
 							<label class="remember-checkbox-label">
-								<input type="checkbox" name="allergies[]" value="<?php echo esc_attr( $allergy->allergy_id ); ?>" <?php checked( in_array( (string) $allergy->allergy_id, array_map( 'strval', (array) $selected_allergy_ids ), true ) ); ?>>
+								<input type="checkbox" name="allergies[]" value="<?php echo esc_attr( $allergy->allergy_id ); ?>" <?php checked( in_array( (string) $allergy->allergy_id, array_map( 'strval', (array) $selected_allergy_ids ), true ) ); ?><?php echo ( 'None' === $allergy->allergy_name ) ? ' data-remember-none="1"' : ''; ?>>
 								<span><?php echo esc_html( $allergy->allergy_name ); ?></span>
 							</label>
 						<?php endforeach; ?>
@@ -568,12 +636,12 @@ if ( ! empty( $selected_allergy_ids ) ) {
 				<div class="remember-form-row">
 					<div class="remember-form-col">
 						<label for="im_type" class="remember-form-label"><?php esc_html_e( 'IM Type', 'remember' ); ?></label>
+						<?php
+						require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-im-platforms.php';
+						$im_selected = ( $profile && ! empty( $profile->im_type ) ) ? $profile->im_type : Remember_Im_Platforms::default_key();
+						?>
 						<select id="im_type" name="im_type" class="remember-form-control" required>
-							<option value="telegram" <?php selected( $profile && $profile->im_type ? $profile->im_type : 'telegram', 'telegram' ); ?>><?php esc_html_e( 'Telegram', 'remember' ); ?></option>
-							<option value="discord" <?php selected( $profile && $profile->im_type ? $profile->im_type : 'telegram', 'discord' ); ?>><?php esc_html_e( 'Discord', 'remember' ); ?></option>
-							<option value="signal" <?php selected( $profile && $profile->im_type ? $profile->im_type : 'telegram', 'signal' ); ?>><?php esc_html_e( 'Signal', 'remember' ); ?></option>
-							<option value="whatsapp" <?php selected( $profile && $profile->im_type ? $profile->im_type : 'telegram', 'whatsapp' ); ?>><?php esc_html_e( 'WhatsApp', 'remember' ); ?></option>
-							<option value="other" <?php selected( $profile && $profile->im_type ? $profile->im_type : 'telegram', 'other' ); ?>><?php esc_html_e( 'Other', 'remember' ); ?></option>
+							<?php Remember_Im_Platforms::render_options( $im_selected ); ?>
 						</select>
 					</div>
 					<div class="remember-form-col">
@@ -634,6 +702,7 @@ if ( ! empty( $selected_allergy_ids ) ) {
 
 			<div class="remember-form-section">
 				<h3 class="remember-form-section-title"><?php esc_html_e( 'Interests', 'remember' ); ?></h3>
+				<p class="remember-form-help"><?php esc_html_e( 'What are you trying to get out of this event?', 'remember' ); ?></p>
 				<div class="remember-form-row">
 					<div class="remember-form-col remember-form-col-full">
 						<label for="interests" class="remember-form-label"><?php esc_html_e( 'Interests', 'remember' ); ?></label>
@@ -649,7 +718,7 @@ if ( ! empty( $selected_allergy_ids ) ) {
 								'textarea_rows' => 6,
 								'media_buttons' => false,
 								'teeny'         => true,
-								'quicktags'     => true,
+								'quicktags'     => false,
 								'editor_class'  => 'remember-form-control',
 							)
 						);
@@ -657,6 +726,11 @@ if ( ! empty( $selected_allergy_ids ) ) {
 					</div>
 				</div>
 			</div>
+
+			<?php
+			require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-questions.php';
+			Remember_Profile_Questions::render_fields( (int) $user->ID, 'front' );
+			?>
 
 			<div class="remember-form-section">
 				<h3 class="remember-form-section-title"><?php esc_html_e( 'Emergency Contact', 'remember' ); ?></h3>
@@ -688,7 +762,7 @@ if ( ! empty( $selected_allergy_ids ) ) {
 
 			<div class="remember-form-section">
 				<h3 class="remember-form-section-title"><?php esc_html_e( 'Privacy Settings', 'remember' ); ?></h3>
-				<p class="remember-form-help"><?php esc_html_e( 'Control what is shared with other members when you are accepted into events.', 'remember' ); ?></p>
+				<p class="remember-form-help"><?php esc_html_e( 'Optional. Consider allowing other event attendees to see at least your photo and IM so that you can begin networking with them. Use these controls to do that.', 'remember' ); ?></p>
 				<div class="remember-privacy-checkboxes">
 					<label class="remember-checkbox-label">
 						<input type="checkbox" name="share_photo_with_events" value="1" <?php checked( $profile && isset( $profile->share_photo_with_events ) ? $profile->share_photo_with_events : 0, 1 ); ?>>
@@ -755,6 +829,18 @@ if ( ! empty( $selected_allergy_ids ) ) {
 							<strong class="remember-profile-view-label"><?php esc_html_e( 'Display Name', 'remember' ); ?></strong>
 							<span class="remember-profile-view-value"><?php echo esc_html( $user->display_name ); ?></span>
 						</div>
+						<div class="remember-profile-view-item">
+							<strong class="remember-profile-view-label"><?php esc_html_e( 'Member Number', 'remember' ); ?></strong>
+							<span class="remember-profile-view-value">
+								<?php
+								if ( ! empty( $profile->member_number ) ) {
+									echo esc_html( $profile->member_number );
+								} else {
+									esc_html_e( 'Not assigned', 'remember' );
+								}
+								?>
+							</span>
+						</div>
 						<?php
 						$remember_legal_name_line = trim( Remember_Import_Export::member_list_legal_name_line( $profile, (int) $user->ID ) );
 						if ( ! empty( $remember_legal_name_line ) ) :
@@ -784,6 +870,37 @@ if ( ! empty( $selected_allergy_ids ) ) {
 							</div>
 						<?php endif; ?>
 					</div>
+					<?php
+					require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-audit.php';
+					$remember_created_display = Remember_Profile_Audit::format_datetime( isset( $profile->created_at ) ? $profile->created_at : '', (int) $user->ID );
+					$remember_updated_display = Remember_Profile_Audit::format_datetime( isset( $profile->updated_at ) ? $profile->updated_at : '', (int) $user->ID );
+					$remember_updated_by_name = Remember_Profile_Audit::format_updated_by_name( isset( $profile->updated_by ) ? $profile->updated_by : 0 );
+					$remember_audit_bits      = array();
+					if ( '' !== $remember_created_display ) {
+						$remember_audit_bits[] = sprintf(
+							/* translators: %s: formatted datetime */
+							__( 'Created %s', 'remember' ),
+							$remember_created_display
+						);
+					}
+					if ( '' !== $remember_updated_display ) {
+						$remember_audit_bits[] = sprintf(
+							/* translators: %s: formatted datetime */
+							__( 'Updated %s', 'remember' ),
+							$remember_updated_display
+						);
+					}
+					if ( '' !== $remember_updated_by_name ) {
+						$remember_audit_bits[] = sprintf(
+							/* translators: %s: display name */
+							__( 'by %s', 'remember' ),
+							$remember_updated_by_name
+						);
+					}
+					if ( ! empty( $remember_audit_bits ) ) :
+						?>
+						<p class="remember-profile-audit-meta"><?php echo esc_html( implode( ' · ', $remember_audit_bits ) ); ?></p>
+					<?php endif; ?>
 				</div>
 
 				<?php if ( ! empty( $profile->address_street ) || ! empty( $profile->address_city ) || ! empty( $profile->address_state ) || ! empty( $profile->address_postal ) || ! empty( $profile->address_country ) ) : ?>
@@ -907,7 +1024,10 @@ if ( ! empty( $selected_allergy_ids ) ) {
 						<div class="remember-profile-view-grid">
 							<div class="remember-profile-view-item">
 								<strong class="remember-profile-view-label"><?php esc_html_e( 'IM Type', 'remember' ); ?></strong>
-								<span class="remember-profile-view-value"><?php echo esc_html( ucfirst( $profile->im_type ) ); ?></span>
+								<span class="remember-profile-view-value"><?php
+									require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-im-platforms.php';
+									echo esc_html( Remember_Im_Platforms::get_label( $profile->im_type ) );
+								?></span>
 							</div>
 							<div class="remember-profile-view-item">
 								<strong class="remember-profile-view-label"><?php esc_html_e( 'Handle', 'remember' ); ?></strong>
@@ -922,6 +1042,38 @@ if ( ! empty( $selected_allergy_ids ) ) {
 						<h3 class="remember-form-section-title"><?php esc_html_e( 'Interests', 'remember' ); ?></h3>
 						<div class="remember-profile-view-item remember-profile-view-item-full">
 							<span class="remember-profile-view-value remember-richtext"><?php echo wp_kses_post( wpautop( $profile->interests ) ); ?></span>
+						</div>
+					</div>
+				<?php endif; ?>
+
+				<?php
+				require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-profile-question.php';
+				require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-questions.php';
+				$pq_map    = Remember_Profile_Questions::get_responses_map( (int) $user->ID );
+				$pq_active = array();
+				foreach ( ( new Remember_Profile_Question() )->get_active() as $pq ) {
+					$qid = (int) $pq->question_id;
+					$val = isset( $pq_map[ $qid ] ) ? $pq_map[ $qid ] : '';
+					if ( '' === $val ) {
+						continue;
+					}
+					$pq_active[] = array( $pq, $val );
+				}
+				if ( ! empty( $pq_active ) ) :
+					?>
+					<div class="remember-form-section">
+						<h3 class="remember-form-section-title"><?php esc_html_e( 'Additional questions', 'remember' ); ?></h3>
+						<div class="remember-profile-view-grid">
+							<?php foreach ( $pq_active as $pair ) : ?>
+								<?php
+								$pq  = $pair[0];
+								$val = $pair[1];
+								?>
+								<div class="remember-profile-view-item">
+									<strong class="remember-profile-view-label"><?php echo esc_html( $pq->label ); ?></strong>
+									<span class="remember-profile-view-value"><?php echo esc_html( Remember_Profile_Questions::display_value( $pq, $val ) ); ?></span>
+								</div>
+							<?php endforeach; ?>
 						</div>
 					</div>
 				<?php endif; ?>

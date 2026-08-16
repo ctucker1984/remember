@@ -27,6 +27,14 @@ $remember_sanitize_catalog_price = function ( $raw ) {
 };
 
 if ( isset( $_POST['remember_products_action'] ) && check_admin_referer( 'remember_products_action', 'remember_products_nonce' ) ) {
+	if ( ! current_user_can( 'remember_access_settings' ) ) {
+		wp_die(
+			esc_html__( 'You do not have sufficient permissions to perform this action.', 'remember' ),
+			esc_html__( 'Access Denied', 'remember' ),
+			array( 'response' => 403 )
+		);
+	}
+
 	$action = sanitize_text_field( wp_unslash( $_POST['remember_products_action'] ) );
 
 	if ( 'add_product' === $action ) {

@@ -103,8 +103,9 @@ class Remember_Member extends Remember_Base_Model {
 					'emergency_contact_relationship' => '',
 					'created_at'                     => current_time( 'mysql' ),
 					'updated_at'                     => current_time( 'mysql' ),
+					'updated_by'                     => get_current_user_id() ? get_current_user_id() : $user_id,
 				),
-				array( '%d', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s' )
+				array( '%d', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%d' )
 			);
 		}
 
@@ -260,6 +261,45 @@ class Remember_Member extends Remember_Base_Model {
 		);
 		
 		return $wpdb->get_results( $query );
+	}
+
+	/**
+	 * Whether an attendees-only guard may view a specific member.
+	 *
+	 * True when both share at least one event where each has an accepted application,
+	 * and the target is not the guard themselves. Matches get_attendees_for_guard() scope.
+	 *
+	 * @param int $guard_member_id  Guard (viewer) member ID.
+	 * @param int $target_member_id Member being viewed.
+	 * @return bool
+	 */
+	public function guard_can_view_attendee( $guard_member_id, $target_member_id ) {
+		global $wpdb;
+
+		$guard_member_id  = absint( $guard_member_id );
+		$target_member_id = absint( $target_member_id );
+
+		if ( $guard_member_id <= 0 || $target_member_id <= 0 || $guard_member_id === $target_member_id ) {
+			return false;
+		}
+
+		$shared = $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT 1
+				FROM {$wpdb->prefix}remember_event_applications g
+				INNER JOIN {$wpdb->prefix}remember_event_applications t
+					ON g.event_id = t.event_id
+				WHERE g.member_id = %d
+					AND g.status = 'accepted'
+					AND t.member_id = %d
+					AND t.status = 'accepted'
+				LIMIT 1",
+				$guard_member_id,
+				$target_member_id
+			)
+		);
+
+		return ! empty( $shared );
 	}
 
 	/**

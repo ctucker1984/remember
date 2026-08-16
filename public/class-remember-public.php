@@ -71,8 +71,12 @@ class Remember_Public {
 		);
 		wp_enqueue_script( $this->plugin_name, plugin_dir_url( __FILE__ ) . '../assets/js/public.js', array( 'jquery', $this->plugin_name . '-timezone' ), $this->version, true );
 		wp_localize_script( $this->plugin_name, 'rememberPublic', array(
-			'ajaxurl' => admin_url( 'admin-ajax.php' ),
-			'nonce'   => wp_create_nonce( 'remember_public_nonce' ),
+			'ajaxurl'              => admin_url( 'admin-ajax.php' ),
+			'nonce'                => wp_create_nonce( 'remember_public_nonce' ),
+			'profileCurrencyNonce' => wp_create_nonce( 'remember_profile_currency_status' ),
+			'i18n'                 => array(
+				'profileStale' => __( 'Save your profile first (within the last 24 hours), then type the confirmation phrase.', 'remember' ),
+			),
 		) );
 
 		// Interests uses wp_editor on profile edit and public registration.
@@ -183,8 +187,17 @@ class Remember_Public {
 			$this->redirect_member_registration( 'missing_fields' );
 		}
 
+		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-profile-questions.php';
+		$pq_answers = Remember_Profile_Questions::collect_from_request();
+
 		$missing = Remember_Profile_Fields::first_missing_required( $profile_data, $meta_data );
 		if ( '' !== $missing ) {
+			$this->redirect_member_registration( 'missing_fields' );
+		}
+		if ( null !== Remember_Profile_Questions::first_missing_required( $pq_answers ) ) {
+			$this->redirect_member_registration( 'missing_fields' );
+		}
+		if ( '' !== Remember_Profile_Fields::first_missing_required_health_catalog() ) {
 			$this->redirect_member_registration( 'missing_fields' );
 		}
 
@@ -228,15 +241,16 @@ class Remember_Public {
 		}
 
 		$has_photo = ! empty( $_FILES['photo_file']['name'] );
-		if ( $has_photo ) {
-			$file_size = isset( $_FILES['photo_file']['size'] ) ? absint( $_FILES['photo_file']['size'] ) : 0;
-			if ( $file_size > 0 && $file_size > $photo_max_bytes ) {
-				$this->redirect_member_registration( 'photo_too_large' );
-			}
-			$upload_err = isset( $_FILES['photo_file']['error'] ) ? (int) $_FILES['photo_file']['error'] : UPLOAD_ERR_NO_FILE;
-			if ( UPLOAD_ERR_OK !== $upload_err && UPLOAD_ERR_NO_FILE !== $upload_err ) {
-				$this->redirect_member_registration( 'photo_failed' );
-			}
+		if ( ! $has_photo ) {
+			$this->redirect_member_registration( 'photo_required' );
+		}
+		$file_size = isset( $_FILES['photo_file']['size'] ) ? absint( $_FILES['photo_file']['size'] ) : 0;
+		if ( $file_size > 0 && $file_size > $photo_max_bytes ) {
+			$this->redirect_member_registration( 'photo_too_large' );
+		}
+		$upload_err = isset( $_FILES['photo_file']['error'] ) ? (int) $_FILES['photo_file']['error'] : UPLOAD_ERR_NO_FILE;
+		if ( UPLOAD_ERR_OK !== $upload_err ) {
+			$this->redirect_member_registration( 'photo_failed' );
 		}
 
 		require_once plugin_dir_path( __FILE__ ) . '../includes/models/class-member.php';
@@ -286,6 +300,7 @@ class Remember_Public {
 		$profile_row['member_id']  = $user_id;
 		$profile_row['created_at'] = current_time( 'mysql' );
 		$profile_row['updated_at'] = current_time( 'mysql' );
+		$profile_row['updated_by'] = $user_id;
 
 		$profile_inserted = $wpdb->insert( $wpdb->prefix . 'remember_member_profiles', $profile_row );
 
@@ -300,6 +315,7 @@ class Remember_Public {
 		}
 
 		Remember_Profile_Fields::save_junctions_from_request( $user_id );
+		Remember_Profile_Questions::save_for_member( $user_id, $pq_answers );
 
 		if ( Remember_Vetting_Workflow::should_vet_on_join() ) {
 			$vetting_result = Remember_Vetting_Workflow::create_vetting_case( $user_id );
@@ -373,6 +389,7 @@ class Remember_Public {
 			'create_failed'    => __( 'Could not create your account. Please try again or contact support.', 'remember' ),
 			'member_failed'    => __( 'Could not complete member setup. Please contact support.', 'remember' ),
 			'profile_failed'   => __( 'Could not save your profile. Please contact support.', 'remember' ),
+			'photo_required'   => __( 'A profile photo is required to register.', 'remember' ),
 			'photo_too_large'  => __( 'That photo is too large. Please choose a smaller image and try again.', 'remember' ),
 			'photo_failed'     => __( 'That photo could not be uploaded. Please try a different JPEG, PNG, or GIF.', 'remember' ),
 		);
@@ -514,6 +531,31 @@ class Remember_Public {
 		$event_id = $atts['event_id'];
 		include plugin_dir_path( __FILE__ ) . 'partials/remember-apply.php';
 		return ob_get_clean();
+	}
+
+	/**
+	 * AJAX: whether the current member's profile was saved within 24 hours.
+	 *
+	 * @return void
+	 */
+	public function ajax_profile_currency_status() {
+		check_ajax_referer( 'remember_profile_currency_status', 'nonce' );
+
+		if ( ! is_user_logged_in() ) {
+			wp_send_json_error( array( 'message' => __( 'You must be logged in.', 'remember' ) ), 403 );
+		}
+
+		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-profile-audit.php';
+		$member_id  = get_current_user_id();
+		$updated_at = Remember_Profile_Audit::get_profile_updated_at( $member_id );
+		$fresh      = Remember_Profile_Audit::is_profile_fresh( $member_id );
+
+		wp_send_json_success(
+			array(
+				'fresh'      => $fresh,
+				'updated_at' => $updated_at,
+			)
+		);
 	}
 
 	/**

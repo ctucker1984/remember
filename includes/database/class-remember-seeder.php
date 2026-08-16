@@ -53,6 +53,7 @@ class Remember_Seeder {
 			'seed_default_location',
 			'seed_default_roles',
 			'seed_social_media_platforms',
+			'seed_im_platforms',
 			'seed_dietary_restrictions',
 			'seed_allergies',
 			'seed_clothing_size_options',
@@ -82,6 +83,17 @@ class Remember_Seeder {
 	 */
 	public function ensure_clothing_size_options() {
 		$this->seed_clothing_size_options();
+	}
+
+	/**
+	 * Ensure dietary / allergy / medical catalog rows exist (safe for upgrades).
+	 *
+	 * @return void
+	 */
+	public function ensure_health_catalog_options() {
+		$this->seed_dietary_restrictions();
+		$this->seed_allergies();
+		$this->seed_medical_accommodations();
 	}
 
 	/**
@@ -155,6 +167,7 @@ class Remember_Seeder {
 				'remember_read_events',
 				'remember_update_events',
 				'remember_delete_events',
+				'remember_event_data_export',
 				// Locations (read only)
 				'remember_read_locations',
 				// Members (read only)
@@ -257,22 +270,77 @@ class Remember_Seeder {
 	}
 
 	/**
+	 * Seed instant messenger platforms (idempotent).
+	 */
+	private function seed_im_platforms() {
+		$this->ensure_im_platforms();
+	}
+
+	/**
+	 * Ensure default IM platforms exist (safe for upgrades).
+	 *
+	 * @return void
+	 */
+	public function ensure_im_platforms() {
+		require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-im-platforms.php';
+		$table = $this->prefix . 'im_platforms';
+		if ( $this->wpdb->get_var( $this->wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
+			return;
+		}
+		$index = 0;
+		foreach ( Remember_Im_Platforms::defaults() as $key => $name ) {
+			$existing = $this->wpdb->get_var(
+				$this->wpdb->prepare(
+					"SELECT platform_id FROM {$table} WHERE platform_key = %s",
+					$key
+				)
+			);
+			if ( ! $existing ) {
+				$this->wpdb->insert(
+					$table,
+					array(
+						'platform_key'  => $key,
+						'platform_name' => $name,
+						'is_active'     => 1,
+						'sort_order'    => $index,
+						'created_at'    => current_time( 'mysql' ),
+					),
+					array( '%s', '%s', '%d', '%d', '%s' )
+				);
+			}
+			++$index;
+		}
+	}
+
+	/**
 	 * Seed dietary restrictions.
 	 */
 	private function seed_dietary_restrictions() {
 		$table_name = $this->prefix . 'dietary_restrictions';
 		
 		$restrictions = array(
+			__( 'None', 'remember' ),
 			__( 'Vegetarian', 'remember' ),
 			__( 'Vegan', 'remember' ),
+			__( 'Pescatarian', 'remember' ),
 			__( 'Gluten-Free', 'remember' ),
+			__( 'Celiac', 'remember' ),
 			__( 'Dairy-Free', 'remember' ),
+			__( 'Egg-Free', 'remember' ),
+			__( 'Soy-Free', 'remember' ),
 			__( 'Kosher', 'remember' ),
 			__( 'Halal', 'remember' ),
 			__( 'No Nuts', 'remember' ),
 			__( 'No Shellfish', 'remember' ),
+			__( 'No Pork', 'remember' ),
+			__( 'No Beef', 'remember' ),
+			__( 'No Alcohol', 'remember' ),
 			__( 'Low Sodium', 'remember' ),
 			__( 'Diabetic', 'remember' ),
+			__( 'Sugar-Free / No Added Sugar', 'remember' ),
+			__( 'Low-FODMAP', 'remember' ),
+			__( 'Keto / Low-Carb', 'remember' ),
+			__( 'Soft Foods Only', 'remember' ),
 		);
 
 		foreach ( $restrictions as $index => $restriction ) {
@@ -298,16 +366,54 @@ class Remember_Seeder {
 		$table_name = $this->prefix . 'allergies';
 		
 		$allergies = array(
+			__( 'None', 'remember' ),
 			__( 'Peanuts', 'remember' ),
 			__( 'Tree Nuts', 'remember' ),
+			__( 'Almonds', 'remember' ),
+			__( 'Cashews', 'remember' ),
+			__( 'Walnuts', 'remember' ),
+			__( 'Pecans', 'remember' ),
+			__( 'Hazelnuts', 'remember' ),
+			__( 'Pistachios', 'remember' ),
+			__( 'Brazil Nuts', 'remember' ),
+			__( 'Macadamia Nuts', 'remember' ),
 			__( 'Shellfish', 'remember' ),
+			__( 'Crustaceans', 'remember' ),
+			__( 'Molluscs', 'remember' ),
 			__( 'Fish', 'remember' ),
 			__( 'Eggs', 'remember' ),
 			__( 'Dairy', 'remember' ),
 			__( 'Soy', 'remember' ),
 			__( 'Wheat', 'remember' ),
+			__( 'Gluten', 'remember' ),
 			__( 'Sesame', 'remember' ),
+			__( 'Mustard', 'remember' ),
+			__( 'Celery', 'remember' ),
+			__( 'Lupin', 'remember' ),
+			__( 'Sulphites', 'remember' ),
+			__( 'Corn', 'remember' ),
+			__( 'Garlic', 'remember' ),
+			__( 'Onion', 'remember' ),
+			__( 'Tomato', 'remember' ),
+			__( 'Citrus', 'remember' ),
+			__( 'Grapefruit', 'remember' ),
+			__( 'Orange', 'remember' ),
+			__( 'Lemon', 'remember' ),
+			__( 'Lime', 'remember' ),
+			__( 'Pomegranate', 'remember' ),
+			__( 'Strawberry', 'remember' ),
+			__( 'Kiwi', 'remember' ),
+			__( 'Banana', 'remember' ),
+			__( 'Mango', 'remember' ),
+			__( 'Pineapple', 'remember' ),
+			__( 'Avocado', 'remember' ),
+			__( 'Coconut', 'remember' ),
+			__( 'Chocolate', 'remember' ),
+			__( 'Caffeine', 'remember' ),
+			__( 'Honey', 'remember' ),
 			__( 'Latex', 'remember' ),
+			__( 'Penicillin', 'remember' ),
+			__( 'Aspirin / NSAIDs', 'remember' ),
 		);
 
 		foreach ( $allergies as $index => $allergy ) {
@@ -369,6 +475,10 @@ class Remember_Seeder {
 		
 		$accommodations = array(
 			array(
+				'name'        => __( 'None', 'remember' ),
+				'description' => '',
+			),
+			array(
 				'name'        => __( 'CPAP Machine', 'remember' ),
 				'description' => __( 'Requires CPAP machine for sleep', 'remember' ),
 			),
@@ -391,6 +501,38 @@ class Remember_Seeder {
 			array(
 				'name'        => __( 'Medical Equipment Storage', 'remember' ),
 				'description' => __( 'Requires secure storage for medical equipment', 'remember' ),
+			),
+			array(
+				'name'        => __( 'Ground Floor / Elevator Access', 'remember' ),
+				'description' => __( 'Needs ground-floor lodging or reliable elevator access', 'remember' ),
+			),
+			array(
+				'name'        => __( 'ADA-Accessible Restroom', 'remember' ),
+				'description' => __( 'Requires ADA-accessible restroom facilities', 'remember' ),
+			),
+			array(
+				'name'        => __( 'Shower Chair / Grab Bars', 'remember' ),
+				'description' => __( 'Needs shower chair and/or grab bars in bathing area', 'remember' ),
+			),
+			array(
+				'name'        => __( 'Refrigerator for Medication', 'remember' ),
+				'description' => __( 'Needs refrigerated storage for medication', 'remember' ),
+			),
+			array(
+				'name'        => __( 'Quiet / Low-Stimulus Room', 'remember' ),
+				'description' => __( 'Prefers a quiet or low-stimulus sleeping/meeting space', 'remember' ),
+			),
+			array(
+				'name'        => __( 'Extra Time Between Sessions', 'remember' ),
+				'description' => __( 'Needs additional transition time between scheduled activities', 'remember' ),
+			),
+			array(
+				'name'        => __( 'Nearby Hospital Access', 'remember' ),
+				'description' => __( 'Needs proximity to hospital or urgent medical care', 'remember' ),
+			),
+			array(
+				'name'        => __( 'Allergy-Friendly Environment', 'remember' ),
+				'description' => __( 'Needs reduced allergen exposure in lodging or common areas', 'remember' ),
 			),
 		);
 

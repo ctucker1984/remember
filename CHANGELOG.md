@@ -2,12 +2,17 @@
 
 All notable changes to reMember are listed here. The current plugin version is in `remember.php` (`REMEMBER_VERSION`) and [GitHub Releases](https://github.com/ctucker1984/remember/releases).
 
+## 1.3.5
+
+- **Fix:** Every rich-text field is Visual-only — the Visual/Code switcher is gone from events, locations, agreements, member edit, registration, and profile.
+
 ## 1.3.4
 
 - **Enhancement:** Admin-assignable unique alphanumeric member number; members see it read-only. Closes [#21](https://github.com/ctucker1984/remember/issues/21).
 - **Enhancement:** Event apply and dashboard application edits require profile-currency confirmation (phrase + profile saved within 24 hours); profile `updated_by` audit fields. Closes [#22](https://github.com/ctucker1984/remember/issues/22).
 - **Fix:** Interests editors (profile, registration, admin) show Visual only — Code tab hidden.
 - **Fix:** Long profile edit forms no longer clip custom fields or force horizontal overflow.
+- **Fix:** Upload → Replace no longer fails on git/dev trees (`.git`, `dist`, etc.): deactivate earlier, purge non-release paths, chmod writable, retry clear when WordPress reports `files_not_writable`.
 
 ## 1.3.3
 

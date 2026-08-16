@@ -8,12 +8,13 @@
 	
 	// Settings page tabs
 	$(document).ready(function() {
-		// Handle tab clicks
-		$('.nav-tab-wrapper a').on('click', function(e) {
+		// Handle tab clicks (Settings page only — do not intercept other nav-tab-wrappers).
+		var $settingsTabs = $('.remember-settings #remember-main-settings > .nav-tab-wrapper a');
+		$settingsTabs.on('click', function(e) {
 			e.preventDefault();
 			var target = $(this).attr('href');
 			
-			$('.nav-tab').removeClass('nav-tab-active');
+			$settingsTabs.removeClass('nav-tab-active');
 			$(this).addClass('nav-tab-active');
 			
 			$('.remember-settings-tab').hide();
@@ -28,7 +29,11 @@
 		// Handle URL hash on page load
 		if (window.location.hash) {
 			var hash = window.location.hash;
-			var $tab = $('.nav-tab-wrapper a[href="' + hash + '"]');
+			// Combined Platforms tab replaced separate Social Media / IM tabs.
+			if (hash === '#social-media' || hash === '#im-platforms') {
+				hash = '#platforms';
+			}
+			var $tab = $('.remember-settings #remember-main-settings > .nav-tab-wrapper a[href="' + hash + '"]');
 			if ($tab.length) {
 				$tab.trigger('click');
 			}
@@ -37,7 +42,7 @@
 			var params = new URLSearchParams(window.location.search);
 			var tabParam = params.get('tab');
 			if (tabParam) {
-				var $tabFromQuery = $('.nav-tab-wrapper a[href="#' + tabParam + '"]');
+				var $tabFromQuery = $('.remember-settings #remember-main-settings > .nav-tab-wrapper a[href="#' + tabParam + '"]');
 				if ($tabFromQuery.length) {
 					$tabFromQuery.trigger('click');
 				}

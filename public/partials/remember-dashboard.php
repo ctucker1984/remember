@@ -43,9 +43,17 @@ if ( isset( $_POST['remember_member_application_action'] ) && check_admin_refere
 
 	if ( $application && absint( $application->member_id ) === absint( $member_id_for_queries ) ) {
 		if ( 'update_application' === $member_action && in_array( $application->status, array( 'pending', 'waitlisted' ), true ) ) {
+			require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-audit.php';
+			$currency_error = Remember_Profile_Audit::validate_application_confirmation(
+				isset( $_POST['remember_profile_currency_confirm'] ) ? wp_unslash( $_POST['remember_profile_currency_confirm'] ) : '',
+				(int) $member_id_for_queries
+			);
+			if ( '' !== $currency_error ) {
+				echo '<div class="remember-notice remember-error"><p>' . esc_html( $currency_error ) . '</p></div>';
+			} else {
+			global $wpdb;
 			$new_event_role_id = isset( $_POST['event_role_id'] ) ? absint( $_POST['event_role_id'] ) : 0;
 			if ( $new_event_role_id > 0 ) {
-				global $wpdb;
 				$event_role_exists = $wpdb->get_var(
 					$wpdb->prepare(
 						"SELECT COUNT(*) FROM {$wpdb->prefix}remember_event_roles WHERE event_role_id = %d AND event_id = %d",
@@ -106,21 +114,20 @@ if ( isset( $_POST['remember_member_application_action'] ) && check_admin_refere
 					);
 				}
 			}
+			Remember_Profile_Audit::touch_updated( (int) $member_id_for_queries, get_current_user_id() );
+			echo '<div class="remember-notice remember-notice-success"><p>' . esc_html__( 'Application updated. Your profile currency confirmation was recorded.', 'remember' ) . '</p></div>';
+			}
 		} elseif ( 'withdraw_application' === $member_action && 'accepted' === $application->status ) {
 			require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-unwind.php';
-			$billing_action = isset( $_POST['billing_action'] ) ? Remember_Billing_Unwind::sanitize_action( wp_unslash( $_POST['billing_action'] ) ) : 'leave';
-			$updated        = $application_model->update_status( $application_id, 'cancelled', get_current_user_id() );
+			$updated = $application_model->update_status( $application_id, 'cancelled', get_current_user_id() );
 			if ( false !== $updated ) {
-				$unwind = Remember_Billing_Unwind::apply(
+				// Void ticket only; leave invoice for admin to handle in the back end.
+				Remember_Billing_Unwind::apply(
 					$application_id,
-					$billing_action,
+					'leave',
 					sprintf( __( 'Member cancelled application #%d', 'remember' ), $application_id )
 				);
-				if ( is_wp_error( $unwind ) ) {
-					echo '<div class="remember-notice remember-notice-warning"><p>' . esc_html( $unwind->get_error_message() ) . '</p></div>';
-				} else {
-					echo '<div class="remember-notice remember-notice-success"><p>' . esc_html__( 'Application cancelled. Your ticket is marked VOID.', 'remember' ) . '</p></div>';
-				}
+				echo '<div class="remember-notice remember-notice-success"><p>' . esc_html__( 'Application cancelled. Your ticket is marked VOID.', 'remember' ) . '</p></div>';
 			}
 		}
 	}
@@ -317,7 +324,12 @@ foreach ( $selected_application_addons as $selected_addon_row ) {
 						<?php endif; ?>
 					</div>
 
-					<button type="submit" class="remember-button remember-button-primary"><?php esc_html_e( 'Save Application Changes', 'remember' ); ?></button>
+					<?php
+					require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-audit.php';
+					Remember_Profile_Audit::render_confirm_field( 'remember_dashboard_profile_currency_confirm' );
+					?>
+
+					<button type="submit" class="remember-button remember-button-primary" disabled><?php esc_html_e( 'Save Application Changes', 'remember' ); ?></button>
 				</form>
 			<?php elseif ( 'accepted' === $selected_application->status || ! empty( $selected_application->ticket_voided ) ) : ?>
 				<?php
@@ -330,20 +342,15 @@ foreach ( $selected_application_addons as $selected_addon_row ) {
 					</p>
 				<?php endif; ?>
 				<?php if ( 'accepted' === $selected_application->status ) : ?>
-				<?php
-				require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-unwind.php';
-				$cancel_has_invoice = Remember_Billing_Unwind::has_invoice( $selected_application->application_id );
-				?>
 				<form method="post" action="" style="margin-top: 15px;" class="remember-cancel-application">
 					<?php wp_nonce_field( 'remember_member_application_action', 'remember_member_application_nonce' ); ?>
 					<input type="hidden" name="remember_member_application_action" value="withdraw_application">
 					<input type="hidden" name="application_id" value="<?php echo esc_attr( $selected_application->application_id ); ?>">
-					<h4 style="margin: 0 0 8px;"><?php esc_html_e( 'Cancel application (member)', 'remember' ); ?></h4>
+					<h4 style="margin: 0 0 8px;"><?php esc_html_e( 'Cancel application', 'remember' ); ?></h4>
 					<p class="remember-description" style="margin-top: 0;">
-						<?php esc_html_e( 'This sets your application to Cancelled and voids your admission ticket. Choose what should happen to the invoice.', 'remember' ); ?>
+						<?php esc_html_e( 'This cancels your application and voids your admission ticket. Billing questions are handled by an administrator.', 'remember' ); ?>
 					</p>
-					<?php echo Remember_Billing_Unwind::render_action_radios( 'billing_action', $cancel_has_invoice ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in helper. ?>
-					<button type="submit" class="remember-button remember-button-secondary" style="margin-top: 10px;" onclick="return confirm('<?php echo esc_js( __( 'Cancel this application? Confirm your invoice choice above.', 'remember' ) ); ?>');"><?php esc_html_e( 'Cancel Application', 'remember' ); ?></button>
+					<button type="submit" class="remember-button remember-button-secondary" style="margin-top: 10px;" onclick="return confirm('<?php echo esc_js( __( 'Cancel this application?', 'remember' ) ); ?>');"><?php esc_html_e( 'Cancel Application', 'remember' ); ?></button>
 				</form>
 				<?php endif; ?>
 			<?php endif; ?>

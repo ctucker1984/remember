@@ -67,8 +67,11 @@
 			$input.attr('required', 'required');
 		}
 		$input.attr('id', $select.attr('id') + '_combo');
-		$input.attr('placeholder', $select.find('option:selected').length ? '' : 'Type a city or region…');
+		$input.attr('placeholder', 'Type a city or region…');
 		$input.val(selectedLabel($select));
+		if (!$select.val()) {
+			$input.val('');
+		}
 
 		$select.addClass('remember-timezone-select--sr');
 		$select.attr('tabindex', '-1');
@@ -155,7 +158,8 @@
 		}
 
 		$input.on('focus', function() {
-			renderList($input.val());
+			// Browse the full WP list on open; only filter after the member types.
+			renderList('');
 			$input.select();
 		});
 

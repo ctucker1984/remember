@@ -116,6 +116,10 @@ class Remember_Countries {
 		);
 		$args = wp_parse_args( $args, $defaults );
 
+		if ( '' === (string) $selected ) {
+			$selected = 'US';
+		}
+
 		$html = sprintf(
 			'<select name="%s" id="%s" class="%s"%s>',
 			esc_attr( $name ),
@@ -127,12 +131,12 @@ class Remember_Countries {
 		$countries = self::get_countries();
 		asort( $countries ); // Sort alphabetically by name
 
-		foreach ( $countries as $code => $name ) {
+		foreach ( $countries as $code => $label ) {
 			$html .= sprintf(
 				'<option value="%s"%s>%s</option>',
 				esc_attr( $code ),
 				selected( $selected, $code, false ),
-				esc_html( $name )
+				esc_html( $label )
 			);
 		}
 

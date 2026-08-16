@@ -27,6 +27,8 @@ class Remember_Database_Updater {
 	public static function update_schema() {
 		global $wpdb;
 		require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-logger.php';
+		// Migrations may create tables via dbDelta outside plugin activation.
+		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 
 		Remember_Logger::activation_debug(
 			'update_schema: enter',
@@ -791,6 +793,313 @@ class Remember_Database_Updater {
 			update_option( 'remember_db_version', '1.22.0' );
 			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.22.0' ) );
 		}
+
+		// Update to 1.23.0 — profile custom questions (admin-defined fields).
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.23.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.23.0' ) );
+
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-database.php';
+			$db = new Remember_Database();
+			$db->create_profile_questions_table();
+			$db->create_profile_question_responses_table();
+
+			update_option( 'remember_db_version', '1.23.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.23.0' ) );
+		}
+
+		// Update to 1.24.0 — event agreements library (versioned) + acceptances.
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.24.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.24.0' ) );
+
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-database.php';
+			$db = new Remember_Database();
+			$db->create_agreements_table();
+			$db->create_agreement_revisions_table();
+			$db->create_event_agreements_table();
+			$db->create_agreement_acceptances_table();
+
+			update_option( 'remember_db_version', '1.24.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.24.0' ) );
+		}
+
+		// Update to 1.25.0 — allow admin to supersede closed applications for reapply.
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.25.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.25.0' ) );
+
+			global $wpdb;
+			$apps_table = $wpdb->prefix . 'remember_event_applications';
+			$col        = $wpdb->get_results( $wpdb->prepare( 'SHOW COLUMNS FROM `' . $apps_table . '` LIKE %s', 'superseded_at' ) );
+			if ( empty( $col ) ) {
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is plugin-controlled.
+				$ok = $wpdb->query( "ALTER TABLE {$apps_table} ADD COLUMN superseded_at DATETIME DEFAULT NULL AFTER ticket_ready_emailed_at" );
+				if ( false === $ok ) {
+					Remember_Logger::error( 'Failed to add superseded_at', array( 'error' => $wpdb->last_error ) );
+				}
+			}
+
+			$indexes = $wpdb->get_results( "SHOW INDEX FROM {$apps_table} WHERE Key_name = 'event_member_role'" );
+			if ( ! empty( $indexes ) ) {
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$drop = $wpdb->query( "ALTER TABLE {$apps_table} DROP INDEX event_member_role" );
+				if ( false === $drop ) {
+					Remember_Logger::error( 'Failed to drop event_member_role unique index', array( 'error' => $wpdb->last_error ) );
+				}
+			}
+
+			$new_idx = $wpdb->get_results( "SHOW INDEX FROM {$apps_table} WHERE Key_name = 'event_member_role_active'" );
+			if ( empty( $new_idx ) ) {
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$add_idx = $wpdb->query( "ALTER TABLE {$apps_table} ADD KEY event_member_role_active (event_id, member_id, event_role_id, superseded_at)" );
+				if ( false === $add_idx ) {
+					Remember_Logger::error( 'Failed to add event_member_role_active index', array( 'error' => $wpdb->last_error ) );
+				}
+			}
+
+			update_option( 'remember_db_version', '1.25.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.25.0' ) );
+		}
+
+		// Update to 1.26.0 — event participant CSV export capability.
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.26.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.26.0' ) );
+
+			require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-capabilities.php';
+			require_once plugin_dir_path( __FILE__ ) . '../models/class-role.php';
+
+			Remember_Capabilities::setup_capabilities();
+
+			$role_model = new Remember_Role();
+			$cap        = 'remember_event_data_export';
+			$role_names = array( 'Event Administrator', 'System Administrator' );
+			$role_ids   = array();
+
+			foreach ( $role_names as $role_name ) {
+				$role_id = (int) $wpdb->get_var(
+					$wpdb->prepare(
+						"SELECT role_id FROM {$wpdb->prefix}remember_roles WHERE role_name = %s",
+						$role_name
+					)
+				);
+				if ( $role_id > 0 ) {
+					$role_model->add_capability( $role_id, $cap );
+					$role_ids[] = $role_id;
+				}
+			}
+
+			if ( ! empty( $role_ids ) ) {
+				$placeholders = implode( ',', array_fill( 0, count( $role_ids ), '%d' ) );
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- placeholders built from count.
+				$member_ids = $wpdb->get_col(
+					$wpdb->prepare(
+						"SELECT DISTINCT member_id FROM {$wpdb->prefix}remember_member_roles WHERE role_id IN ($placeholders)",
+						$role_ids
+					)
+				);
+				if ( is_array( $member_ids ) ) {
+					foreach ( $member_ids as $member_id ) {
+						Remember_Capabilities::sync_user_capabilities_from_roles( (int) $member_id );
+					}
+				}
+			}
+
+			update_option( 'remember_db_version', '1.26.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.26.0' ) );
+		}
+
+		// Update to 1.27.0 — bulk Import/Export capability (System Admin; assignable).
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.27.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.27.0' ) );
+
+			require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-capabilities.php';
+			require_once plugin_dir_path( __FILE__ ) . '../models/class-role.php';
+
+			Remember_Capabilities::setup_capabilities();
+
+			$role_model = new Remember_Role();
+			$cap        = 'remember_import_export';
+			$role_id    = (int) $wpdb->get_var(
+				$wpdb->prepare(
+					"SELECT role_id FROM {$wpdb->prefix}remember_roles WHERE role_name = %s",
+					'System Administrator'
+				)
+			);
+			if ( $role_id > 0 ) {
+				$role_model->add_capability( $role_id, $cap );
+				$member_ids = $wpdb->get_col(
+					$wpdb->prepare(
+						"SELECT DISTINCT member_id FROM {$wpdb->prefix}remember_member_roles WHERE role_id = %d",
+						$role_id
+					)
+				);
+				if ( is_array( $member_ids ) ) {
+					foreach ( $member_ids as $member_id ) {
+						Remember_Capabilities::sync_user_capabilities_from_roles( (int) $member_id );
+					}
+				}
+			}
+
+			update_option( 'remember_db_version', '1.27.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.27.0' ) );
+		}
+
+		// Update to 1.28.0 — None options for dietary / allergy / medical catalogs.
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.28.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.28.0' ) );
+
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-seeder.php';
+			$seeder = new Remember_Seeder();
+			$seeder->ensure_health_catalog_options();
+
+			update_option( 'remember_db_version', '1.28.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.28.0' ) );
+		}
+
+		// Update to 1.29.0 — expanded allergies catalog (incl. pomegranate, grapefruit).
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.29.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.29.0' ) );
+
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-seeder.php';
+			$seeder = new Remember_Seeder();
+			$seeder->ensure_health_catalog_options();
+
+			update_option( 'remember_db_version', '1.29.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.29.0' ) );
+		}
+
+		// Update to 1.30.0 — expanded dietary + medical accommodation catalogs.
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.30.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.30.0' ) );
+
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-seeder.php';
+			$seeder = new Remember_Seeder();
+			$seeder->ensure_health_catalog_options();
+
+			update_option( 'remember_db_version', '1.30.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.30.0' ) );
+		}
+
+		// Update to 1.31.0 — conditional required_when for custom profile fields (#11).
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.31.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.31.0' ) );
+
+			$table = $wpdb->prefix . 'remember_profile_questions';
+			if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) === $table ) {
+				$cols = $wpdb->get_col( "SHOW COLUMNS FROM {$table}", 0 );
+				if ( is_array( $cols ) && ! in_array( 'required_when_json', $cols, true ) ) {
+					$ok = $wpdb->query(
+						"ALTER TABLE {$table} ADD COLUMN required_when_json LONGTEXT DEFAULT NULL AFTER is_required"
+					);
+					if ( false === $ok ) {
+						Remember_Logger::error(
+							'Failed to add required_when_json to remember_profile_questions',
+							array( 'error' => $wpdb->last_error )
+						);
+					} else {
+						Remember_Logger::info( 'Added required_when_json to remember_profile_questions' );
+					}
+				}
+			}
+
+			update_option( 'remember_db_version', '1.31.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.31.0' ) );
+		}
+
+		// Update to 1.32.0 — admin-managed IM platforms (#20).
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.32.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.32.0' ) );
+
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-database.php';
+			$db = new Remember_Database();
+			$db->create_im_platforms_table();
+
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-seeder.php';
+			$seeder = new Remember_Seeder();
+			$seeder->ensure_im_platforms();
+
+			update_option( 'remember_db_version', '1.32.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.32.0' ) );
+		}
+
+		// Update to 1.33.0 — unique alphanumeric member_number (#21).
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.33.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.33.0' ) );
+
+			$profiles_table = $wpdb->prefix . 'remember_member_profiles';
+			$col            = $wpdb->get_results( $wpdb->prepare( 'SHOW COLUMNS FROM `' . $profiles_table . '` LIKE %s', 'member_number' ) );
+			if ( empty( $col ) ) {
+				$ok = $wpdb->query(
+					"ALTER TABLE {$profiles_table} ADD COLUMN member_number VARCHAR(50) DEFAULT NULL AFTER share_photo_with_events"
+				);
+				if ( false === $ok ) {
+					Remember_Logger::error(
+						'Failed to add member_number to remember_member_profiles',
+						array( 'error' => $wpdb->last_error )
+					);
+				} else {
+					Remember_Logger::info( 'Added member_number to remember_member_profiles' );
+				}
+			}
+
+			$index = $wpdb->get_results( "SHOW INDEX FROM `{$profiles_table}` WHERE Key_name = 'member_number'" );
+			if ( empty( $index ) ) {
+				$ok = $wpdb->query( "ALTER TABLE {$profiles_table} ADD UNIQUE KEY member_number (member_number)" );
+				if ( false === $ok ) {
+					Remember_Logger::error(
+						'Failed to add unique key on member_number',
+						array( 'error' => $wpdb->last_error )
+					);
+				} else {
+					Remember_Logger::info( 'Added unique key on member_number' );
+				}
+			}
+
+			update_option( 'remember_db_version', '1.33.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.33.0' ) );
+		}
+
+		// Update to 1.34.0 — profile updated_by for audit / apply confirmation (#22).
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.34.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.34.0' ) );
+
+			$profiles_table = $wpdb->prefix . 'remember_member_profiles';
+			$col            = $wpdb->get_results( $wpdb->prepare( 'SHOW COLUMNS FROM `' . $profiles_table . '` LIKE %s', 'updated_by' ) );
+			if ( empty( $col ) ) {
+				$ok = $wpdb->query(
+					"ALTER TABLE {$profiles_table} ADD COLUMN updated_by BIGINT(20) UNSIGNED DEFAULT NULL AFTER updated_at"
+				);
+				if ( false === $ok ) {
+					Remember_Logger::error(
+						'Failed to add updated_by to remember_member_profiles',
+						array( 'error' => $wpdb->last_error )
+					);
+				} else {
+					Remember_Logger::info( 'Added updated_by to remember_member_profiles' );
+				}
+			}
+
+			$index = $wpdb->get_results( "SHOW INDEX FROM `{$profiles_table}` WHERE Key_name = 'updated_by'" );
+			if ( empty( $index ) ) {
+				$ok = $wpdb->query( "ALTER TABLE {$profiles_table} ADD KEY updated_by (updated_by)" );
+				if ( false === $ok ) {
+					Remember_Logger::error(
+						'Failed to add key on updated_by',
+						array( 'error' => $wpdb->last_error )
+					);
+				} else {
+					Remember_Logger::info( 'Added key on updated_by' );
+				}
+			}
+
+			update_option( 'remember_db_version', '1.34.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.34.0' ) );
+		}
+
+		// Always re-ensure health catalogs (idempotent). Catches sites that stalled mid-migration
+		// or activated before catalog seed rows were added.
+		require_once plugin_dir_path( __FILE__ ) . 'class-remember-seeder.php';
+		$seeder = new Remember_Seeder();
+		$seeder->ensure_health_catalog_options();
+		$seeder->ensure_im_platforms();
 
 		Remember_Logger::activation_debug(
 			'update_schema: exit',

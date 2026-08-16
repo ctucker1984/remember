@@ -50,10 +50,26 @@ $status_colors = array(
 // Check if viewing a specific member
 $view_member_id = isset( $_GET['view'] ) ? absint( $_GET['view'] ) : 0;
 
+// Attendees-only staff may list/view only attendees on their events — compute early so view + mutations can enforce it.
+$current_user_id      = get_current_user_id();
+$has_members_access   = current_user_can( 'remember_read_members' );
+$has_attendees_access = current_user_can( 'remember_read_attendees' );
+$is_attendees_only    = $has_attendees_access && ! $has_members_access;
+
 // Handle form submissions
 if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember_member_action', 'remember_member_nonce' ) ) {
 	$action = sanitize_text_field( $_POST['remember_member_action'] );
 	$member_id = isset( $_POST['member_id'] ) ? absint( $_POST['member_id'] ) : 0;
+
+	// Attendees-only users must not mutate member records (create/update require remember_*_members anyway;
+	// this blocks any future attendees write caps or mistaken grants from acting out of scope).
+	if ( $is_attendees_only && $member_id > 0 && ! $member_model->guard_can_view_attendee( $current_user_id, $member_id ) ) {
+		wp_die(
+			esc_html__( 'You do not have permission to modify this member.', 'remember' ),
+			esc_html__( 'Access Denied', 'remember' ),
+			array( 'response' => 403 )
+		);
+	}
 	
 	if ( 'add' === $action ) {
 		// Check capability
@@ -240,11 +256,26 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 		}
 
 		require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-clothing-sizes.php';
+		require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-im-platforms.php';
 		require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-fields.php';
+		require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-questions.php';
 
 		$profile_check = Remember_Profile_Fields::collect_profile_data_from_request();
 		$meta_check    = Remember_Profile_Fields::collect_meta_from_request();
-		$missing_key   = Remember_Profile_Fields::first_missing_required( $profile_check, $meta_check );
+		$pq_answers    = Remember_Profile_Questions::collect_from_request();
+		// Admin: only nickname, display name, legal first/last, cell phone are required.
+		$missing_key = Remember_Profile_Fields::first_missing_required( $profile_check, $meta_check, 'admin' );
+
+		$member_number = Remember_Profile_Fields::sanitize_member_number(
+			isset( $_POST['member_number'] ) ? wp_unslash( $_POST['member_number'] ) : ''
+		);
+		$member_number_error = '';
+		if ( null === $member_number ) {
+			$member_number_error = __( 'Member number must be alphanumeric (letters and numbers only).', 'remember' );
+		} elseif ( '' !== $member_number && Remember_Profile_Fields::is_member_number_taken( $member_number, $member_id ) ) {
+			$member_number_error = __( 'That member number is already assigned to another member.', 'remember' );
+		}
+
 		if ( '' !== $missing_key ) {
 			$labels = Remember_Profile_Fields::labels();
 			$label  = isset( $labels[ $missing_key ] ) ? $labels[ $missing_key ] : __( 'Required field', 'remember' );
@@ -255,6 +286,8 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 					$label
 				)
 			) . '</p></div>';
+		} elseif ( '' !== $member_number_error ) {
+			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html( $member_number_error ) . '</p></div>';
 		} else {
 		
 		global $wpdb;
@@ -337,7 +370,7 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 			'address_country' => isset( $_POST['address_country'] ) ? sanitize_text_field( wp_unslash( $_POST['address_country'] ) ) : '',
 			'cell_phone' => isset( $_POST['cell_phone'] ) ? sanitize_text_field( wp_unslash( $_POST['cell_phone'] ) ) : '',
 			'im_handle' => isset( $_POST['im_handle'] ) ? sanitize_text_field( wp_unslash( $_POST['im_handle'] ) ) : '',
-			'im_type' => isset( $_POST['im_type'] ) ? sanitize_text_field( wp_unslash( $_POST['im_type'] ) ) : 'telegram',
+			'im_type' => isset( $_POST['im_type'] ) ? Remember_Im_Platforms::sanitize_key_value( wp_unslash( $_POST['im_type'] ) ) : Remember_Im_Platforms::default_key(),
 			'interests' => isset( $_POST['interests'] ) ? wp_kses_post( wp_unslash( $_POST['interests'] ) ) : '',
 			'shirt_size' => isset( $_POST['shirt_size'] ) ? Remember_Clothing_Sizes::sanitize( 'shirt', wp_unslash( $_POST['shirt_size'] ) ) : '',
 			'pants_size' => isset( $_POST['pants_size'] ) ? Remember_Clothing_Sizes::sanitize( 'pants', wp_unslash( $_POST['pants_size'] ) ) : '',
@@ -352,7 +385,9 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 			'share_im_with_events' => isset( $_POST['share_im_with_events'] ) ? 1 : 0,
 			'share_interests_with_events' => isset( $_POST['share_interests_with_events'] ) ? 1 : 0,
 			'share_photo_with_events' => isset( $_POST['share_photo_with_events'] ) ? 1 : 0,
+			'member_number' => ( '' === $member_number ) ? null : $member_number,
 			'updated_at' => current_time( 'mysql' ),
+			'updated_by' => get_current_user_id(),
 		);
 		
 		// Check if profile exists
@@ -489,6 +524,7 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 				Remember_Logger::info( 'Member roles updated', array( 'member_id' => $member_id, 'roles' => $selected_role_ids ) );
 			}
 			
+			Remember_Profile_Questions::save_for_member( $member_id, $pq_answers );
 			Remember_Logger::info( 'Member profile updated', array( 'member_id' => $member_id ) );
 			do_action( 'remember_member_profile_saved', $member_id );
 			// Set success flag and clear edit mode (no redirect to avoid headers already sent)
@@ -499,7 +535,7 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 			Remember_Logger::error( 'Failed to update member profile', array( 'member_id' => $member_id ) );
 			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to update member profile.', 'remember' ) . '</p></div>';
 		}
-		} // end cell_phone required check
+		} // end required-field checks
 	} elseif ( $member_id > 0 && 'sync_qb_customer' === $action ) {
 		if ( ! current_user_can( 'remember_update_members' ) ) {
 			wp_die( __( 'You do not have sufficient permissions to perform this action.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
@@ -568,10 +604,7 @@ if ( $filter_role > 0 ) {
 }
 
 // Check capabilities - if user has attendees access but not full members access, show only attendees
-$current_user_id = get_current_user_id();
-$has_members_access = current_user_can( 'remember_read_members' );
-$has_attendees_access = current_user_can( 'remember_read_attendees' );
-$is_attendees_only = $has_attendees_access && ! $has_members_access;
+// ($has_members_access / $has_attendees_access / $is_attendees_only / $current_user_id set earlier.)
 
 // Get members
 if ( $is_attendees_only ) {
@@ -595,6 +628,14 @@ if ( $is_attendees_only ) {
 
 // If viewing a specific member, show detail view
 if ( $view_member_id > 0 ) {
+	if ( $is_attendees_only && ! $member_model->guard_can_view_attendee( $current_user_id, $view_member_id ) ) {
+		wp_die(
+			esc_html__( 'You do not have permission to view this member.', 'remember' ),
+			esc_html__( 'Access Denied', 'remember' ),
+			array( 'response' => 403 )
+		);
+	}
+
 	$view_member = $member_model->get( $view_member_id );
 	if ( ! $view_member ) {
 		wp_die( __( 'Member not found.', 'remember' ) );
@@ -1137,7 +1178,8 @@ if ( $view_member_id > 0 ) {
 
 	<!-- Members List -->
 	<?php if ( ! empty( $members ) ) : ?>
-		<table class="wp-list-table widefat fixed striped">
+		<div class="remember-table-scroll">
+		<table class="wp-list-table widefat striped remember-responsive-table">
 			<thead>
 				<tr>
 					<th class="column-name"><?php esc_html_e( 'Name', 'remember' ); ?></th>
@@ -1165,13 +1207,13 @@ if ( $view_member_id > 0 ) {
 					$vetting = $vetting_model->get_by_member( $member->member_id );
 						?>
 						<tr>
-						<td class="column-name">
+						<td class="column-name" data-label="<?php echo esc_attr__( 'Name', 'remember' ); ?>">
 							<strong><a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-members&view=' . $member->member_id ) ); ?>"><?php echo esc_html( $user->display_name ); ?></a></strong>
 							<?php if ( $profile ) : ?>
 								<br><span class="description"><?php echo esc_html( Remember_Import_Export::member_list_legal_name_line( $profile, (int) $member->member_id ) ); ?></span>
 							<?php endif; ?>
 						</td>
-						<td class="column-email">
+						<td class="column-email" data-label="<?php echo esc_attr__( 'Contact', 'remember' ); ?>">
 							<?php if ( ! empty( $user->user_email ) ) : ?>
 								<span class="dashicons dashicons-email-alt" style="font-size: 14px; vertical-align: middle; color: #666; margin-right: 4px;"></span>
 								<a href="mailto:<?php echo esc_attr( $user->user_email ); ?>" style="text-decoration: none;"><?php echo esc_html( $user->user_email ); ?></a>
@@ -1182,15 +1224,15 @@ if ( $view_member_id > 0 ) {
 								<a href="tel:<?php echo esc_attr( preg_replace( '/[^0-9+]/', '', $profile->cell_phone ) ); ?>" style="text-decoration: none;"><?php echo esc_html( $profile->cell_phone ); ?></a>
 							<?php endif; ?>
 						</td>
-						<td class="column-status">
+						<td class="column-status" data-label="<?php echo esc_attr__( 'Status', 'remember' ); ?>">
 							<span style="color: <?php echo esc_attr( $status_colors[ $member->status ] ); ?>; font-weight: bold;">
 								<?php echo esc_html( $status_labels[ $member->status ] ); ?>
 								</span>
 							</td>
-						<td class="column-joined">
+						<td class="column-joined" data-label="<?php echo esc_attr__( 'Joined', 'remember' ); ?>">
 							<?php echo esc_html( date_i18n( get_option( 'date_format' ), strtotime( $member->created_at ) ) ); ?>
 						</td>
-						<td class="column-actions">
+						<td class="column-actions" data-label="<?php echo esc_attr__( 'Actions', 'remember' ); ?>">
 							<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-members&view=' . $member->member_id ) ); ?>"><?php esc_html_e( 'View Profile', 'remember' ); ?></a>
 							<?php 
 							// Only show vetting link if there's a non-completed case
@@ -1202,6 +1244,7 @@ if ( $view_member_id > 0 ) {
 					<?php endforeach; ?>
 			</tbody>
 		</table>
+		</div>
 		
 		<p class="description" style="margin-top: 15px;">
 			<?php echo esc_html( sprintf( __( 'Showing %d member(s)', 'remember' ), count( $members ) ) ); ?>

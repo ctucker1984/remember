@@ -19,6 +19,7 @@ require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-role.php
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-merchandise.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-product.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-addon-role-limits.php';
+require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-agreements.php';
 
 Remember_Logger::debug( 'Events page loaded' );
 
@@ -124,6 +125,85 @@ function remember_build_addons_from_post( $product_model ) {
  * @param array                $addons Addon payload.
  * @return void
  */
+/**
+ * Render event ↔ agreement pin checkboxes (pinned revision per agreement).
+ *
+ * @param int $event_id Event ID (0 on add).
+ * @return void
+ */
+function remember_render_event_agreements_field( $event_id = 0 ) {
+	$library = Remember_Agreements::get_active_agreements();
+	$pins    = $event_id > 0 ? Remember_Agreements::get_event_pin_map( $event_id ) : array();
+	// Include inactive agreements already pinned so the event can keep them.
+	if ( $event_id > 0 ) {
+		foreach ( Remember_Agreements::get_event_pinned_revisions( $event_id ) as $pinned ) {
+			$found = false;
+			foreach ( $library as $item ) {
+				if ( (int) $item->agreement_id === (int) $pinned->agreement_id ) {
+					$found = true;
+					break;
+				}
+			}
+			if ( ! $found ) {
+				$library[] = Remember_Agreements::get_agreement( (int) $pinned->agreement_id );
+			}
+		}
+	}
+	?>
+	<p class="description">
+		<?php esc_html_e( 'Attach agreements from the library. Each applicant must acknowledge every attached revision when they apply. Changing the library later does not move this event off a pinned revision until you change it here.', 'remember' ); ?>
+		<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-agreements' ) ); ?>"><?php esc_html_e( 'Manage Agreements', 'remember' ); ?></a>
+	</p>
+	<?php if ( empty( $library ) ) : ?>
+		<p class="description"><?php esc_html_e( 'No agreements in the library yet.', 'remember' ); ?></p>
+		<?php
+		return;
+	endif;
+	?>
+	<div class="remember-event-agreements">
+		<?php foreach ( $library as $agreement ) : ?>
+			<?php
+			if ( ! $agreement ) {
+				continue;
+			}
+			$aid       = (int) $agreement->agreement_id;
+			$revisions = Remember_Agreements::get_revisions_for_agreement( $aid );
+			if ( empty( $revisions ) ) {
+				continue;
+			}
+			$checked   = isset( $pins[ $aid ] );
+			$selected  = $checked ? (int) $pins[ $aid ] : (int) $revisions[0]->revision_id;
+			?>
+			<div class="remember-event-agreement-row" style="margin:8px 0;padding:8px 10px;border:1px solid #dcdcde;border-radius:3px;background:#fff;">
+				<label style="display:block;margin-bottom:6px;">
+					<input type="checkbox" name="event_agreement_ids[]" value="<?php echo esc_attr( (string) $aid ); ?>" <?php checked( $checked ); ?>>
+					<strong><?php echo esc_html( $agreement->title ); ?></strong>
+				</label>
+				<label>
+					<?php esc_html_e( 'Pinned revision', 'remember' ); ?>
+					<select name="event_agreement_revisions[<?php echo esc_attr( (string) $aid ); ?>]">
+						<?php foreach ( $revisions as $rev ) : ?>
+							<option value="<?php echo esc_attr( (string) $rev->revision_id ); ?>" <?php selected( $selected, (int) $rev->revision_id ); ?>>
+								<?php
+								echo esc_html(
+									sprintf(
+										/* translators: 1: revision number, 2: date */
+										__( 'Revision %1$d — %2$s', 'remember' ),
+										(int) $rev->revision_number,
+										date_i18n( get_option( 'date_format' ), strtotime( $rev->created_at ) )
+									)
+								);
+								?>
+							</option>
+						<?php endforeach; ?>
+					</select>
+				</label>
+			</div>
+		<?php endforeach; ?>
+	</div>
+	<?php
+}
+
 function remember_sync_event_addons( $merchandise_model, $event_id, $addons ) {
 	$existing = $merchandise_model->get_all_by_event( $event_id );
 	$existing_ids = array_map(
@@ -242,6 +322,7 @@ if ( isset( $_POST['remember_event_action'] ) && check_admin_referer( 'remember_
 
 			$addons = remember_build_addons_from_post( $product_model );
 			remember_sync_event_addons( $merchandise_model, $event_id, $addons );
+			Remember_Agreements::sync_event_pins( $event_id, Remember_Agreements::pins_from_request() );
 
 			Remember_Logger::info( 'Event created', array( 'event_id' => $event_id ) );
 			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Event created successfully.', 'remember' ) . '</p></div>';
@@ -273,6 +354,7 @@ if ( isset( $_POST['remember_event_action'] ) && check_admin_referer( 'remember_
 
 			$addons = remember_build_addons_from_post( $product_model );
 			remember_sync_event_addons( $merchandise_model, $event_id, $addons );
+			Remember_Agreements::sync_event_pins( $event_id, Remember_Agreements::pins_from_request() );
 
 			Remember_Logger::info( 'Event updated', array( 'event_id' => $event_id, 'role_configs' => $role_configs ) );
 			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Event updated successfully.', 'remember' ) . '</p></div>';
@@ -397,7 +479,7 @@ if ( isset( $_GET['view'] ) ) {
 									'textarea_rows' => 8,
 									'media_buttons' => false,
 									'teeny'         => true,
-									'quicktags'     => true,
+									'quicktags'     => false,
 								)
 							);
 							?>
@@ -416,7 +498,7 @@ if ( isset( $_GET['view'] ) ) {
 									'textarea_rows' => 8,
 									'media_buttons' => false,
 									'teeny'         => true,
-									'quicktags'     => true,
+									'quicktags'     => false,
 								)
 							);
 							?>
@@ -546,6 +628,12 @@ if ( isset( $_GET['view'] ) ) {
 							<button type="button" class="button remember-add-addon" data-addon-target="edit" <?php disabled( ! $has_catalog_products ); ?>><?php esc_html_e( 'Add Add-on', 'remember' ); ?></button>
 						</td>
 					</tr>
+					<tr>
+						<th><label><?php esc_html_e( 'Agreements', 'remember' ); ?></label></th>
+						<td>
+							<?php remember_render_event_agreements_field( absint( $editing_event->event_id ) ); ?>
+						</td>
+					</tr>
 				</table>
 				
 				<p class="submit">
@@ -578,7 +666,7 @@ if ( isset( $_GET['view'] ) ) {
 									'textarea_rows' => 8,
 									'media_buttons' => false,
 									'teeny'         => true,
-									'quicktags'     => true,
+									'quicktags'     => false,
 								)
 							);
 							?>
@@ -597,7 +685,7 @@ if ( isset( $_GET['view'] ) ) {
 									'textarea_rows' => 8,
 									'media_buttons' => false,
 									'teeny'         => true,
-									'quicktags'     => true,
+									'quicktags'     => false,
 								)
 							);
 							?>
@@ -681,6 +769,12 @@ if ( isset( $_GET['view'] ) ) {
 							<?php endif; ?>
 							<div class="remember-addon-rows" data-addon-target="add"></div>
 							<button type="button" class="button remember-add-addon" data-addon-target="add" <?php disabled( ! $has_catalog_products ); ?>><?php esc_html_e( 'Add Add-on', 'remember' ); ?></button>
+						</td>
+					</tr>
+					<tr>
+						<th><label><?php esc_html_e( 'Agreements', 'remember' ); ?></label></th>
+						<td>
+							<?php remember_render_event_agreements_field( 0 ); ?>
 						</td>
 					</tr>
 				</table>

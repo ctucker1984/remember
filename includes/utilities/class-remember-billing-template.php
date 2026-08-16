@@ -243,24 +243,21 @@ class Remember_Billing_Template {
 			return;
 		}
 
-		$table_classes = array( 'remember-billing-payments-table' );
-		$table_classes[] = 'wp-list-table';
-		$table_classes[] = 'widefat';
-		$table_classes[] = 'fixed';
-		$table_classes[] = 'striped';
+		$table_classes = array( 'remember-billing-payments-table', 'wp-list-table', 'widefat', 'striped', 'remember-responsive-table' );
 		if ( '' !== $table_extra ) {
 			$table_classes[] = $table_extra;
 		}
 
 		?>
+		<div class="remember-table-scroll">
 		<table class="<?php echo esc_attr( implode( ' ', $table_classes ) ); ?>">
 			<thead>
 				<tr>
 					<th class="column-member"><?php esc_html_e( 'Member', 'remember' ); ?></th>
 					<th class="column-qb-invoice"><?php esc_html_e( 'Invoice #', 'remember' ); ?></th>
-					<th class="column-amount"><?php esc_html_e( 'Subtotal Amount', 'remember' ); ?></th>
-					<th class="column-paid"><?php esc_html_e( 'Payment/Credit', 'remember' ); ?></th>
-					<th class="column-due"><?php esc_html_e( 'Amount Due', 'remember' ); ?></th>
+					<th class="column-amount remember-num"><?php esc_html_e( 'Subtotal Amount', 'remember' ); ?></th>
+					<th class="column-paid remember-num"><?php esc_html_e( 'Payment/Credit', 'remember' ); ?></th>
+					<th class="column-due remember-num"><?php esc_html_e( 'Amount Due', 'remember' ); ?></th>
 					<th class="column-status"><?php esc_html_e( 'Status', 'remember' ); ?></th>
 					<th class="column-method"><?php esc_html_e( 'Method', 'remember' ); ?></th>
 					<th class="column-date"><?php esc_html_e( 'Date', 'remember' ); ?></th>
@@ -269,7 +266,7 @@ class Remember_Billing_Template {
 			<tbody>
 				<?php foreach ( $payments as $payment ) : ?>
 					<tr>
-						<td class="column-member">
+						<td class="column-member" data-label="<?php echo esc_attr__( 'Member', 'remember' ); ?>">
 							<?php
 							$user = null;
 							if ( $member_model && isset( $payment->member_id ) ) {
@@ -285,21 +282,21 @@ class Remember_Billing_Template {
 								<span class="description"><?php esc_html_e( 'Member not found', 'remember' ); ?></span>
 							<?php endif; ?>
 						</td>
-						<td class="column-qb-invoice">
+						<td class="column-qb-invoice" data-label="<?php echo esc_attr__( 'Invoice #', 'remember' ); ?>">
 							<?php self::render_invoice_number_cell( $payment ); ?>
 						</td>
-						<td class="column-amount">
+						<td class="column-amount remember-num" data-label="<?php echo esc_attr__( 'Subtotal Amount', 'remember' ); ?>">
 							<strong>$<?php echo esc_html( number_format( (float) $payment->total_amount, 2 ) ); ?></strong>
 						</td>
-						<td class="column-paid">
+						<td class="column-paid remember-num" data-label="<?php echo esc_attr__( 'Payment/Credit', 'remember' ); ?>">
 							$<?php echo esc_html( number_format( self::get_payment_and_credit_total( $payment ), 2 ) ); ?>
 						</td>
-						<td class="column-due">
+						<td class="column-due remember-num" data-label="<?php echo esc_attr__( 'Amount Due', 'remember' ); ?>">
 							<strong style="color: <?php echo (float) $payment->amount_due > 0 ? '#dc3232' : '#46b450'; ?>;">
 								$<?php echo esc_html( number_format( (float) $payment->amount_due, 2 ) ); ?>
 							</strong>
 						</td>
-						<td class="column-status">
+						<td class="column-status" data-label="<?php echo esc_attr__( 'Status', 'remember' ); ?>">
 							<?php
 							$ps = isset( $payment->payment_status ) ? (string) $payment->payment_status : '';
 							$sl = isset( $status_labels[ $ps ] ) ? $status_labels[ $ps ] : $ps;
@@ -307,10 +304,10 @@ class Remember_Billing_Template {
 							?>
 							<span style="color: <?php echo esc_attr( $sc ); ?>; font-weight: bold;"><?php echo esc_html( $sl ); ?></span>
 						</td>
-						<td class="column-method">
+						<td class="column-method" data-label="<?php echo esc_attr__( 'Method', 'remember' ); ?>">
 							<?php echo esc_html( ucfirst( $payment->payment_method ? $payment->payment_method : 'manual' ) ); ?>
 						</td>
-						<td class="column-date">
+						<td class="column-date" data-label="<?php echo esc_attr__( 'Date', 'remember' ); ?>">
 							<?php if ( ! empty( $payment->payment_date ) ) : ?>
 								<?php echo esc_html( date_i18n( get_option( 'date_format' ), strtotime( $payment->payment_date ) ) ); ?>
 							<?php else : ?>
@@ -321,6 +318,7 @@ class Remember_Billing_Template {
 				<?php endforeach; ?>
 			</tbody>
 		</table>
+		</div>
 		<?php
 	}
 

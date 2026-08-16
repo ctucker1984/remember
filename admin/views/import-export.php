@@ -13,14 +13,21 @@ if ( ! defined( 'WPINC' ) ) {
 
 // Template downloads and CSV exports are handled in Remember_Admin::handle_import_export_requests() on admin_init.
 
+require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-questions.php';
+$remember_custom_field_keys = Remember_Profile_Questions::export_field_keys();
+
 // Handle form submissions (imports only; exports run on admin_init).
 if ( isset( $_POST['remember_import_export_action'] ) ) {
 	check_admin_referer( 'remember_import_export_action', 'remember_import_export_nonce' );
+
+	if ( ! current_user_can( 'remember_import_export' ) ) {
+		wp_die( esc_html__( 'You do not have sufficient permissions to import data.', 'remember' ) );
+	}
 	
 	$action = sanitize_text_field( wp_unslash( $_POST['remember_import_export_action'] ) );
 	
 	// Handle imports
-	if ( 'import_members' === $action || 'import_events' === $action || 'import_locations' === $action ) {
+	if ( in_array( $action, array( 'import_members', 'import_events', 'import_locations', 'import_profile_questions' ), true ) ) {
 		if ( ! isset( $_FILES['import_file'] ) || $_FILES['import_file']['error'] !== UPLOAD_ERR_OK ) {
 			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Error uploading file. Please try again.', 'remember' ) . '</p></div>';
 		} else {
@@ -43,6 +50,8 @@ if ( isset( $_POST['remember_import_export_action'] ) ) {
 						$results = Remember_Import_Export::import_events( $temp_file );
 					} elseif ( 'import_locations' === $action ) {
 						$results = Remember_Import_Export::import_locations( $temp_file );
+					} else {
+						$results = Remember_Import_Export::import_profile_questions( $temp_file );
 					}
 					
 					// Display results
@@ -97,6 +106,7 @@ if ( isset( $_POST['remember_import_export_action'] ) ) {
 
 <div class="wrap">
 	<h1><?php echo esc_html( get_admin_page_title() ); ?></h1>
+	<p class="description"><?php esc_html_e( 'Requires the Import / Export Data capability. Assign it on Roles when someone besides System Administrators should move bulk data.', 'remember' ); ?></p>
 	
 	<div class="remember-import-export-container" style="margin-top: 20px;">
 		
@@ -105,7 +115,7 @@ if ( isset( $_POST['remember_import_export_action'] ) ) {
 			<h2 style="margin-top: 0;"><?php esc_html_e( 'Members', 'remember' ); ?></h2>
 			
 			<h3><?php esc_html_e( 'Export', 'remember' ); ?></h3>
-			<p class="description"><?php esc_html_e( 'Export all members to a CSV file.', 'remember' ); ?></p>
+			<p class="description"><?php esc_html_e( 'Export all members to a CSV file, including clothing sizes, dietary/allergy/medical lists, and custom field answers (columns use each field’s Short name).', 'remember' ); ?></p>
 			<form method="post" action="">
 				<?php wp_nonce_field( 'remember_import_export_action', 'remember_import_export_nonce' ); ?>
 				<input type="hidden" name="remember_import_export_action" value="export_members">
@@ -115,7 +125,22 @@ if ( isset( $_POST['remember_import_export_action'] ) ) {
 			<hr style="margin: 20px 0;">
 			
 			<h3><?php esc_html_e( 'Import', 'remember' ); ?></h3>
-			<p class="description"><?php esc_html_e( 'Import members from a CSV file. Required columns: Email. Optional columns: Display Name, First Name, Last Name, Status, Legal First Name, Legal Last Name, Street Address, City, State, Postal Code, Country, Cell Phone, Timezone, IM Handle, IM Type, Interests, Emergency Contact First, Emergency Contact Last, Emergency Contact Phone, Emergency Contact Relationship.', 'remember' ); ?></p>
+			<p class="description">
+				<?php esc_html_e( 'Required: Email. Also supported: Display Name, Nickname, First/Last Name, Status, Legal First/Last, address fields, Cell Phone, Timezone, IM Handle/Type, Shirt/Pants/Shoe Size, Interests, Emergency Contact fields, Dietary Restrictions, Allergies, Medical Accommodations (comma-separated catalog names), plus any custom Short name columns.', 'remember' ); ?>
+			</p>
+			<?php if ( ! empty( $remember_custom_field_keys ) ) : ?>
+				<p class="description">
+					<?php
+					echo esc_html(
+						sprintf(
+							/* translators: %s: comma-separated short names */
+							__( 'Custom columns currently defined: %s', 'remember' ),
+							implode( ', ', $remember_custom_field_keys )
+						)
+					);
+					?>
+				</p>
+			<?php endif; ?>
 			<p>
 				<a href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin.php?page=remember-import-export&remember_import_export_action=download_members_template' ), 'remember_import_export_action', 'remember_import_export_nonce' ) ); ?>" class="button button-secondary" style="margin-bottom: 10px;">
 					<span class="dashicons dashicons-download" style="vertical-align: middle; margin-right: 5px;"></span>
@@ -129,6 +154,38 @@ if ( isset( $_POST['remember_import_export_action'] ) ) {
 					<input type="file" name="import_file" accept=".csv" required>
 				</p>
 				<?php submit_button( __( 'Import Members', 'remember' ), 'primary', 'submit', false ); ?>
+			</form>
+		</div>
+
+		<!-- Custom Fields definitions -->
+		<div style="background: #fff; border: 1px solid #ccd0d4; border-radius: 4px; padding: 20px;">
+			<h2 style="margin-top: 0;"><?php esc_html_e( 'Custom Fields', 'remember' ); ?></h2>
+			<p class="description"><?php esc_html_e( 'Move the field definitions (Short name, question text, type, options) between sites before importing member answers that use those Short names.', 'remember' ); ?></p>
+
+			<h3><?php esc_html_e( 'Export', 'remember' ); ?></h3>
+			<form method="post" action="">
+				<?php wp_nonce_field( 'remember_import_export_action', 'remember_import_export_nonce' ); ?>
+				<input type="hidden" name="remember_import_export_action" value="export_profile_questions">
+				<?php submit_button( __( 'Export Custom Fields', 'remember' ), 'secondary', 'submit', false ); ?>
+			</form>
+
+			<hr style="margin: 20px 0;">
+
+			<h3><?php esc_html_e( 'Import', 'remember' ); ?></h3>
+			<p class="description"><?php esc_html_e( 'Upserts by Short Name. Columns: Short Name, Question, Type (text|select|multiselect), Options (key|Label;key|Label), Required, Active, Order.', 'remember' ); ?></p>
+			<p>
+				<a href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin.php?page=remember-import-export&remember_import_export_action=download_profile_questions_template' ), 'remember_import_export_action', 'remember_import_export_nonce' ) ); ?>" class="button button-secondary" style="margin-bottom: 10px;">
+					<span class="dashicons dashicons-download" style="vertical-align: middle; margin-right: 5px;"></span>
+					<?php esc_html_e( 'Download Template', 'remember' ); ?>
+				</a>
+			</p>
+			<form method="post" action="" enctype="multipart/form-data">
+				<?php wp_nonce_field( 'remember_import_export_action', 'remember_import_export_nonce' ); ?>
+				<input type="hidden" name="remember_import_export_action" value="import_profile_questions">
+				<p>
+					<input type="file" name="import_file" accept=".csv" required>
+				</p>
+				<?php submit_button( __( 'Import Custom Fields', 'remember' ), 'primary', 'submit', false ); ?>
 			</form>
 		</div>
 		
@@ -202,11 +259,12 @@ if ( isset( $_POST['remember_import_export_action'] ) ) {
 		<h2><?php esc_html_e( 'Import/Export Tips', 'remember' ); ?></h2>
 		<ul style="margin-left: 20px;">
 			<li><?php esc_html_e( 'CSV files should be UTF-8 encoded for best compatibility.', 'remember' ); ?></li>
-			<li><?php esc_html_e( 'When importing, existing records (by email for members, by name for locations) will be skipped or updated.', 'remember' ); ?></li>
+			<li><?php esc_html_e( 'Demo → production: export Custom Fields first, import them on the target site, then export/import Members so Short name columns match.', 'remember' ); ?></li>
+			<li><?php esc_html_e( 'When importing members, existing users are matched by email and updated; missing users are created with auto-generated passwords.', 'remember' ); ?></li>
+			<li><?php esc_html_e( 'Custom field answers use option keys (e.g. yes or key|key for multi-select), not display labels.', 'remember' ); ?></li>
 			<li><?php esc_html_e( 'Date formats supported: YYYY-MM-DD, MM/DD/YYYY, DD/MM/YYYY, and other common formats.', 'remember' ); ?></li>
-			<li><?php esc_html_e( 'For "Is Private" and "Is Active" columns, use "Yes" or "No" (case-insensitive).', 'remember' ); ?></li>
+			<li><?php esc_html_e( 'For Yes/No columns, use Yes or No (case-insensitive).', 'remember' ); ?></li>
 			<li><?php esc_html_e( 'Export a file first to see the exact column format expected.', 'remember' ); ?></li>
-			<li><?php esc_html_e( 'Member imports will create WordPress users if they don\'t exist. Passwords are auto-generated.', 'remember' ); ?></li>
 		</ul>
 	</div>
 	

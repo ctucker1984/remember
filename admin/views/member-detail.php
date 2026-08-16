@@ -20,43 +20,45 @@ if ( $is_editing && ! current_user_can( 'remember_update_members' ) ) {
 }
 ?>
 
-<div class="remember-member-detail" style="margin: 20px 0;">
+<div class="remember-member-detail">
 	<!-- Member Header -->
-	<div style="background: #fff; border: 1px solid #ccd0d4; border-radius: 4px; padding: 20px; margin-bottom: 20px;">
-		<div style="display: flex; align-items: center; gap: 20px; justify-content: space-between;">
-			<div style="display: flex; align-items: center; gap: 20px; flex: 1;">
+	<div class="remember-member-detail-card">
+		<div class="remember-member-detail-header">
+			<div class="remember-member-detail-header__identity">
 				<?php if ( $view_member->photo_url ) : ?>
-					<img src="<?php echo esc_url( $view_member->photo_url ); ?>" alt="<?php echo esc_attr( $view_user->display_name ); ?>" style="width: 100px; height: 100px; border-radius: 50%; object-fit: cover;">
+					<img class="remember-member-detail-avatar" src="<?php echo esc_url( $view_member->photo_url ); ?>" alt="<?php echo esc_attr( $view_user->display_name ); ?>">
 				<?php else : ?>
-					<div style="width: 100px; height: 100px; border-radius: 50%; background: #f0f0f0; display: flex; align-items: center; justify-content: center; font-size: 40px; color: #999;">
+					<div class="remember-member-detail-avatar remember-member-detail-avatar--placeholder">
 						<?php echo esc_html( strtoupper( substr( $view_user->display_name, 0, 1 ) ) ); ?>
 					</div>
 				<?php endif; ?>
-				<div style="flex: 1;">
-					<h2 style="margin: 0 0 10px 0;">
+				<div class="remember-member-detail-header__meta">
+					<h2>
 						<?php echo esc_html( $view_user->display_name ); ?>
-						<span style="color: <?php echo esc_attr( $status_colors[ $view_member->status ] ); ?>; font-size: 14px; font-weight: normal; margin-left: 10px;">
+						<span class="remember-member-detail-status" style="color: <?php echo esc_attr( $status_colors[ $view_member->status ] ); ?>;">
 							<?php echo esc_html( $status_labels[ $view_member->status ] ); ?>
 						</span>
 					</h2>
-					<p style="margin: 5px 0; color: #666;">
+					<p class="remember-member-detail-contact">
 						<?php if ( ! empty( $view_user->user_email ) ) : ?>
-							<span class="dashicons dashicons-email-alt" style="font-size: 14px; vertical-align: middle; color: #666; margin-right: 4px;"></span>
-							<a href="mailto:<?php echo esc_attr( $view_user->user_email ); ?>" style="text-decoration: none; color: #666;"><?php echo esc_html( $view_user->user_email ); ?></a>
+							<span class="remember-member-detail-contact__item">
+								<span class="dashicons dashicons-email-alt" aria-hidden="true"></span>
+								<a href="mailto:<?php echo esc_attr( $view_user->user_email ); ?>"><?php echo esc_html( $view_user->user_email ); ?></a>
+							</span>
 						<?php endif; ?>
 						<?php if ( $view_profile && ! empty( $view_profile->cell_phone ) ) : ?>
-							<span style="margin-left: 12px;">
-								<span class="dashicons dashicons-phone" style="font-size: 14px; vertical-align: middle; color: #666; margin-right: 4px;"></span>
-								<a href="tel:<?php echo esc_attr( preg_replace( '/[^0-9+]/', '', $view_profile->cell_phone ) ); ?>" style="text-decoration: none; color: #666;"><?php echo esc_html( $view_profile->cell_phone ); ?></a>
+							<span class="remember-member-detail-contact__item">
+								<span class="dashicons dashicons-phone" aria-hidden="true"></span>
+								<a href="tel:<?php echo esc_attr( preg_replace( '/[^0-9+]/', '', $view_profile->cell_phone ) ); ?>"><?php echo esc_html( $view_profile->cell_phone ); ?></a>
 							</span>
 						<?php endif; ?>
 					</p>
 					<?php if ( ! empty( $view_roles ) ) : ?>
-						<div style="margin-top: 8px; display: flex; flex-wrap: wrap; gap: 8px;">
+						<div class="remember-member-detail-roles">
 							<?php foreach ( $view_roles as $member_role ) : ?>
-								<span style="display: inline-block; padding: 4px 12px; background: <?php echo $member_role->is_event_role ? '#e8f4f8' : '#fff3cd'; ?>; border: 1px solid <?php echo $member_role->is_event_role ? '#bee5eb' : '#ffc107'; ?>; border-radius: 3px; font-size: 12px;">
+								<span class="remember-member-detail-role <?php echo $member_role->is_event_role ? 'is-event' : 'is-system'; ?>">
 									<?php echo esc_html( $member_role->role_name ); ?>
-									<span style="color: #666; font-size: 11px;">
+									<span class="remember-member-detail-role__scope">
 										(<?php echo $member_role->is_event_role ? esc_html__( 'Event', 'remember' ) : esc_html__( 'System', 'remember' ); ?>)
 									</span>
 								</span>
@@ -65,7 +67,7 @@ if ( $is_editing && ! current_user_can( 'remember_update_members' ) ) {
 					<?php endif; ?>
 				</div>
 			</div>
-			<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px; justify-content: flex-end;">
+			<div class="remember-member-detail-header__actions">
 				<?php if ( ! $is_editing ) : ?>
 					<?php if ( current_user_can( 'remember_update_members' ) ) : ?>
 						<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-members&view=' . $view_member_id . '&edit=1' ) ); ?>" class="button button-primary">
@@ -73,7 +75,7 @@ if ( $is_editing && ! current_user_can( 'remember_update_members' ) ) {
 						</a>
 					<?php endif; ?>
 					<?php if ( ! empty( $remember_qb_show_sync_customer ) ) : ?>
-						<form method="post" action="" style="display: inline-block; margin: 0;">
+						<form method="post" action="">
 							<?php wp_nonce_field( 'remember_member_action', 'remember_member_nonce' ); ?>
 							<input type="hidden" name="remember_member_action" value="sync_qb_customer" />
 							<input type="hidden" name="member_id" value="<?php echo esc_attr( $view_member_id ); ?>" />
@@ -83,7 +85,7 @@ if ( $is_editing && ! current_user_can( 'remember_update_members' ) ) {
 						</form>
 					<?php endif; ?>
 					<?php if ( ! empty( $remember_xero_show_sync_contact ) ) : ?>
-						<form method="post" action="" style="display: inline-block; margin: 0;">
+						<form method="post" action="">
 							<?php wp_nonce_field( 'remember_member_action', 'remember_member_nonce' ); ?>
 							<input type="hidden" name="remember_member_action" value="sync_xero_contact" />
 							<input type="hidden" name="member_id" value="<?php echo esc_attr( $view_member_id ); ?>" />
@@ -105,7 +107,7 @@ if ( $is_editing && ! current_user_can( 'remember_update_members' ) ) {
 		<!-- Edit Form -->
 		<?php include 'member-edit.php'; ?>
 	<?php else : ?>
-		<!-- View Mode: three equal columns — Profile | Emergency | Dietary / Allergies / Medical (stacked in column 3) -->
+		<!-- View Mode: three equal columns — Profile | Emergency + Custom Fields | Dietary / Allergies / Medical -->
 		<div class="remember-member-detail-grid remember-member-detail-grid--three-cols">
 			<!-- Profile Information -->
 			<div class="remember-member-detail-section">
@@ -122,6 +124,40 @@ if ( $is_editing && ! current_user_can( 'remember_update_members' ) ) {
 								?>
 								<span class="description"><?php esc_html_e( 'Not provided', 'remember' ); ?></span>
 							<?php endif; ?>
+						</td>
+					</tr>
+					<tr>
+						<th><?php esc_html_e( 'Member Number', 'remember' ); ?></th>
+						<td>
+							<?php if ( $view_profile && ! empty( $view_profile->member_number ) ) : ?>
+								<?php echo esc_html( $view_profile->member_number ); ?>
+							<?php else : ?>
+								<span class="description"><?php esc_html_e( 'Not assigned', 'remember' ); ?></span>
+							<?php endif; ?>
+						</td>
+					</tr>
+					<?php
+					require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-audit.php';
+					$remember_created_display = Remember_Profile_Audit::format_datetime( $view_profile && isset( $view_profile->created_at ) ? $view_profile->created_at : '', get_current_user_id() );
+					$remember_updated_display = Remember_Profile_Audit::format_datetime( $view_profile && isset( $view_profile->updated_at ) ? $view_profile->updated_at : '', get_current_user_id() );
+					$remember_updated_by_name = Remember_Profile_Audit::format_updated_by_name( $view_profile && isset( $view_profile->updated_by ) ? $view_profile->updated_by : 0 );
+					?>
+					<tr>
+						<th><?php esc_html_e( 'Profile created', 'remember' ); ?></th>
+						<td>
+							<?php echo '' !== $remember_created_display ? esc_html( $remember_created_display ) : '<span class="description">' . esc_html__( '—', 'remember' ) . '</span>'; ?>
+						</td>
+					</tr>
+					<tr>
+						<th><?php esc_html_e( 'Profile updated', 'remember' ); ?></th>
+						<td>
+							<?php echo '' !== $remember_updated_display ? esc_html( $remember_updated_display ) : '<span class="description">' . esc_html__( '—', 'remember' ) . '</span>'; ?>
+						</td>
+					</tr>
+					<tr>
+						<th><?php esc_html_e( 'Updated by', 'remember' ); ?></th>
+						<td>
+							<?php echo '' !== $remember_updated_by_name ? esc_html( $remember_updated_by_name ) : '<span class="description">' . esc_html__( '—', 'remember' ) . '</span>'; ?>
 						</td>
 					</tr>
 					<tr>
@@ -166,7 +202,10 @@ if ( $is_editing && ! current_user_can( 'remember_update_members' ) ) {
 						<th><?php esc_html_e( 'Instant Messenger', 'remember' ); ?></th>
 						<td>
 							<?php if ( $view_profile && $view_profile->im_handle ) : ?>
-								<?php echo esc_html( ucfirst( $view_profile->im_type ?: 'telegram' ) ); ?>: <?php echo esc_html( $view_profile->im_handle ); ?>
+								<?php
+								require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-im-platforms.php';
+								echo esc_html( Remember_Im_Platforms::get_label( $view_profile->im_type ?: Remember_Im_Platforms::default_key() ) );
+								?>: <?php echo esc_html( $view_profile->im_handle ); ?>
 							<?php else : ?>
 								<span class="description"><?php esc_html_e( 'Not provided', 'remember' ); ?></span>
 							<?php endif; ?>
@@ -208,33 +247,47 @@ if ( $is_editing && ! current_user_can( 'remember_update_members' ) ) {
 				</table>
 			</div>
 
-			<!-- Emergency Contact -->
-			<div class="remember-member-detail-section">
-				<h3><?php esc_html_e( 'Emergency Contact', 'remember' ); ?></h3>
-				<table class="form-table">
-					<tr>
-						<th><?php esc_html_e( 'Name', 'remember' ); ?></th>
-						<td>
-							<?php if ( $view_profile ) : ?>
-								<?php echo esc_html( trim( $view_profile->emergency_contact_first . ' ' . $view_profile->emergency_contact_last ) ); ?>
-							<?php else : ?>
-								<span class="description"><?php esc_html_e( 'Not provided', 'remember' ); ?></span>
-							<?php endif; ?>
-						</td>
-					</tr>
-					<tr>
-						<th><?php esc_html_e( 'Phone', 'remember' ); ?></th>
-						<td>
-							<?php echo $view_profile && $view_profile->emergency_contact_phone ? esc_html( $view_profile->emergency_contact_phone ) : '<span class="description">' . esc_html__( 'Not provided', 'remember' ) . '</span>'; ?>
-						</td>
-					</tr>
-					<tr>
-						<th><?php esc_html_e( 'Relationship', 'remember' ); ?></th>
-						<td>
-							<?php echo $view_profile && $view_profile->emergency_contact_relationship ? esc_html( $view_profile->emergency_contact_relationship ) : '<span class="description">' . esc_html__( 'Not provided', 'remember' ) . '</span>'; ?>
-						</td>
-					</tr>
-				</table>
+			<!-- Emergency Contact + Custom Fields (stacked) -->
+			<div class="remember-member-detail-middle-column">
+				<div class="remember-member-detail-section">
+					<h3><?php esc_html_e( 'Emergency Contact', 'remember' ); ?></h3>
+					<table class="form-table">
+						<tr>
+							<th><?php esc_html_e( 'Name', 'remember' ); ?></th>
+							<td>
+								<?php if ( $view_profile ) : ?>
+									<?php echo esc_html( trim( $view_profile->emergency_contact_first . ' ' . $view_profile->emergency_contact_last ) ); ?>
+								<?php else : ?>
+									<span class="description"><?php esc_html_e( 'Not provided', 'remember' ); ?></span>
+								<?php endif; ?>
+							</td>
+						</tr>
+						<tr>
+							<th><?php esc_html_e( 'Phone', 'remember' ); ?></th>
+							<td>
+								<?php echo $view_profile && $view_profile->emergency_contact_phone ? esc_html( $view_profile->emergency_contact_phone ) : '<span class="description">' . esc_html__( 'Not provided', 'remember' ) . '</span>'; ?>
+							</td>
+						</tr>
+						<tr>
+							<th><?php esc_html_e( 'Relationship', 'remember' ); ?></th>
+							<td>
+								<?php echo $view_profile && $view_profile->emergency_contact_relationship ? esc_html( $view_profile->emergency_contact_relationship ) : '<span class="description">' . esc_html__( 'Not provided', 'remember' ) . '</span>'; ?>
+							</td>
+						</tr>
+					</table>
+				</div>
+				<?php
+				require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-questions.php';
+				ob_start();
+				$remember_has_custom_fields = Remember_Profile_Questions::render_detail_rows( (int) $view_member_id );
+				$remember_custom_fields_html = ob_get_clean();
+				if ( $remember_has_custom_fields ) :
+					?>
+					<div class="remember-member-detail-section">
+						<h3><?php esc_html_e( 'Custom Fields', 'remember' ); ?></h3>
+						<?php echo $remember_custom_fields_html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in render_detail_rows() ?>
+					</div>
+				<?php endif; ?>
 			</div>
 
 			<!-- Dietary, Allergies, Medical: stacked in the third column; always show all three cards -->
@@ -280,9 +333,9 @@ if ( $is_editing && ! current_user_can( 'remember_update_members' ) ) {
 
 		<!-- Vetting Cases (Full Width) -->
 		<?php if ( isset( $view_vetting_cases ) ) : ?>
-			<div class="remember-member-detail-section" style="position: relative; margin-bottom: 15px;">
-				<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-					<h3 style="margin: 0;"><?php esc_html_e( 'Vetting Cases', 'remember' ); ?></h3>
+			<div class="remember-member-detail-section remember-member-detail-section--full">
+				<div class="remember-section-heading">
+					<h3><?php esc_html_e( 'Vetting Cases', 'remember' ); ?></h3>
 					<?php if ( current_user_can( 'remember_create_vetting' ) ) : ?>
 						<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-vetting&member_id=' . $view_member_id ) ); ?>" class="button button-small">
 							<?php esc_html_e( 'Create Vetting Case', 'remember' ); ?>
@@ -290,7 +343,8 @@ if ( $is_editing && ! current_user_can( 'remember_update_members' ) ) {
 					<?php endif; ?>
 				</div>
 				<?php if ( ! empty( $view_vetting_cases ) ) : ?>
-					<table class="wp-list-table widefat fixed striped" style="margin-top: 10px;">
+					<div class="remember-table-scroll">
+					<table class="wp-list-table widefat striped remember-responsive-table">
 						<thead>
 							<tr>
 								<th style="width: 120px;"><?php esc_html_e( 'Case Start', 'remember' ); ?></th>
@@ -324,13 +378,13 @@ if ( $is_editing && ! current_user_can( 'remember_update_members' ) ) {
 								$decider = ! empty( $case->primary_vetter_id ) ? get_user_by( 'ID', $case->primary_vetter_id ) : null;
 							?>
 								<tr>
-									<td><?php echo esc_html( date_i18n( get_option( 'date_format' ), strtotime( $case->created_at ) ) ); ?></td>
-									<td>
+									<td data-label="<?php echo esc_attr__( 'Case Start', 'remember' ); ?>"><?php echo esc_html( date_i18n( get_option( 'date_format' ), strtotime( $case->created_at ) ) ); ?></td>
+									<td data-label="<?php echo esc_attr__( 'Status', 'remember' ); ?>">
 										<span style="color: <?php echo esc_attr( $vetting_status_colors[ $case->status ] ); ?>; font-weight: bold;">
 											<?php echo esc_html( $vetting_status_labels[ $case->status ] ); ?>
 										</span>
 									</td>
-									<td>
+									<td data-label="<?php echo esc_attr__( 'Decision', 'remember' ); ?>">
 										<?php if ( 'completed' === $case->status && ! empty( $case->decision ) && 'pending' !== $case->decision ) : ?>
 											<span style="color: <?php echo 'accepted' === $case->decision ? '#46b450' : '#dc3232'; ?>; font-weight: bold;">
 												<?php echo esc_html( $vetting_decision_labels[ $case->decision ] ); ?>
@@ -339,17 +393,17 @@ if ( $is_editing && ! current_user_can( 'remember_update_members' ) ) {
 											<span class="description">—</span>
 										<?php endif; ?>
 									</td>
-									<td>
+									<td data-label="<?php echo esc_attr__( 'Decision Date', 'remember' ); ?>">
 										<?php if ( ! empty( $case->decision_date ) ) : ?>
 											<?php echo esc_html( date_i18n( get_option( 'date_format' ), strtotime( $case->decision_date ) ) ); ?>
 										<?php else : ?>
 											<span class="description">—</span>
 										<?php endif; ?>
 									</td>
-									<td>
+									<td data-label="<?php echo esc_attr__( 'Decider', 'remember' ); ?>">
 										<?php echo $decider ? esc_html( $decider->display_name ) : '<span class="description">—</span>'; ?>
 									</td>
-									<td>
+									<td data-label="<?php echo esc_attr__( 'Actions', 'remember' ); ?>">
 										<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-vetting&view=' . $case->vetting_id ) ); ?>" class="button button-small">
 											<?php esc_html_e( 'View', 'remember' ); ?>
 										</a>
@@ -358,6 +412,7 @@ if ( $is_editing && ! current_user_can( 'remember_update_members' ) ) {
 							<?php endforeach; ?>
 						</tbody>
 					</table>
+					</div>
 				<?php else : ?>
 					<p class="description"><?php esc_html_e( 'No vetting cases found.', 'remember' ); ?></p>
 				<?php endif; ?>
@@ -365,28 +420,29 @@ if ( $is_editing && ! current_user_can( 'remember_update_members' ) ) {
 		<?php endif; ?>
 
 		<!-- Billing Register (Full Width) -->
-		<div class="remember-member-detail-section">
+		<div class="remember-member-detail-section remember-member-detail-section--full">
 			<h3><?php esc_html_e( 'Billing Register', 'remember' ); ?></h3>
 			<p class="description"><?php esc_html_e( 'Chronological accounting register of invoices, payments, and refunds.', 'remember' ); ?></p>
 			
 			<?php if ( ! empty( $billing_register ) ) : ?>
-				<table class="wp-list-table widefat fixed striped" style="margin-top: 15px;">
+				<div class="remember-table-scroll">
+				<table class="wp-list-table widefat striped remember-responsive-table">
 					<thead>
 						<tr>
-							<th style="width: 120px;"><?php esc_html_e( 'Date', 'remember' ); ?></th>
-							<th style="width: 100px;"><?php esc_html_e( 'Type', 'remember' ); ?></th>
+							<th><?php esc_html_e( 'Date', 'remember' ); ?></th>
+							<th><?php esc_html_e( 'Type', 'remember' ); ?></th>
 							<th><?php esc_html_e( 'Description', 'remember' ); ?></th>
-							<th style="width: 120px; text-align: right;"><?php esc_html_e( 'Debit', 'remember' ); ?></th>
-							<th style="width: 120px; text-align: right;"><?php esc_html_e( 'Credit', 'remember' ); ?></th>
-							<th style="width: 120px; text-align: right;"><?php esc_html_e( 'Balance', 'remember' ); ?></th>
-							<th style="width: 100px;"><?php esc_html_e( 'Status', 'remember' ); ?></th>
+							<th class="remember-num"><?php esc_html_e( 'Debit', 'remember' ); ?></th>
+							<th class="remember-num"><?php esc_html_e( 'Credit', 'remember' ); ?></th>
+							<th class="remember-num"><?php esc_html_e( 'Balance', 'remember' ); ?></th>
+							<th><?php esc_html_e( 'Status', 'remember' ); ?></th>
 						</tr>
 					</thead>
 					<tbody>
 						<?php foreach ( $billing_register as $entry ) : ?>
 							<tr>
-								<td><?php echo esc_html( date_i18n( get_option( 'date_format' ), strtotime( $entry['date'] ) ) ); ?></td>
-								<td>
+								<td data-label="<?php echo esc_attr__( 'Date', 'remember' ); ?>"><?php echo esc_html( date_i18n( get_option( 'date_format' ), strtotime( $entry['date'] ) ) ); ?></td>
+								<td data-label="<?php echo esc_attr__( 'Type', 'remember' ); ?>">
 									<?php if ( 'invoice' === $entry['type'] ) : ?>
 										<span style="color: #d63638;"><?php esc_html_e( 'Invoice', 'remember' ); ?></span>
 									<?php elseif ( 'refund' === $entry['type'] ) : ?>
@@ -395,7 +451,7 @@ if ( $is_editing && ! current_user_can( 'remember_update_members' ) ) {
 										<span style="color: #00a32a;"><?php esc_html_e( 'Payment', 'remember' ); ?></span>
 									<?php endif; ?>
 								</td>
-								<td>
+								<td data-label="<?php echo esc_attr__( 'Description', 'remember' ); ?>">
 									<?php if ( 'invoice' === $entry['type'] && ! empty( $entry['invoice_url'] ) && ! empty( $entry['invoice_number'] ) ) : ?>
 										<?php
 										$desc   = (string) $entry['description'];
@@ -418,29 +474,29 @@ if ( $is_editing && ! current_user_can( 'remember_update_members' ) ) {
 										<?php echo esc_html( $entry['description'] ); ?>
 									<?php endif; ?>
 								</td>
-								<td style="text-align: right;">
+								<td class="remember-num" data-label="<?php echo esc_attr__( 'Debit', 'remember' ); ?>">
 									<?php if ( $entry['debit'] > 0 ) : ?>
 										<?php echo esc_html( number_format( $entry['debit'], 2 ) ); ?>
 									<?php else : ?>
 										&mdash;
 									<?php endif; ?>
 								</td>
-								<td style="text-align: right;">
+								<td class="remember-num" data-label="<?php echo esc_attr__( 'Credit', 'remember' ); ?>">
 									<?php if ( $entry['credit'] > 0 ) : ?>
 										<?php echo esc_html( number_format( $entry['credit'], 2 ) ); ?>
 									<?php else : ?>
 										&mdash;
 									<?php endif; ?>
 								</td>
-								<td style="text-align: right; font-weight: <?php echo $entry['balance'] > 0 ? 'bold' : 'normal'; ?>;">
-									<?php 
+								<td class="remember-num" data-label="<?php echo esc_attr__( 'Balance', 'remember' ); ?>" style="font-weight: <?php echo $entry['balance'] > 0 ? 'bold' : 'normal'; ?>;">
+									<?php
 									$balance_color = $entry['balance'] > 0 ? '#d63638' : ( $entry['balance'] < 0 ? '#00a32a' : '#666' );
 									?>
 									<span style="color: <?php echo esc_attr( $balance_color ); ?>;">
 										<?php echo esc_html( number_format( $entry['balance'], 2 ) ); ?>
 									</span>
 								</td>
-								<td>
+								<td data-label="<?php echo esc_attr__( 'Status', 'remember' ); ?>">
 									<?php
 									$status_labels_billing = array(
 										'pending' => __( 'Pending', 'remember' ),
@@ -467,23 +523,21 @@ if ( $is_editing && ! current_user_can( 'remember_update_members' ) ) {
 						<?php endforeach; ?>
 					</tbody>
 					<tfoot>
-						<tr style="background: #f9f9f9; font-weight: bold;">
-							<td colspan="3" style="text-align: right; padding: 10px;">
-								<?php esc_html_e( 'Current Balance:', 'remember' ); ?>
-							</td>
-							<td colspan="3" style="text-align: right; padding: 10px;">
-								<?php 
+						<tr>
+							<td colspan="7" data-label="<?php echo esc_attr__( 'Current Balance', 'remember' ); ?>">
+								<strong><?php esc_html_e( 'Current Balance:', 'remember' ); ?></strong>
+								<?php
 								$current_balance = $running_balance;
 								$balance_color = $current_balance > 0 ? '#d63638' : ( $current_balance < 0 ? '#00a32a' : '#666' );
 								?>
-								<span style="color: <?php echo esc_attr( $balance_color ); ?>; font-size: 16px;">
+								<span style="color: <?php echo esc_attr( $balance_color ); ?>; font-size: 16px; font-weight: bold; margin-left: 8px;">
 									<?php echo esc_html( number_format( $current_balance, 2 ) ); ?>
 								</span>
 							</td>
-							<td></td>
 						</tr>
 					</tfoot>
 				</table>
+				</div>
 			<?php else : ?>
 				<p><?php esc_html_e( 'No billing history found.', 'remember' ); ?></p>
 			<?php endif; ?>

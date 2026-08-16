@@ -332,9 +332,228 @@
 		});
 	}
 
+	/**
+	 * Require at least one checkbox in dietary / medical / allergy groups.
+	 * Selecting "None" clears other options in the same group (and vice versa).
+	 */
+	function initRequireOneCheckboxGroups() {
+		$('[data-remember-require-one]').each(function() {
+			var $group = $(this);
+			var $boxes = $group.find('input[type="checkbox"]');
+			if (!$boxes.length) {
+				return;
+			}
+
+			function syncRequired() {
+				var anyChecked = $boxes.filter(':checked').length > 0;
+				$boxes.prop('required', false);
+				if (!anyChecked) {
+					$boxes.first().prop('required', true);
+				}
+			}
+
+			$boxes.on('change', function() {
+				var $changed = $(this);
+				if ($changed.is('[data-remember-none]') && $changed.is(':checked')) {
+					$boxes.not($changed).prop('checked', false);
+				} else if (!$changed.is('[data-remember-none]') && $changed.is(':checked')) {
+					$boxes.filter('[data-remember-none]').prop('checked', false);
+				}
+				syncRequired();
+			});
+
+			syncRequired();
+		});
+	}
+
+	/**
+	 * Conditional custom profile fields: show/hide + required when a gate field matches.
+	 */
+	function initConditionalProfileQuestions() {
+		var $fields = $('.remember-pq-field[data-remember-pq-when]');
+		if (!$fields.length) {
+			return;
+		}
+
+		function getFieldValues($field) {
+			var type = $field.data('remember-pq-type');
+			if (type === 'multiselect') {
+				return $field.find('input[type="checkbox"]:checked').map(function() {
+					return $(this).val();
+				}).get();
+			}
+			var $input = $field.find('select, input[type="text"]').first();
+			var val = $input.length ? String($input.val() || '') : '';
+			return val ? [val] : [];
+		}
+
+		function gateMatches(rule) {
+			if (!rule || !rule.field_key || !rule.values || !rule.values.length) {
+				return false;
+			}
+			var $gate = $('.remember-pq-field[data-remember-pq-key="' + rule.field_key + '"]');
+			if (!$gate.length || $gate.prop('hidden')) {
+				return false;
+			}
+			var picked = getFieldValues($gate);
+			for (var i = 0; i < picked.length; i++) {
+				if (rule.values.indexOf(picked[i]) !== -1) {
+					return true;
+				}
+			}
+			return false;
+		}
+
+		function syncMultiRequire($field, required) {
+			var $group = $field.find('[role="group"]').first();
+			var $boxes = $field.find('input[type="checkbox"]');
+			if (!$boxes.length) {
+				return;
+			}
+			if (required) {
+				$group.attr('data-remember-pq-require-one', '1');
+				var any = $boxes.filter(':checked').length > 0;
+				$boxes.prop('required', false);
+				if (!any) {
+					$boxes.first().prop('required', true);
+				}
+			} else {
+				$group.removeAttr('data-remember-pq-require-one');
+				$boxes.prop('required', false);
+			}
+		}
+
+		function syncField($field) {
+			var raw = $field.attr('data-remember-pq-when');
+			var rule = null;
+			try {
+				rule = raw ? JSON.parse(raw) : null;
+			} catch (e) {
+				rule = null;
+			}
+			var active = gateMatches(rule);
+			$field.prop('hidden', !active);
+			$field.find('.remember-pq-req-mark').prop('hidden', !active);
+
+			var type = $field.data('remember-pq-type');
+			if (type === 'multiselect') {
+				syncMultiRequire($field, active);
+			} else {
+				$field.find('select, input[type="text"]').prop('required', !!active);
+			}
+		}
+
+		function syncAll() {
+			// Two passes so nested conditionals settle when a mid-chain gate hides.
+			$fields.each(function() {
+				syncField($(this));
+			});
+			$fields.each(function() {
+				syncField($(this));
+			});
+		}
+
+		$(document).on('change', '.remember-pq-field select, .remember-pq-field input[type="checkbox"], .remember-pq-field input[type="text"]', function() {
+			syncAll();
+		});
+
+		syncAll();
+	}
+
+	function normalizeProfileConfirmPhrase(value) {
+		return String(value || '')
+			.toLowerCase()
+			.replace(/\s+/g, ' ')
+			.trim()
+			.replace(/[.,!?;:'"\s]+$/g, '')
+			.trim();
+	}
+
+	function initProfileCurrencyConfirm() {
+		var ajaxUrl = (typeof rememberPublic !== 'undefined' && rememberPublic.ajaxurl) ? rememberPublic.ajaxurl : '';
+		var nonce = (typeof rememberPublic !== 'undefined' && rememberPublic.profileCurrencyNonce) ? rememberPublic.profileCurrencyNonce : '';
+		var staleMsg = (typeof rememberPublic !== 'undefined' && rememberPublic.i18n && rememberPublic.i18n.profileStale)
+			? rememberPublic.i18n.profileStale
+			: 'Save your profile first (within the last 24 hours), then type the confirmation phrase.';
+
+		$('.remember-profile-currency-confirm').each(function() {
+			var $wrap = $(this);
+			var $input = $wrap.find('.remember-profile-currency-confirm__input');
+			var $status = $wrap.find('.remember-profile-currency-confirm__status');
+			var $form = $wrap.closest('form');
+			if (!$input.length || !$form.length) {
+				return;
+			}
+			var $submit = $form.find('button[type="submit"].remember-button-primary, button[type="submit"]').first();
+			var expected = normalizeProfileConfirmPhrase($input.data('remember-confirm-phrase') || 'my profile is current');
+			var fresh = $wrap.attr('data-remember-profile-fresh') === '1';
+			var checking = false;
+
+			function setStatus(message) {
+				if (!message) {
+					$status.prop('hidden', true).text('');
+					return;
+				}
+				$status.prop('hidden', false).text(message);
+			}
+
+			function sync() {
+				var phraseOk = normalizeProfileConfirmPhrase($input.val()) === expected;
+				var unlocked = phraseOk && fresh;
+				$submit.prop('disabled', !unlocked);
+				$submit.toggleClass('remember-button-disabled', !unlocked);
+				if (phraseOk && !fresh) {
+					setStatus(staleMsg);
+				} else {
+					setStatus('');
+				}
+			}
+
+			function refreshFreshness() {
+				if (!ajaxUrl || !nonce || checking) {
+					sync();
+					return;
+				}
+				checking = true;
+				$.post(ajaxUrl, {
+					action: 'remember_profile_currency_status',
+					nonce: nonce
+				}).done(function(resp) {
+					if (resp && resp.success && resp.data) {
+						fresh = !!resp.data.fresh;
+						$wrap.attr('data-remember-profile-fresh', fresh ? '1' : '0');
+						if (resp.data.updated_at) {
+							$wrap.attr('data-remember-profile-updated-at', resp.data.updated_at);
+						}
+					}
+				}).always(function() {
+					checking = false;
+					sync();
+				});
+			}
+
+			$input.on('input change keyup', sync);
+			$(window).on('focus', refreshFreshness);
+			$(document).on('visibilitychange', function() {
+				if (!document.hidden) {
+					refreshFreshness();
+				}
+			});
+			$wrap.find('a[target="_blank"]').on('click', function() {
+				// After returning from profile edit, re-check freshness.
+				window.setTimeout(refreshFreshness, 500);
+			});
+
+			refreshFreshness();
+		});
+	}
+
 	$(function() {
 		initDisplayNameNicknameSync();
 		initProfilePhotoCropper();
+		initRequireOneCheckboxGroups();
+		initConditionalProfileQuestions();
+		initProfileCurrencyConfirm();
 		if (typeof window.rememberInitTimezoneComboboxes === 'function') {
 			window.rememberInitTimezoneComboboxes();
 		}
