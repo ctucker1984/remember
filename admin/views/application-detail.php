@@ -89,6 +89,7 @@ $status_colors = array(
 					<?php endif; ?>
 				<p style="margin: 5px 0;">
 					<strong><?php esc_html_e( 'Billing:', 'remember' ); ?></strong>
+					<?php if ( current_user_can( 'remember_read_billing' ) ) : ?>
 					<span style="color: <?php echo esc_attr( isset( $viewing_billing_color ) ? $viewing_billing_color : '#72777c' ); ?>;">
 						<?php
 						if ( ! empty( $viewing_billing_html ) ) {
@@ -108,6 +109,9 @@ $status_colors = array(
 						}
 						?>
 					</span>
+					<?php else : ?>
+					<span class="description"><?php esc_html_e( 'Hidden', 'remember' ); ?></span>
+					<?php endif; ?>
 				</p>
 				</div>
 			</div>
@@ -119,12 +123,14 @@ $status_colors = array(
 				<div style="display:flex; flex-direction:column; gap:8px; align-items:flex-end;">
 					<a class="button button-primary" href="<?php echo esc_url( $ticket_url ); ?>" target="_blank" rel="noopener noreferrer"><?php esc_html_e( 'View / Print Ticket', 'remember' ); ?></a>
 					<a class="button" href="<?php echo esc_url( add_query_arg( 'download', '1', $ticket_url ) ); ?>"><?php esc_html_e( 'Download Ticket', 'remember' ); ?></a>
+					<?php if ( current_user_can( 'remember_update_applications' ) ) : ?>
 					<form method="post" action="" style="margin: 0;">
 						<?php wp_nonce_field( 'remember_application_action', 'remember_application_nonce' ); ?>
 						<input type="hidden" name="remember_application_action" value="email_ticket">
 						<input type="hidden" name="application_id" value="<?php echo esc_attr( $viewing_application->application_id ); ?>">
 						<input type="submit" class="button" value="<?php esc_attr_e( 'Email Ticket', 'remember' ); ?>" onclick="return confirm('<?php echo esc_js( __( 'Email this ticket to the member now?', 'remember' ) ); ?>');">
 					</form>
+					<?php endif; ?>
 				</div>
 			<?php endif; ?>
 		</div>
@@ -284,7 +290,7 @@ $status_colors = array(
 		</div>
 
 		<!-- Payment Information Section -->
-		<?php if ( $viewing_payment ) : ?>
+		<?php if ( $viewing_payment && current_user_can( 'remember_read_billing' ) ) : ?>
 			<div class="remember-application-detail-section">
 				<h3><?php esc_html_e( 'Payment Information', 'remember' ); ?></h3>
 				<table class="form-table" style="margin: 0;">
@@ -366,12 +372,14 @@ $status_colors = array(
 
 	<!-- Action Buttons -->
 	<?php
-	$remember_can_allow_reapply = in_array( $viewing_application->status, array( 'declined', 'cancelled' ), true )
+	$remember_can_update_apps     = current_user_can( 'remember_update_applications' );
+	$remember_can_allow_reapply   = in_array( $viewing_application->status, array( 'declined', 'cancelled' ), true )
 		&& empty( $viewing_application->superseded_at )
-		&& current_user_can( 'remember_update_applications' );
-	$remember_show_active_actions = in_array( $viewing_application->status, array( 'pending', 'waitlisted', 'accepted' ), true );
+		&& $remember_can_update_apps;
+	$remember_show_active_actions = $remember_can_update_apps
+		&& in_array( $viewing_application->status, array( 'pending', 'waitlisted', 'accepted' ), true );
 	?>
-	<?php if ( $remember_show_active_actions || $remember_can_allow_reapply || ! empty( $viewing_application->superseded_at ) ) : ?>
+	<?php if ( $remember_show_active_actions || $remember_can_allow_reapply || ( ! empty( $viewing_application->superseded_at ) && $remember_can_update_apps ) ) : ?>
 		<?php
 		require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-unwind.php';
 		$decline_has_invoice = Remember_Billing_Unwind::has_invoice( $viewing_application->application_id );
@@ -406,7 +414,7 @@ $status_colors = array(
 				</form>
 			<?php endif; ?>
 
-			<?php if ( in_array( $viewing_application->status, array( 'declined', 'cancelled' ), true ) && $decline_has_invoice && current_user_can( 'remember_update_applications' ) ) : ?>
+			<?php if ( in_array( $viewing_application->status, array( 'declined', 'cancelled' ), true ) && $decline_has_invoice && $remember_can_update_apps && current_user_can( 'remember_update_billing' ) ) : ?>
 				<form method="post" action="" style="margin: 0 0 16px; padding-bottom: 16px; border-bottom: 1px solid #ddd;">
 					<?php wp_nonce_field( 'remember_application_action', 'remember_application_nonce' ); ?>
 					<input type="hidden" name="remember_application_action" value="unwind_billing">
@@ -448,12 +456,14 @@ $status_colors = array(
 					<input type="hidden" name="application_id" value="<?php echo esc_attr( $viewing_application->application_id ); ?>">
 					<input type="submit" class="button" value="<?php esc_attr_e( 'Move to Pending', 'remember' ); ?>" onclick="return confirm('<?php esc_attr_e( 'Move this accepted application back to pending?', 'remember' ); ?>');">
 				</form>
+				<?php if ( current_user_can( 'remember_create_billing' ) ) : ?>
 				<form method="post" action="" style="display: inline-block; margin-right: 10px;">
 					<?php wp_nonce_field( 'remember_application_action', 'remember_application_nonce' ); ?>
 					<input type="hidden" name="remember_application_action" value="reprocess_billing">
 					<input type="hidden" name="application_id" value="<?php echo esc_attr( $viewing_application->application_id ); ?>">
 					<input type="submit" class="button button-primary" value="<?php esc_attr_e( 'Reprocess Billing', 'remember' ); ?>">
 				</form>
+				<?php endif; ?>
 				<form method="post" action="" style="display: inline-block; margin-right: 10px;">
 					<?php wp_nonce_field( 'remember_application_action', 'remember_application_nonce' ); ?>
 					<input type="hidden" name="remember_application_action" value="email_ticket_ready">

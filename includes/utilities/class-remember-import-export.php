@@ -151,8 +151,20 @@ class Remember_Import_Export {
 	 * @return void
 	 */
 	public static function export_members() {
+		if ( ! current_user_can( 'remember_read_members' ) && ! current_user_can( 'remember_read_attendees' ) ) {
+			wp_die( __( 'You do not have sufficient permissions to export members.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+		}
+
 		$member_model = new Remember_Member();
-		$members = $member_model->get_all();
+		$has_members_access   = current_user_can( 'remember_read_members' );
+		$has_attendees_access = current_user_can( 'remember_read_attendees' );
+		$is_attendees_only    = $has_attendees_access && ! $has_members_access;
+
+		if ( $is_attendees_only ) {
+			$members = $member_model->get_attendees_for_guard( get_current_user_id() );
+		} else {
+			$members = $member_model->get_all();
+		}
 		
 		$filename = 'members-export-' . date( 'Y-m-d-H-i-s' ) . '.csv';
 		

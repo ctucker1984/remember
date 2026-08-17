@@ -392,7 +392,7 @@ $remember_print_name  = $view_user ? (string) $view_user->display_name : '';
 		</div>
 
 		<!-- Vetting Cases (Full Width) -->
-		<?php if ( isset( $view_vetting_cases ) ) : ?>
+		<?php if ( isset( $view_vetting_cases ) && current_user_can( 'remember_read_vetting' ) ) : ?>
 			<div class="remember-member-detail-section remember-member-detail-section--full remember-no-print">
 				<div class="remember-section-heading">
 					<h3><?php esc_html_e( 'Vetting Cases', 'remember' ); ?></h3>
@@ -480,6 +480,7 @@ $remember_print_name  = $view_user ? (string) $view_user->display_name : '';
 		<?php endif; ?>
 
 		<!-- Billing Register (Full Width) -->
+		<?php if ( current_user_can( 'remember_read_billing' ) ) : ?>
 		<div class="remember-member-detail-section remember-member-detail-section--full remember-no-print">
 			<h3><?php esc_html_e( 'Billing Register', 'remember' ); ?></h3>
 			<p class="description"><?php esc_html_e( 'Chronological accounting register of invoices, payments, and refunds.', 'remember' ); ?></p>
@@ -602,6 +603,7 @@ $remember_print_name  = $view_user ? (string) $view_user->display_name : '';
 				<p><?php esc_html_e( 'No billing history found.', 'remember' ); ?></p>
 			<?php endif; ?>
 		</div>
+		<?php endif; ?>
 	<?php endif; ?>
 
 </td></tr></tbody><tfoot><tr><td>

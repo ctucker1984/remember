@@ -14,10 +14,12 @@ if ( ! defined( 'WPINC' ) ) {
 
 <div class="remember-dashboard-widget">
 	<div class="remember-widget-stats">
+		<?php if ( current_user_can( 'remember_read_members' ) || current_user_can( 'remember_read_attendees' ) ) : ?>
 		<div class="remember-widget-stat">
 			<span class="remember-widget-stat-number"><?php echo esc_html( $total_members ); ?></span>
 			<span class="remember-widget-stat-label"><?php esc_html_e( 'Total Members', 'remember' ); ?></span>
 		</div>
+		<?php endif; ?>
 
 		<?php if ( current_user_can( 'remember_read_applications' ) ) : ?>
 		<div class="remember-widget-stat">

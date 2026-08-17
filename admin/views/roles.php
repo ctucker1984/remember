@@ -27,17 +27,22 @@ if ( isset( $_GET['delete'] ) && isset( $_GET['remember_role_nonce'] ) && check_
 	}
 	
 	$role_id = absint( $_GET['delete'] );
-	// Delete capabilities first
-	global $wpdb;
-	$wpdb->delete( $wpdb->prefix . 'remember_role_capabilities', array( 'role_id' => $role_id ), array( '%d' ) );
-	// Delete role
-	$result = $role_model->delete( $role_id );
-	if ( $result !== false ) {
-		Remember_Logger::info( 'Role deleted', array( 'role_id' => $role_id ) );
-		echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Role deleted successfully.', 'remember' ) . '</p></div>';
+	$role_to_delete = $role_model->get( $role_id );
+	if ( Remember_Capabilities::is_protected_system_role( $role_to_delete ) ) {
+		echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'The System Administrator role cannot be deleted.', 'remember' ) . '</p></div>';
 	} else {
-		Remember_Logger::error( 'Failed to delete role', array( 'role_id' => $role_id ) );
-		echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to delete role.', 'remember' ) . '</p></div>';
+		// Delete capabilities first
+		global $wpdb;
+		$wpdb->delete( $wpdb->prefix . 'remember_role_capabilities', array( 'role_id' => $role_id ), array( '%d' ) );
+		// Delete role
+		$result = $role_model->delete( $role_id );
+		if ( $result !== false ) {
+			Remember_Logger::info( 'Role deleted', array( 'role_id' => $role_id ) );
+			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Role deleted successfully.', 'remember' ) . '</p></div>';
+		} else {
+			Remember_Logger::error( 'Failed to delete role', array( 'role_id' => $role_id ) );
+			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to delete role.', 'remember' ) . '</p></div>';
+		}
 	}
 }
 
@@ -59,9 +64,9 @@ if ( isset( $_POST['remember_role_action'] ) && check_admin_referer( 'remember_r
 		);
 		$role_id = $role_model->create( $data );
 		if ( $role_id ) {
-			// Set capabilities if provided
+			// Set capabilities if provided — only caps the actor can grant.
 			if ( isset( $_POST['capabilities'] ) && is_array( $_POST['capabilities'] ) ) {
-				$capabilities = array_map( 'sanitize_text_field', $_POST['capabilities'] );
+				$capabilities = Remember_Capabilities::filter_grantable_capabilities( $_POST['capabilities'] );
 				$role_model->set_capabilities( $role_id, $capabilities );
 			}
 			Remember_Logger::info( 'Role created', array( 'role_id' => $role_id ) );
@@ -77,44 +82,72 @@ if ( isset( $_POST['remember_role_action'] ) && check_admin_referer( 'remember_r
 		}
 		
 		$role_id = absint( $_POST['role_id'] );
-		
-		// Update role details
-		$data = array(
-			'role_name'        => sanitize_text_field( $_POST['role_name'] ),
-			'role_type'        => sanitize_text_field( $_POST['role_type'] ),
-			'is_event_role'    => ( 'event' === $_POST['role_type'] ) ? 1 : 0,
-			'show_in_frontend' => isset( $_POST['show_in_frontend'] ) && $_POST['show_in_frontend'] ? 1 : 0,
-			'description'      => isset( $_POST['description'] ) ? sanitize_textarea_field( wp_unslash( $_POST['description'] ) ) : '',
-		);
-		$update_result = $role_model->update( $role_id, $data );
-		
-		// Update capabilities
-		$capabilities = isset( $_POST['capabilities'] ) && is_array( $_POST['capabilities'] ) 
-			? array_map( 'sanitize_text_field', $_POST['capabilities'] ) 
-			: array();
-		$capabilities_result = $role_model->set_capabilities( $role_id, $capabilities );
-		
-		if ( $update_result !== false && $capabilities_result ) {
-			Remember_Logger::info( 'Role updated', array( 'role_id' => $role_id ) );
-			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Role updated successfully.', 'remember' ) . '</p></div>';
-			// Refresh the role data
-			$editing_role = $role_model->get( $role_id );
+		$existing_role = $role_model->get( $role_id );
+		if ( ! $existing_role ) {
+			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Role not found.', 'remember' ) . '</p></div>';
+		} elseif ( Remember_Capabilities::is_protected_system_role( $existing_role ) && ! current_user_can( 'manage_options' ) ) {
+			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Only a WordPress administrator can edit the System Administrator role.', 'remember' ) . '</p></div>';
 		} else {
-			Remember_Logger::error( 'Failed to update role', array( 'role_id' => $role_id ) );
-			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to update role.', 'remember' ) . '</p></div>';
+			$role_name = sanitize_text_field( $_POST['role_name'] );
+			// Keep the protected role name stable.
+			if ( Remember_Capabilities::is_protected_system_role( $existing_role ) ) {
+				$role_name = 'System Administrator';
+			}
+
+			// Update role details
+			$data = array(
+				'role_name'        => $role_name,
+				'role_type'        => sanitize_text_field( $_POST['role_type'] ),
+				'is_event_role'    => ( 'event' === $_POST['role_type'] ) ? 1 : 0,
+				'show_in_frontend' => isset( $_POST['show_in_frontend'] ) && $_POST['show_in_frontend'] ? 1 : 0,
+				'description'      => isset( $_POST['description'] ) ? sanitize_textarea_field( wp_unslash( $_POST['description'] ) ) : '',
+			);
+			$update_result = $role_model->update( $role_id, $data );
+			
+			// Update capabilities — preserve caps the actor cannot grant.
+			$posted_caps = isset( $_POST['capabilities'] ) && is_array( $_POST['capabilities'] )
+				? $_POST['capabilities']
+				: array();
+			$capabilities = Remember_Capabilities::merge_role_capabilities(
+				$role_model->get_capabilities( $role_id ),
+				$posted_caps
+			);
+			$capabilities_result = $role_model->set_capabilities( $role_id, $capabilities );
+			
+			if ( $update_result !== false && $capabilities_result ) {
+				Remember_Logger::info( 'Role updated', array( 'role_id' => $role_id ) );
+				echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Role updated successfully.', 'remember' ) . '</p></div>';
+				// Refresh the role data
+				$editing_role = $role_model->get( $role_id );
+			} else {
+				Remember_Logger::error( 'Failed to update role', array( 'role_id' => $role_id ) );
+				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to update role.', 'remember' ) . '</p></div>';
+			}
 		}
 	} elseif ( 'update_capabilities' === $action && isset( $_POST['role_id'] ) ) {
+		if ( ! current_user_can( 'remember_update_roles' ) ) {
+			wp_die( __( 'You do not have sufficient permissions to perform this action.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+		}
 		$role_id = absint( $_POST['role_id'] );
-		$capabilities = isset( $_POST['capabilities'] ) && is_array( $_POST['capabilities'] ) 
-			? array_map( 'sanitize_text_field', $_POST['capabilities'] ) 
-			: array();
-		$result = $role_model->set_capabilities( $role_id, $capabilities );
-		if ( $result ) {
-			Remember_Logger::info( 'Role capabilities updated', array( 'role_id' => $role_id ) );
-			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Capabilities updated successfully.', 'remember' ) . '</p></div>';
+		$existing_role = $role_model->get( $role_id );
+		if ( Remember_Capabilities::is_protected_system_role( $existing_role ) && ! current_user_can( 'manage_options' ) ) {
+			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Only a WordPress administrator can edit the System Administrator role.', 'remember' ) . '</p></div>';
 		} else {
-			Remember_Logger::error( 'Failed to update capabilities', array( 'role_id' => $role_id ) );
-			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to update capabilities.', 'remember' ) . '</p></div>';
+			$posted_caps = isset( $_POST['capabilities'] ) && is_array( $_POST['capabilities'] )
+				? $_POST['capabilities']
+				: array();
+			$capabilities = Remember_Capabilities::merge_role_capabilities(
+				$role_model->get_capabilities( $role_id ),
+				$posted_caps
+			);
+			$result = $role_model->set_capabilities( $role_id, $capabilities );
+			if ( $result ) {
+				Remember_Logger::info( 'Role capabilities updated', array( 'role_id' => $role_id ) );
+				echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Capabilities updated successfully.', 'remember' ) . '</p></div>';
+			} else {
+				Remember_Logger::error( 'Failed to update capabilities', array( 'role_id' => $role_id ) );
+				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to update capabilities.', 'remember' ) . '</p></div>';
+			}
 		}
 	}
 }
@@ -153,8 +186,9 @@ $remember_render_capability_matrix = function ( $selected = array() ) use ( $cap
 						<th scope="row"><?php echo esc_html( $module_label ); ?></th>
 						<?php foreach ( $capability_actions as $action => $action_label ) : ?>
 							<?php
-							$cap = "remember_{$action}_{$module}";
-							$id  = 'cap_' . $cap;
+							$cap       = "remember_{$action}_{$module}";
+							$id        = 'cap_' . $cap;
+							$can_grant = Remember_Capabilities::current_user_can_grant( $cap );
 							?>
 							<td>
 								<label class="screen-reader-text" for="<?php echo esc_attr( $id ); ?>">
@@ -173,6 +207,7 @@ $remember_render_capability_matrix = function ( $selected = array() ) use ( $cap
 									name="capabilities[]"
 									value="<?php echo esc_attr( $cap ); ?>"
 									<?php checked( in_array( $cap, $selected, true ) ); ?>
+									<?php disabled( ! $can_grant ); ?>
 								>
 							</td>
 						<?php endforeach; ?>
@@ -186,7 +221,10 @@ $remember_render_capability_matrix = function ( $selected = array() ) use ( $cap
 				<h4 class="remember-cap-special__title"><?php esc_html_e( 'Other', 'remember' ); ?></h4>
 				<ul class="remember-cap-special__list">
 					<?php foreach ( $special_capabilities as $cap => $label ) : ?>
-						<?php $id = 'cap_' . $cap; ?>
+						<?php
+						$id        = 'cap_' . $cap;
+						$can_grant = Remember_Capabilities::current_user_can_grant( $cap );
+						?>
 						<li>
 							<label for="<?php echo esc_attr( $id ); ?>">
 								<input
@@ -195,6 +233,7 @@ $remember_render_capability_matrix = function ( $selected = array() ) use ( $cap
 									name="capabilities[]"
 									value="<?php echo esc_attr( $cap ); ?>"
 									<?php checked( in_array( $cap, $selected, true ) ); ?>
+									<?php disabled( ! $can_grant ); ?>
 								>
 								<?php echo esc_html( $label ); ?>
 							</label>
@@ -211,12 +250,23 @@ $remember_render_capability_matrix = function ( $selected = array() ) use ( $cap
 $editing_role_id = isset( $_GET['edit_capabilities'] ) ? absint( $_GET['edit_capabilities'] ) : 0;
 $editing_role = $editing_role_id > 0 ? $role_model->get( $editing_role_id ) : null;
 $editing_role_capabilities = $editing_role ? $role_model->get_capabilities( $editing_role_id ) : array();
+
+if ( $editing_role ) {
+	if ( ! current_user_can( 'remember_update_roles' ) ) {
+		wp_die( __( 'You do not have sufficient permissions to edit roles.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+	}
+	if ( Remember_Capabilities::is_protected_system_role( $editing_role ) && ! current_user_can( 'manage_options' ) ) {
+		wp_die( __( 'Only a WordPress administrator can edit the System Administrator role.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+	}
+}
 ?>
 
 <div class="wrap remember-roles">
 	<h1 class="wp-heading-inline"><?php echo esc_html( get_admin_page_title() ); ?></h1>
 	<?php if ( ! $editing_role ) : ?>
-		<button type="button" class="page-title-action" onclick="document.getElementById('remember-add-role').style.display='block'; this.style.display='none';"><?php esc_html_e( 'Add New', 'remember' ); ?></button>
+		<?php if ( current_user_can( 'remember_create_roles' ) ) : ?>
+			<button type="button" class="page-title-action" onclick="document.getElementById('remember-add-role').style.display='block'; this.style.display='none';"><?php esc_html_e( 'Add New', 'remember' ); ?></button>
+		<?php endif; ?>
 	<?php else : ?>
 		<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-roles' ) ); ?>" class="page-title-action"><?php esc_html_e( 'Back to Roles', 'remember' ); ?></a>
 	<?php endif; ?>
@@ -224,6 +274,7 @@ $editing_role_capabilities = $editing_role ? $role_model->get_capabilities( $edi
 
 	<?php if ( ! $editing_role ) : ?>
 		<!-- Add Form -->
+		<?php if ( current_user_can( 'remember_create_roles' ) ) : ?>
 		<div id="remember-add-role" style="display:none; margin: 20px 0; padding: 20px; background: #fff; border: 1px solid #ccd0d4; border-radius: 4px;">
 			<h2><?php esc_html_e( 'Add New Role', 'remember' ); ?></h2>
 			<form method="post" action="">
@@ -265,7 +316,7 @@ $editing_role_capabilities = $editing_role ? $role_model->get_capabilities( $edi
 					<tr>
 						<th><label><?php esc_html_e( 'Capabilities', 'remember' ); ?></label></th>
 						<td>
-							<p class="description"><?php esc_html_e( 'Select capabilities for this role. System roles typically have capabilities; event roles typically do not.', 'remember' ); ?></p>
+							<p class="description"><?php esc_html_e( 'Select capabilities for this role. You can only grant capabilities you already hold.', 'remember' ); ?></p>
 							<?php $remember_render_capability_matrix( array() ); ?>
 						</td>
 					</tr>
@@ -277,6 +328,7 @@ $editing_role_capabilities = $editing_role ? $role_model->get_capabilities( $edi
 				</p>
 			</form>
 		</div>
+		<?php endif; ?>
 
 		<!-- Event Roles -->
 		<h2><?php esc_html_e( 'Event Roles', 'remember' ); ?></h2>
@@ -323,8 +375,15 @@ $editing_role_capabilities = $editing_role ? $role_model->get_capabilities( $edi
 								<?php endif; ?>
 							</td>
 							<td class="column-actions">
-								<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-roles&edit_capabilities=' . $role->role_id ) ); ?>"><?php esc_html_e( 'Edit Capabilities', 'remember' ); ?></a> |
-								<a href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin.php?page=remember-roles&delete=' . $role->role_id ), 'remember_role_action', 'remember_role_nonce' ) ); ?>" onclick="return confirm('<?php esc_attr_e( 'Are you sure you want to delete this role?', 'remember' ); ?>');"><?php esc_html_e( 'Delete', 'remember' ); ?></a>
+								<?php if ( current_user_can( 'remember_update_roles' ) ) : ?>
+									<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-roles&edit_capabilities=' . $role->role_id ) ); ?>"><?php esc_html_e( 'Edit Capabilities', 'remember' ); ?></a>
+								<?php endif; ?>
+								<?php if ( current_user_can( 'remember_update_roles' ) && current_user_can( 'remember_delete_roles' ) ) : ?>
+									|
+								<?php endif; ?>
+								<?php if ( current_user_can( 'remember_delete_roles' ) ) : ?>
+									<a href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin.php?page=remember-roles&delete=' . $role->role_id ), 'remember_role_action', 'remember_role_nonce' ) ); ?>" onclick="return confirm('<?php esc_attr_e( 'Are you sure you want to delete this role?', 'remember' ); ?>');"><?php esc_html_e( 'Delete', 'remember' ); ?></a>
+								<?php endif; ?>
 							</td>
 						</tr>
 					<?php endforeach; ?>
@@ -356,6 +415,9 @@ $editing_role_capabilities = $editing_role ? $role_model->get_capabilities( $edi
 							"SELECT COUNT(*) FROM {$wpdb->prefix}remember_member_roles WHERE role_id = %d",
 							$role->role_id
 						) );
+						$is_protected = Remember_Capabilities::is_protected_system_role( $role );
+						$can_edit_role = current_user_can( 'remember_update_roles' )
+							&& ( ! $is_protected || current_user_can( 'manage_options' ) );
 					?>
 						<tr>
 							<td class="column-name"><strong><?php echo esc_html( $role->role_name ); ?></strong></td>
@@ -381,9 +443,15 @@ $editing_role_capabilities = $editing_role ? $role_model->get_capabilities( $edi
 							<td class="column-actions">
 								<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-members&filter_role=' . $role->role_id ) ); ?>">
 									<?php echo esc_html( sprintf( _n( '%d member', '%d members', $member_count, 'remember' ), $member_count ) ); ?>
-								</a> |
-								<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-roles&edit_capabilities=' . $role->role_id ) ); ?>"><?php esc_html_e( 'Edit Capabilities', 'remember' ); ?></a> |
-								<a href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin.php?page=remember-roles&delete=' . $role->role_id ), 'remember_role_action', 'remember_role_nonce' ) ); ?>" onclick="return confirm('<?php esc_attr_e( 'Are you sure you want to delete this role?', 'remember' ); ?>');"><?php esc_html_e( 'Delete', 'remember' ); ?></a>
+								</a>
+								<?php if ( $can_edit_role ) : ?>
+									|
+									<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-roles&edit_capabilities=' . $role->role_id ) ); ?>"><?php esc_html_e( 'Edit Capabilities', 'remember' ); ?></a>
+								<?php endif; ?>
+								<?php if ( current_user_can( 'remember_delete_roles' ) && ! $is_protected ) : ?>
+									|
+									<a href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin.php?page=remember-roles&delete=' . $role->role_id ), 'remember_role_action', 'remember_role_nonce' ) ); ?>" onclick="return confirm('<?php esc_attr_e( 'Are you sure you want to delete this role?', 'remember' ); ?>');"><?php esc_html_e( 'Delete', 'remember' ); ?></a>
+								<?php endif; ?>
 							</td>
 						</tr>
 					<?php endforeach; ?>
@@ -405,7 +473,9 @@ $editing_role_capabilities = $editing_role ? $role_model->get_capabilities( $edi
 				<table class="form-table">
 					<tr>
 						<th><label for="role_name"><?php esc_html_e( 'Role Name', 'remember' ); ?> <span class="description">(required)</span></label></th>
-						<td><input type="text" id="role_name" name="role_name" class="regular-text" value="<?php echo esc_attr( $editing_role->role_name ); ?>" required></td>
+						<td>
+							<input type="text" id="role_name" name="role_name" class="regular-text" value="<?php echo esc_attr( $editing_role->role_name ); ?>" required<?php echo Remember_Capabilities::is_protected_system_role( $editing_role ) ? ' readonly' : ''; ?>>
+						</td>
 					</tr>
 					<tr>
 						<th><label for="role_type"><?php esc_html_e( 'Role Type', 'remember' ); ?></label></th>
@@ -437,7 +507,7 @@ $editing_role_capabilities = $editing_role ? $role_model->get_capabilities( $edi
 					<tr>
 						<th><label><?php esc_html_e( 'Capabilities', 'remember' ); ?></label></th>
 						<td>
-							<p class="description"><?php esc_html_e( 'Select the capabilities this role should have. Members with this role will be able to perform these actions.', 'remember' ); ?></p>
+							<p class="description"><?php esc_html_e( 'Select the capabilities this role should have. You can only change capabilities you already hold; others stay as they are.', 'remember' ); ?></p>
 							<?php $remember_render_capability_matrix( $editing_role_capabilities ); ?>
 						</td>
 					</tr>
