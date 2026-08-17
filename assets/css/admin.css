@@ -386,6 +386,29 @@
 	grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+/* Emergency and health are capability-gated. Track the column count so the cards
+   a viewer may see fill the row instead of leaving dead space on the right. */
+.remember-member-detail-grid--cols-1 {
+	grid-template-columns: minmax(0, 1fr);
+}
+
+.remember-member-detail-grid--cols-2 {
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.remember-member-detail-grid--cols-3 {
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+/* A lone profile card spans the screen, so let the label column breathe rather
+   than stranding every value against a 140px gutter. Screen only — the print
+   layout sets its own label width in points. */
+@media screen {
+	.remember-member-detail-grid--cols-1 .remember-member-detail-profile-card .form-table th {
+		width: 220px;
+	}
+}
+
 .remember-member-detail-grid.full-width {
 	grid-template-columns: 1fr;
 }
@@ -393,6 +416,12 @@
 /* Interests narrative and custom fields sit below the columns, and pair up when both are present. */
 .remember-member-detail-grid--secondary {
 	grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+}
+
+/* Transparent on screen: emergency and health participate in the grid as if the
+   wrapper were not there. Print (confidential) restyles it into a real column. */
+.remember-member-detail-sensitive-column {
+	display: contents;
 }
 
 .remember-member-detail-health-column {
@@ -1016,12 +1045,17 @@
 	position: relative;
 }
 
-.remember-print-menu__toggle .dashicons {
+.remember-print-menu__toggle .dashicons,
+.remember-print-menu__direct .dashicons {
 	margin-right: 2px;
 	font-size: 16px;
 	width: 16px;
 	height: 16px;
 	vertical-align: text-bottom;
+}
+
+.remember-print-denied-note {
+	display: none;
 }
 
 .remember-print-menu__list {
@@ -1704,6 +1738,23 @@
 		widows: 3;
 	}
 
+	/* ---- Denied print (no print caps; Ctrl/Cmd+P still fires) ---- */
+
+	[data-print-mode="denied"] .remember-print-banner,
+	[data-print-mode="denied"] .remember-member-detail-card,
+	[data-print-mode="denied"] .remember-member-detail-grid {
+		display: none !important;
+	}
+
+	[data-print-mode="denied"] .remember-print-denied-note {
+		display: block !important;
+		margin: 2in auto;
+		max-width: 4in;
+		text-align: center;
+		font-size: 11pt;
+		color: #1d2327;
+	}
+
 	/* ---- Confidential format ---- */
 
 	[data-print-mode="confidential"] .remember-print-banner {
@@ -1744,14 +1795,25 @@
 		margin-bottom: 8pt;
 	}
 
-	[data-print-mode="confidential"] .remember-member-detail-profile-card {
-		grid-column: 1;
-		grid-row: 1 / -1;
+	/* One row, two cells: profile | sensitive column. The wrapper is a flex column
+	   here (display:contents on screen), so emergency and the health cards stack
+	   tightly from the top regardless of how tall the profile card is. Grid row
+	   spans are avoided on purpose: with no explicit rows, "grid-row: 1 / -1"
+	   collapses to a single row and strands the health cards below the profile. */
+	[data-print-mode="confidential"] .remember-member-detail-sensitive-column {
+		display: flex;
+		flex-direction: column;
+		gap: 8pt;
+		min-width: 0;
 	}
 
-	[data-print-mode="confidential"] .remember-member-detail-emergency-card,
-	[data-print-mode="confidential"] .remember-member-detail-health-column {
-		grid-column: 2;
+	[data-print-mode="confidential"] .remember-member-detail-sensitive-column .remember-member-detail-section {
+		margin-bottom: 0;
+	}
+
+	/* Without emergency or health, the profile is the only card — no second column to reserve. */
+	[data-print-mode="confidential"] .remember-member-detail-grid--cols-1 {
+		grid-template-columns: minmax(0, 1fr);
 	}
 
 	[data-print-mode="confidential"] .remember-member-detail-grid--secondary {
@@ -1766,7 +1828,7 @@
 	[data-print-mode="event"] .remember-member-detail-grid--three-cols,
 	[data-print-mode="event"] .remember-member-detail-contact,
 	[data-print-mode="event"] .remember-member-detail-status,
-	[data-print-mode="event"] .remember-member-detail-role.is-system,
+	[data-print-mode="event"] .remember-member-detail-roles,
 	[data-print-mode="event"] .remember-print-confidential-only,
 	[data-print-mode="event"] .remember-pq-row:not(.remember-pq-row--event) {
 		display: none !important;
@@ -1797,14 +1859,5 @@
 	[data-print-mode="event"] .remember-member-detail-header__meta h2 {
 		margin-bottom: 6pt;
 		font-size: 22pt;
-	}
-
-	[data-print-mode="event"] .remember-member-detail-roles {
-		justify-content: center;
-	}
-
-	[data-print-mode="event"] .remember-member-detail-role {
-		padding: 3pt 9pt;
-		font-size: 9.5pt;
 	}
 }

@@ -102,18 +102,43 @@
 			$(this).prop('disabled', true);
 		});
 
-		// Member profile print formats. The choice only sets data-print-mode; the
-		// print stylesheet decides what each format shows. document.title becomes
-		// the Save-as-PDF filename in Chromium/Safari.
-		var $printMenu = $('.remember-print-menu');
-		if ($printMenu.length) {
+		// Member profile print formats. Caps gate which modes appear; Ctrl/Cmd+P
+		// is coerced to an allowed mode (or denied) so a menu is not required.
+		var $printDetail = $('.remember-member-detail');
+		if ($printDetail.length) {
+			var $printMenu = $('.remember-print-menu');
 			var $printToggle = $printMenu.find('.remember-print-menu__toggle');
 			var $printList = $printMenu.find('.remember-print-menu__list');
-			var $printDetail = $('.remember-member-detail');
-			var defaultPrintMode = $printDetail.attr('data-print-mode') || 'confidential';
+			var defaultPrintMode = $printDetail.attr('data-print-mode') || 'denied';
 			var originalDocumentTitle = document.title;
 
+			var canPrintMode = function(mode) {
+				if (mode === 'confidential') {
+					return $printDetail.attr('data-print-can-confidential') === '1';
+				}
+				if (mode === 'event') {
+					return $printDetail.attr('data-print-can-event') === '1';
+				}
+				return false;
+			};
+
+			var resolveAllowedPrintMode = function(preferred) {
+				if (canPrintMode(preferred)) {
+					return preferred;
+				}
+				if (canPrintMode('confidential')) {
+					return 'confidential';
+				}
+				if (canPrintMode('event')) {
+					return 'event';
+				}
+				return 'denied';
+			};
+
 			var closePrintMenu = function() {
+				if (!$printList.length) {
+					return;
+				}
 				$printList.prop('hidden', true);
 				$printToggle.attr('aria-expanded', 'false');
 			};
@@ -140,24 +165,15 @@
 				var stamp = printDateStamp();
 				if (mode === 'event') {
 					document.title = name + '_event_card_' + stamp;
-				} else {
+				} else if (mode === 'confidential') {
 					document.title = name + '_member_full_profile_' + stamp;
+				} else {
+					document.title = originalDocumentTitle;
 				}
 			};
 
-			$printToggle.on('click', function(e) {
-				e.preventDefault();
-				if ($printToggle.attr('aria-expanded') === 'true') {
-					closePrintMenu();
-					return;
-				}
-				$printList.prop('hidden', false);
-				$printToggle.attr('aria-expanded', 'true');
-			});
-
-			$printList.on('click', 'button[data-print-mode]', function(e) {
-				e.preventDefault();
-				var mode = $(this).attr('data-print-mode');
+			var runPrint = function(mode) {
+				mode = resolveAllowedPrintMode(mode);
 				$printDetail.attr('data-print-mode', mode);
 				closePrintMenu();
 				setPrintDocumentTitle(mode);
@@ -165,26 +181,44 @@
 				window.setTimeout(function() {
 					window.print();
 				}, 0);
-			});
+			};
 
-			$(document).on('click', function(e) {
-				if (!$(e.target).closest('.remember-print-menu').length) {
-					closePrintMenu();
-				}
-			});
+			if ($printMenu.length) {
+				$printToggle.on('click', function(e) {
+					e.preventDefault();
+					if ($printToggle.attr('aria-expanded') === 'true') {
+						closePrintMenu();
+						return;
+					}
+					$printList.prop('hidden', false);
+					$printToggle.attr('aria-expanded', 'true');
+				});
 
-			$(document).on('keydown', function(e) {
-				if (e.key === 'Escape') {
-					closePrintMenu();
-				}
-			});
+				$printMenu.on('click', 'button[data-print-mode]', function(e) {
+					e.preventDefault();
+					runPrint($(this).attr('data-print-mode'));
+				});
 
-			// Ctrl/Cmd+P still gets a useful filename for the default confidential sheet.
+				$(document).on('click', function(e) {
+					if (!$(e.target).closest('.remember-print-menu').length) {
+						closePrintMenu();
+					}
+				});
+
+				$(document).on('keydown', function(e) {
+					if (e.key === 'Escape') {
+						closePrintMenu();
+					}
+				});
+			}
+
+			// Ctrl/Cmd+P: keep an allowed mode, or blank the sheet when neither cap is held.
 			$(window).on('beforeprint', function() {
-				setPrintDocumentTitle($printDetail.attr('data-print-mode') || defaultPrintMode);
+				var mode = resolveAllowedPrintMode($printDetail.attr('data-print-mode') || defaultPrintMode);
+				$printDetail.attr('data-print-mode', mode);
+				setPrintDocumentTitle(mode);
 			});
 
-			// Return to the default format so an unprompted Ctrl-P stays predictable.
 			$(window).on('afterprint', function() {
 				$printDetail.attr('data-print-mode', defaultPrintMode);
 				document.title = originalDocumentTitle;

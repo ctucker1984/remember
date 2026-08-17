@@ -61,12 +61,14 @@ class Remember_Capabilities {
 	 */
 	public static function get_special_capabilities() {
 		return array(
-			'remember_access_settings'        => __( 'Access Settings', 'remember' ),
-			'remember_view_reports'           => __( 'View Reports', 'remember' ),
-			'remember_event_data_export'      => __( 'Export Event Data', 'remember' ),
-			'remember_import_export'          => __( 'Import / Export Data', 'remember' ),
+			'remember_access_settings'          => __( 'Access Settings', 'remember' ),
+			'remember_view_reports'             => __( 'View Reports', 'remember' ),
+			'remember_event_data_export'        => __( 'Export Event Data', 'remember' ),
+			'remember_import_export'            => __( 'Import / Export Data', 'remember' ),
 			'remember_access_emergency_contact' => __( 'Access Emergency Contact', 'remember' ),
 			'remember_access_health'            => __( 'Access Health Information', 'remember' ),
+			'remember_print_confidential'       => __( 'Print Confidential Profile', 'remember' ),
+			'remember_print_event_card'         => __( 'Print Event Card', 'remember' ),
 		);
 	}
 

@@ -23,8 +23,21 @@ if ( $is_editing && ! current_user_can( 'remember_update_members' ) ) {
 <?php
 $remember_print_stamp = date_i18n( get_option( 'date_format' ) );
 $remember_print_name  = $view_user ? (string) $view_user->display_name : '';
+$remember_can_print_confidential = current_user_can( 'remember_print_confidential' );
+$remember_can_print_event        = current_user_can( 'remember_print_event_card' );
+$remember_can_print_any          = $remember_can_print_confidential || $remember_can_print_event;
+// Prefer the staff sheet when both are allowed; otherwise the one they hold.
+$remember_default_print_mode = $remember_can_print_confidential
+	? 'confidential'
+	: ( $remember_can_print_event ? 'event' : 'denied' );
 ?>
-<div class="remember-member-detail" data-print-mode="confidential" data-print-display-name="<?php echo esc_attr( $remember_print_name ); ?>">
+<div
+	class="remember-member-detail"
+	data-print-mode="<?php echo esc_attr( $remember_default_print_mode ); ?>"
+	data-print-display-name="<?php echo esc_attr( $remember_print_name ); ?>"
+	data-print-can-confidential="<?php echo $remember_can_print_confidential ? '1' : '0'; ?>"
+	data-print-can-event="<?php echo $remember_can_print_event ? '1' : '0'; ?>"
+>
 <?php
 /*
  * Print frame. A table's <thead> and <tfoot> are the only reliable way to repeat
@@ -41,6 +54,9 @@ $remember_print_name  = $view_user ? (string) $view_user->display_name : '';
 		<span class="remember-print-banner__note"><?php esc_html_e( 'Member record — do not post or redistribute', 'remember' ); ?></span>
 	</div>
 </td></tr></thead><tbody><tr><td>
+	<p class="remember-print-denied-note" hidden>
+		<?php esc_html_e( 'You do not have permission to print this member profile.', 'remember' ); ?>
+	</p>
 
 	<!-- Member Header -->
 	<div class="remember-member-detail-card">
@@ -89,35 +105,49 @@ $remember_print_name  = $view_user ? (string) $view_user->display_name : '';
 				</div>
 			</div>
 			<div class="remember-member-detail-header__actions remember-no-print">
-				<?php if ( ! $is_editing ) : ?>
+				<?php if ( ! $is_editing && $remember_can_print_any ) : ?>
 					<div class="remember-print-menu">
-						<button type="button" class="button remember-print-menu__toggle" aria-expanded="false" aria-haspopup="true" aria-controls="remember-print-menu-list">
-							<span class="dashicons dashicons-printer" aria-hidden="true"></span>
-							<?php esc_html_e( 'Print', 'remember' ); ?>
-						</button>
-						<ul class="remember-print-menu__list" id="remember-print-menu-list" hidden>
-							<li>
-								<button type="button" data-print-mode="confidential">
-									<span class="remember-print-menu__label"><?php esc_html_e( 'Confidential profile', 'remember' ); ?></span>
-									<span class="remember-print-menu__hint">
-										<?php
-										if ( current_user_can( 'remember_access_emergency_contact' ) ) {
-											esc_html_e( 'Staff record, including emergency contact', 'remember' );
-										} else {
-											esc_html_e( 'Staff record of what you are allowed to see', 'remember' );
-										}
-										?>
-									</span>
-								</button>
-							</li>
-							<li>
-								<button type="button" data-print-mode="event">
-									<span class="remember-print-menu__label"><?php esc_html_e( 'Event card', 'remember' ); ?></span>
-									<span class="remember-print-menu__hint"><?php esc_html_e( 'Photo, name, and interests only — safe to post', 'remember' ); ?></span>
-								</button>
-							</li>
-						</ul>
+						<?php if ( $remember_can_print_confidential && $remember_can_print_event ) : ?>
+							<button type="button" class="button remember-print-menu__toggle" aria-expanded="false" aria-haspopup="true" aria-controls="remember-print-menu-list">
+								<span class="dashicons dashicons-printer" aria-hidden="true"></span>
+								<?php esc_html_e( 'Print', 'remember' ); ?>
+							</button>
+							<ul class="remember-print-menu__list" id="remember-print-menu-list" hidden>
+								<li>
+									<button type="button" data-print-mode="confidential">
+										<span class="remember-print-menu__label"><?php esc_html_e( 'Confidential profile', 'remember' ); ?></span>
+										<span class="remember-print-menu__hint">
+											<?php
+											if ( current_user_can( 'remember_access_emergency_contact' ) ) {
+												esc_html_e( 'Staff record, including emergency contact', 'remember' );
+											} else {
+												esc_html_e( 'Staff record of what you are allowed to see', 'remember' );
+											}
+											?>
+										</span>
+									</button>
+								</li>
+								<li>
+									<button type="button" data-print-mode="event">
+										<span class="remember-print-menu__label"><?php esc_html_e( 'Event card', 'remember' ); ?></span>
+										<span class="remember-print-menu__hint"><?php esc_html_e( 'Photo, name, and interests only — safe to post', 'remember' ); ?></span>
+									</button>
+								</li>
+							</ul>
+						<?php elseif ( $remember_can_print_confidential ) : ?>
+							<button type="button" class="button remember-print-menu__direct" data-print-mode="confidential">
+								<span class="dashicons dashicons-printer" aria-hidden="true"></span>
+								<?php esc_html_e( 'Print confidential profile', 'remember' ); ?>
+							</button>
+						<?php else : ?>
+							<button type="button" class="button remember-print-menu__direct" data-print-mode="event">
+								<span class="dashicons dashicons-printer" aria-hidden="true"></span>
+								<?php esc_html_e( 'Print event card', 'remember' ); ?>
+							</button>
+						<?php endif; ?>
 					</div>
+				<?php endif; ?>
+				<?php if ( ! $is_editing ) : ?>
 					<?php if ( current_user_can( 'remember_update_members' ) ) : ?>
 						<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-members&view=' . $view_member_id . '&edit=1' ) ); ?>" class="button button-primary">
 							<?php esc_html_e( 'Edit Profile', 'remember' ); ?>
@@ -152,13 +182,20 @@ $remember_print_name  = $view_user ? (string) $view_user->display_name : '';
 		</div>
 	</div>
 
+	<?php
+	$remember_show_emergency = current_user_can( 'remember_access_emergency_contact' );
+	$remember_show_health    = current_user_can( 'remember_access_health' );
+	// Emergency and health are capability-gated, so the row can hold one, two, or
+	// three cards. Track the count and let the remaining cards claim the full width.
+	$remember_detail_columns = 1 + ( $remember_show_emergency ? 1 : 0 ) + ( $remember_show_health ? 1 : 0 );
+	?>
 	<?php if ( $is_editing ) : ?>
 		<!-- Edit Form -->
 		<?php include 'member-edit.php'; ?>
 	<?php else : ?>
-		<!-- View Mode: three equal columns — Profile | Emergency | Dietary / Allergies / Medical.
+		<!-- View Mode: Profile | Emergency | Dietary / Allergies / Medical, sized to whatever the viewer may see.
 		     Interests and custom fields follow below so print keeps page 1 to the core profile. -->
-		<div class="remember-member-detail-grid remember-member-detail-grid--three-cols">
+		<div class="remember-member-detail-grid remember-member-detail-grid--three-cols remember-member-detail-grid--cols-<?php echo esc_attr( $remember_detail_columns ); ?>">
 			<!-- Profile Information -->
 			<div class="remember-member-detail-section remember-member-detail-profile-card">
 				<h3><?php esc_html_e( 'Profile Information', 'remember' ); ?></h3>
@@ -284,7 +321,14 @@ $remember_print_name  = $view_user ? (string) $view_user->display_name : '';
 				</table>
 			</div>
 
-			<?php if ( current_user_can( 'remember_access_emergency_contact' ) ) : ?>
+			<?php if ( $remember_show_emergency || $remember_show_health ) : ?>
+			<!-- On screen this wrapper is display:contents, so emergency and health stay
+			     independent grid columns. The confidential printout turns it into a flex
+			     column so both stack tightly beside the profile card. -->
+			<div class="remember-member-detail-sensitive-column">
+			<?php endif; ?>
+
+			<?php if ( $remember_show_emergency ) : ?>
 			<!-- Emergency Contact — confidential printout only; excluded from the event card. -->
 			<div class="remember-member-detail-section remember-member-detail-emergency-card">
 				<h3><?php esc_html_e( 'Emergency Contact', 'remember' ); ?></h3>
@@ -315,8 +359,8 @@ $remember_print_name  = $view_user ? (string) $view_user->display_name : '';
 			</div>
 			<?php endif; ?>
 
-			<?php if ( current_user_can( 'remember_access_health' ) ) : ?>
-			<!-- Dietary, Allergies, Medical: stacked in the third column; always show all three cards -->
+			<?php if ( $remember_show_health ) : ?>
+			<!-- Dietary, Allergies, Medical: stacked in the last column; always show all three cards -->
 			<div class="remember-member-detail-health-column">
 				<div class="remember-member-detail-section remember-member-detail-health-card">
 					<h3><?php esc_html_e( 'Dietary Restrictions', 'remember' ); ?></h3>
@@ -355,6 +399,10 @@ $remember_print_name  = $view_user ? (string) $view_user->display_name : '';
 					<?php endif; ?>
 				</div>
 			</div>
+			<?php endif; ?>
+
+			<?php if ( $remember_show_emergency || $remember_show_health ) : ?>
+			</div><!-- /.remember-member-detail-sensitive-column -->
 			<?php endif; ?>
 		</div>
 

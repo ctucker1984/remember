@@ -1254,6 +1254,59 @@ class Remember_Database_Updater {
 			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.38.0' ) );
 		}
 
+		// Update to 1.39.0 — gate member profile printouts behind dedicated caps.
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.39.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.39.0' ) );
+
+			require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-capabilities.php';
+			require_once plugin_dir_path( __FILE__ ) . '../models/class-role.php';
+
+			Remember_Capabilities::setup_capabilities();
+
+			$role_model = new Remember_Role();
+			$print_caps = array( 'remember_print_confidential', 'remember_print_event_card' );
+			$grants     = array(
+				'System Administrator' => $print_caps,
+				'Event Administrator'  => $print_caps,
+			);
+			$role_ids = array();
+
+			foreach ( $grants as $role_name => $caps ) {
+				$role_id = (int) $wpdb->get_var(
+					$wpdb->prepare(
+						"SELECT role_id FROM {$wpdb->prefix}remember_roles WHERE role_name = %s",
+						$role_name
+					)
+				);
+				if ( $role_id <= 0 ) {
+					continue;
+				}
+				$role_ids[] = $role_id;
+				foreach ( $caps as $cap ) {
+					$role_model->add_capability( $role_id, $cap );
+				}
+			}
+
+			if ( ! empty( $role_ids ) ) {
+				$placeholders = implode( ',', array_fill( 0, count( $role_ids ), '%d' ) );
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- placeholders built from count.
+				$member_ids = $wpdb->get_col(
+					$wpdb->prepare(
+						"SELECT DISTINCT member_id FROM {$wpdb->prefix}remember_member_roles WHERE role_id IN ($placeholders)",
+						$role_ids
+					)
+				);
+				if ( is_array( $member_ids ) ) {
+					foreach ( $member_ids as $member_id ) {
+						Remember_Capabilities::sync_user_capabilities_from_roles( (int) $member_id );
+					}
+				}
+			}
+
+			update_option( 'remember_db_version', '1.39.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.39.0' ) );
+		}
+
 		// Always re-ensure health catalogs (idempotent). Catches sites that stalled mid-migration
 		// or activated before catalog seed rows were added.
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-seeder.php';

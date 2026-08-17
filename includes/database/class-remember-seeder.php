@@ -212,6 +212,9 @@ class Remember_Seeder {
 				'remember_update_members',
 				// Dietary / allergies / medical for event planning (not emergency contact)
 				'remember_access_health',
+				// Profile printouts for staff records and public event posting
+				'remember_print_confidential',
+				'remember_print_event_card',
 				// Vetting (read only)
 				'remember_read_vetting',
 			);
