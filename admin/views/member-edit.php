@@ -22,17 +22,17 @@ $social_media_platforms = $wpdb->get_results(
 
 // Get dietary restrictions
 $dietary_restrictions = $wpdb->get_results(
-	"SELECT * FROM {$wpdb->prefix}remember_dietary_restrictions WHERE is_active = 1 ORDER BY sort_order ASC, restriction_name ASC"
+	"SELECT * FROM {$wpdb->prefix}remember_dietary_restrictions WHERE is_active = 1 ORDER BY CASE WHEN restriction_name = 'None' THEN 0 ELSE 1 END ASC, sort_order ASC, restriction_name ASC"
 );
 
 // Get medical accommodations
 $medical_accommodations = $wpdb->get_results(
-	"SELECT * FROM {$wpdb->prefix}remember_medical_accommodations WHERE is_active = 1 ORDER BY sort_order ASC, accommodation_name ASC"
+	"SELECT * FROM {$wpdb->prefix}remember_medical_accommodations WHERE is_active = 1 ORDER BY CASE WHEN accommodation_name = 'None' THEN 0 ELSE 1 END ASC, sort_order ASC, accommodation_name ASC"
 );
 
 // Get allergies
 $allergies = $wpdb->get_results(
-	"SELECT * FROM {$wpdb->prefix}remember_allergies WHERE is_active = 1 ORDER BY sort_order ASC, allergy_name ASC"
+	"SELECT * FROM {$wpdb->prefix}remember_allergies WHERE is_active = 1 ORDER BY CASE WHEN allergy_name = 'None' THEN 0 ELSE 1 END ASC, sort_order ASC, allergy_name ASC"
 );
 
 // Get selected IDs for multi-selects (from junction tables)
@@ -346,6 +346,7 @@ if ( $photo_max_bytes < 1 ) {
 	echo '</table>';
 	?>
 	
+	<?php if ( current_user_can( 'remember_access_emergency_contact' ) ) : ?>
 	<!-- Emergency Contact -->
 	<h3><?php esc_html_e( 'Emergency Contact', 'remember' ); ?></h3>
 	<table class="form-table">
@@ -374,6 +375,7 @@ if ( $photo_max_bytes < 1 ) {
 			</td>
 		</tr>
 	</table>
+	<?php endif; ?>
 	
 	<!-- Social Media -->
 	<?php if ( ! empty( $social_media_platforms ) ) : ?>
@@ -398,6 +400,7 @@ if ( $photo_max_bytes < 1 ) {
 		</table>
 	<?php endif; ?>
 	
+	<?php if ( current_user_can( 'remember_access_health' ) ) : ?>
 	<!-- Dietary Restrictions -->
 	<?php if ( ! empty( $dietary_restrictions ) ) : ?>
 		<h3><?php esc_html_e( 'Dietary Restrictions', 'remember' ); ?></h3>
@@ -460,10 +463,12 @@ if ( $photo_max_bytes < 1 ) {
 			</tr>
 		</table>
 	<?php endif; ?>
+	<?php endif; ?>
 	
 	<!-- Member Roles (only if user has update_members capability) -->
 	<?php if ( current_user_can( 'remember_update_members' ) ) : 
 		require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-role.php';
+		require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-capabilities.php';
 		$role_model = new Remember_Role();
 		$all_roles = $role_model->get_all();
 		
@@ -479,7 +484,7 @@ if ( $photo_max_bytes < 1 ) {
 			<tr>
 				<th><?php esc_html_e( 'Assigned Roles', 'remember' ); ?></th>
 				<td>
-					<p class="description"><?php esc_html_e( 'Select the roles this member should have. Members with roles receive the capabilities associated with those roles.', 'remember' ); ?></p>
+					<p class="description"><?php esc_html_e( 'Select the roles this member should have. You can only assign roles whose capabilities you already hold.', 'remember' ); ?></p>
 					<fieldset style="max-height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 3px; margin-top: 10px;">
 						<?php if ( ! empty( $all_roles ) ) : ?>
 							<?php 
@@ -497,8 +502,13 @@ if ( $photo_max_bytes < 1 ) {
 							<?php if ( ! empty( $system_roles ) ) : ?>
 								<h4 style="margin: 0 0 10px 0; font-size: 14px; font-weight: bold;"><?php esc_html_e( 'System Roles', 'remember' ); ?></h4>
 								<?php foreach ( $system_roles as $role ) : ?>
+									<?php
+									$is_assigned = in_array( (string) $role->role_id, array_map( 'strval', $current_role_ids ), true )
+										|| in_array( (int) $role->role_id, array_map( 'intval', $current_role_ids ), true );
+									$can_assign  = Remember_Capabilities::current_user_can_assign_role( $role->role_id );
+									?>
 									<label style="display: block; margin: 5px 0;">
-										<input type="checkbox" name="member_roles[]" value="<?php echo esc_attr( $role->role_id ); ?>" <?php checked( in_array( $role->role_id, $current_role_ids ) ); ?>>
+										<input type="checkbox" name="member_roles[]" value="<?php echo esc_attr( $role->role_id ); ?>" <?php checked( $is_assigned ); ?> <?php disabled( ! $can_assign ); ?>>
 										<?php echo esc_html( $role->role_name ); ?>
 										<?php if ( ! empty( $role->description ) ) : ?>
 											<span class="description" style="margin-left: 5px;">- <?php echo esc_html( $role->description ); ?></span>
@@ -514,8 +524,13 @@ if ( $photo_max_bytes < 1 ) {
 									<h4 style="margin: 0 0 10px 0; font-size: 14px; font-weight: bold;"><?php esc_html_e( 'Event Roles', 'remember' ); ?></h4>
 								<?php endif; ?>
 								<?php foreach ( $event_roles as $role ) : ?>
+									<?php
+									$is_assigned = in_array( (string) $role->role_id, array_map( 'strval', $current_role_ids ), true )
+										|| in_array( (int) $role->role_id, array_map( 'intval', $current_role_ids ), true );
+									$can_assign  = Remember_Capabilities::current_user_can_assign_role( $role->role_id );
+									?>
 									<label style="display: block; margin: 5px 0;">
-										<input type="checkbox" name="member_roles[]" value="<?php echo esc_attr( $role->role_id ); ?>" <?php checked( in_array( $role->role_id, $current_role_ids ) ); ?>>
+										<input type="checkbox" name="member_roles[]" value="<?php echo esc_attr( $role->role_id ); ?>" <?php checked( $is_assigned ); ?> <?php disabled( ! $can_assign ); ?>>
 										<?php echo esc_html( $role->role_name ); ?>
 										<?php if ( ! empty( $role->description ) ) : ?>
 											<span class="description" style="margin-left: 5px;">- <?php echo esc_html( $role->description ); ?></span>

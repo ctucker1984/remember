@@ -20,7 +20,44 @@ if ( $is_editing && ! current_user_can( 'remember_update_members' ) ) {
 }
 ?>
 
-<div class="remember-member-detail">
+<?php
+$remember_print_stamp = date_i18n( get_option( 'date_format' ) );
+$remember_print_name  = $view_user ? (string) $view_user->display_name : '';
+$remember_can_print_confidential = current_user_can( 'remember_print_confidential' );
+$remember_can_print_event        = current_user_can( 'remember_print_event_card' );
+$remember_can_print_any          = $remember_can_print_confidential || $remember_can_print_event;
+// Prefer the staff sheet when both are allowed; otherwise the one they hold.
+$remember_default_print_mode = $remember_can_print_confidential
+	? 'confidential'
+	: ( $remember_can_print_event ? 'event' : 'denied' );
+?>
+<div
+	class="remember-member-detail"
+	data-print-mode="<?php echo esc_attr( $remember_default_print_mode ); ?>"
+	data-print-display-name="<?php echo esc_attr( $remember_print_name ); ?>"
+	data-print-can-confidential="<?php echo $remember_can_print_confidential ? '1' : '0'; ?>"
+	data-print-can-event="<?php echo $remember_can_print_event ? '1' : '0'; ?>"
+>
+<?php
+/*
+ * Print frame. A table's <thead> and <tfoot> are the only reliable way to repeat
+ * a banner on every printed page — position: fixed is inconsistent across
+ * browsers, and browsers silently drop repeats that are too tall, so the banners
+ * are kept to a single line. On screen the frame is display:block and the banners
+ * are hidden, so this wrapper changes nothing in the admin view. The frame is left
+ * unindented on purpose: it brackets the whole view without re-indenting it.
+ */
+?>
+<table class="remember-print-frame"><thead><tr><td>
+	<div class="remember-print-banner remember-print-banner--top">
+		<span class="remember-print-banner__mark"><?php esc_html_e( 'Confidential', 'remember' ); ?></span>
+		<span class="remember-print-banner__note"><?php esc_html_e( 'Member record — do not post or redistribute', 'remember' ); ?></span>
+	</div>
+</td></tr></thead><tbody><tr><td>
+	<p class="remember-print-denied-note" hidden>
+		<?php esc_html_e( 'You do not have permission to print this member profile.', 'remember' ); ?>
+	</p>
+
 	<!-- Member Header -->
 	<div class="remember-member-detail-card">
 		<div class="remember-member-detail-header">
@@ -67,7 +104,49 @@ if ( $is_editing && ! current_user_can( 'remember_update_members' ) ) {
 					<?php endif; ?>
 				</div>
 			</div>
-			<div class="remember-member-detail-header__actions">
+			<div class="remember-member-detail-header__actions remember-no-print">
+				<?php if ( ! $is_editing && $remember_can_print_any ) : ?>
+					<div class="remember-print-menu">
+						<?php if ( $remember_can_print_confidential && $remember_can_print_event ) : ?>
+							<button type="button" class="button remember-print-menu__toggle" aria-expanded="false" aria-haspopup="true" aria-controls="remember-print-menu-list">
+								<span class="dashicons dashicons-printer" aria-hidden="true"></span>
+								<?php esc_html_e( 'Print', 'remember' ); ?>
+							</button>
+							<ul class="remember-print-menu__list" id="remember-print-menu-list" hidden>
+								<li>
+									<button type="button" data-print-mode="confidential">
+										<span class="remember-print-menu__label"><?php esc_html_e( 'Confidential profile', 'remember' ); ?></span>
+										<span class="remember-print-menu__hint">
+											<?php
+											if ( current_user_can( 'remember_access_emergency_contact' ) ) {
+												esc_html_e( 'Staff record, including emergency contact', 'remember' );
+											} else {
+												esc_html_e( 'Staff record of what you are allowed to see', 'remember' );
+											}
+											?>
+										</span>
+									</button>
+								</li>
+								<li>
+									<button type="button" data-print-mode="event">
+										<span class="remember-print-menu__label"><?php esc_html_e( 'Event card', 'remember' ); ?></span>
+										<span class="remember-print-menu__hint"><?php esc_html_e( 'Photo, name, and interests only — safe to post', 'remember' ); ?></span>
+									</button>
+								</li>
+							</ul>
+						<?php elseif ( $remember_can_print_confidential ) : ?>
+							<button type="button" class="button remember-print-menu__direct" data-print-mode="confidential">
+								<span class="dashicons dashicons-printer" aria-hidden="true"></span>
+								<?php esc_html_e( 'Print confidential profile', 'remember' ); ?>
+							</button>
+						<?php else : ?>
+							<button type="button" class="button remember-print-menu__direct" data-print-mode="event">
+								<span class="dashicons dashicons-printer" aria-hidden="true"></span>
+								<?php esc_html_e( 'Print event card', 'remember' ); ?>
+							</button>
+						<?php endif; ?>
+					</div>
+				<?php endif; ?>
 				<?php if ( ! $is_editing ) : ?>
 					<?php if ( current_user_can( 'remember_update_members' ) ) : ?>
 						<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-members&view=' . $view_member_id . '&edit=1' ) ); ?>" class="button button-primary">
@@ -103,14 +182,22 @@ if ( $is_editing && ! current_user_can( 'remember_update_members' ) ) {
 		</div>
 	</div>
 
+	<?php
+	$remember_show_emergency = current_user_can( 'remember_access_emergency_contact' );
+	$remember_show_health    = current_user_can( 'remember_access_health' );
+	// Emergency and health are capability-gated, so the row can hold one, two, or
+	// three cards. Track the count and let the remaining cards claim the full width.
+	$remember_detail_columns = 1 + ( $remember_show_emergency ? 1 : 0 ) + ( $remember_show_health ? 1 : 0 );
+	?>
 	<?php if ( $is_editing ) : ?>
 		<!-- Edit Form -->
 		<?php include 'member-edit.php'; ?>
 	<?php else : ?>
-		<!-- View Mode: three equal columns — Profile | Emergency + Custom Fields | Dietary / Allergies / Medical -->
-		<div class="remember-member-detail-grid remember-member-detail-grid--three-cols">
+		<!-- View Mode: Profile | Emergency | Dietary / Allergies / Medical, sized to whatever the viewer may see.
+		     Interests and custom fields follow below so print keeps page 1 to the core profile. -->
+		<div class="remember-member-detail-grid remember-member-detail-grid--three-cols remember-member-detail-grid--cols-<?php echo esc_attr( $remember_detail_columns ); ?>">
 			<!-- Profile Information -->
-			<div class="remember-member-detail-section">
+			<div class="remember-member-detail-section remember-member-detail-profile-card">
 				<h3><?php esc_html_e( 'Profile Information', 'remember' ); ?></h3>
 				<table class="form-table">
 					<tr>
@@ -231,66 +318,49 @@ if ( $is_editing && ! current_user_can( 'remember_update_members' ) ) {
 							?>
 						</td>
 					</tr>
-					<tr>
-						<th><?php esc_html_e( 'Interests', 'remember' ); ?></th>
-						<td>
-							<?php
-							if ( $view_profile && ! empty( $view_profile->interests ) ) {
-								echo '<div class="remember-richtext">' . wp_kses_post( wpautop( $view_profile->interests ) ) . '</div>';
-							} else {
-								echo '<span class="description">' . esc_html__( 'Not provided', 'remember' ) . '</span>';
-							}
-							?>
+				</table>
+			</div>
 
+			<?php if ( $remember_show_emergency || $remember_show_health ) : ?>
+			<!-- On screen this wrapper is display:contents, so emergency and health stay
+			     independent grid columns. The confidential printout turns it into a flex
+			     column so both stack tightly beside the profile card. -->
+			<div class="remember-member-detail-sensitive-column">
+			<?php endif; ?>
+
+			<?php if ( $remember_show_emergency ) : ?>
+			<!-- Emergency Contact — confidential printout only; excluded from the event card. -->
+			<div class="remember-member-detail-section remember-member-detail-emergency-card">
+				<h3><?php esc_html_e( 'Emergency Contact', 'remember' ); ?></h3>
+				<table class="form-table">
+					<tr>
+						<th><?php esc_html_e( 'Name', 'remember' ); ?></th>
+						<td>
+							<?php if ( $view_profile ) : ?>
+								<?php echo esc_html( trim( $view_profile->emergency_contact_first . ' ' . $view_profile->emergency_contact_last ) ); ?>
+							<?php else : ?>
+								<span class="description"><?php esc_html_e( 'Not provided', 'remember' ); ?></span>
+							<?php endif; ?>
+						</td>
+					</tr>
+					<tr>
+						<th><?php esc_html_e( 'Phone', 'remember' ); ?></th>
+						<td>
+							<?php echo $view_profile && $view_profile->emergency_contact_phone ? esc_html( $view_profile->emergency_contact_phone ) : '<span class="description">' . esc_html__( 'Not provided', 'remember' ) . '</span>'; ?>
+						</td>
+					</tr>
+					<tr>
+						<th><?php esc_html_e( 'Relationship', 'remember' ); ?></th>
+						<td>
+							<?php echo $view_profile && $view_profile->emergency_contact_relationship ? esc_html( $view_profile->emergency_contact_relationship ) : '<span class="description">' . esc_html__( 'Not provided', 'remember' ) . '</span>'; ?>
 						</td>
 					</tr>
 				</table>
 			</div>
+			<?php endif; ?>
 
-			<!-- Emergency Contact + Custom Fields (stacked) -->
-			<div class="remember-member-detail-middle-column">
-				<div class="remember-member-detail-section">
-					<h3><?php esc_html_e( 'Emergency Contact', 'remember' ); ?></h3>
-					<table class="form-table">
-						<tr>
-							<th><?php esc_html_e( 'Name', 'remember' ); ?></th>
-							<td>
-								<?php if ( $view_profile ) : ?>
-									<?php echo esc_html( trim( $view_profile->emergency_contact_first . ' ' . $view_profile->emergency_contact_last ) ); ?>
-								<?php else : ?>
-									<span class="description"><?php esc_html_e( 'Not provided', 'remember' ); ?></span>
-								<?php endif; ?>
-							</td>
-						</tr>
-						<tr>
-							<th><?php esc_html_e( 'Phone', 'remember' ); ?></th>
-							<td>
-								<?php echo $view_profile && $view_profile->emergency_contact_phone ? esc_html( $view_profile->emergency_contact_phone ) : '<span class="description">' . esc_html__( 'Not provided', 'remember' ) . '</span>'; ?>
-							</td>
-						</tr>
-						<tr>
-							<th><?php esc_html_e( 'Relationship', 'remember' ); ?></th>
-							<td>
-								<?php echo $view_profile && $view_profile->emergency_contact_relationship ? esc_html( $view_profile->emergency_contact_relationship ) : '<span class="description">' . esc_html__( 'Not provided', 'remember' ) . '</span>'; ?>
-							</td>
-						</tr>
-					</table>
-				</div>
-				<?php
-				require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-questions.php';
-				ob_start();
-				$remember_has_custom_fields = Remember_Profile_Questions::render_detail_rows( (int) $view_member_id );
-				$remember_custom_fields_html = ob_get_clean();
-				if ( $remember_has_custom_fields ) :
-					?>
-					<div class="remember-member-detail-section">
-						<h3><?php esc_html_e( 'Custom Fields', 'remember' ); ?></h3>
-						<?php echo $remember_custom_fields_html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in render_detail_rows() ?>
-					</div>
-				<?php endif; ?>
-			</div>
-
-			<!-- Dietary, Allergies, Medical: stacked in the third column; always show all three cards -->
+			<?php if ( $remember_show_health ) : ?>
+			<!-- Dietary, Allergies, Medical: stacked in the last column; always show all three cards -->
 			<div class="remember-member-detail-health-column">
 				<div class="remember-member-detail-section remember-member-detail-health-card">
 					<h3><?php esc_html_e( 'Dietary Restrictions', 'remember' ); ?></h3>
@@ -329,11 +399,49 @@ if ( $is_editing && ! current_user_can( 'remember_update_members' ) ) {
 					<?php endif; ?>
 				</div>
 			</div>
+			<?php endif; ?>
+
+			<?php if ( $remember_show_emergency || $remember_show_health ) : ?>
+			</div><!-- /.remember-member-detail-sensitive-column -->
+			<?php endif; ?>
+		</div>
+
+		<?php
+		require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-questions.php';
+		ob_start();
+		$remember_has_custom_fields  = Remember_Profile_Questions::render_detail_rows( (int) $view_member_id );
+		$remember_custom_fields_html = ob_get_clean();
+		$remember_has_interests      = $view_profile && ! empty( $view_profile->interests );
+		// With nothing to say here, keep the block off the printout rather than spending a page on it.
+		$remember_secondary_classes  = ( $remember_has_interests || $remember_has_custom_fields ) ? '' : ' remember-no-print';
+		// Custom fields reach the public event card only where an admin opted the question in.
+		$remember_custom_fields_class = ( $remember_has_custom_fields && Remember_Profile_Questions::has_event_card_rows( (int) $view_member_id ) )
+			? ''
+			: ' remember-print-confidential-only';
+		?>
+		<!-- Narrative and custom fields: full width on screen, page two of the printout. -->
+		<div class="remember-member-detail-grid remember-member-detail-grid--secondary<?php echo esc_attr( $remember_secondary_classes ); ?>">
+			<div class="remember-member-detail-section">
+				<h3><?php esc_html_e( 'Interests', 'remember' ); ?></h3>
+				<?php
+				if ( $remember_has_interests ) {
+					echo '<div class="remember-richtext">' . wp_kses_post( wpautop( $view_profile->interests ) ) . '</div>';
+				} else {
+					echo '<p class="remember-member-detail-none">' . esc_html__( 'Not provided', 'remember' ) . '</p>';
+				}
+				?>
+			</div>
+			<?php if ( $remember_has_custom_fields ) : ?>
+				<div class="remember-member-detail-section<?php echo esc_attr( $remember_custom_fields_class ); ?>">
+					<h3><?php esc_html_e( 'Custom Fields', 'remember' ); ?></h3>
+					<?php echo $remember_custom_fields_html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in render_detail_rows() ?>
+				</div>
+			<?php endif; ?>
 		</div>
 
 		<!-- Vetting Cases (Full Width) -->
-		<?php if ( isset( $view_vetting_cases ) ) : ?>
-			<div class="remember-member-detail-section remember-member-detail-section--full">
+		<?php if ( isset( $view_vetting_cases ) && current_user_can( 'remember_read_vetting' ) ) : ?>
+			<div class="remember-member-detail-section remember-member-detail-section--full remember-no-print">
 				<div class="remember-section-heading">
 					<h3><?php esc_html_e( 'Vetting Cases', 'remember' ); ?></h3>
 					<?php if ( current_user_can( 'remember_create_vetting' ) ) : ?>
@@ -420,7 +528,8 @@ if ( $is_editing && ! current_user_can( 'remember_update_members' ) ) {
 		<?php endif; ?>
 
 		<!-- Billing Register (Full Width) -->
-		<div class="remember-member-detail-section remember-member-detail-section--full">
+		<?php if ( current_user_can( 'remember_read_billing' ) ) : ?>
+		<div class="remember-member-detail-section remember-member-detail-section--full remember-no-print">
 			<h3><?php esc_html_e( 'Billing Register', 'remember' ); ?></h3>
 			<p class="description"><?php esc_html_e( 'Chronological accounting register of invoices, payments, and refunds.', 'remember' ); ?></p>
 			
@@ -542,5 +651,22 @@ if ( $is_editing && ! current_user_can( 'remember_update_members' ) ) {
 				<p><?php esc_html_e( 'No billing history found.', 'remember' ); ?></p>
 			<?php endif; ?>
 		</div>
+		<?php endif; ?>
 	<?php endif; ?>
+
+</td></tr></tbody><tfoot><tr><td>
+	<div class="remember-print-banner remember-print-banner--bottom">
+		<span class="remember-print-banner__mark"><?php esc_html_e( 'Confidential', 'remember' ); ?></span>
+		<span class="remember-print-banner__note">
+			<?php
+			printf(
+				/* translators: 1: member display name, 2: date the sheet was printed */
+				esc_html__( '%1$s · printed %2$s', 'remember' ),
+				esc_html( $view_user->display_name ),
+				esc_html( $remember_print_stamp )
+			);
+			?>
+		</span>
+	</div>
+</td></tr></tfoot></table>
 </div>

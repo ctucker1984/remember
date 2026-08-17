@@ -587,7 +587,9 @@ foreach ( $all_notifications as $notification ) {
 }
 
 $options = get_option( 'remember_options', array() );
-$plugin_version = get_option( 'remember_version', REMEMBER_VERSION );
+// Always show the installed files' version. remember_version in the DB can lag after
+// Upload → Replace, because silent reactivation skips the activation hook that writes it.
+$plugin_version = defined( 'REMEMBER_VERSION' ) ? REMEMBER_VERSION : get_option( 'remember_version', '0.0.0' );
 
 // Get social media platforms
 global $wpdb;

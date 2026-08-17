@@ -249,6 +249,92 @@
 	margin-bottom: 20px;
 }
 
+/* Role capability matrix: modules as rows, Create / Read / Edit / Delete as columns. */
+.remember-cap-matrix-wrap {
+	margin-top: 10px;
+	max-width: 640px;
+}
+
+.remember-cap-matrix {
+	width: 100%;
+	border-collapse: collapse;
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+	overflow: hidden;
+}
+
+.remember-cap-matrix th,
+.remember-cap-matrix td {
+	padding: 8px 10px;
+	border-bottom: 1px solid #e0e0e0;
+	text-align: center;
+	vertical-align: middle;
+}
+
+.remember-cap-matrix thead th {
+	background: #f6f7f7;
+	font-weight: 600;
+	font-size: 12px;
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
+	color: #1d2327;
+}
+
+.remember-cap-matrix__module {
+	text-align: left !important;
+	width: 40%;
+}
+
+.remember-cap-matrix tbody th {
+	text-align: left;
+	font-weight: 500;
+	color: #1d2327;
+}
+
+.remember-cap-matrix tbody tr:nth-child(even) {
+	background: #fafafa;
+}
+
+.remember-cap-matrix tbody tr:last-child th,
+.remember-cap-matrix tbody tr:last-child td {
+	border-bottom: 0;
+}
+
+.remember-cap-matrix input[type="checkbox"] {
+	margin: 0;
+}
+
+.remember-cap-special {
+	margin-top: 16px;
+	padding: 12px 14px;
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+}
+
+.remember-cap-special__title {
+	margin: 0 0 8px;
+	font-size: 13px;
+	font-weight: 600;
+}
+
+.remember-cap-special__list {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+	gap: 6px 16px;
+}
+
+.remember-cap-special__list label {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	margin: 0;
+}
+
 .remember-platforms-columns {
 	display: grid;
 	grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -300,11 +386,44 @@
 	grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+/* Emergency and health are capability-gated. Track the column count so the cards
+   a viewer may see fill the row instead of leaving dead space on the right. */
+.remember-member-detail-grid--cols-1 {
+	grid-template-columns: minmax(0, 1fr);
+}
+
+.remember-member-detail-grid--cols-2 {
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.remember-member-detail-grid--cols-3 {
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+/* A lone profile card spans the screen, so let the label column breathe rather
+   than stranding every value against a 140px gutter. Screen only — the print
+   layout sets its own label width in points. */
+@media screen {
+	.remember-member-detail-grid--cols-1 .remember-member-detail-profile-card .form-table th {
+		width: 220px;
+	}
+}
+
 .remember-member-detail-grid.full-width {
 	grid-template-columns: 1fr;
 }
 
-.remember-member-detail-middle-column,
+/* Interests narrative and custom fields sit below the columns, and pair up when both are present. */
+.remember-member-detail-grid--secondary {
+	grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+}
+
+/* Transparent on screen: emergency and health participate in the grid as if the
+   wrapper were not there. Print (confidential) restyles it into a real column. */
+.remember-member-detail-sensitive-column {
+	display: contents;
+}
+
 .remember-member-detail-health-column {
 	display: flex;
 	flex-direction: column;
@@ -312,7 +431,6 @@
 	min-width: 0;
 }
 
-.remember-member-detail-middle-column .remember-member-detail-section,
 .remember-member-detail-health-column .remember-member-detail-health-card {
 	margin: 0;
 }
@@ -374,7 +492,7 @@
 
 .remember-member-detail-section .form-table th {
 	width: 140px;
-	padding: 8px 0;
+	padding: 8px 12px 8px 0;
 	font-weight: 500;
 }
 
@@ -904,6 +1022,91 @@
 	margin: 0;
 }
 
+/* Print frame: a real table on paper so its banners repeat per page, plain blocks on screen. */
+.remember-print-frame,
+.remember-print-frame > thead,
+.remember-print-frame > tbody,
+.remember-print-frame > tfoot,
+.remember-print-frame > * > tr,
+.remember-print-frame > * > tr > td {
+	display: block;
+	width: auto;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	background: none;
+}
+
+.remember-print-banner {
+	display: none;
+}
+
+.remember-print-menu {
+	position: relative;
+}
+
+.remember-print-menu__toggle .dashicons,
+.remember-print-menu__direct .dashicons {
+	margin-right: 2px;
+	font-size: 16px;
+	width: 16px;
+	height: 16px;
+	vertical-align: text-bottom;
+}
+
+.remember-print-denied-note {
+	display: none;
+}
+
+.remember-print-menu__list {
+	position: absolute;
+	top: calc(100% + 4px);
+	right: 0;
+	z-index: 100;
+	min-width: 264px;
+	margin: 0;
+	padding: 4px;
+	list-style: none;
+	text-align: left;
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+.remember-print-menu__list li {
+	margin: 0;
+}
+
+.remember-print-menu__list button {
+	display: block;
+	width: 100%;
+	padding: 8px 10px;
+	border: 0;
+	border-radius: 3px;
+	background: none;
+	text-align: left;
+	cursor: pointer;
+}
+
+.remember-print-menu__list button:hover,
+.remember-print-menu__list button:focus {
+	background: #f0f6fc;
+}
+
+.remember-print-menu__label {
+	display: block;
+	font-weight: 600;
+	color: #1d2327;
+}
+
+.remember-print-menu__hint {
+	display: block;
+	margin-top: 2px;
+	color: #646970;
+	font-size: 12px;
+}
+
 .remember-section-heading {
 	display: flex;
 	flex-wrap: wrap;
@@ -1351,5 +1554,310 @@
 	.remember-member-detail .remember-responsive-table td:nth-child(3) {
 		min-width: 0;
 		max-width: none;
+	}
+}
+
+/* ---- Print ----
+ * A member profile prints as a document, not a screenshot of wp-admin. Two
+ * formats share this markup, chosen by data-print-mode on .remember-member-detail:
+ *
+ *   confidential — the full record for staff. Page one is identity, profile,
+ *                  emergency contact, and health; the interests narrative and
+ *                  custom fields start on page two. Red banners top and bottom.
+ *   event        — a card for posting at an event: photo, display name, the
+ *                  member's event roles, interests, and custom fields. Every
+ *                  identifying and health detail is withheld.
+ *
+ * Plain Ctrl-P falls through to confidential, matching what is on screen.
+ * .remember-no-print never prints in either format: action buttons, and the
+ * vetting and billing registers, which belong to their own screens.
+ */
+@media print {
+	@page {
+		size: portrait;
+		margin: 12mm;
+	}
+
+	#adminmenumain,
+	#adminmenuback,
+	#adminmenuwrap,
+	#wpadminbar,
+	#wpfooter,
+	#screen-meta,
+	#screen-meta-links,
+	.update-nag,
+	.notice,
+	.page-title-action,
+	.remember-no-print {
+		display: none !important;
+	}
+
+	/* The screen's "Members" heading would sit above the banner; the sheet is the
+	   member's document, not the list page. Browsers without :has() just keep it. */
+	.wrap:has(.remember-member-detail) > h1 {
+		display: none;
+	}
+
+	html.wp-toolbar {
+		padding-top: 0 !important;
+	}
+
+	#wpcontent,
+	#wpbody,
+	#wpbody-content {
+		margin-left: 0 !important;
+		padding: 0 !important;
+	}
+
+	body {
+		background: #fff !important;
+	}
+
+	/* Restore the real table so <thead>/<tfoot> repeat the banners on every sheet. */
+	.remember-print-frame {
+		display: table;
+		width: 100%;
+		border-collapse: collapse;
+	}
+
+	.remember-print-frame > thead {
+		display: table-header-group;
+	}
+
+	.remember-print-frame > tbody {
+		display: table-row-group;
+	}
+
+	.remember-print-frame > tfoot {
+		display: table-footer-group;
+	}
+
+	.remember-print-frame > * > tr {
+		display: table-row;
+	}
+
+	.remember-print-frame > * > tr > td {
+		display: table-cell;
+		padding: 0;
+		border: 0;
+	}
+
+	.remember-member-detail {
+		margin: 0;
+		font-size: 9.5pt;
+		line-height: 1.35;
+		-webkit-print-color-adjust: exact;
+		print-color-adjust: exact;
+	}
+
+	.remember-member-detail .remember-member-detail-card,
+	.remember-member-detail .remember-member-detail-section {
+		padding: 8pt 10pt;
+		margin-bottom: 8pt;
+		border: 1px solid #c9ced3;
+		border-radius: 3pt;
+		box-shadow: none;
+		page-break-inside: avoid;
+		break-inside: avoid;
+	}
+
+	.remember-member-detail-header__identity {
+		gap: 10pt;
+	}
+
+	.remember-member-detail-avatar {
+		width: 62pt;
+		height: 62pt;
+	}
+
+	.remember-member-detail-avatar--placeholder {
+		font-size: 26pt;
+	}
+
+	.remember-member-detail-header__meta h2 {
+		margin-bottom: 4pt;
+		font-size: 14pt;
+	}
+
+	.remember-member-detail-status {
+		font-size: 10pt;
+	}
+
+	.remember-member-detail-contact {
+		margin: 2pt 0;
+		gap: 3pt 12pt;
+	}
+
+	.remember-member-detail-contact__item,
+	.remember-member-detail-contact__item a {
+		color: #1d2327;
+	}
+
+	.remember-member-detail-roles {
+		margin-top: 5pt;
+		gap: 4pt;
+	}
+
+	.remember-member-detail-role,
+	.remember-member-detail-pill {
+		padding: 2pt 7pt;
+		font-size: 8.5pt;
+	}
+
+	.remember-member-detail-section h3 {
+		margin-bottom: 6pt;
+		padding-bottom: 4pt;
+		font-size: 10pt;
+	}
+
+	.remember-member-detail-section .form-table th {
+		width: 92pt;
+		padding: 2.5pt 8pt 2.5pt 0;
+		font-size: 9pt;
+	}
+
+	.remember-member-detail-section .form-table td {
+		padding: 2.5pt 0;
+	}
+
+	/* Custom-field prompts are sentences, so they need more room than profile labels. */
+	.remember-member-detail-grid--secondary .form-table th {
+		width: 150pt;
+	}
+
+	.remember-member-detail-health-column {
+		gap: 8pt;
+	}
+
+	.remember-member-detail-grid--secondary {
+		display: block;
+	}
+
+	.remember-member-detail-grid--secondary .remember-richtext {
+		orphans: 3;
+		widows: 3;
+	}
+
+	/* ---- Denied print (no print caps; Ctrl/Cmd+P still fires) ---- */
+
+	[data-print-mode="denied"] .remember-print-banner,
+	[data-print-mode="denied"] .remember-member-detail-card,
+	[data-print-mode="denied"] .remember-member-detail-grid {
+		display: none !important;
+	}
+
+	[data-print-mode="denied"] .remember-print-denied-note {
+		display: block !important;
+		margin: 2in auto;
+		max-width: 4in;
+		text-align: center;
+		font-size: 11pt;
+		color: #1d2327;
+	}
+
+	/* ---- Confidential format ---- */
+
+	[data-print-mode="confidential"] .remember-print-banner {
+		display: flex;
+		align-items: baseline;
+		justify-content: space-between;
+		gap: 10pt;
+		color: #c1272d;
+		font-size: 8pt;
+		font-weight: 700;
+		letter-spacing: 0.14em;
+		text-transform: uppercase;
+	}
+
+	[data-print-mode="confidential"] .remember-print-banner--top {
+		margin-bottom: 9pt;
+		padding-bottom: 3pt;
+		border-bottom: 1.5pt solid #c1272d;
+	}
+
+	[data-print-mode="confidential"] .remember-print-banner--bottom {
+		margin-top: 9pt;
+		padding-top: 3pt;
+		border-top: 1.5pt solid #c1272d;
+	}
+
+	[data-print-mode="confidential"] .remember-print-banner__note {
+		font-weight: 400;
+		letter-spacing: 0.03em;
+		text-transform: none;
+		color: #8a3a3a;
+	}
+
+	/* Profile runs full height on the left; emergency / health stack on the right when present. */
+	[data-print-mode="confidential"] .remember-member-detail-grid--three-cols {
+		grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+		gap: 8pt;
+		margin-bottom: 8pt;
+	}
+
+	/* One row, two cells: profile | sensitive column. The wrapper is a flex column
+	   here (display:contents on screen), so emergency and the health cards stack
+	   tightly from the top regardless of how tall the profile card is. Grid row
+	   spans are avoided on purpose: with no explicit rows, "grid-row: 1 / -1"
+	   collapses to a single row and strands the health cards below the profile. */
+	[data-print-mode="confidential"] .remember-member-detail-sensitive-column {
+		display: flex;
+		flex-direction: column;
+		gap: 8pt;
+		min-width: 0;
+	}
+
+	[data-print-mode="confidential"] .remember-member-detail-sensitive-column .remember-member-detail-section {
+		margin-bottom: 0;
+	}
+
+	/* Without emergency or health, the profile is the only card — no second column to reserve. */
+	[data-print-mode="confidential"] .remember-member-detail-grid--cols-1 {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	[data-print-mode="confidential"] .remember-member-detail-grid--secondary {
+		page-break-before: always;
+		break-before: page;
+	}
+
+	/* ---- Event card format ---- */
+
+	/* Everything identifying or medical lives in these blocks, so they go as a unit.
+	   Custom-field rows appear only where an admin ticked "Show on event card". */
+	[data-print-mode="event"] .remember-member-detail-grid--three-cols,
+	[data-print-mode="event"] .remember-member-detail-contact,
+	[data-print-mode="event"] .remember-member-detail-status,
+	[data-print-mode="event"] .remember-member-detail-roles,
+	[data-print-mode="event"] .remember-print-confidential-only,
+	[data-print-mode="event"] .remember-pq-row:not(.remember-pq-row--event) {
+		display: none !important;
+	}
+
+	[data-print-mode="event"] .remember-member-detail-card {
+		margin-bottom: 12pt;
+		padding: 0;
+		border: 0;
+	}
+
+	[data-print-mode="event"] .remember-member-detail-header,
+	[data-print-mode="event"] .remember-member-detail-header__identity {
+		display: block;
+		text-align: center;
+	}
+
+	[data-print-mode="event"] .remember-member-detail-avatar {
+		width: 1.9in;
+		height: 1.9in;
+		margin: 0 auto 10pt;
+	}
+
+	[data-print-mode="event"] .remember-member-detail-avatar--placeholder {
+		font-size: 60pt;
+	}
+
+	[data-print-mode="event"] .remember-member-detail-header__meta h2 {
+		margin-bottom: 6pt;
+		font-size: 22pt;
 	}
 }

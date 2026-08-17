@@ -261,7 +261,28 @@ class Remember {
 		if ( is_admin() && current_user_can( 'manage_options' ) ) {
 			require_once plugin_dir_path( __FILE__ ) . 'database/class-remember-database-updater.php';
 			Remember_Database_Updater::update_schema();
+			$this->maybe_sync_plugin_version_option();
 		}
+	}
+
+	/**
+	 * Keep the remember_version option aligned with the installed plugin files.
+	 *
+	 * Upload → Replace reactivates silently and skips the activation hook that
+	 * normally writes this option, so Settings (and anything else reading it)
+	 * can report a stale version after a zip overwrite.
+	 *
+	 * @return void
+	 */
+	private function maybe_sync_plugin_version_option() {
+		if ( ! defined( 'REMEMBER_VERSION' ) ) {
+			return;
+		}
+		$stored = (string) get_option( 'remember_version', '' );
+		if ( REMEMBER_VERSION === $stored ) {
+			return;
+		}
+		update_option( 'remember_version', REMEMBER_VERSION );
 	}
 
 	/**

@@ -1094,6 +1094,219 @@ class Remember_Database_Updater {
 			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.34.0' ) );
 		}
 
+		// Update to 1.35.0 — opt custom fields into the public event card printout.
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.35.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.35.0' ) );
+
+			$table = $wpdb->prefix . 'remember_profile_questions';
+			if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) === $table ) {
+				$cols = $wpdb->get_col( "SHOW COLUMNS FROM {$table}", 0 );
+				// Defaults to 0: nothing reaches a publicly posted card until an admin says so.
+				if ( is_array( $cols ) && ! in_array( 'show_on_event_card', $cols, true ) ) {
+					$ok = $wpdb->query(
+						"ALTER TABLE {$table} ADD COLUMN show_on_event_card TINYINT(1) NOT NULL DEFAULT 0 AFTER is_active"
+					);
+					if ( false === $ok ) {
+						Remember_Logger::error(
+							'Failed to add show_on_event_card to remember_profile_questions',
+							array( 'error' => $wpdb->last_error )
+						);
+					} else {
+						Remember_Logger::info( 'Added show_on_event_card to remember_profile_questions' );
+					}
+				}
+			}
+
+			update_option( 'remember_db_version', '1.35.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.35.0' ) );
+		}
+
+		// Update to 1.36.0 — gate emergency contact and health (dietary / allergy / medical).
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.36.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.36.0' ) );
+
+			require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-capabilities.php';
+			require_once plugin_dir_path( __FILE__ ) . '../models/class-role.php';
+
+			Remember_Capabilities::setup_capabilities();
+
+			$role_model = new Remember_Role();
+			$grants     = array(
+				'System Administrator' => array( 'remember_access_emergency_contact', 'remember_access_health' ),
+				'Vetting'              => array( 'remember_access_emergency_contact', 'remember_access_health' ),
+				'Event Administrator'  => array( 'remember_access_health' ),
+			);
+			$role_ids = array();
+
+			foreach ( $grants as $role_name => $caps ) {
+				$role_id = (int) $wpdb->get_var(
+					$wpdb->prepare(
+						"SELECT role_id FROM {$wpdb->prefix}remember_roles WHERE role_name = %s",
+						$role_name
+					)
+				);
+				if ( $role_id <= 0 ) {
+					continue;
+				}
+				$role_ids[] = $role_id;
+				foreach ( $caps as $cap ) {
+					$role_model->add_capability( $role_id, $cap );
+				}
+			}
+
+			if ( ! empty( $role_ids ) ) {
+				$placeholders = implode( ',', array_fill( 0, count( $role_ids ), '%d' ) );
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- placeholders built from count.
+				$member_ids = $wpdb->get_col(
+					$wpdb->prepare(
+						"SELECT DISTINCT member_id FROM {$wpdb->prefix}remember_member_roles WHERE role_id IN ($placeholders)",
+						$role_ids
+					)
+				);
+				if ( is_array( $member_ids ) ) {
+					foreach ( $member_ids as $member_id ) {
+						Remember_Capabilities::sync_user_capabilities_from_roles( (int) $member_id );
+					}
+				}
+			}
+
+			update_option( 'remember_db_version', '1.36.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.36.0' ) );
+		}
+
+		// Update to 1.37.0 — rename emergency/health caps from read_* to access_*.
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.37.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.37.0' ) );
+
+			require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-capabilities.php';
+			require_once plugin_dir_path( __FILE__ ) . '../models/class-role.php';
+
+			Remember_Capabilities::setup_capabilities();
+
+			$renames = array(
+				'remember_read_emergency_contact' => 'remember_access_emergency_contact',
+				'remember_read_health'            => 'remember_access_health',
+			);
+
+			// Drop obsolete keys from the WP administrator role if they were added earlier.
+			$admin_role = get_role( 'administrator' );
+			if ( $admin_role ) {
+				foreach ( array_keys( $renames ) as $old_cap ) {
+					$admin_role->remove_cap( $old_cap );
+				}
+			}
+
+			$role_model = new Remember_Role();
+			$role_ids   = array();
+			$cap_table  = $wpdb->prefix . 'remember_role_capabilities';
+
+			foreach ( $renames as $old_cap => $new_cap ) {
+				$holder_ids = $wpdb->get_col(
+					$wpdb->prepare(
+						"SELECT DISTINCT role_id FROM {$cap_table} WHERE capability = %s",
+						$old_cap
+					)
+				);
+				if ( ! is_array( $holder_ids ) ) {
+					continue;
+				}
+				foreach ( $holder_ids as $role_id ) {
+					$role_id = (int) $role_id;
+					if ( $role_id <= 0 ) {
+						continue;
+					}
+					$role_model->add_capability( $role_id, $new_cap );
+					$role_model->remove_capability( $role_id, $old_cap );
+					$role_ids[] = $role_id;
+				}
+			}
+
+			$role_ids = array_values( array_unique( $role_ids ) );
+			if ( ! empty( $role_ids ) ) {
+				$placeholders = implode( ',', array_fill( 0, count( $role_ids ), '%d' ) );
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- placeholders built from count.
+				$member_ids = $wpdb->get_col(
+					$wpdb->prepare(
+						"SELECT DISTINCT member_id FROM {$wpdb->prefix}remember_member_roles WHERE role_id IN ($placeholders)",
+						$role_ids
+					)
+				);
+				if ( is_array( $member_ids ) ) {
+					foreach ( $member_ids as $member_id ) {
+						Remember_Capabilities::sync_user_capabilities_from_roles( (int) $member_id );
+					}
+				}
+			}
+
+			update_option( 'remember_db_version', '1.37.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.37.0' ) );
+		}
+
+		// Update to 1.38.0 — pin "None" to the top of health catalog lists.
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.38.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.38.0' ) );
+
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-seeder.php';
+			$seeder = new Remember_Seeder();
+			$seeder->ensure_none_options_sort_first();
+
+			update_option( 'remember_db_version', '1.38.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.38.0' ) );
+		}
+
+		// Update to 1.39.0 — gate member profile printouts behind dedicated caps.
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.39.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.39.0' ) );
+
+			require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-capabilities.php';
+			require_once plugin_dir_path( __FILE__ ) . '../models/class-role.php';
+
+			Remember_Capabilities::setup_capabilities();
+
+			$role_model = new Remember_Role();
+			$print_caps = array( 'remember_print_confidential', 'remember_print_event_card' );
+			$grants     = array(
+				'System Administrator' => $print_caps,
+				'Event Administrator'  => $print_caps,
+			);
+			$role_ids = array();
+
+			foreach ( $grants as $role_name => $caps ) {
+				$role_id = (int) $wpdb->get_var(
+					$wpdb->prepare(
+						"SELECT role_id FROM {$wpdb->prefix}remember_roles WHERE role_name = %s",
+						$role_name
+					)
+				);
+				if ( $role_id <= 0 ) {
+					continue;
+				}
+				$role_ids[] = $role_id;
+				foreach ( $caps as $cap ) {
+					$role_model->add_capability( $role_id, $cap );
+				}
+			}
+
+			if ( ! empty( $role_ids ) ) {
+				$placeholders = implode( ',', array_fill( 0, count( $role_ids ), '%d' ) );
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- placeholders built from count.
+				$member_ids = $wpdb->get_col(
+					$wpdb->prepare(
+						"SELECT DISTINCT member_id FROM {$wpdb->prefix}remember_member_roles WHERE role_id IN ($placeholders)",
+						$role_ids
+					)
+				);
+				if ( is_array( $member_ids ) ) {
+					foreach ( $member_ids as $member_id ) {
+						Remember_Capabilities::sync_user_capabilities_from_roles( (int) $member_id );
+					}
+				}
+			}
+
+			update_option( 'remember_db_version', '1.39.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.39.0' ) );
+		}
+
 		// Always re-ensure health catalogs (idempotent). Catches sites that stalled mid-migration
 		// or activated before catalog seed rows were added.
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-seeder.php';

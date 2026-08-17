@@ -172,6 +172,7 @@ if ( isset( $_POST['remember_application_action'] ) && check_admin_referer( 'rem
 				require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-provider.php';
 				$invoice_notice_shown = false;
 
+				if ( current_user_can( 'remember_create_billing' ) ) {
 				if ( Remember_Billing_Provider::is_xero() ) {
 					require_once plugin_dir_path( __FILE__ ) . '../../includes/integrations/class-remember-xero-oauth.php';
 					if ( Remember_Xero_OAuth::is_connected() ) {
@@ -238,6 +239,7 @@ if ( isset( $_POST['remember_application_action'] ) && check_admin_referer( 'rem
 						$invoice_notice_shown = true;
 					}
 				}
+				} // end remember_create_billing gate
 
 				if ( ! $invoice_notice_shown ) {
 					echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Application accepted successfully.', 'remember' ) . '</p></div>';
@@ -275,6 +277,9 @@ if ( isset( $_POST['remember_application_action'] ) && check_admin_referer( 'rem
 			} else {
 				require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-unwind.php';
 				$billing_action = isset( $_POST['billing_action'] ) ? Remember_Billing_Unwind::sanitize_action( wp_unslash( $_POST['billing_action'] ) ) : 'leave';
+				if ( 'leave' !== $billing_action && ! current_user_can( 'remember_update_billing' ) ) {
+					wp_die( __( 'You do not have sufficient permissions to modify billing for this application.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+				}
 
 				$result = $application_model->update_status( $application_id, 'declined', get_current_user_id() );
 				if ( $result !== false ) {
@@ -389,7 +394,7 @@ if ( isset( $_POST['remember_application_action'] ) && check_admin_referer( 'rem
 				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html( $result ) . '</p></div>';
 			}
 		} elseif ( 'unwind_billing' === $action ) {
-			if ( ! current_user_can( 'remember_update_applications' ) ) {
+			if ( ! current_user_can( 'remember_update_applications' ) || ! current_user_can( 'remember_update_billing' ) ) {
 				wp_die( __( 'You do not have sufficient permissions to perform this action.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
 			}
 			require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-unwind.php';
@@ -413,7 +418,7 @@ if ( isset( $_POST['remember_application_action'] ) && check_admin_referer( 'rem
 			}
 		} elseif ( 'reprocess_billing' === $action ) {
 			// Check capability
-			if ( ! current_user_can( 'remember_update_applications' ) ) {
+			if ( ! current_user_can( 'remember_update_applications' ) || ! current_user_can( 'remember_create_billing' ) ) {
 				wp_die( __( 'You do not have sufficient permissions to perform this action.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
 			}
 
@@ -810,7 +815,9 @@ $status_colors = array(
 					<th class="column-member"><?php esc_html_e( 'Member', 'remember' ); ?></th>
 					<th class="column-role"><?php esc_html_e( 'Role', 'remember' ); ?></th>
 					<th class="column-status"><?php esc_html_e( 'Status', 'remember' ); ?></th>
+					<?php if ( current_user_can( 'remember_read_billing' ) ) : ?>
 					<th class="column-billing"><?php esc_html_e( 'Billing', 'remember' ); ?></th>
+					<?php endif; ?>
 					<th class="column-date"><?php esc_html_e( 'Applied', 'remember' ); ?></th>
 					<th class="column-actions"><?php esc_html_e( 'Actions', 'remember' ); ?></th>
 				</tr>
@@ -863,11 +870,13 @@ $status_colors = array(
 								<?php echo esc_html( $status_labels[ $application->status ] ); ?>
 							</span>
 						</td>
+						<?php if ( current_user_can( 'remember_read_billing' ) ) : ?>
 						<td class="column-billing" data-label="<?php echo esc_attr__( 'Billing', 'remember' ); ?>">
 							<span style="color: <?php echo esc_attr( $billing_color ); ?>; font-weight: bold;">
 								<?php echo esc_html( $billing_label ); ?>
 							</span>
 						</td>
+						<?php endif; ?>
 						<td class="column-date" data-label="<?php echo esc_attr__( 'Applied', 'remember' ); ?>">
 							<?php echo esc_html( date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), strtotime( $application->applied_at ) ) ); ?>
 						</td>
@@ -877,7 +886,7 @@ $status_colors = array(
 							<?php if ( Remember_Ticket::is_eligible( $application ) ) : ?>
 								<a href="<?php echo esc_url( Remember_Ticket::get_ticket_url( $application->application_id ) ); ?>" target="_blank" rel="noopener noreferrer"><?php esc_html_e( 'Ticket', 'remember' ); ?></a>
 							<?php endif; ?>
-							<?php if ( 'pending' === $application->status || 'waitlisted' === $application->status ) : ?>
+							<?php if ( current_user_can( 'remember_update_applications' ) && ( 'pending' === $application->status || 'waitlisted' === $application->status ) ) : ?>
 								<form method="post" action="">
 									<?php wp_nonce_field( 'remember_application_action', 'remember_application_nonce' ); ?>
 									<input type="hidden" name="remember_application_action" value="accept">
@@ -901,7 +910,7 @@ $status_colors = array(
 										<input type="submit" class="button button-small" value="<?php esc_attr_e( 'Waitlist', 'remember' ); ?>">
 									</form>
 								<?php endif; ?>
-							<?php else : ?>
+							<?php elseif ( current_user_can( 'remember_update_applications' ) ) : ?>
 								<?php if ( 'accepted' === $application->status ) : ?>
 									<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-applications&view=' . $application->application_id ) ); ?>"><?php esc_html_e( 'Decline…', 'remember' ); ?></a>
 									<form method="post" action="">
@@ -910,12 +919,14 @@ $status_colors = array(
 										<input type="hidden" name="application_id" value="<?php echo esc_attr( $application->application_id ); ?>">
 										<input type="submit" class="button button-small" value="<?php esc_attr_e( 'Move to Pending', 'remember' ); ?>" onclick="return confirm('<?php esc_attr_e( 'Move this accepted application back to pending?', 'remember' ); ?>');">
 									</form>
+									<?php if ( current_user_can( 'remember_create_billing' ) ) : ?>
 									<form method="post" action="">
 										<?php wp_nonce_field( 'remember_application_action', 'remember_application_nonce' ); ?>
 										<input type="hidden" name="remember_application_action" value="reprocess_billing">
 										<input type="hidden" name="application_id" value="<?php echo esc_attr( $application->application_id ); ?>">
 										<input type="submit" class="button button-small" value="<?php esc_attr_e( 'Reprocess Billing', 'remember' ); ?>">
 									</form>
+									<?php endif; ?>
 								<?php else : ?>
 									<span class="description"><?php esc_html_e( 'Processed', 'remember' ); ?></span>
 								<?php endif; ?>

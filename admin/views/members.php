@@ -375,10 +375,6 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 			'shirt_size' => isset( $_POST['shirt_size'] ) ? Remember_Clothing_Sizes::sanitize( 'shirt', wp_unslash( $_POST['shirt_size'] ) ) : '',
 			'pants_size' => isset( $_POST['pants_size'] ) ? Remember_Clothing_Sizes::sanitize( 'pants', wp_unslash( $_POST['pants_size'] ) ) : '',
 			'shoe_size' => isset( $_POST['shoe_size'] ) ? Remember_Clothing_Sizes::sanitize( 'shoe', wp_unslash( $_POST['shoe_size'] ) ) : '',
-			'emergency_contact_first' => isset( $_POST['emergency_contact_first'] ) ? sanitize_text_field( wp_unslash( $_POST['emergency_contact_first'] ) ) : '',
-			'emergency_contact_last' => isset( $_POST['emergency_contact_last'] ) ? sanitize_text_field( wp_unslash( $_POST['emergency_contact_last'] ) ) : '',
-			'emergency_contact_phone' => isset( $_POST['emergency_contact_phone'] ) ? sanitize_text_field( wp_unslash( $_POST['emergency_contact_phone'] ) ) : '',
-			'emergency_contact_relationship' => isset( $_POST['emergency_contact_relationship'] ) ? sanitize_text_field( wp_unslash( $_POST['emergency_contact_relationship'] ) ) : '',
 			'share_email_with_events' => isset( $_POST['share_email_with_events'] ) ? 1 : 0,
 			'share_phone_with_events' => isset( $_POST['share_phone_with_events'] ) ? 1 : 0,
 			'share_location_with_events' => isset( $_POST['share_location_with_events'] ) ? 1 : 0,
@@ -389,6 +385,14 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 			'updated_at' => current_time( 'mysql' ),
 			'updated_by' => get_current_user_id(),
 		);
+
+		// Emergency contact stays unchanged unless the editor is allowed to see it.
+		if ( current_user_can( 'remember_access_emergency_contact' ) ) {
+			$profile_data['emergency_contact_first']        = isset( $_POST['emergency_contact_first'] ) ? sanitize_text_field( wp_unslash( $_POST['emergency_contact_first'] ) ) : '';
+			$profile_data['emergency_contact_last']         = isset( $_POST['emergency_contact_last'] ) ? sanitize_text_field( wp_unslash( $_POST['emergency_contact_last'] ) ) : '';
+			$profile_data['emergency_contact_phone']        = isset( $_POST['emergency_contact_phone'] ) ? sanitize_text_field( wp_unslash( $_POST['emergency_contact_phone'] ) ) : '';
+			$profile_data['emergency_contact_relationship'] = isset( $_POST['emergency_contact_relationship'] ) ? sanitize_text_field( wp_unslash( $_POST['emergency_contact_relationship'] ) ) : '';
+		}
 		
 		// Check if profile exists
 		$existing_profile = $wpdb->get_row( $wpdb->prepare(
@@ -433,59 +437,72 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 				}
 			}
 			
-			// Update dietary restrictions
-			$wpdb->delete( $wpdb->prefix . 'remember_member_dietary_restrictions', array( 'member_id' => $member_id ) );
-			if ( isset( $_POST['dietary_restrictions'] ) && is_array( $_POST['dietary_restrictions'] ) ) {
-				foreach ( $_POST['dietary_restrictions'] as $restriction_id ) {
-					$wpdb->insert(
-						$wpdb->prefix . 'remember_member_dietary_restrictions',
-						array(
-							'member_id' => $member_id,
-							'restriction_id' => absint( $restriction_id ),
-						)
-					);
+			// Update dietary / medical / allergies only when the editor may see health data.
+			// Without the cap, skip these writes so a forged POST cannot wipe or change them.
+			if ( current_user_can( 'remember_access_health' ) ) {
+				$wpdb->delete( $wpdb->prefix . 'remember_member_dietary_restrictions', array( 'member_id' => $member_id ) );
+				if ( isset( $_POST['dietary_restrictions'] ) && is_array( $_POST['dietary_restrictions'] ) ) {
+					foreach ( $_POST['dietary_restrictions'] as $restriction_id ) {
+						$wpdb->insert(
+							$wpdb->prefix . 'remember_member_dietary_restrictions',
+							array(
+								'member_id' => $member_id,
+								'restriction_id' => absint( $restriction_id ),
+							)
+						);
+					}
 				}
-			}
-			
-			// Update medical accommodations
-			$wpdb->delete( $wpdb->prefix . 'remember_member_medical_accommodations', array( 'member_id' => $member_id ) );
-			if ( isset( $_POST['medical_accommodations'] ) && is_array( $_POST['medical_accommodations'] ) ) {
-				foreach ( $_POST['medical_accommodations'] as $accommodation_id ) {
-					$wpdb->insert(
-						$wpdb->prefix . 'remember_member_medical_accommodations',
-						array(
-							'member_id' => $member_id,
-							'accommodation_id' => absint( $accommodation_id ),
-						)
-					);
+
+				$wpdb->delete( $wpdb->prefix . 'remember_member_medical_accommodations', array( 'member_id' => $member_id ) );
+				if ( isset( $_POST['medical_accommodations'] ) && is_array( $_POST['medical_accommodations'] ) ) {
+					foreach ( $_POST['medical_accommodations'] as $accommodation_id ) {
+						$wpdb->insert(
+							$wpdb->prefix . 'remember_member_medical_accommodations',
+							array(
+								'member_id' => $member_id,
+								'accommodation_id' => absint( $accommodation_id ),
+							)
+						);
+					}
 				}
-			}
-			
-			// Update allergies
-			$wpdb->delete( $wpdb->prefix . 'remember_member_allergies', array( 'member_id' => $member_id ) );
-			if ( isset( $_POST['allergies'] ) && is_array( $_POST['allergies'] ) ) {
-				foreach ( $_POST['allergies'] as $allergy_id ) {
-					$wpdb->insert(
-						$wpdb->prefix . 'remember_member_allergies',
-						array(
-							'member_id' => $member_id,
-							'allergy_id' => absint( $allergy_id ),
-						)
-					);
+
+				$wpdb->delete( $wpdb->prefix . 'remember_member_allergies', array( 'member_id' => $member_id ) );
+				if ( isset( $_POST['allergies'] ) && is_array( $_POST['allergies'] ) ) {
+					foreach ( $_POST['allergies'] as $allergy_id ) {
+						$wpdb->insert(
+							$wpdb->prefix . 'remember_member_allergies',
+							array(
+								'member_id' => $member_id,
+								'allergy_id' => absint( $allergy_id ),
+							)
+						);
+					}
 				}
 			}
 			
 			// Handle role assignment (only if user has update_members capability)
 			if ( current_user_can( 'remember_update_members' ) ) {
-				$selected_role_ids = isset( $_POST['member_roles'] ) ? array_map( 'absint', $_POST['member_roles'] ) : array();
-				
+				require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-capabilities.php';
+				$posted_role_ids = isset( $_POST['member_roles'] ) ? array_map( 'absint', $_POST['member_roles'] ) : array();
+				$posted_role_ids = array_values( array_unique( array_filter( $posted_role_ids ) ) );
+
 				// Get current roles
-				$current_role_ids = $wpdb->get_col( $wpdb->prepare(
+				$current_role_ids = array_map( 'absint', $wpdb->get_col( $wpdb->prepare(
 					"SELECT role_id FROM {$wpdb->prefix}remember_member_roles WHERE member_id = %d",
 					$member_id
-				) );
+				) ) );
+
+				// Roles the editor cannot assign stay on the member (and cannot be newly added).
+				$locked_role_ids = array();
+				foreach ( $current_role_ids as $current_role_id ) {
+					if ( ! Remember_Capabilities::current_user_can_assign_role( $current_role_id ) ) {
+						$locked_role_ids[] = $current_role_id;
+					}
+				}
+				$assignable_posted = Remember_Capabilities::filter_assignable_role_ids( $posted_role_ids );
+				$selected_role_ids = array_values( array_unique( array_merge( $locked_role_ids, $assignable_posted ) ) );
 				
-				// Remove roles that are no longer selected
+				// Remove roles that are no longer selected (never remove locked roles).
 				$roles_to_remove = array_diff( $current_role_ids, $selected_role_ids );
 				if ( ! empty( $roles_to_remove ) ) {
 					$placeholders = implode( ',', array_fill( 0, count( $roles_to_remove ), '%d' ) );
@@ -495,7 +512,6 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 						array_merge( array( $member_id ), $roles_to_remove )
 					) );
 					// Sync capabilities after role removal
-					require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-capabilities.php';
 					Remember_Capabilities::sync_user_capabilities_from_roles( $member_id );
 				}
 				
@@ -518,7 +534,6 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 				}
 				
 				// Sync capabilities to WordPress user
-				require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-capabilities.php';
 				Remember_Capabilities::sync_user_capabilities_from_roles( $member_id );
 				
 				Remember_Logger::info( 'Member roles updated', array( 'member_id' => $member_id, 'roles' => $selected_role_ids ) );
@@ -537,7 +552,7 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 		}
 		} // end required-field checks
 	} elseif ( $member_id > 0 && 'sync_qb_customer' === $action ) {
-		if ( ! current_user_can( 'remember_update_members' ) ) {
+		if ( ! current_user_can( 'remember_update_members' ) || ! current_user_can( 'remember_update_billing' ) ) {
 			wp_die( __( 'You do not have sufficient permissions to perform this action.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
 		}
 		require_once plugin_dir_path( __FILE__ ) . '../../includes/integrations/class-remember-quickbooks-oauth.php';
@@ -563,7 +578,7 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 		}
 		$view_member_id = $member_id;
 	} elseif ( $member_id > 0 && 'sync_xero_contact' === $action ) {
-		if ( ! current_user_can( 'remember_update_members' ) ) {
+		if ( ! current_user_can( 'remember_update_members' ) || ! current_user_can( 'remember_update_billing' ) ) {
 			wp_die( __( 'You do not have sufficient permissions to perform this action.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
 		}
 		require_once plugin_dir_path( __FILE__ ) . '../../includes/integrations/class-remember-xero-oauth.php';
@@ -673,42 +688,51 @@ if ( $view_member_id > 0 ) {
 		$view_member_id
 	) );
 	
-	// Get dietary restrictions
-	$view_dietary_restrictions = $wpdb->get_col( $wpdb->prepare(
-		"SELECT dr.restriction_name 
-		FROM {$wpdb->prefix}remember_dietary_restrictions dr
-		JOIN {$wpdb->prefix}remember_member_dietary_restrictions mdr ON dr.restriction_id = mdr.restriction_id
-		WHERE mdr.member_id = %d
-		ORDER BY dr.sort_order ASC, dr.restriction_name ASC",
-		$view_member_id
-	) );
-	
-	// Get medical accommodations
-	$view_medical_accommodations = $wpdb->get_col( $wpdb->prepare(
-		"SELECT ma.accommodation_name 
-		FROM {$wpdb->prefix}remember_medical_accommodations ma
-		JOIN {$wpdb->prefix}remember_member_medical_accommodations mma ON ma.accommodation_id = mma.accommodation_id
-		WHERE mma.member_id = %d
-		ORDER BY ma.sort_order ASC, ma.accommodation_name ASC",
-		$view_member_id
-	) );
-	
-	// Get allergies
-	$view_allergies = $wpdb->get_col( $wpdb->prepare(
-		"SELECT a.allergy_name 
-		FROM {$wpdb->prefix}remember_allergies a
-		JOIN {$wpdb->prefix}remember_member_allergies ma ON a.allergy_id = ma.allergy_id
-		WHERE ma.member_id = %d
-		ORDER BY a.sort_order ASC, a.allergy_name ASC",
-		$view_member_id
-	) );
+	// Get dietary restrictions / medical / allergies only when staff may see health data.
+	$view_dietary_restrictions   = array();
+	$view_medical_accommodations = array();
+	$view_allergies              = array();
+	if ( current_user_can( 'remember_access_health' ) ) {
+		$view_dietary_restrictions = $wpdb->get_col( $wpdb->prepare(
+			"SELECT dr.restriction_name 
+			FROM {$wpdb->prefix}remember_dietary_restrictions dr
+			JOIN {$wpdb->prefix}remember_member_dietary_restrictions mdr ON dr.restriction_id = mdr.restriction_id
+			WHERE mdr.member_id = %d
+			ORDER BY dr.sort_order ASC, dr.restriction_name ASC",
+			$view_member_id
+		) );
+		
+		$view_medical_accommodations = $wpdb->get_col( $wpdb->prepare(
+			"SELECT ma.accommodation_name 
+			FROM {$wpdb->prefix}remember_medical_accommodations ma
+			JOIN {$wpdb->prefix}remember_member_medical_accommodations mma ON ma.accommodation_id = mma.accommodation_id
+			WHERE mma.member_id = %d
+			ORDER BY ma.sort_order ASC, ma.accommodation_name ASC",
+			$view_member_id
+		) );
+		
+		$view_allergies = $wpdb->get_col( $wpdb->prepare(
+			"SELECT a.allergy_name
+			FROM {$wpdb->prefix}remember_allergies a
+			JOIN {$wpdb->prefix}remember_member_allergies ma ON a.allergy_id = ma.allergy_id
+			WHERE ma.member_id = %d
+			ORDER BY a.sort_order ASC, a.allergy_name ASC",
+			$view_member_id
+		) );
+	}
 	
 	// Refresh amounts / lines from the active billing provider before the ledger.
-	require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-provider.php';
-	Remember_Billing_Provider::sync_member_payments( $view_member_id );
+	// Billing is only read, synced, and rendered for staff who hold the billing cap.
+	$remember_can_read_billing = current_user_can( 'remember_read_billing' );
 
-	// Get payments for billing register
-	$view_payments = $payment_model->get_by_member( $view_member_id );
+	$view_payments = array();
+	if ( $remember_can_read_billing ) {
+		require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-provider.php';
+		Remember_Billing_Provider::sync_member_payments( $view_member_id );
+
+		// Get payments for billing register
+		$view_payments = $payment_model->get_by_member( $view_member_id );
+	}
 	
 	// Get applications for context
 	$view_applications = $application_model->get_by_member( $view_member_id );
@@ -980,11 +1004,13 @@ if ( $view_member_id > 0 ) {
 	$remember_qb_settings           = Remember_QuickBooks_OAuth::get_settings();
 	$remember_qb_show_sync_customer = Remember_Billing_Provider::is_quickbooks()
 		&& current_user_can( 'remember_update_members' )
+		&& current_user_can( 'remember_update_billing' )
 		&& ! empty( $remember_qb_settings['access_token'] )
 		&& ! empty( $remember_qb_settings['realm_id'] );
 
 	$remember_xero_show_sync_contact = Remember_Billing_Provider::is_xero()
 		&& current_user_can( 'remember_update_members' )
+		&& current_user_can( 'remember_update_billing' )
 		&& Remember_Xero_OAuth::is_connected();
 }
 ?>
@@ -993,7 +1019,7 @@ if ( $view_member_id > 0 ) {
 	<h1 class="wp-heading-inline"><?php echo esc_html( get_admin_page_title() ); ?></h1>
 	<?php if ( $view_member_id > 0 ) : ?>
 		<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-members' ) ); ?>" class="page-title-action"><?php esc_html_e( '← Back to Members', 'remember' ); ?></a>
-	<?php elseif ( ! isset( $_GET['add'] ) ) : ?>
+	<?php elseif ( ! isset( $_GET['add'] ) && current_user_can( 'remember_create_members' ) ) : ?>
 		<button type="button" class="page-title-action" onclick="document.getElementById('remember-add-member').style.display='block'; document.getElementById('remember-convert-wp-user').style.display='none'; this.style.display='none'; var c=document.getElementById('remember-convert-toggle'); if(c){c.style.display='inline-block';}"><?php esc_html_e( 'Add New', 'remember' ); ?></button>
 		<button type="button" class="page-title-action" id="remember-convert-toggle" onclick="document.getElementById('remember-convert-wp-user').style.display='block'; document.getElementById('remember-add-member').style.display='none'; this.style.display='none'; var a=document.querySelector('.remember-members .page-title-action'); if(a){a.style.display='inline-block';}"><?php esc_html_e( 'Convert WP User', 'remember' ); ?></button>
 	<?php endif; ?>
@@ -1008,6 +1034,7 @@ if ( $view_member_id > 0 ) {
 		<?php include 'member-detail.php'; ?>
 	<?php else : ?>
 		<!-- Add Form -->
+	<?php if ( current_user_can( 'remember_create_members' ) ) : ?>
 	<div id="remember-add-member" style="display:none; margin: 20px 0; padding: 20px; background: #fff; border: 1px solid #ccd0d4; border-radius: 4px;">
 		<h2><?php esc_html_e( 'Add New Member', 'remember' ); ?></h2>
 		<form method="post" action="">
@@ -1126,6 +1153,7 @@ if ( $view_member_id > 0 ) {
 			</form>
 		<?php endif; ?>
 	</div>
+	<?php endif; // remember_create_members ?>
 
 	<?php if ( ! $is_attendees_only ) : ?>
 		<!-- Filters -->

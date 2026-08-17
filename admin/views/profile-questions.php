@@ -58,9 +58,10 @@ if ( isset( $_POST['remember_pq_action'] ) && check_admin_referer( 'remember_pq_
 	if ( ! in_array( $req_mode, array( 'optional', 'always', 'when' ), true ) ) {
 		$req_mode = 'optional';
 	}
-	$is_required = ( 'always' === $req_mode ) ? 1 : 0;
-	$is_active   = ! empty( $_POST['is_active'] ) ? 1 : 0;
-	$sort_order  = isset( $_POST['sort_order'] ) ? absint( $_POST['sort_order'] ) : 0;
+	$is_required        = ( 'always' === $req_mode ) ? 1 : 0;
+	$is_active          = ! empty( $_POST['is_active'] ) ? 1 : 0;
+	$show_on_event_card = ! empty( $_POST['show_on_event_card'] ) ? 1 : 0;
+	$sort_order         = isset( $_POST['sort_order'] ) ? absint( $_POST['sort_order'] ) : 0;
 
 	$required_when_json = null;
 	if ( 'when' === $req_mode ) {
@@ -149,6 +150,7 @@ if ( isset( $_POST['remember_pq_action'] ) && check_admin_referer( 'remember_pq_
 				'is_required'        => $is_required,
 				'required_when_json' => $required_when_json,
 				'is_active'          => $is_active,
+				'show_on_event_card' => $show_on_event_card,
 				'sort_order'         => $sort_order,
 				'created_at'         => current_time( 'mysql' ),
 				'updated_at'         => current_time( 'mysql' ),
@@ -170,6 +172,7 @@ if ( isset( $_POST['remember_pq_action'] ) && check_admin_referer( 'remember_pq_
 				'is_required'        => $is_required,
 				'required_when_json' => $required_when_json,
 				'is_active'          => $is_active,
+				'show_on_event_card' => $show_on_event_card,
 				'sort_order'         => $sort_order,
 				'updated_at'         => current_time( 'mysql' ),
 			)
@@ -218,6 +221,7 @@ $remember_pq_render_form = function ( $row ) use ( $remember_pq_gate_meta ) {
 	$when_field    = $when_rule ? $when_rule['field_key'] : '';
 	$when_values   = $when_rule ? $when_rule['values'] : array();
 	$is_active     = $is_edit ? ! empty( $row->is_active ) : true;
+	$on_event_card = $is_edit ? ! empty( $row->show_on_event_card ) : false;
 	$sort_order    = $is_edit ? (int) $row->sort_order : 0;
 	$self_key      = $is_edit ? (string) $row->field_key : '';
 	$gate_choices  = array();
@@ -366,6 +370,18 @@ $remember_pq_render_form = function ( $row ) use ( $remember_pq_gate_meta ) {
 			</td>
 		</tr>
 		<tr>
+			<th scope="row"><?php esc_html_e( 'Show on event card?', 'remember' ); ?></th>
+			<td>
+				<label>
+					<input type="checkbox" name="show_on_event_card" value="1" <?php checked( $on_event_card ); ?>>
+					<?php esc_html_e( 'Yes, print this answer on the event card', 'remember' ); ?>
+				</label>
+				<p class="description">
+					<?php esc_html_e( 'The event card is a member profile printed for public display at an event. Leave this off for anything private — medications, health, or contact details.', 'remember' ); ?>
+				</p>
+			</td>
+		</tr>
+		<tr>
 			<th scope="row">
 				<label for="sort_order"><?php esc_html_e( 'Order', 'remember' ); ?></label>
 			</th>
@@ -421,6 +437,7 @@ $remember_pq_render_form = function ( $row ) use ( $remember_pq_gate_meta ) {
 					<th><?php esc_html_e( 'Type', 'remember' ); ?></th>
 					<th><?php esc_html_e( 'Required', 'remember' ); ?></th>
 					<th><?php esc_html_e( 'Shown', 'remember' ); ?></th>
+					<th><?php esc_html_e( 'Event card', 'remember' ); ?></th>
 					<th><?php esc_html_e( 'Order', 'remember' ); ?></th>
 					<th><?php esc_html_e( 'Actions', 'remember' ); ?></th>
 				</tr>
@@ -455,6 +472,7 @@ $remember_pq_render_form = function ( $row ) use ( $remember_pq_gate_meta ) {
 							?>
 						</td>
 						<td><?php echo ! empty( $q->is_active ) ? esc_html__( 'Yes', 'remember' ) : esc_html__( 'No', 'remember' ); ?></td>
+						<td><?php echo ! empty( $q->show_on_event_card ) ? esc_html__( 'Yes', 'remember' ) : esc_html__( 'No', 'remember' ); ?></td>
 						<td><?php echo esc_html( (string) $q->sort_order ); ?></td>
 						<td>
 							<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-profile-questions&edit=' . (int) $q->question_id ) ); ?>"><?php esc_html_e( 'Edit', 'remember' ); ?></a>

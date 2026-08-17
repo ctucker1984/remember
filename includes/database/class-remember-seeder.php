@@ -94,6 +94,43 @@ class Remember_Seeder {
 		$this->seed_dietary_restrictions();
 		$this->seed_allergies();
 		$this->seed_medical_accommodations();
+		$this->ensure_none_options_sort_first();
+	}
+
+	/**
+	 * Keep the "None" catalog row first in dietary / allergy / medical lists.
+	 *
+	 * Older installs seeded accommodations before "None" existed, so "None"
+	 * landed with the same sort_order as CPAP and sorted second by name.
+	 *
+	 * @return void
+	 */
+	public function ensure_none_options_sort_first() {
+		$catalogs = array(
+			array( 'dietary_restrictions', 'restriction_name' ),
+			array( 'allergies', 'allergy_name' ),
+			array( 'medical_accommodations', 'accommodation_name' ),
+		);
+
+		foreach ( $catalogs as $catalog ) {
+			$table    = $this->prefix . $catalog[0];
+			$name_col = $catalog[1];
+
+			// Free sort_order 0 for None when another row already occupies it.
+			$this->wpdb->query(
+				"UPDATE {$table}
+				SET sort_order = sort_order + 1
+				WHERE {$name_col} <> 'None' AND sort_order <= 0"
+			);
+
+			$this->wpdb->update(
+				$table,
+				array( 'sort_order' => 0 ),
+				array( $name_col => 'None' ),
+				array( '%d' ),
+				array( '%s' )
+			);
+		}
 	}
 
 	/**
@@ -173,6 +210,11 @@ class Remember_Seeder {
 				// Members (read only)
 				'remember_read_members',
 				'remember_update_members',
+				// Dietary / allergies / medical for event planning (not emergency contact)
+				'remember_access_health',
+				// Profile printouts for staff records and public event posting
+				'remember_print_confidential',
+				'remember_print_event_card',
 				// Vetting (read only)
 				'remember_read_vetting',
 			);
@@ -209,6 +251,9 @@ class Remember_Seeder {
 				// Members (read and update)
 				'remember_read_members',
 				'remember_update_members',
+				// Limited PII for vetting decisions
+				'remember_access_emergency_contact',
+				'remember_access_health',
 			);
 			$role_model->set_capabilities( $vetting_role_id, $vetting_capabilities );
 		}
