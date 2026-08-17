@@ -22,17 +22,17 @@ $social_media_platforms = $wpdb->get_results(
 
 // Get dietary restrictions
 $dietary_restrictions = $wpdb->get_results(
-	"SELECT * FROM {$wpdb->prefix}remember_dietary_restrictions WHERE is_active = 1 ORDER BY sort_order ASC, restriction_name ASC"
+	"SELECT * FROM {$wpdb->prefix}remember_dietary_restrictions WHERE is_active = 1 ORDER BY CASE WHEN restriction_name = 'None' THEN 0 ELSE 1 END ASC, sort_order ASC, restriction_name ASC"
 );
 
 // Get medical accommodations
 $medical_accommodations = $wpdb->get_results(
-	"SELECT * FROM {$wpdb->prefix}remember_medical_accommodations WHERE is_active = 1 ORDER BY sort_order ASC, accommodation_name ASC"
+	"SELECT * FROM {$wpdb->prefix}remember_medical_accommodations WHERE is_active = 1 ORDER BY CASE WHEN accommodation_name = 'None' THEN 0 ELSE 1 END ASC, sort_order ASC, accommodation_name ASC"
 );
 
 // Get allergies
 $allergies = $wpdb->get_results(
-	"SELECT * FROM {$wpdb->prefix}remember_allergies WHERE is_active = 1 ORDER BY sort_order ASC, allergy_name ASC"
+	"SELECT * FROM {$wpdb->prefix}remember_allergies WHERE is_active = 1 ORDER BY CASE WHEN allergy_name = 'None' THEN 0 ELSE 1 END ASC, sort_order ASC, allergy_name ASC"
 );
 
 // Get selected IDs for multi-selects (from junction tables)

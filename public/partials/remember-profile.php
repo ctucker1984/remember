@@ -222,13 +222,13 @@ if ( $current_display && ! in_array( $current_display, $display_choices, true ) 
 
 // Health / accommodation lookup lists for edit + view.
 $dietary_restrictions = $wpdb->get_results(
-	"SELECT * FROM {$wpdb->prefix}remember_dietary_restrictions WHERE is_active = 1 ORDER BY sort_order ASC, restriction_name ASC"
+	"SELECT * FROM {$wpdb->prefix}remember_dietary_restrictions WHERE is_active = 1 ORDER BY CASE WHEN restriction_name = 'None' THEN 0 ELSE 1 END ASC, sort_order ASC, restriction_name ASC"
 );
 $medical_accommodations = $wpdb->get_results(
-	"SELECT * FROM {$wpdb->prefix}remember_medical_accommodations WHERE is_active = 1 ORDER BY sort_order ASC, accommodation_name ASC"
+	"SELECT * FROM {$wpdb->prefix}remember_medical_accommodations WHERE is_active = 1 ORDER BY CASE WHEN accommodation_name = 'None' THEN 0 ELSE 1 END ASC, sort_order ASC, accommodation_name ASC"
 );
 $allergies = $wpdb->get_results(
-	"SELECT * FROM {$wpdb->prefix}remember_allergies WHERE is_active = 1 ORDER BY sort_order ASC, allergy_name ASC"
+	"SELECT * FROM {$wpdb->prefix}remember_allergies WHERE is_active = 1 ORDER BY CASE WHEN allergy_name = 'None' THEN 0 ELSE 1 END ASC, sort_order ASC, allergy_name ASC"
 );
 
 $selected_dietary_ids = $wpdb->get_col(

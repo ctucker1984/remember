@@ -1242,6 +1242,18 @@ class Remember_Database_Updater {
 			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.37.0' ) );
 		}
 
+		// Update to 1.38.0 — pin "None" to the top of health catalog lists.
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.38.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.38.0' ) );
+
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-seeder.php';
+			$seeder = new Remember_Seeder();
+			$seeder->ensure_none_options_sort_first();
+
+			update_option( 'remember_db_version', '1.38.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.38.0' ) );
+		}
+
 		// Always re-ensure health catalogs (idempotent). Catches sites that stalled mid-migration
 		// or activated before catalog seed rows were added.
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-seeder.php';
