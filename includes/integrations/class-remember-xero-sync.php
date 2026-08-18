@@ -594,14 +594,14 @@ class Remember_Xero_Sync {
 
 		if ( self::is_xero_invoice_voided_or_deleted( $invoice ) ) {
 			Remember_Logger::info(
-				'Xero invoice is voided/deleted; clearing local invoice link',
+				'Xero invoice is voided/deleted; marking local invoice cancelled',
 				array(
 					'payment_id'      => $payment_id,
 					'xero_invoice_id' => $payment->xero_invoice_id,
 					'status'          => isset( $invoice['Status'] ) ? $invoice['Status'] : '',
 				)
 			);
-			self::clear_local_xero_invoice_link( $payment_id );
+			self::mark_xero_invoice_gone( $payment_id, false );
 			return true;
 		}
 
@@ -653,14 +653,23 @@ class Remember_Xero_Sync {
 			$total_credited += floatval( $rrow['amount'] ?? 0 );
 		}
 
-		$total_amt = floatval( $payment->total_amount );
-
-		// Prefer Xero invoice totals when present (AmountPaid ≠ payments minus credits).
+		$xero_total     = isset( $invoice['Total'] ) ? floatval( $invoice['Total'] ) : null;
+		$total_amt      = ( null !== $xero_total && $xero_total > 0.001 ) ? $xero_total : floatval( $payment->total_amount );
 		$xero_due       = isset( $invoice['AmountDue'] ) ? floatval( $invoice['AmountDue'] ) : null;
 		$xero_paid      = isset( $invoice['AmountPaid'] ) ? floatval( $invoice['AmountPaid'] ) : null;
 		$xero_credited  = isset( $invoice['AmountCredited'] ) ? floatval( $invoice['AmountCredited'] ) : null;
-		if ( null !== $xero_credited && $xero_credited > $total_credited ) {
-			$total_credited = $xero_credited;
+		if ( null !== $xero_credited && ( $xero_credited - $total_credited ) > 0.001 ) {
+			$gap            = round( $xero_credited - $total_credited, 2 );
+			$total_credited += $gap;
+			$refund_lines[]  = array(
+				'amount'         => $gap,
+				'txn_date'       => ! empty( $invoice['Date'] ) ? Remember_Xero_API::normalize_xero_date( $invoice['Date'] ) : '',
+				'payment_method' => __( 'Allocated credit', 'remember' ),
+				'qb_refund_id'   => 'xero-amount-credited',
+				'doc_number'     => '',
+				'sort_ts'        => $invoice_sort_ts > 0 ? $invoice_sort_ts + 2 : strtotime( current_time( 'mysql' ) ),
+				'ledger_effect'  => 'credit',
+			);
 		}
 
 		if ( null !== $xero_paid ) {
@@ -693,6 +702,21 @@ class Remember_Xero_Sync {
 			}
 		}
 
+		$reconstructed_due = $total_amt - $amount_paid_out - $total_credited;
+		if ( ( $reconstructed_due - $amount_due ) > 0.001 ) {
+			$gap             = round( $reconstructed_due - $amount_due, 2 );
+			$total_credited += $gap;
+			$refund_lines[]  = array(
+				'amount'         => $gap,
+				'txn_date'       => ! empty( $invoice['Date'] ) ? Remember_Xero_API::normalize_xero_date( $invoice['Date'] ) : '',
+				'payment_method' => __( 'Allocated credit', 'remember' ),
+				'qb_refund_id'   => 'xero-amount-due-balance',
+				'doc_number'     => '',
+				'sort_ts'        => $invoice_sort_ts > 0 ? $invoice_sort_ts + 3 : strtotime( current_time( 'mysql' ) ),
+				'ledger_effect'  => 'credit',
+			);
+		}
+
 		$total_refunded = $total_credited;
 
 		$latest_ts = 0;
@@ -714,6 +738,7 @@ class Remember_Xero_Sync {
 		$update_data = array(
 			'amount_paid'          => $amount_paid_out,
 			'amount_due'           => $amount_due,
+			'total_amount'         => $total_amt,
 			'payment_status'       => $payment_status,
 			'payment_date'         => $has_money_activity
 				? ( $latest_ts > 0 ? date( 'Y-m-d H:i:s', $latest_ts ) : current_time( 'mysql' ) )
@@ -834,22 +859,32 @@ class Remember_Xero_Sync {
 	 *
 	 * @param int $payment_id Payment ID.
 	 */
-	private static function clear_local_xero_invoice_link( $payment_id ) {
+	private static function mark_xero_invoice_gone( $payment_id, $clear_ids = true ) {
 		$payment_model = new Remember_Payment();
-		$payment_model->update(
-			$payment_id,
-			array(
-				'xero_invoice_id'          => null,
-				'xero_invoice_number'      => null,
-				'xero_online_invoice_url'  => null,
-				'xero_invoice_sort_ts'     => null,
-				'xero_payment_lines'       => null,
-				'xero_refund_lines'        => null,
-				'amount_paid'              => 0,
-				'payment_status'           => 'pending',
-				'payment_date'             => null,
-			)
+		$data          = array(
+			'amount_paid'         => 0,
+			'amount_due'          => 0,
+			'payment_status'      => 'cancelled',
+			'payment_date'        => null,
+			'xero_payment_lines'  => null,
+			'xero_refund_lines'   => null,
 		);
+		if ( $clear_ids ) {
+			$data['xero_invoice_id']         = null;
+			$data['xero_invoice_number']     = null;
+			$data['xero_online_invoice_url'] = null;
+			$data['xero_invoice_sort_ts']    = null;
+		}
+		$payment_model->update( $payment_id, $data );
+	}
+
+	/**
+	 * Clear Xero invoice fields on a local payment row (recreate path).
+	 *
+	 * @param int $payment_id Payment ID.
+	 */
+	private static function clear_local_xero_invoice_link( $payment_id ) {
+		self::mark_xero_invoice_gone( $payment_id, true );
 	}
 
 	/**

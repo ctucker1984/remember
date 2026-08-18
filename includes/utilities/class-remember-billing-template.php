@@ -26,7 +26,7 @@ class Remember_Billing_Template {
 			'partial'   => __( 'Partial', 'remember' ),
 			'paid'      => __( 'Paid', 'remember' ),
 			'refunded'  => __( 'Refunded', 'remember' ),
-			'cancelled' => __( 'Cancelled', 'remember' ),
+			'cancelled' => __( 'Voided', 'remember' ),
 		);
 	}
 

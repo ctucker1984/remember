@@ -147,8 +147,11 @@ class Remember_Billing_Unwind {
 			$payment_model->update(
 				$payment->payment_id,
 				array(
-					'payment_status' => 'cancelled',
-					'amount_due'     => 0,
+					'payment_status'     => 'cancelled',
+					'amount_paid'        => 0,
+					'amount_due'         => 0,
+					'xero_payment_lines' => null,
+					'xero_refund_lines'  => null,
 				)
 			);
 			return true;
@@ -193,8 +196,11 @@ class Remember_Billing_Unwind {
 			$payment_model->update(
 				$payment->payment_id,
 				array(
-					'payment_status' => 'cancelled',
-					'amount_due'     => 0,
+					'payment_status'           => 'cancelled',
+					'amount_paid'              => 0,
+					'amount_due'               => 0,
+					'quickbooks_payment_lines' => null,
+					'quickbooks_refund_lines'  => null,
 				)
 			);
 			return true;
@@ -212,8 +218,11 @@ class Remember_Billing_Unwind {
 			$payment_model->update(
 				$payment->payment_id,
 				array(
-					'payment_status' => 'cancelled',
-					'amount_due'     => 0,
+					'payment_status'           => 'cancelled',
+					'amount_paid'              => 0,
+					'amount_due'               => 0,
+					'quickbooks_payment_lines' => null,
+					'quickbooks_refund_lines'  => null,
 				)
 			);
 			return true;

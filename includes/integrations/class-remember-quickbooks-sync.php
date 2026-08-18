@@ -165,7 +165,25 @@ class Remember_QuickBooks_Sync {
 		$payment = $payment_model->get_by_application( $application_id );
 		
 		if ( $payment && ! empty( $payment->quickbooks_invoice_id ) ) {
-			return new WP_Error( 'invoice_exists', __( 'Invoice already exists for this application.', 'remember' ) );
+			$existing_invoice = Remember_QuickBooks_API::get_invoice( $payment->quickbooks_invoice_id );
+			$remote_gone      = is_wp_error( $existing_invoice )
+				? self::is_qb_invoice_missing_error( $existing_invoice )
+				: Remember_QuickBooks_API::is_invoice_voided( $existing_invoice, $payment->total_amount );
+
+			if ( $remote_gone ) {
+				Remember_Logger::info(
+					'Clearing voided/missing QuickBooks invoice link before recreate',
+					array(
+						'application_id'        => $application_id,
+						'payment_id'            => $payment->payment_id,
+						'quickbooks_invoice_id' => $payment->quickbooks_invoice_id,
+					)
+				);
+				self::mark_qb_invoice_gone( $payment->payment_id, true );
+				$payment = $payment_model->get( $payment->payment_id );
+			} else {
+				return new WP_Error( 'invoice_exists', __( 'Invoice already exists for this application.', 'remember' ) );
+			}
 		}
 
 		// Always push latest member profile to QBO before attaching a new invoice (partial profiles get updated later).
@@ -323,28 +341,28 @@ class Remember_QuickBooks_Sync {
 		if ( is_wp_error( $invoice ) ) {
 			if ( self::is_qb_invoice_missing_error( $invoice ) ) {
 				Remember_Logger::info(
-					'QuickBooks invoice no longer exists; clearing local invoice link',
+					'QuickBooks invoice no longer exists; marking local invoice cancelled',
 					array(
 						'payment_id'            => $payment_id,
 						'quickbooks_invoice_id' => $payment->quickbooks_invoice_id,
 					)
 				);
-				$payment_model->update(
-					$payment_id,
-					array(
-						'quickbooks_invoice_id'         => null,
-						'quickbooks_invoice_number'     => null,
-						'quickbooks_invoice_sort_ts'    => null,
-						'quickbooks_payment_lines'      => null,
-						'quickbooks_refund_lines'       => null,
-						'amount_paid'                   => 0,
-						'payment_status'              => 'pending',
-						'payment_date'                  => null,
-					)
-				);
+				self::mark_qb_invoice_gone( $payment_id, true );
 				return true;
 			}
 			return $invoice;
+		}
+
+		if ( Remember_QuickBooks_API::is_invoice_voided( $invoice, $payment->total_amount ) ) {
+			Remember_Logger::info(
+				'QuickBooks invoice is voided; marking local invoice cancelled',
+				array(
+					'payment_id'            => $payment_id,
+					'quickbooks_invoice_id' => $payment->quickbooks_invoice_id,
+				)
+			);
+			self::mark_qb_invoice_gone( $payment_id, false );
+			return true;
 		}
 
 		// Get each QuickBooks Payment applied to this invoice (multiple payments = multiple rows).
@@ -401,28 +419,54 @@ class Remember_QuickBooks_Sync {
 			$total_refunded += floatval( $rrow['amount'] ?? 0 );
 		}
 
-		$net_paid = $total_paid - $total_refunded;
+		$inv_total   = floatval( $invoice['TotalAmt'] ?? 0 );
+		$inv_balance = floatval( $invoice['Balance'] ?? 0 );
+		if ( $inv_total > 0.001 ) {
+			$total_amt = $inv_total;
+		} else {
+			$total_amt = floatval( $payment->total_amount );
+		}
+
+		$credit_memo_total = 0;
+		foreach ( $refund_lines as $rrow ) {
+			if ( isset( $rrow['ledger_effect'] ) && 'credit' === $rrow['ledger_effect'] ) {
+				$credit_memo_total += floatval( $rrow['amount'] ?? 0 );
+			}
+		}
+		$implied_credits = $total_amt - $inv_balance - $total_paid;
+		if ( $implied_credits - $credit_memo_total > 0.001 ) {
+			$gap               = round( $implied_credits - $credit_memo_total, 2 );
+			$total_refunded   += $gap;
+			$refund_lines[]    = array(
+				'amount'         => $gap,
+				'txn_date'       => isset( $invoice['TxnDate'] ) ? sanitize_text_field( (string) $invoice['TxnDate'] ) : '',
+				'payment_method' => __( 'Allocated credit', 'remember' ),
+				'qb_refund_id'   => 'qb-balance-credit',
+				'doc_number'     => '',
+				'sort_ts'        => $invoice_sort_ts > 0 ? $invoice_sort_ts + 2 : strtotime( current_time( 'mysql' ) ),
+				'ledger_effect'  => 'credit',
+			);
+		}
+
+		$net_paid = $total_paid - $credit_memo_total;
 		if ( $net_paid < 0 ) {
 			$net_paid = 0;
 		}
 
-		$total_amt = floatval( $payment->total_amount );
-
-		if ( $total_refunded > 0 && $net_paid <= 0.001 ) {
-			$payment_status  = 'refunded';
-			$amount_due      = 0;
-			$amount_paid_out = 0;
-		} elseif ( $net_paid >= $total_amt - 0.001 ) {
-			$payment_status  = 'paid';
-			$amount_due      = 0;
-			$amount_paid_out = $net_paid;
-		} elseif ( $net_paid > 0 ) {
-			$payment_status  = 'partial';
-			$amount_due      = max( 0, $total_amt - $net_paid );
-			$amount_paid_out = $net_paid;
+		$amount_due      = max( 0, $inv_balance );
+		$amount_paid_out = max( 0, $total_paid );
+		if ( $amount_due <= 0.001 ) {
+			$amount_due = 0;
+			if ( $credit_memo_total > 0.001 && $total_paid <= 0.001 ) {
+				$payment_status  = 'refunded';
+				$amount_paid_out = 0;
+			} else {
+				$payment_status = 'paid';
+			}
+		} elseif ( $total_paid > 0.001 || $credit_memo_total > 0.001 ) {
+			$payment_status = 'partial';
 		} else {
 			$payment_status  = 'pending';
-			$amount_due      = $total_amt;
 			$amount_paid_out = 0;
 		}
 
@@ -445,6 +489,7 @@ class Remember_QuickBooks_Sync {
 		$update_data = array(
 			'amount_paid'                => $amount_paid_out,
 			'amount_due'                 => $amount_due,
+			'total_amount'               => $total_amt,
 			'payment_status'             => $payment_status,
 			'payment_date'               => $has_money_activity
 				? ( $latest_ts > 0 ? date( 'Y-m-d H:i:s', $latest_ts ) : current_time( 'mysql' ) )
@@ -552,6 +597,30 @@ class Remember_QuickBooks_Sync {
 		}
 
 		return $results;
+	}
+
+	/**
+	 * Mark a local QBO-linked payment as cancelled after the remote invoice is gone or voided.
+	 *
+	 * @param int  $payment_id Payment ID.
+	 * @param bool $clear_ids  When true, drop the QBO invoice id so a new invoice can be created.
+	 */
+	private static function mark_qb_invoice_gone( $payment_id, $clear_ids = true ) {
+		$payment_model = new Remember_Payment();
+		$data          = array(
+			'amount_paid'              => 0,
+			'amount_due'               => 0,
+			'payment_status'           => 'cancelled',
+			'payment_date'             => null,
+			'quickbooks_payment_lines' => null,
+			'quickbooks_refund_lines'  => null,
+		);
+		if ( $clear_ids ) {
+			$data['quickbooks_invoice_id']      = null;
+			$data['quickbooks_invoice_number']  = null;
+			$data['quickbooks_invoice_sort_ts'] = null;
+		}
+		$payment_model->update( $payment_id, $data );
 	}
 
 	/**

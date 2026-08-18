@@ -785,17 +785,23 @@ class Remember_Xero_API {
 			$query['where'] = 'Contact.ContactID=Guid("' . $contact_id . '")&&Type=="ACCRECCREDIT"';
 		}
 
-		$result = self::request( 'GET', 'CreditNotes', null, $query );
-		if ( is_wp_error( $result ) ) {
-			return $result;
-		}
+		$notes = array();
+		$page  = 1;
+		do {
+			$query['page'] = $page;
+			$result        = self::request( 'GET', 'CreditNotes', null, $query );
+			if ( is_wp_error( $result ) ) {
+				return $result;
+			}
+			$batch = ( ! empty( $result['CreditNotes'] ) && is_array( $result['CreditNotes'] ) ) ? $result['CreditNotes'] : array();
+			foreach ( $batch as $note ) {
+				$notes[] = $note;
+			}
+			++$page;
+		} while ( count( $batch ) >= 100 && $page <= 10 );
 
 		$out = array();
-		if ( empty( $result['CreditNotes'] ) || ! is_array( $result['CreditNotes'] ) ) {
-			return $out;
-		}
-
-		foreach ( $result['CreditNotes'] as $note ) {
+		foreach ( $notes as $note ) {
 			if ( ! is_array( $note ) ) {
 				continue;
 			}

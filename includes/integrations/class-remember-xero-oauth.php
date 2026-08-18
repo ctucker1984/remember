@@ -31,6 +31,18 @@ class Remember_Xero_OAuth {
 	const CONNECTIONS_URL = 'https://api.xero.com/connections';
 
 	/**
+	 * User-Agent for Xero Identity and API calls.
+	 *
+	 * Akamai in front of identity.xero.com / api.xero.com returns HTTP 403 HTML
+	 * when the default WordPress user-agent is missing or overwritten.
+	 *
+	 * @return string
+	 */
+	private static function http_user_agent() {
+		return 'reMember-WordPress/' . ( defined( 'REMEMBER_VERSION' ) ? REMEMBER_VERSION : '1.1.0' );
+	}
+
+	/**
 	 * Default OAuth scopes for contacts, invoices/payments, and items/settings.
 	 *
 	 * New Xero apps (created on/after 2026-03-02) require granular scopes —
@@ -60,7 +72,7 @@ class Remember_Xero_OAuth {
 	 * @param string $scope         OAuth scopes (space-separated).
 	 * @return string Authorization URL.
 	 */
-	public static function get_authorization_url( $client_id, $redirect_uri, $scope = '' ) {
+	public static function get_authorization_url( $client_id, $redirect_uri, $scope = '', $extra = array() ) {
 		if ( '' === $scope ) {
 			$scope = self::get_default_scopes();
 		}
@@ -70,10 +82,98 @@ class Remember_Xero_OAuth {
 			'client_id'     => $client_id,
 			'redirect_uri'  => $redirect_uri,
 			'scope'         => $scope,
-			'state'         => wp_create_nonce( 'remember_xero_oauth' ),
+			'state'         => ! empty( $extra['state'] ) ? (string) $extra['state'] : wp_generate_password( 32, false, false ),
+			'prompt'        => 'consent',
 		);
 
+		if ( ! empty( $extra['code_challenge'] ) ) {
+			$params['code_challenge']        = (string) $extra['code_challenge'];
+			$params['code_challenge_method'] = 'S256';
+		}
+
 		return self::AUTH_URL . '?' . http_build_query( $params, '', '&', PHP_QUERY_RFC3986 );
+	}
+
+	/**
+	 * Start an OAuth attempt: store state, redirect URI, and PKCE verifier for the callback.
+	 *
+	 * @return array{state:string,redirect_uri:string,code_verifier:string,user_id:int}
+	 */
+	public static function create_pending_oauth() {
+		$pending = array(
+			'state'         => wp_generate_password( 32, false, false ),
+			'redirect_uri'  => self::get_redirect_uri(),
+			'code_verifier' => wp_generate_password( 64, false, false ),
+			'user_id'       => get_current_user_id(),
+		);
+		set_transient( 'remember_xero_oauth_pending', $pending, 15 * MINUTE_IN_SECONDS );
+		return $pending;
+	}
+
+	/**
+	 * @return array|false Pending OAuth payload.
+	 */
+	public static function get_pending_oauth() {
+		$pending = get_transient( 'remember_xero_oauth_pending' );
+		return is_array( $pending ) ? $pending : false;
+	}
+
+	/**
+	 * Drop the in-flight OAuth attempt.
+	 */
+	public static function clear_pending_oauth() {
+		delete_transient( 'remember_xero_oauth_pending' );
+	}
+
+	/**
+	 * S256 code challenge for a PKCE verifier.
+	 *
+	 * @param string $verifier Code verifier.
+	 * @return string
+	 */
+	public static function pkce_challenge( $verifier ) {
+		return rtrim( strtr( base64_encode( hash( 'sha256', $verifier, true ) ), '+/', '-_' ), '=' );
+	}
+
+	/**
+	 * Persist the last OAuth result for the Xero settings tab (survives the 60s flash notice).
+	 *
+	 * @param string $type    success|error.
+	 * @param string $message Message.
+	 */
+	public static function set_last_oauth_result( $type, $message ) {
+		$payload = array(
+			'type'    => $type,
+			'message' => $message,
+			'at'      => time(),
+		);
+		update_option( 'remember_xero_last_oauth', $payload, false );
+		$uid = get_current_user_id();
+		if ( $uid ) {
+			set_transient(
+				'remember_xero_oauth_notice_' . $uid,
+				array(
+					'type'    => $type,
+					'message' => $message,
+				),
+				15 * MINUTE_IN_SECONDS
+			);
+		}
+	}
+
+	/**
+	 * @return array{type?:string,message?:string,at?:int}
+	 */
+	public static function get_last_oauth_result() {
+		$saved = get_option( 'remember_xero_last_oauth' );
+		return is_array( $saved ) ? $saved : array();
+	}
+
+	/**
+	 * Clear a successful (or dismissed) OAuth result.
+	 */
+	public static function clear_last_oauth_result() {
+		delete_option( 'remember_xero_last_oauth' );
 	}
 
 	/**
@@ -85,21 +185,29 @@ class Remember_Xero_OAuth {
 	 * @param string $redirect_uri  Redirect URI.
 	 * @return array|WP_Error Token data or error.
 	 */
-	public static function exchange_code_for_token( $code, $client_id, $client_secret, $redirect_uri ) {
+	public static function exchange_code_for_token( $code, $client_id, $client_secret, $redirect_uri, $code_verifier = '' ) {
+		$body = array(
+			'grant_type'   => 'authorization_code',
+			'code'         => $code,
+			'redirect_uri' => $redirect_uri,
+		);
+		if ( '' !== $code_verifier ) {
+			$body['code_verifier'] = $code_verifier;
+		}
+
 		$response = wp_remote_post(
 			self::TOKEN_URL,
 			array(
-				'headers' => array(
+				'headers'     => array(
 					'Accept'        => 'application/json',
 					'Content-Type'  => 'application/x-www-form-urlencoded',
 					'Authorization' => 'Basic ' . base64_encode( $client_id . ':' . $client_secret ),
 				),
-				'body'    => array(
-					'grant_type'   => 'authorization_code',
-					'code'         => $code,
-					'redirect_uri' => $redirect_uri,
-				),
-				'timeout' => 30,
+				'body'        => $body,
+				'user-agent'  => self::http_user_agent(),
+				'timeout'     => 45,
+				'redirection' => 0,
+				'sslverify'   => true,
 			)
 		);
 
@@ -107,18 +215,33 @@ class Remember_Xero_OAuth {
 			return $response;
 		}
 
-		$body        = json_decode( wp_remote_retrieve_body( $response ), true );
-		$status_code = wp_remote_retrieve_response_code( $response );
+		$raw_body    = wp_remote_retrieve_body( $response );
+		$body        = json_decode( $raw_body, true );
+		$status_code = (int) wp_remote_retrieve_response_code( $response );
 
 		if ( 200 !== $status_code ) {
-			$message = __( 'Failed to exchange authorization code for token.', 'remember' );
+			$message = sprintf(
+				/* translators: %d: HTTP status */
+				__( 'Failed to exchange authorization code for token (HTTP %d).', 'remember' ),
+				$status_code
+			);
 			if ( is_array( $body ) ) {
 				if ( ! empty( $body['error_description'] ) ) {
-					$message = $body['error_description'];
-				} elseif ( ! empty( $body['error'] ) ) {
-					$message = is_string( $body['error'] ) ? $body['error'] : $message;
+					$message = (string) $body['error_description'];
+				} elseif ( ! empty( $body['error'] ) && is_string( $body['error'] ) ) {
+					$message = $body['error'];
 				}
+			} elseif ( 403 === $status_code ) {
+				$message = __( 'Xero blocked the token request (HTTP 403). The identity host often rejects WordPress’s default user-agent.', 'remember' );
 			}
+			require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-logger.php';
+			Remember_Logger::error(
+				'Xero authorization code exchange failed',
+				array(
+					'status' => $status_code,
+					'error'  => is_array( $body ) && ! empty( $body['error'] ) ? (string) $body['error'] : '',
+				)
+			);
 			return new WP_Error( 'xero_oauth_error', $message, $body );
 		}
 
@@ -137,16 +260,19 @@ class Remember_Xero_OAuth {
 		$response = wp_remote_post(
 			self::TOKEN_URL,
 			array(
-				'headers' => array(
+				'headers'     => array(
 					'Accept'        => 'application/json',
 					'Content-Type'  => 'application/x-www-form-urlencoded',
 					'Authorization' => 'Basic ' . base64_encode( $client_id . ':' . $client_secret ),
 				),
-				'body'    => array(
+				'body'        => array(
 					'grant_type'    => 'refresh_token',
 					'refresh_token' => $refresh_token,
 				),
-				'timeout' => 30,
+				'user-agent'  => self::http_user_agent(),
+				'timeout'     => 45,
+				'redirection' => 0,
+				'sslverify'   => true,
 			)
 		);
 
@@ -158,10 +284,24 @@ class Remember_Xero_OAuth {
 		$status_code = wp_remote_retrieve_response_code( $response );
 
 		if ( 200 !== $status_code ) {
-			$message = __( 'Failed to refresh Xero access token.', 'remember' );
-			if ( is_array( $body ) && ! empty( $body['error_description'] ) ) {
-				$message = $body['error_description'];
+			$message = __( 'Failed to refresh Xero access token. Reconnect Xero in Settings.', 'remember' );
+			if ( is_array( $body ) ) {
+				if ( ! empty( $body['error_description'] ) ) {
+					$message = (string) $body['error_description'];
+				} elseif ( ! empty( $body['error'] ) && is_string( $body['error'] ) ) {
+					$message = $body['error'];
+				}
+			} elseif ( 403 === (int) $status_code ) {
+				$message = __( 'Xero blocked the token refresh (HTTP 403). The identity host often rejects WordPress’s default user-agent.', 'remember' );
 			}
+			require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-logger.php';
+			Remember_Logger::error(
+				'Xero token refresh failed',
+				array(
+					'status' => (int) $status_code,
+					'error'  => is_array( $body ) && ! empty( $body['error'] ) ? (string) $body['error'] : '',
+				)
+			);
 			return new WP_Error( 'xero_refresh_error', $message, $body );
 		}
 
@@ -180,14 +320,17 @@ class Remember_Xero_OAuth {
 		$response = wp_remote_post(
 			self::REVOKE_URL,
 			array(
-				'headers' => array(
+				'headers'     => array(
 					'Content-Type'  => 'application/x-www-form-urlencoded',
 					'Authorization' => 'Basic ' . base64_encode( $client_id . ':' . $client_secret ),
 				),
-				'body'    => array(
+				'body'        => array(
 					'token' => $token,
 				),
-				'timeout' => 30,
+				'user-agent'  => self::http_user_agent(),
+				'timeout'     => 45,
+				'redirection' => 0,
+				'sslverify'   => true,
 			)
 		);
 
@@ -224,7 +367,7 @@ class Remember_Xero_OAuth {
 					'Content-Type'  => 'application/json',
 					'Authorization' => 'Bearer ' . $access_token,
 				),
-				'user-agent'  => 'reMember-WordPress/' . ( defined( 'REMEMBER_VERSION' ) ? REMEMBER_VERSION : '1.1.0' ),
+				'user-agent'  => self::http_user_agent(),
 				'timeout'     => 45,
 				'redirection' => 0,
 				'sslverify'   => true,

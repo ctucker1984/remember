@@ -1017,88 +1017,87 @@ class Remember_Admin {
 				exit;
 			}
 
+			$pending = Remember_Xero_OAuth::create_pending_oauth();
 			$auth_url = Remember_Xero_OAuth::get_authorization_url(
 				$xero['client_id'],
-				Remember_Xero_OAuth::get_redirect_uri()
+				$pending['redirect_uri'],
+				'',
+				array(
+					'state'          => $pending['state'],
+					'code_challenge' => Remember_Xero_OAuth::pkce_challenge( $pending['code_verifier'] ),
+				)
 			);
 			wp_redirect( $auth_url ); // phpcs:ignore WordPress.Security.SafeRedirect.wp_redirect_wp_redirect -- External Xero URL.
 			exit;
 		}
 
-		// OAuth callback (GET).
+		// OAuth callback (GET). Accept the dedicated flag, or a code/state return if Xero dropped extra query args.
 		if ( ! isset( $_GET['page'] ) || 'remember-settings' !== $_GET['page'] ) {
 			return;
 		}
-		if ( ! isset( $_GET['xero_oauth_callback'] ) ) {
+
+		$pending     = Remember_Xero_OAuth::get_pending_oauth();
+		$is_callback = isset( $_GET['xero_oauth_callback'] )
+			|| ( isset( $_GET['code'] ) && isset( $_GET['state'] ) )
+			|| ( isset( $_GET['error'] ) && is_array( $pending ) );
+		if ( ! $is_callback ) {
 			return;
 		}
 		if ( ! current_user_can( 'remember_access_settings' ) ) {
 			return;
 		}
 
-		$uid      = get_current_user_id();
-		$notice   = 'remember_xero_oauth_notice_' . $uid;
 		$redirect = admin_url( 'admin.php?page=remember-settings#xero' );
 
 		if ( ! empty( $_GET['error'] ) ) {
 			$error_desc = isset( $_GET['error_description'] ) ? sanitize_text_field( wp_unslash( $_GET['error_description'] ) ) : sanitize_text_field( wp_unslash( $_GET['error'] ) );
-			set_transient(
-				$notice,
-				array(
-					'type'    => 'error',
-					'message' => sprintf(
-						/* translators: %s: Xero error message */
-						__( 'Xero authorization failed: %s', 'remember' ),
-						$error_desc
-					),
+			$this->finish_xero_oauth_error(
+				sprintf(
+					/* translators: %s: Xero error message */
+					__( 'Xero authorization failed: %s', 'remember' ),
+					$error_desc
 				),
-				60
+				$redirect
 			);
-			wp_safe_redirect( $redirect );
-			exit;
 		}
 
 		if ( empty( $_GET['code'] ) ) {
-			set_transient(
-				$notice,
-				array(
-					'type'    => 'error',
-					'message' => __( 'Xero did not return an authorization code. If an organisation shows “Already connected”, disconnect reMember for WordPress under that org’s Settings → Connected apps, then try Connect again.', 'remember' ),
-				),
-				60
+			$this->finish_xero_oauth_error(
+				__( 'Xero did not return an authorization code. In Xero, open the organisation → Settings → Connected apps, disconnect reMember, then click Reconnect Xero again.', 'remember' ),
+				$redirect
 			);
-			wp_safe_redirect( $redirect );
-			exit;
 		}
 
 		$code  = sanitize_text_field( wp_unslash( $_GET['code'] ) );
 		$state = isset( $_GET['state'] ) ? sanitize_text_field( wp_unslash( $_GET['state'] ) ) : '';
 
-		if ( ! wp_verify_nonce( $state, 'remember_xero_oauth' ) ) {
-			set_transient( $notice, array( 'type' => 'error', 'message' => __( 'Invalid OAuth state. Please try again.', 'remember' ) ), 60 );
-			wp_safe_redirect( $redirect );
-			exit;
+		if ( ! is_array( $pending ) || empty( $pending['state'] ) || ! hash_equals( (string) $pending['state'], $state ) ) {
+			$this->finish_xero_oauth_error(
+				__( 'Invalid OAuth state. Click Reconnect Xero again and finish the Xero prompt without using the browser Back button.', 'remember' ),
+				$redirect
+			);
 		}
 
 		$settings = Remember_Xero_OAuth::get_settings();
 		if ( ! $settings || empty( $settings['client_id'] ) || empty( $settings['client_secret'] ) ) {
-			set_transient( $notice, array( 'type' => 'error', 'message' => __( 'Xero credentials not configured. Please enter Client ID and Client Secret first.', 'remember' ) ), 60 );
-			wp_safe_redirect( $redirect );
-			exit;
+			$this->finish_xero_oauth_error(
+				__( 'Xero credentials not configured. Please enter Client ID and Client Secret first.', 'remember' ),
+				$redirect
+			);
 		}
 
-		$redirect_uri = Remember_Xero_OAuth::get_redirect_uri();
-		$token_data   = Remember_Xero_OAuth::exchange_code_for_token(
+		$redirect_uri  = ! empty( $pending['redirect_uri'] ) ? $pending['redirect_uri'] : Remember_Xero_OAuth::get_redirect_uri();
+		$code_verifier = ! empty( $pending['code_verifier'] ) ? $pending['code_verifier'] : '';
+		$token_data    = Remember_Xero_OAuth::exchange_code_for_token(
 			$code,
 			$settings['client_id'],
 			$settings['client_secret'],
-			$redirect_uri
+			$redirect_uri,
+			$code_verifier
 		);
 
 		if ( is_wp_error( $token_data ) ) {
-			set_transient( $notice, array( 'type' => 'error', 'message' => wp_strip_all_tags( $token_data->get_error_message() ) ), 60 );
-			wp_safe_redirect( $redirect );
-			exit;
+			$this->finish_xero_oauth_error( wp_strip_all_tags( $token_data->get_error_message() ), $redirect );
 		}
 
 		$settings['access_token']  = isset( $token_data['access_token'] ) ? $token_data['access_token'] : '';
@@ -1114,15 +1113,14 @@ class Remember_Admin {
 
 		$connections = Remember_Xero_OAuth::get_connections( $settings['access_token'] );
 		if ( is_wp_error( $connections ) ) {
-			set_transient( $notice, array( 'type' => 'error', 'message' => wp_strip_all_tags( $connections->get_error_message() ) ), 60 );
-			wp_safe_redirect( $redirect );
-			exit;
+			$this->finish_xero_oauth_error( wp_strip_all_tags( $connections->get_error_message() ), $redirect );
 		}
 
 		if ( empty( $connections[0]['tenantId'] ) ) {
-			set_transient( $notice, array( 'type' => 'error', 'message' => __( 'No Xero organisation was available to connect. Authorize at least one organisation.', 'remember' ) ), 60 );
-			wp_safe_redirect( $redirect );
-			exit;
+			$this->finish_xero_oauth_error(
+				__( 'No Xero organisation was available to connect. Authorize at least one organisation.', 'remember' ),
+				$redirect
+			);
 		}
 
 		// Phase 1: use the first authorised tenant (multi-tenant picker can come later).
@@ -1131,10 +1129,10 @@ class Remember_Admin {
 		$settings['connection_id'] = ! empty( $connections[0]['id'] ) ? sanitize_text_field( $connections[0]['id'] ) : '';
 
 		if ( ! Remember_Xero_OAuth::save_settings( $settings ) ) {
-			set_transient( $notice, array( 'type' => 'error', 'message' => __( 'Failed to save Xero connection.', 'remember' ) ), 60 );
-			wp_safe_redirect( $redirect );
-			exit;
+			$this->finish_xero_oauth_error( __( 'Failed to save Xero connection.', 'remember' ), $redirect );
 		}
+
+		Remember_Xero_OAuth::clear_pending_oauth();
 
 		// Cache org ShortCode for invoice deep links (best-effort).
 		require_once plugin_dir_path( __FILE__ ) . '../includes/integrations/class-remember-xero-api.php';
@@ -1155,18 +1153,27 @@ class Remember_Admin {
 		);
 
 		$org_label = $settings['tenant_name'] ? $settings['tenant_name'] : $settings['tenant_id'];
-		set_transient(
-			$notice,
-			array(
-				'type'    => 'success',
-				'message' => sprintf(
-					/* translators: %s: Xero organisation name */
-					__( 'Xero connected successfully (%s).', 'remember' ),
-					$org_label
-				),
-			),
-			60
+		Remember_Xero_OAuth::set_last_oauth_result(
+			'success',
+			sprintf(
+				/* translators: %s: Xero organisation name */
+				__( 'Xero connected successfully (%s).', 'remember' ),
+				$org_label
+			)
 		);
+		wp_safe_redirect( $redirect );
+		exit;
+	}
+
+	/**
+	 * Store a Xero OAuth failure and return to Settings → Xero.
+	 *
+	 * @param string $message  Error message.
+	 * @param string $redirect Admin URL.
+	 */
+	private function finish_xero_oauth_error( $message, $redirect ) {
+		Remember_Xero_OAuth::set_last_oauth_result( 'error', $message );
+		Remember_Xero_OAuth::clear_pending_oauth();
 		wp_safe_redirect( $redirect );
 		exit;
 	}

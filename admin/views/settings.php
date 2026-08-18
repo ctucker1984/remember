@@ -1396,10 +1396,14 @@ $im_platforms = Remember_Im_Platforms::get_all();
 			$xero_settings  = Remember_Xero_OAuth::get_settings();
 			$xero_connected = Remember_Xero_OAuth::is_connected( $xero_settings );
 			$xero_org       = array();
+			$xero_org_error = '';
 			if ( $xero_connected ) {
 				$xero_org_result = Remember_Xero_API::get_organisation();
 				if ( ! is_wp_error( $xero_org_result ) && is_array( $xero_org_result ) ) {
 					$xero_org = $xero_org_result;
+					Remember_Xero_OAuth::clear_last_oauth_result();
+				} elseif ( is_wp_error( $xero_org_result ) ) {
+					$xero_org_error = $xero_org_result->get_error_message();
 				}
 			}
 			$billing_provider_now = isset( $options['billing_provider'] ) ? $options['billing_provider'] : 'none';
@@ -1422,7 +1426,38 @@ $im_platforms = Remember_Im_Platforms::get_all();
 				</div>
 			<?php endif; ?>
 
-			<?php if ( $xero_connected ) : ?>
+			<?php
+			$xero_last_oauth = Remember_Xero_OAuth::get_last_oauth_result();
+			if ( $xero_org_error && ! empty( $xero_last_oauth['message'] ) && isset( $xero_last_oauth['type'] ) && 'error' === $xero_last_oauth['type'] ) :
+				?>
+				<div class="notice notice-error inline" style="margin: 0 0 20px;">
+					<p>
+						<strong><?php esc_html_e( 'Reconnect did not finish:', 'remember' ); ?></strong>
+						<?php echo esc_html( $xero_last_oauth['message'] ); ?>
+					</p>
+				</div>
+			<?php endif; ?>
+
+			<?php if ( $xero_connected && $xero_org_error ) : ?>
+				<div style="padding: 15px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; margin-bottom: 20px;">
+					<p style="margin: 0; color: #664d03;">
+						<strong><?php esc_html_e( 'Connection expired', 'remember' ); ?></strong>
+						<?php
+						$display_name = '';
+						if ( ! empty( $xero_settings['tenant_name'] ) ) {
+							$display_name = $xero_settings['tenant_name'];
+						}
+						if ( $display_name ) {
+							echo ' — ' . esc_html( $display_name );
+						}
+						?>
+					</p>
+					<p style="margin: 8px 0 0;">
+						<?php echo esc_html( $xero_org_error ); ?>
+						<?php esc_html_e( ' Use Reconnect Xero below to authorize again. You do not need to disconnect first.', 'remember' ); ?>
+					</p>
+				</div>
+			<?php elseif ( $xero_connected ) : ?>
 				<div style="padding: 15px; background: #d4edda; border: 1px solid #c3e6cb; border-radius: 4px; margin-bottom: 20px;">
 					<p style="margin: 0; color: #155724;">
 						<strong><?php esc_html_e( 'Connected', 'remember' ); ?></strong>
@@ -1510,13 +1545,38 @@ $im_platforms = Remember_Im_Platforms::get_all();
 			</form>
 
 			<?php if ( ! empty( $xero_settings['client_id'] ) && ! empty( $xero_settings['client_secret'] ) ) : ?>
-				<?php if ( $xero_connected ) : ?>
-					<form method="post" action="" style="margin-bottom: 30px;">
+				<div style="margin-bottom: 30px;">
+					<form method="post" action="" style="display: inline-block; margin: 0 8px 8px 0;">
 						<?php wp_nonce_field( 'remember_settings_action', 'remember_settings_nonce' ); ?>
-						<input type="hidden" name="remember_settings_action" value="disconnect_xero">
-						<?php submit_button( __( 'Disconnect Xero', 'remember' ), 'secondary' ); ?>
+						<input type="hidden" name="remember_settings_action" value="start_xero_oauth" />
+						<?php
+						submit_button(
+							$xero_connected ? __( 'Reconnect Xero', 'remember' ) : __( 'Connect to Xero', 'remember' ),
+							$xero_org_error || ! $xero_connected ? 'primary large' : 'secondary',
+							'submit',
+							false
+						);
+						?>
 					</form>
+					<?php if ( $xero_connected ) : ?>
+						<form method="post" action="" style="display: inline-block; margin: 0 0 8px;">
+							<?php wp_nonce_field( 'remember_settings_action', 'remember_settings_nonce' ); ?>
+							<input type="hidden" name="remember_settings_action" value="disconnect_xero">
+							<?php submit_button( __( 'Disconnect Xero', 'remember' ), 'secondary', 'submit', false ); ?>
+						</form>
+					<?php endif; ?>
+					<p class="description" style="margin-top: 8px;">
+						<?php
+						if ( $xero_connected ) {
+							esc_html_e( 'Reconnect authorizes Xero again and replaces the stored tokens. Disconnect clears the connection entirely.', 'remember' );
+						} else {
+							esc_html_e( 'You will be asked to authorize one or more Xero organisations. reMember stores the first organisation returned for this connection.', 'remember' );
+						}
+						?>
+					</p>
+				</div>
 
+				<?php if ( $xero_connected ) : ?>
 					<form method="post" action="" style="margin-bottom: 30px;">
 						<?php wp_nonce_field( 'remember_settings_action', 'remember_settings_nonce' ); ?>
 						<input type="hidden" name="remember_settings_action" value="update">
@@ -1560,15 +1620,6 @@ $im_platforms = Remember_Im_Platforms::get_all();
 						</p>
 						<?php submit_button( __( 'Sync Payments Now', 'remember' ), 'secondary' ); ?>
 					</form>
-				<?php else : ?>
-					<form method="post" action="" style="margin-bottom: 1em;">
-						<?php wp_nonce_field( 'remember_settings_action', 'remember_settings_nonce' ); ?>
-						<input type="hidden" name="remember_settings_action" value="start_xero_oauth" />
-						<?php submit_button( __( 'Connect to Xero', 'remember' ), 'primary large', 'submit', false ); ?>
-					</form>
-					<p class="description">
-						<?php esc_html_e( 'You will be asked to authorize one or more Xero organisations. reMember stores the first organisation returned for this connection.', 'remember' ); ?>
-					</p>
 				<?php endif; ?>
 			<?php endif; ?>
 

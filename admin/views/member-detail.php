@@ -615,7 +615,7 @@ require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remem
 										'partial' => __( 'Partial', 'remember' ),
 										'paid' => __( 'Paid', 'remember' ),
 										'refunded' => __( 'Refunded', 'remember' ),
-										'cancelled' => __( 'Cancelled', 'remember' ),
+										'cancelled' => __( 'Voided', 'remember' ),
 									);
 									$status_colors_billing = array(
 										'pending' => '#f0b849',
