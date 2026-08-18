@@ -492,6 +492,50 @@ class Remember_QuickBooks_API {
 	}
 
 	/**
+	 * Whether a QuickBooks invoice entity has been voided.
+	 *
+	 * Voided invoices still GET successfully; TotalAmt is zeroed and PrivateNote often says "Voided".
+	 *
+	 * @param array      $invoice     Invoice payload.
+	 * @param float|null $local_total Local invoice total; used when TotalAmt is 0 after a void.
+	 * @return bool
+	 */
+	public static function is_invoice_voided( $invoice, $local_total = null ) {
+		if ( ! is_array( $invoice ) ) {
+			return false;
+		}
+		$note = isset( $invoice['PrivateNote'] ) ? strtolower( (string) $invoice['PrivateNote'] ) : '';
+		if ( false !== strpos( $note, 'voided' ) ) {
+			return true;
+		}
+		$total = floatval( $invoice['TotalAmt'] ?? 0 );
+		if ( $total <= 0.001 && null !== $local_total && floatval( $local_total ) > 0.001 ) {
+			return true;
+		}
+		return false;
+	}
+
+	/**
+	 * Whether a QBO payment / refund / credit memo looks voided or deleted.
+	 *
+	 * @param array $txn Transaction payload.
+	 * @return bool
+	 */
+	public static function is_txn_voided( $txn ) {
+		if ( ! is_array( $txn ) ) {
+			return true;
+		}
+		$note = isset( $txn['PrivateNote'] ) ? strtolower( (string) $txn['PrivateNote'] ) : '';
+		if ( false !== strpos( $note, 'voided' ) ) {
+			return true;
+		}
+		if ( isset( $txn['TotalAmt'] ) && floatval( $txn['TotalAmt'] ) <= 0.001 ) {
+			return true;
+		}
+		return false;
+	}
+
+	/**
 	 * Deep link into QuickBooks Online UI for an invoice (staff browser).
 	 *
 	 * @param string $invoice_id QBO Invoice Id (entity Id, not DocNumber).
@@ -695,6 +739,9 @@ class Remember_QuickBooks_API {
 		if ( ! is_array( $payment ) || ! isset( $payment['Line'] ) ) {
 			return null;
 		}
+		if ( self::is_txn_voided( $payment ) ) {
+			return null;
+		}
 
 		$lines = $payment['Line'];
 		if ( isset( $lines['Amount'] ) ) {
@@ -785,7 +832,7 @@ class Remember_QuickBooks_API {
 	 * @return array<string, mixed>|null
 	 */
 	private static function summarize_refund_receipt_row( $refund ) {
-		if ( ! is_array( $refund ) ) {
+		if ( ! is_array( $refund ) || self::is_txn_voided( $refund ) ) {
 			return null;
 		}
 		$amt = floatval( $refund['TotalAmt'] ?? 0 );
@@ -816,9 +863,10 @@ class Remember_QuickBooks_API {
 		}
 		$ids = array();
 		foreach ( $payments as $p ) {
-			if ( ! empty( $p['Id'] ) ) {
-				$ids[] = (string) $p['Id'];
+			if ( ! is_array( $p ) || empty( $p['Id'] ) || self::is_txn_voided( $p ) ) {
+				continue;
 			}
+			$ids[] = (string) $p['Id'];
 		}
 		return array_values( array_unique( $ids ) );
 	}
@@ -915,6 +963,9 @@ class Remember_QuickBooks_API {
 	 */
 	private static function summarize_refund_for_invoice( $refund, $invoice_id, array $qb_payment_ids = array() ) {
 		if ( ! is_array( $refund ) ) {
+			return null;
+		}
+		if ( self::is_txn_voided( $refund ) ) {
 			return null;
 		}
 		$invoice_id = (string) $invoice_id;
@@ -1101,6 +1152,30 @@ class Remember_QuickBooks_API {
 			}
 		}
 
+		// 4) Credit memos applied to this invoice reduce Amount Due (ledger credit).
+		if ( '' !== $customer_id_resolved ) {
+			$cm_query = "SELECT * FROM CreditMemo WHERE CustomerRef = '" . esc_sql( $customer_id_resolved ) . "'";
+			$cm_resp  = self::api_request( 'GET', 'query?query=' . rawurlencode( $cm_query ) );
+			if ( ! is_wp_error( $cm_resp ) && isset( $cm_resp['QueryResponse']['CreditMemo'] ) ) {
+				$raw  = $cm_resp['QueryResponse']['CreditMemo'];
+				$list = isset( $raw['Id'] ) ? array( $raw ) : ( is_array( $raw ) ? $raw : array() );
+				foreach ( $list as $memo ) {
+					$row = self::summarize_credit_memo_for_invoice( $memo, $invoice_id );
+					if ( null === $row ) {
+						continue;
+					}
+					$rid = isset( $row['qb_refund_id'] ) ? (string) $row['qb_refund_id'] : '';
+					if ( '' !== $rid && isset( $seen[ $rid ] ) ) {
+						continue;
+					}
+					if ( '' !== $rid ) {
+						$seen[ $rid ] = true;
+					}
+					$out[] = $row;
+				}
+			}
+		}
+
 		Remember_Logger::dev_log(
 			'QuickBooks get_invoice_refund_lines',
 			array(
@@ -1126,6 +1201,76 @@ class Remember_QuickBooks_API {
 		);
 
 		return $out;
+	}
+
+	/**
+	 * Credit memo amount applied to a specific invoice.
+	 *
+	 * @param array  $memo       CreditMemo payload.
+	 * @param string $invoice_id Invoice Id.
+	 * @return array<string, mixed>|null
+	 */
+	private static function summarize_credit_memo_for_invoice( $memo, $invoice_id ) {
+		if ( ! is_array( $memo ) || self::is_txn_voided( $memo ) ) {
+			return null;
+		}
+		$invoice_id = (string) $invoice_id;
+		$amount     = 0.0;
+
+		if ( ! empty( $memo['LinkedTxn'] ) ) {
+			$linked = $memo['LinkedTxn'];
+			if ( isset( $linked['TxnId'] ) ) {
+				$linked = array( $linked );
+			}
+			if ( is_array( $linked ) ) {
+				foreach ( $linked as $lt ) {
+					if ( is_array( $lt ) && isset( $lt['TxnId'] ) && (string) $lt['TxnId'] === $invoice_id ) {
+						$amount = floatval( $memo['TotalAmt'] ?? 0 );
+						break;
+					}
+				}
+			}
+		}
+
+		if ( $amount <= 0 && ! empty( $memo['Line'] ) ) {
+			$lines = $memo['Line'];
+			if ( isset( $lines['Amount'] ) ) {
+				$lines = array( $lines );
+			}
+			if ( is_array( $lines ) ) {
+				foreach ( $lines as $line ) {
+					if ( ! is_array( $line ) || empty( $line['LinkedTxn'] ) ) {
+						continue;
+					}
+					$linked = $line['LinkedTxn'];
+					if ( isset( $linked['TxnId'] ) ) {
+						$linked = array( $linked );
+					}
+					if ( ! is_array( $linked ) ) {
+						continue;
+					}
+					foreach ( $linked as $lt ) {
+						if ( is_array( $lt ) && isset( $lt['TxnId'] ) && (string) $lt['TxnId'] === $invoice_id ) {
+							$amount += isset( $line['Amount'] ) ? floatval( $line['Amount'] ) : 0.0;
+						}
+					}
+				}
+			}
+		}
+
+		if ( $amount <= 0 ) {
+			return null;
+		}
+
+		return array(
+			'amount'         => $amount,
+			'txn_date'       => isset( $memo['TxnDate'] ) ? sanitize_text_field( (string) $memo['TxnDate'] ) : '',
+			'payment_method' => __( 'Credit memo', 'remember' ),
+			'qb_refund_id'   => isset( $memo['Id'] ) ? (string) $memo['Id'] : '',
+			'doc_number'     => isset( $memo['DocNumber'] ) ? sanitize_text_field( (string) $memo['DocNumber'] ) : '',
+			'sort_ts'        => self::qb_entity_sort_timestamp( $memo ),
+			'ledger_effect'  => 'credit',
+		);
 	}
 
 	/**

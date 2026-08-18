@@ -728,9 +728,9 @@ if ( $view_member_id > 0 ) {
 	$view_payments = array();
 	if ( $remember_can_read_billing ) {
 		require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-provider.php';
-		Remember_Billing_Provider::sync_member_payments( $view_member_id );
+		// Always hit Xero/QBO on this screen so the register matches the provider, not a cached snapshot.
+		Remember_Billing_Provider::sync_member_payments( $view_member_id, 0 );
 
-		// Get payments for billing register
 		$view_payments = $payment_model->get_by_member( $view_member_id );
 	}
 	
@@ -785,6 +785,8 @@ if ( $view_member_id > 0 ) {
 		$provider_label = __( 'QuickBooks', 'remember' );
 
 		$refund_reduces_balance = false;
+		$is_cancelled           = ( isset( $payment->payment_status ) && 'cancelled' === $payment->payment_status );
+
 		if ( $billing_use_xero ) {
 			$provider_label = __( 'Xero', 'remember' );
 			if ( ! empty( $payment->xero_invoice_number ) || ! empty( $payment->xero_invoice_id ) ) {
@@ -830,6 +832,27 @@ if ( $view_member_id > 0 ) {
 		if ( $invoice_sort_ts <= 0 ) {
 			$invoice_sort_ts = strtotime( $payment->created_at );
 		}
+
+		if ( $is_cancelled ) {
+			$billing_register[] = array(
+				'date'            => date( 'Y-m-d H:i:s', $invoice_sort_ts ),
+				'sort_ts'         => $invoice_sort_ts,
+				'type'            => 'invoice',
+				'description'     => $invoice_description,
+				'invoice_number'  => $invoice_number,
+				'invoice_url'     => $invoice_url,
+				'debit'           => 0,
+				'credit'          => 0,
+				'balance'         => 0,
+				'status'          => 'cancelled',
+				'payment_id'      => $payment->payment_id,
+				'application_id'  => $payment->event_application_id,
+				'affects_balance' => false,
+			);
+			continue;
+		}
+
+		$applied_credits = 0;
 
 		$billing_register[] = array(
 			'date' => date( 'Y-m-d H:i:s', $invoice_sort_ts ),
@@ -888,6 +911,7 @@ if ( $view_member_id > 0 ) {
 					'transaction_id' => $payment->transaction_id,
 					'qb_payment_id' => isset( $qb_line['qb_payment_id'] ) ? (string) $qb_line['qb_payment_id'] : '',
 				);
+				$applied_credits += $credit;
 			}
 		} elseif ( $payment->amount_paid > 0 && $payment->payment_date ) {
 			$manual_ts = strtotime( $payment->payment_date );
@@ -906,6 +930,7 @@ if ( $view_member_id > 0 ) {
 				'payment_id' => $payment->payment_id,
 				'transaction_id' => $payment->transaction_id,
 			);
+			$applied_credits += floatval( $payment->amount_paid );
 		}
 
 		// Refund / credit note row(s), chronological with payments.
@@ -953,6 +978,33 @@ if ( $view_member_id > 0 ) {
 				'qb_refund_id' => isset( $rf_line['qb_refund_id'] ) ? (string) $rf_line['qb_refund_id'] : '',
 				'affects_balance' => $as_credit,
 			);
+			if ( $as_credit ) {
+				$applied_credits += $amount;
+			}
+		}
+
+		// Provider remaining due is the source of truth. If local lines still show more
+		// owed than Xero/QBO AmountDue, add a credit so Current Balance matches.
+		$provider_due = isset( $payment->amount_due ) ? floatval( $payment->amount_due ) : null;
+		if ( null !== $provider_due ) {
+			$from_lines = floatval( $payment->total_amount ) - $applied_credits;
+			$gap        = round( $from_lines - $provider_due, 2 );
+			if ( $gap > 0.001 ) {
+				$gap_ts = $invoice_sort_ts + 3;
+				$billing_register[] = array(
+					'date'            => date( 'Y-m-d H:i:s', $gap_ts ),
+					'sort_ts'         => $gap_ts,
+					'type'            => 'refund',
+					'description'     => __( 'Allocated credit', 'remember' ),
+					'debit'           => 0,
+					'credit'          => $gap,
+					'balance'         => 0,
+					'status'          => $payment->payment_status,
+					'payment_id'      => $payment->payment_id,
+					'qb_refund_id'    => 'provider-amount-due',
+					'affects_balance' => true,
+				);
+			}
 		}
 	}
 	
@@ -985,10 +1037,10 @@ if ( $view_member_id > 0 ) {
 		}
 	);
 	
-	// Running balance: invoices debit, payments credit, Xero credit notes credit.
-	// QBO refund-receipt audit rows (debit, affects_balance false) do not change balance due.
+	// Running balance: invoices debit, payments credit, Xero credit notes / QBO credit memos credit.
+	// Cancelled (voided/deleted) invoices and QBO refund-receipt audit rows do not change balance due.
 	foreach ( $billing_register as &$entry ) {
-		if ( 'refund' === ( $entry['type'] ?? '' ) && empty( $entry['affects_balance'] ) ) {
+		if ( 'cancelled' === ( $entry['status'] ?? '' ) || ( 'refund' === ( $entry['type'] ?? '' ) && empty( $entry['affects_balance'] ) ) ) {
 			$entry['balance'] = $running_balance;
 			continue;
 		}
@@ -996,6 +1048,15 @@ if ( $view_member_id > 0 ) {
 		$entry['balance'] = $running_balance;
 	}
 	unset( $entry );
+
+	$provider_balance = 0.0;
+	foreach ( $view_payments as $p ) {
+		if ( isset( $p->payment_status ) && 'cancelled' === $p->payment_status ) {
+			continue;
+		}
+		$provider_balance += isset( $p->amount_due ) ? floatval( $p->amount_due ) : 0.0;
+	}
+	$running_balance = $provider_balance;
 
 	require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-provider.php';
 	require_once plugin_dir_path( __FILE__ ) . '../../includes/integrations/class-remember-quickbooks-oauth.php';
