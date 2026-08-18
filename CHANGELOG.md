@@ -5,6 +5,7 @@ All notable changes to reMember are listed here. The current plugin version is i
 ## 1.3.7
 
 - **Enhancement:** The event card printout uses a larger square photo at top left, with the display name and the first four opted-in custom fields in the column beside it. Remaining event-card fields continue in two columns under that row, then Interests.
+- **Enhancement:** Assigned member numbers print on both sheets: under the display name on the confidential profile and the event card, and in the confidential footer.
 - **Fix:** Member billing register follows Xero/QBO invoice totals: voided or deleted invoices are cancelled locally (zero balance, no ghost debit), deleted payments and credit notes drop off on sync, and remaining credits (Xero AmountCredited / QBO credit memos) are applied so Current Balance matches the provider.
 - **Fix:** Opening a member profile always refreshes invoices, payments, and credits from Xero or QuickBooks (no 60-second cache).
 - **Fix:** Settings → Xero shows **Reconnect Xero** while a connection is stored, and warns when the access token can no longer be refreshed. Previously only Disconnect was offered, so an expired token looked connected with no way to authorize again.
