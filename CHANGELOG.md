@@ -9,7 +9,7 @@ All notable changes to reMember are listed here. The current plugin version is i
 - **Fix:** Opening a member profile always refreshes invoices, payments, and credits from Xero or QuickBooks (no 60-second cache).
 - **Fix:** Settings → Xero shows **Reconnect Xero** while a connection is stored, and warns when the access token can no longer be refreshed. Previously only Disconnect was offered, so an expired token looked connected with no way to authorize again.
 - **Fix:** Xero reconnect keeps the authorization error on the Xero tab (it was a 60-second flash notice), uses a stored OAuth state plus PKCE, and exchanges the code with the same redirect URI that started the flow so a completed reconnect actually replaces the tokens.
-- **Fix:** Xero token exchange, refresh, and revoke send the same User-Agent as other Xero calls. identity.xero.com was returning HTTP 403 (Akamai) for WordPress’s default user-agent, which blocked reconnect and left the stored tokens expired.
+- **Fix:** Xero token exchange, refresh, and revoke send the same User-Agent as other Xero calls. identity.xero.com was returning HTTP 403 (Akamai) for WordPress’s default user-agent, which blocked reconnect and left the stored tokens expired. A failed reconnect notice is cleared once the live connection works again.
 
 ## 1.3.6
 
