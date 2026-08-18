@@ -1037,7 +1037,8 @@
 	background: none;
 }
 
-.remember-print-banner {
+.remember-print-banner,
+.remember-print-event-only {
 	display: none;
 }
 
@@ -1564,9 +1565,10 @@
  *   confidential — the full record for staff. Page one is identity, profile,
  *                  emergency contact, and health; the interests narrative and
  *                  custom fields start on page two. Red banners top and bottom.
- *   event        — a card for posting at an event: photo, display name, the
- *                  member's event roles, interests, and custom fields. Every
- *                  identifying and health detail is withheld.
+ *   event        — a card for posting at an event: large square photo top-left,
+ *                  display name and the first opted-in custom fields beside it,
+ *                  remaining custom fields and interests below. Contact, roles,
+ *                  emergency, and health stay off.
  *
  * Plain Ctrl-P falls through to confidential, matching what is on screen.
  * .remember-no-print never prints in either format: action buttons, and the
@@ -1824,40 +1826,128 @@
 	/* ---- Event card format ---- */
 
 	/* Everything identifying or medical lives in these blocks, so they go as a unit.
-	   Custom-field rows appear only where an admin ticked "Show on event card". */
+	   Custom-field rows appear only where an admin ticked "Show on event card".
+	   The first few sit beside the photo; the rest continue in two columns below.
+	   The Custom Fields heading on the profile is confidential-only. */
 	[data-print-mode="event"] .remember-member-detail-grid--three-cols,
 	[data-print-mode="event"] .remember-member-detail-contact,
 	[data-print-mode="event"] .remember-member-detail-status,
 	[data-print-mode="event"] .remember-member-detail-roles,
 	[data-print-mode="event"] .remember-print-confidential-only,
-	[data-print-mode="event"] .remember-pq-row:not(.remember-pq-row--event) {
+	[data-print-mode="event"] .remember-pq-row:not(.remember-pq-row--event),
+	[data-print-mode="event"] .remember-pq-row--event-hero {
 		display: none !important;
 	}
 
+	[data-print-mode="event"] .remember-print-event-only {
+		display: block;
+	}
+
+	[data-print-mode="event"] .remember-event-sheet-more {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		column-gap: 18pt;
+		row-gap: 8pt;
+		margin: 0 0 14pt;
+		page-break-inside: auto;
+		break-inside: auto;
+	}
+
+	[data-print-mode="event"] .remember-event-sheet-field {
+		min-width: 0;
+		page-break-inside: avoid;
+		break-inside: avoid;
+	}
+
+	[data-print-mode="event"] .remember-event-sheet-field__label {
+		margin: 0 0 1pt;
+		font-size: 9pt;
+		font-weight: 600;
+		line-height: 1.25;
+		color: #1d2327;
+	}
+
+	[data-print-mode="event"] .remember-event-sheet-field__value {
+		font-size: 10pt;
+		line-height: 1.3;
+		word-break: break-word;
+	}
+
 	[data-print-mode="event"] .remember-member-detail-card {
-		margin-bottom: 12pt;
+		margin-bottom: 8pt;
 		padding: 0;
 		border: 0;
 	}
 
-	[data-print-mode="event"] .remember-member-detail-header,
-	[data-print-mode="event"] .remember-member-detail-header__identity {
+	[data-print-mode="event"] .remember-member-detail-header {
 		display: block;
-		text-align: center;
+	}
+
+	[data-print-mode="event"] .remember-member-detail-header__identity {
+		display: flex;
+		align-items: flex-start;
+		justify-content: flex-start;
+		gap: 14pt;
+		width: 100%;
+		text-align: left;
 	}
 
 	[data-print-mode="event"] .remember-member-detail-avatar {
-		width: 1.9in;
-		height: 1.9in;
-		margin: 0 auto 10pt;
+		width: 2.75in;
+		height: 2.75in;
+		margin: 0;
+		border-radius: 0;
+		object-fit: cover;
 	}
 
 	[data-print-mode="event"] .remember-member-detail-avatar--placeholder {
-		font-size: 60pt;
+		font-size: 84pt;
+	}
+
+	[data-print-mode="event"] .remember-member-detail-header__meta {
+		flex: 1 1 auto;
+		min-width: 0;
+		padding-top: 2pt;
 	}
 
 	[data-print-mode="event"] .remember-member-detail-header__meta h2 {
-		margin-bottom: 6pt;
-		font-size: 22pt;
+		margin: 0 0 8pt;
+		font-size: 20pt;
+		line-height: 1.15;
+		text-align: left;
+	}
+
+	[data-print-mode="event"] .remember-event-sheet-fields {
+		margin: 0;
+		width: 100%;
+	}
+
+	[data-print-mode="event"] .remember-event-sheet-fields th,
+	[data-print-mode="event"] .remember-event-sheet-fields td {
+		padding: 3pt 8pt 3pt 0;
+		font-size: 10pt;
+		line-height: 1.3;
+		vertical-align: top;
+		border: 0;
+	}
+
+	[data-print-mode="event"] .remember-event-sheet-fields th {
+		width: 38%;
+		padding-right: 10pt;
+		font-weight: 600;
+		color: #1d2327;
+	}
+
+	[data-print-mode="event"] .remember-event-sheet-fields td {
+		width: 62%;
+	}
+
+	[data-print-mode="event"] .remember-member-detail-grid--secondary {
+		page-break-before: auto;
+		break-before: auto;
+	}
+
+	[data-print-mode="event"] .remember-member-detail-grid--secondary .remember-member-detail-section {
+		margin-bottom: 0;
 	}
 }

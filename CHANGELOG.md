@@ -2,6 +2,10 @@
 
 All notable changes to reMember are listed here. The current plugin version is in `remember.php` (`REMEMBER_VERSION`) and [GitHub Releases](https://github.com/ctucker1984/remember/releases).
 
+## 1.3.7
+
+- **Enhancement:** The event card printout uses a larger square photo at top left, with the display name and the first four opted-in custom fields in the column beside it. Remaining event-card fields continue in two columns under that row, then Interests.
+
 ## 1.3.6
 
 - **Enhancement:** Member profiles print in two formats, chosen from a **Print** menu on the profile. *Confidential profile* is the full staff record — identity, profile, emergency contact, and health on page one, interests and custom fields on page two — with red CONFIDENTIAL banners repeated on every page. *Event card* is meant for posting at an event: photo, display name, interests, and opted-in custom fields, with no contact details, address, roles, emergency contact, or health information. wp-admin chrome, action buttons, vetting cases, and the billing register stay off both. Save-as-PDF filenames use `{display_name}_member_full_profile_{yymmdd}.pdf` and `{display_name}_event_card_{yymmdd}.pdf`.

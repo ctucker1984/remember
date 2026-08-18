@@ -17,6 +17,13 @@ if ( ! defined( 'WPINC' ) ) {
 class Remember_Profile_Questions {
 
 	/**
+	 * Opted-in custom fields that sit beside the event-sheet photo.
+	 *
+	 * Remaining event-card rows continue in two columns under the photo row.
+	 */
+	const EVENT_SHEET_HERO_FIELD_COUNT = 4;
+
+	/**
 	 * Allowed field types.
 	 *
 	 * @return array<int, string>
@@ -802,17 +809,89 @@ class Remember_Profile_Questions {
 			return false;
 		}
 		echo '<table class="form-table" role="presentation"><tbody>';
+		$hero_left = self::EVENT_SHEET_HERO_FIELD_COUNT;
 		foreach ( $rows as $row ) {
 			$q       = $row['question'];
 			$display = self::display_value( $q, $row['value'] );
 			// The event-card printout keeps only rows an admin has opted in.
-			$classes = empty( $q->show_on_event_card ) ? 'remember-pq-row' : 'remember-pq-row remember-pq-row--event';
-			echo '<tr class="' . esc_attr( $classes ) . '"><th scope="row">' . esc_html( $q->label ) . '</th><td>';
+			$classes = array( 'remember-pq-row' );
+			if ( ! empty( $q->show_on_event_card ) ) {
+				$classes[] = 'remember-pq-row--event';
+				if ( $hero_left > 0 ) {
+					$classes[] = 'remember-pq-row--event-hero';
+					--$hero_left;
+				}
+			}
+			echo '<tr class="' . esc_attr( implode( ' ', $classes ) ) . '"><th scope="row">' . esc_html( $q->label ) . '</th><td>';
 			echo '' !== $display ? esc_html( $display ) : '<span class="description">—</span>';
 			echo '</td></tr>';
 		}
 		echo '</tbody></table>';
 		return true;
+	}
+
+	/**
+	 * Opted-in custom-field rows for the event sheet, in display order.
+	 *
+	 * @param int $member_id Member ID.
+	 * @return array<int, array{question:object,value:string}>
+	 */
+	public static function event_card_rows( $member_id ) {
+		$out = array();
+		foreach ( self::detail_rows_for( $member_id ) as $row ) {
+			if ( ! empty( $row['question']->show_on_event_card ) ) {
+				$out[] = $row;
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * Render the first few event-card fields beside the event-sheet photo.
+	 *
+	 * @param int $member_id Member ID.
+	 * @return int Number of rows rendered.
+	 */
+	public static function render_event_sheet_hero_rows( $member_id ) {
+		$hero = array_slice( self::event_card_rows( $member_id ), 0, self::EVENT_SHEET_HERO_FIELD_COUNT );
+		if ( empty( $hero ) ) {
+			return 0;
+		}
+		echo '<table class="form-table remember-event-sheet-fields" role="presentation"><tbody>';
+		foreach ( $hero as $row ) {
+			$q       = $row['question'];
+			$display = self::display_value( $q, $row['value'] );
+			echo '<tr><th scope="row">' . esc_html( $q->label ) . '</th><td>';
+			echo '' !== $display ? esc_html( $display ) : '<span class="description">—</span>';
+			echo '</td></tr>';
+		}
+		echo '</tbody></table>';
+		return count( $hero );
+	}
+
+	/**
+	 * Render opted-in custom fields that continue below the event-sheet photo row.
+	 *
+	 * @param int $member_id Member ID.
+	 * @return int Number of fields rendered.
+	 */
+	public static function render_event_sheet_continuation_rows( $member_id ) {
+		$rest = array_slice( self::event_card_rows( $member_id ), self::EVENT_SHEET_HERO_FIELD_COUNT );
+		if ( empty( $rest ) ) {
+			return 0;
+		}
+		echo '<div class="remember-print-event-only remember-event-sheet-more">';
+		foreach ( $rest as $row ) {
+			$q       = $row['question'];
+			$display = self::display_value( $q, $row['value'] );
+			echo '<div class="remember-event-sheet-field">';
+			echo '<div class="remember-event-sheet-field__label">' . esc_html( $q->label ) . '</div>';
+			echo '<div class="remember-event-sheet-field__value">';
+			echo '' !== $display ? esc_html( $display ) : '<span class="description">—</span>';
+			echo '</div></div>';
+		}
+		echo '</div>';
+		return count( $rest );
 	}
 
 	/**
@@ -822,12 +901,7 @@ class Remember_Profile_Questions {
 	 * @return bool
 	 */
 	public static function has_event_card_rows( $member_id ) {
-		foreach ( self::detail_rows_for( $member_id ) as $row ) {
-			if ( ! empty( $row['question']->show_on_event_card ) ) {
-				return true;
-			}
-		}
-		return false;
+		return ! empty( self::event_card_rows( $member_id ) );
 	}
 
 	/**

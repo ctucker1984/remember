@@ -30,6 +30,7 @@ $remember_can_print_any          = $remember_can_print_confidential || $remember
 $remember_default_print_mode = $remember_can_print_confidential
 	? 'confidential'
 	: ( $remember_can_print_event ? 'event' : 'denied' );
+require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-questions.php';
 ?>
 <div
 	class="remember-member-detail"
@@ -102,6 +103,9 @@ $remember_default_print_mode = $remember_can_print_confidential
 							<?php endforeach; ?>
 						</div>
 					<?php endif; ?>
+					<div class="remember-print-event-only">
+						<?php Remember_Profile_Questions::render_event_sheet_hero_rows( (int) $view_member_id ); ?>
+					</div>
 				</div>
 			</div>
 			<div class="remember-member-detail-header__actions remember-no-print">
@@ -130,7 +134,7 @@ $remember_default_print_mode = $remember_can_print_confidential
 								<li>
 									<button type="button" data-print-mode="event">
 										<span class="remember-print-menu__label"><?php esc_html_e( 'Event card', 'remember' ); ?></span>
-										<span class="remember-print-menu__hint"><?php esc_html_e( 'Photo, name, and interests only — safe to post', 'remember' ); ?></span>
+										<span class="remember-print-menu__hint"><?php esc_html_e( 'Photo, name, opted-in custom fields, and interests — safe to post', 'remember' ); ?></span>
 									</button>
 								</li>
 							</ul>
@@ -181,6 +185,8 @@ $remember_default_print_mode = $remember_can_print_confidential
 			</div>
 		</div>
 	</div>
+
+	<?php Remember_Profile_Questions::render_event_sheet_continuation_rows( (int) $view_member_id ); ?>
 
 	<?php
 	$remember_show_emergency = current_user_can( 'remember_access_emergency_contact' );
@@ -407,17 +413,14 @@ $remember_default_print_mode = $remember_can_print_confidential
 		</div>
 
 		<?php
-		require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-questions.php';
 		ob_start();
 		$remember_has_custom_fields  = Remember_Profile_Questions::render_detail_rows( (int) $view_member_id );
 		$remember_custom_fields_html = ob_get_clean();
 		$remember_has_interests      = $view_profile && ! empty( $view_profile->interests );
 		// With nothing to say here, keep the block off the printout rather than spending a page on it.
 		$remember_secondary_classes  = ( $remember_has_interests || $remember_has_custom_fields ) ? '' : ' remember-no-print';
-		// Custom fields reach the public event card only where an admin opted the question in.
-		$remember_custom_fields_class = ( $remember_has_custom_fields && Remember_Profile_Questions::has_event_card_rows( (int) $view_member_id ) )
-			? ''
-			: ' remember-print-confidential-only';
+		// Event sheet prints remaining opted-in fields under the photo; this block is confidential-only.
+		$remember_custom_fields_class = ' remember-print-confidential-only';
 		?>
 		<!-- Narrative and custom fields: full width on screen, page two of the printout. -->
 		<div class="remember-member-detail-grid remember-member-detail-grid--secondary<?php echo esc_attr( $remember_secondary_classes ); ?>">
