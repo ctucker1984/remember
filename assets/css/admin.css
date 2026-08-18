@@ -927,6 +927,13 @@
 	word-break: break-word;
 }
 
+.remember-member-detail-number {
+	margin: -6px 0 10px;
+	font-size: 13px;
+	font-weight: 600;
+	color: #50575e;
+}
+
 .remember-member-detail-status {
 	font-size: 14px;
 	font-weight: normal;
@@ -1681,6 +1688,13 @@
 		font-size: 14pt;
 	}
 
+	.remember-member-detail-number {
+		margin: 0 0 4pt;
+		font-size: 10pt;
+		font-weight: 700;
+		color: #1d2327;
+	}
+
 	.remember-member-detail-status {
 		font-size: 10pt;
 	}
@@ -1911,10 +1925,17 @@
 	}
 
 	[data-print-mode="event"] .remember-member-detail-header__meta h2 {
-		margin: 0 0 8pt;
+		margin: 0 0 4pt;
 		font-size: 20pt;
 		line-height: 1.15;
 		text-align: left;
+	}
+
+	[data-print-mode="event"] .remember-member-detail-number {
+		margin: 0 0 8pt;
+		font-size: 12pt;
+		font-weight: 700;
+		letter-spacing: 0.02em;
 	}
 
 	[data-print-mode="event"] .remember-event-sheet-fields {

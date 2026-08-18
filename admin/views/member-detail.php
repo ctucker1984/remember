@@ -23,6 +23,9 @@ if ( $is_editing && ! current_user_can( 'remember_update_members' ) ) {
 <?php
 $remember_print_stamp = date_i18n( get_option( 'date_format' ) );
 $remember_print_name  = $view_user ? (string) $view_user->display_name : '';
+$remember_member_number = ( $view_profile && ! empty( $view_profile->member_number ) )
+	? (string) $view_profile->member_number
+	: '';
 $remember_can_print_confidential = current_user_can( 'remember_print_confidential' );
 $remember_can_print_event        = current_user_can( 'remember_print_event_card' );
 $remember_can_print_any          = $remember_can_print_confidential || $remember_can_print_event;
@@ -77,6 +80,17 @@ require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remem
 							<?php echo esc_html( $status_labels[ $view_member->status ] ); ?>
 						</span>
 					</h2>
+					<?php if ( '' !== $remember_member_number ) : ?>
+						<p class="remember-member-detail-number">
+							<?php
+							printf(
+								/* translators: %s: assigned member number */
+								esc_html__( 'Member #%s', 'remember' ),
+								esc_html( $remember_member_number )
+							);
+							?>
+						</p>
+					<?php endif; ?>
 					<p class="remember-member-detail-contact">
 						<?php if ( ! empty( $view_user->user_email ) ) : ?>
 							<span class="remember-member-detail-contact__item">
@@ -134,7 +148,7 @@ require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remem
 								<li>
 									<button type="button" data-print-mode="event">
 										<span class="remember-print-menu__label"><?php esc_html_e( 'Event card', 'remember' ); ?></span>
-										<span class="remember-print-menu__hint"><?php esc_html_e( 'Photo, name, opted-in custom fields, and interests — safe to post', 'remember' ); ?></span>
+										<span class="remember-print-menu__hint"><?php esc_html_e( 'Photo, name, member number, opted-in custom fields, and interests — safe to post', 'remember' ); ?></span>
 									</button>
 								</li>
 							</ul>
@@ -662,12 +676,22 @@ require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remem
 		<span class="remember-print-banner__mark"><?php esc_html_e( 'Confidential', 'remember' ); ?></span>
 		<span class="remember-print-banner__note">
 			<?php
-			printf(
-				/* translators: 1: member display name, 2: date the sheet was printed */
-				esc_html__( '%1$s · printed %2$s', 'remember' ),
-				esc_html( $view_user->display_name ),
-				esc_html( $remember_print_stamp )
-			);
+			if ( '' !== $remember_member_number ) {
+				printf(
+					/* translators: 1: member display name, 2: member number, 3: date the sheet was printed */
+					esc_html__( '%1$s · #%2$s · printed %3$s', 'remember' ),
+					esc_html( $view_user->display_name ),
+					esc_html( $remember_member_number ),
+					esc_html( $remember_print_stamp )
+				);
+			} else {
+				printf(
+					/* translators: 1: member display name, 2: date the sheet was printed */
+					esc_html__( '%1$s · printed %2$s', 'remember' ),
+					esc_html( $view_user->display_name ),
+					esc_html( $remember_print_stamp )
+				);
+			}
 			?>
 		</span>
 	</div>
