@@ -114,8 +114,10 @@ class Remember {
 		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'public/class-remember-public.php';
 
 		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/utilities/class-remember-xmlrpc.php';
+		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/utilities/class-remember-logger.php';
 
 		$this->loader = new Remember_Loader();
+		Remember_Logger::bootstrap();
 	}
 
 	/**

@@ -1877,15 +1877,18 @@ $im_platforms = Remember_Im_Platforms::get_all();
 		<div id="logging" class="remember-settings-tab" style="display: none;">
 			<h3><?php esc_html_e( 'Logging Settings', 'remember' ); ?></h3>
 			<p class="description">
-				<?php esc_html_e( 'Configure logging for the reMember plugin. Logs are written to the WordPress debug log file.', 'remember' ); ?>
+				<?php esc_html_e( 'Configure logging for the reMember plugin. Logs are stored in a web-blocked directory, not at the public /wp-content/debug.log URL.', 'remember' ); ?>
 			</p>
 			
 			<?php
-			$current_log_level = isset( $options['log_level'] ) ? $options['log_level'] : 'ERROR';
-			$log_file_path = WP_CONTENT_DIR . '/debug.log';
-			$log_file_exists = file_exists( $log_file_path );
-			$log_file_size = $log_file_exists ? size_format( filesize( $log_file_path ) ) : '0 B';
-			$wp_debug_log_enabled = defined( 'WP_DEBUG_LOG' ) && WP_DEBUG_LOG;
+			require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-logger.php';
+			$current_log_level      = isset( $options['log_level'] ) ? $options['log_level'] : 'ERROR';
+			$log_file_path          = Remember_Logger::get_log_file_path();
+			$log_file_exists        = file_exists( $log_file_path );
+			$log_file_size          = $log_file_exists ? size_format( filesize( $log_file_path ) ) : '0 B';
+			$wp_debug_log_enabled   = defined( 'WP_DEBUG_LOG' ) && WP_DEBUG_LOG;
+			$public_debug_log       = WP_CONTENT_DIR . '/debug.log';
+			$public_debug_log_exists = file_exists( $public_debug_log );
 			?>
 			
 			<table class="form-table">
@@ -1927,8 +1930,13 @@ $im_platforms = Remember_Im_Platforms::get_all();
 								<?php esc_html_e( 'WP_DEBUG_LOG is not enabled in wp-config.php. Logging will not work until this is enabled.', 'remember' ); ?>
 							</p>
 						<?php endif; ?>
+						<?php if ( $public_debug_log_exists ) : ?>
+							<p>
+								<?php esc_html_e( 'A leftover wp-content/debug.log file is blocked from web access on Apache/LiteSpeed. You can delete that file; new logs do not go there.', 'remember' ); ?>
+							</p>
+						<?php endif; ?>
 						<p class="description">
-							<?php esc_html_e( 'Logs are written to the WordPress debug log file. Make sure WP_DEBUG_LOG is enabled in your wp-config.php file.', 'remember' ); ?>
+							<?php esc_html_e( 'Logging still requires WP_DEBUG_LOG in wp-config.php. On nginx, also deny HTTP access to debug.log if you keep a copy under wp-content.', 'remember' ); ?>
 						</p>
 					</td>
 				</tr>
