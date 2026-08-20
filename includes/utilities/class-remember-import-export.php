@@ -731,6 +731,7 @@ class Remember_Import_Export {
 
 			require_once plugin_dir_path( __FILE__ ) . 'class-remember-clothing-sizes.php';
 			require_once plugin_dir_path( __FILE__ ) . 'class-remember-im-platforms.php';
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-profile-fields.php';
 			$tz_for_profile = array_key_exists( 'Timezone', $row_data )
 				? sanitize_text_field( (string) $row_data['Timezone'] )
 				: '';
@@ -750,7 +751,7 @@ class Remember_Import_Export {
 					'shirt_size'                     => Remember_Clothing_Sizes::sanitize( 'shirt', $row_data['Shirt Size'] ?? '' ),
 					'pants_size'                     => Remember_Clothing_Sizes::sanitize( 'pants', $row_data['Pants Size'] ?? '' ),
 					'shoe_size'                      => Remember_Clothing_Sizes::sanitize( 'shoe', $row_data['Shoe Size'] ?? '' ),
-					'interests'                      => isset( $row_data['Interests'] ) ? wp_kses_post( $row_data['Interests'] ) : '',
+					'interests'                      => isset( $row_data['Interests'] ) ? Remember_Profile_Fields::clamp_interests( $row_data['Interests'] ) : '',
 					'updated_at'                     => current_time( 'mysql' ),
 					'updated_by'                     => get_current_user_id() ? get_current_user_id() : null,
 				)

@@ -286,6 +286,8 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 					$label
 				)
 			) . '</p></div>';
+		} elseif ( Remember_Profile_Fields::interests_is_over_limit( $profile_check['interests'] ) ) {
+			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html( Remember_Profile_Fields::interests_too_long_message() ) . '</p></div>';
 		} elseif ( '' !== $member_number_error ) {
 			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html( $member_number_error ) . '</p></div>';
 		} else {
@@ -371,7 +373,7 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 			'cell_phone' => isset( $_POST['cell_phone'] ) ? sanitize_text_field( wp_unslash( $_POST['cell_phone'] ) ) : '',
 			'im_handle' => isset( $_POST['im_handle'] ) ? sanitize_text_field( wp_unslash( $_POST['im_handle'] ) ) : '',
 			'im_type' => isset( $_POST['im_type'] ) ? Remember_Im_Platforms::sanitize_key_value( wp_unslash( $_POST['im_type'] ) ) : Remember_Im_Platforms::default_key(),
-			'interests' => isset( $_POST['interests'] ) ? wp_kses_post( wp_unslash( $_POST['interests'] ) ) : '',
+			'interests' => isset( $_POST['interests'] ) ? Remember_Profile_Fields::sanitize_interests( wp_unslash( $_POST['interests'] ) ) : '',
 			'shirt_size' => isset( $_POST['shirt_size'] ) ? Remember_Clothing_Sizes::sanitize( 'shirt', wp_unslash( $_POST['shirt_size'] ) ) : '',
 			'pants_size' => isset( $_POST['pants_size'] ) ? Remember_Clothing_Sizes::sanitize( 'pants', wp_unslash( $_POST['pants_size'] ) ) : '',
 			'shoe_size' => isset( $_POST['shoe_size'] ) ? Remember_Clothing_Sizes::sanitize( 'shoe', wp_unslash( $_POST['shoe_size'] ) ) : '',

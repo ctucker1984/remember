@@ -61,11 +61,13 @@ class Remember_Admin {
 			wp_enqueue_style( $this->plugin_name, plugin_dir_url( __FILE__ ) . '../assets/css/admin.css', array(), $this->version, 'all' );
 			// Photo cropper styles (shared with front-end) on Members edit.
 			if ( false !== strpos( $screen->id, 'remember-members' ) ) {
+				$public_css = plugin_dir_path( __FILE__ ) . '../assets/css/public.css';
+				$css_ver    = is_readable( $public_css ) ? (string) filemtime( $public_css ) : $this->version;
 				wp_enqueue_style(
 					$this->plugin_name . '-photo-cropper',
 					plugin_dir_url( __FILE__ ) . '../assets/css/public.css',
 					array(),
-					$this->version,
+					$css_ver,
 					'all'
 				);
 			}
@@ -113,11 +115,13 @@ class Remember_Admin {
 			) );
 			// Shared photo cropper (zoom + drag) on Members edit.
 			if ( false !== strpos( $screen->id, 'remember-members' ) ) {
+				$public_js  = plugin_dir_path( __FILE__ ) . '../assets/js/public.js';
+				$public_ver = is_readable( $public_js ) ? (string) filemtime( $public_js ) : $this->version;
 				wp_enqueue_script(
 					$this->plugin_name . '-photo-cropper',
 					plugin_dir_url( __FILE__ ) . '../assets/js/public.js',
 					array( 'jquery' ),
-					$this->version,
+					$public_ver,
 					true
 				);
 			}

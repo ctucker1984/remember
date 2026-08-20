@@ -53,7 +53,9 @@ class Remember_Public {
 	 * @since    1.0.0
 	 */
 	public function enqueue_styles() {
-		wp_enqueue_style( $this->plugin_name, plugin_dir_url( __FILE__ ) . '../assets/css/public.css', array(), $this->version, 'all' );
+		$css = plugin_dir_path( __FILE__ ) . '../assets/css/public.css';
+		$ver = is_readable( $css ) ? (string) filemtime( $css ) : $this->version;
+		wp_enqueue_style( $this->plugin_name, plugin_dir_url( __FILE__ ) . '../assets/css/public.css', array(), $ver, 'all' );
 	}
 
 	/**
@@ -69,7 +71,9 @@ class Remember_Public {
 			$this->version,
 			true
 		);
-		wp_enqueue_script( $this->plugin_name, plugin_dir_url( __FILE__ ) . '../assets/js/public.js', array( 'jquery', $this->plugin_name . '-timezone' ), $this->version, true );
+		$public_js  = plugin_dir_path( __FILE__ ) . '../assets/js/public.js';
+		$public_ver = is_readable( $public_js ) ? (string) filemtime( $public_js ) : $this->version;
+		wp_enqueue_script( $this->plugin_name, plugin_dir_url( __FILE__ ) . '../assets/js/public.js', array( 'jquery', $this->plugin_name . '-timezone' ), $public_ver, true );
 		wp_localize_script( $this->plugin_name, 'rememberPublic', array(
 			'ajaxurl'              => admin_url( 'admin-ajax.php' ),
 			'nonce'                => wp_create_nonce( 'remember_public_nonce' ),
@@ -199,6 +203,9 @@ class Remember_Public {
 		}
 		if ( '' !== Remember_Profile_Fields::first_missing_required_health_catalog() ) {
 			$this->redirect_member_registration( 'missing_fields' );
+		}
+		if ( Remember_Profile_Fields::interests_is_over_limit( $profile_data['interests'] ) ) {
+			$this->redirect_member_registration( 'interests_too_long' );
 		}
 
 		if ( ! Remember_Timezone::is_valid_timezone( $timezone ) ) {
@@ -375,6 +382,8 @@ class Remember_Public {
 	 * @return string
 	 */
 	private function get_member_registration_error_message( $code ) {
+		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-profile-fields.php';
+
 		$messages = array(
 			'invalid_nonce'    => __( 'That submission was invalid or expired. Please try again.', 'remember' ),
 			'disabled'         => __( 'New member registration is not available.', 'remember' ),
@@ -392,6 +401,7 @@ class Remember_Public {
 			'photo_required'   => __( 'A profile photo is required to register.', 'remember' ),
 			'photo_too_large'  => __( 'That photo is too large. Please choose a smaller image and try again.', 'remember' ),
 			'photo_failed'     => __( 'That photo could not be uploaded. Please try a different JPEG, PNG, or GIF.', 'remember' ),
+			'interests_too_long' => Remember_Profile_Fields::interests_too_long_message(),
 		);
 
 		return isset( $messages[ $code ] ) ? $messages[ $code ] : __( 'Registration could not be completed.', 'remember' );

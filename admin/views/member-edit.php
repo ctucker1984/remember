@@ -322,18 +322,9 @@ if ( $photo_max_bytes < 1 ) {
 			<th><label for="interests"><?php esc_html_e( 'Interests', 'remember' ); ?></label></th>
 			<td>
 				<?php
+				require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-fields.php';
 				$interests_value = $view_profile && isset( $view_profile->interests ) ? $view_profile->interests : '';
-				wp_editor(
-					$interests_value,
-					'interests',
-					array(
-						'textarea_name' => 'interests',
-						'textarea_rows' => 6,
-						'media_buttons' => false,
-						'teeny'         => true,
-						'quicktags'     => false,
-					)
-				);
+				Remember_Profile_Fields::render_interests_editor( $interests_value, 'interests', 'interests' );
 				?>
 			</td>
 		</tr>

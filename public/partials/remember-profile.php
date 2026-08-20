@@ -67,6 +67,10 @@ if ( isset( $_POST['remember_profile_action'] ) && check_admin_referer( 'remembe
 		wp_safe_redirect( add_query_arg( array( 'edit' => '1', 'remember_profile_error' => $missing_health ) ) );
 		exit;
 	}
+	if ( Remember_Profile_Fields::interests_is_over_limit( $profile_data['interests'] ) ) {
+		wp_safe_redirect( add_query_arg( array( 'edit' => '1', 'remember_profile_error' => 'interests_too_long' ) ) );
+		exit;
+	}
 
 	$photo_error   = '';
 	$has_new_photo = ! empty( $_FILES['photo_file']['name'] );
@@ -310,7 +314,9 @@ if ( ! empty( $selected_allergy_ids ) ) {
 				<p>
 					<?php
 					$labels = Remember_Profile_Fields::labels();
-					if ( isset( $labels[ $profile_error ] ) ) {
+					if ( 'interests_too_long' === $profile_error ) {
+						echo esc_html( Remember_Profile_Fields::interests_too_long_message() );
+					} elseif ( isset( $labels[ $profile_error ] ) ) {
 						echo esc_html(
 							sprintf(
 								/* translators: %s: field label */
@@ -707,20 +713,11 @@ if ( ! empty( $selected_allergy_ids ) ) {
 					<div class="remember-form-col remember-form-col-full">
 						<label for="interests" class="remember-form-label"><?php esc_html_e( 'Interests', 'remember' ); ?></label>
 						<?php
-						if ( ! wp_script_is( 'editor', 'enqueued' ) && ! wp_script_is( 'editor', 'done' ) ) {
-							wp_enqueue_editor();
-						}
-						wp_editor(
+						Remember_Profile_Fields::render_interests_editor(
 							$profile && isset( $profile->interests ) ? $profile->interests : '',
 							'interests',
-							array(
-								'textarea_name' => 'interests',
-								'textarea_rows' => 6,
-								'media_buttons' => false,
-								'teeny'         => true,
-								'quicktags'     => false,
-								'editor_class'  => 'remember-form-control',
-							)
+							'interests',
+							'remember-form-control'
 						);
 						?>
 					</div>

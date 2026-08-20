@@ -32,6 +32,7 @@ if ( $photo_max_bytes < 1 ) {
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-timezone.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-countries.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-clothing-sizes.php';
+require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-fields.php';
 
 /**
  * Sticky text value from registration POST (same request only).
@@ -349,20 +350,12 @@ if ( '' === $remember_reg_im_type ) {
 			<p class="remember-register-section-help"><?php esc_html_e( 'What are you trying to get out of this event? Optional.', 'remember' ); ?></p>
 			<div class="remember-register-editor">
 				<?php
-				if ( ! wp_script_is( 'editor', 'enqueued' ) && ! wp_script_is( 'editor', 'done' ) ) {
-					wp_enqueue_editor();
-				}
-				$interests_value = isset( $_POST['remember_reg_interests'] ) ? wp_kses_post( wp_unslash( $_POST['remember_reg_interests'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing -- sticky display only.
-				wp_editor(
+				$interests_value = isset( $_POST['remember_reg_interests'] ) ? Remember_Profile_Fields::sanitize_interests( wp_unslash( $_POST['remember_reg_interests'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing -- sticky display only.
+				Remember_Profile_Fields::render_interests_editor(
 					$interests_value,
 					'remember_reg_interests',
-					array(
-						'textarea_name' => 'remember_reg_interests',
-						'textarea_rows' => 6,
-						'media_buttons' => false,
-						'teeny'         => true,
-						'quicktags'     => false,
-					)
+					'remember_reg_interests',
+					'remember-register-input'
 				);
 				?>
 			</div>

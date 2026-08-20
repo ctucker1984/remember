@@ -166,9 +166,9 @@ class Remember_Profile_Fields {
 
 		$interests = '';
 		if ( isset( $_POST['interests'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
-			$interests = wp_kses_post( wp_unslash( $_POST['interests'] ) );
+			$interests = self::sanitize_interests( wp_unslash( $_POST['interests'] ) );
 		} elseif ( isset( $_POST['remember_reg_interests'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
-			$interests = wp_kses_post( wp_unslash( $_POST['remember_reg_interests'] ) );
+			$interests = self::sanitize_interests( wp_unslash( $_POST['remember_reg_interests'] ) );
 		}
 
 		return array(
@@ -371,6 +371,158 @@ class Remember_Profile_Fields {
 				}
 			}
 		}
+	}
+
+	/**
+	 * Maximum plain-text length for Interests (HTML tags do not count).
+	 *
+	 * @return int
+	 */
+	public static function interests_max_length() {
+		$max = (int) apply_filters( 'remember_interests_max_length', 2000 );
+		return $max > 0 ? $max : 2000;
+	}
+
+	/**
+	 * Visible text of an Interests HTML value.
+	 *
+	 * @param string $html Rich text.
+	 * @return string
+	 */
+	public static function interests_plain_text( $html ) {
+		$text = wp_strip_all_tags( (string) $html );
+		return html_entity_decode( $text, ENT_QUOTES, 'UTF-8' );
+	}
+
+	/**
+	 * Character count of Interests visible text.
+	 *
+	 * @param string $html Rich text.
+	 * @return int
+	 */
+	public static function interests_char_count( $html ) {
+		$text = self::interests_plain_text( $html );
+		if ( function_exists( 'mb_strlen' ) ) {
+			return (int) mb_strlen( $text, 'UTF-8' );
+		}
+		return strlen( $text );
+	}
+
+	/**
+	 * Whether Interests exceeds the plain-text limit.
+	 *
+	 * @param string $html Rich text.
+	 * @return bool
+	 */
+	public static function interests_is_over_limit( $html ) {
+		return self::interests_char_count( $html ) > self::interests_max_length();
+	}
+
+	/**
+	 * Error copy when Interests is too long.
+	 *
+	 * @return string
+	 */
+	public static function interests_too_long_message() {
+		return sprintf(
+			/* translators: %s: maximum character count */
+			__( 'Interests must be %s characters or fewer.', 'remember' ),
+			number_format_i18n( self::interests_max_length() )
+		);
+	}
+
+	/**
+	 * Sanitize Interests HTML (does not truncate).
+	 *
+	 * @param string $html Raw HTML.
+	 * @return string
+	 */
+	public static function sanitize_interests( $html ) {
+		return wp_kses_post( (string) $html );
+	}
+
+	/**
+	 * Sanitize Interests and clamp visible text to the limit (CSV import).
+	 *
+	 * @param string $html Raw HTML or plain text.
+	 * @return string
+	 */
+	public static function clamp_interests( $html ) {
+		$html = self::sanitize_interests( $html );
+		$max  = self::interests_max_length();
+		if ( self::interests_char_count( $html ) <= $max ) {
+			return $html;
+		}
+		$text = self::interests_plain_text( $html );
+		$cut  = function_exists( 'mb_substr' ) ? mb_substr( $text, 0, $max, 'UTF-8' ) : substr( $text, 0, $max );
+		return wp_kses_post( wpautop( $cut ) );
+	}
+
+	/**
+	 * Attach live Interests counting to this TinyMCE instance (called from editor setup).
+	 *
+	 * @param array  $init      TinyMCE init array.
+	 * @param string $editor_id Editor id.
+	 * @return array
+	 */
+	public static function tinymce_interests_setup( $init, $editor_id ) {
+		if ( 'interests' !== $editor_id && 'remember_reg_interests' !== $editor_id ) {
+			return $init;
+		}
+
+		$call = 'if(window.rememberInitInterestsLimitEditor){window.rememberInitInterestsLimitEditor(editor);}';
+		$prev = isset( $init['setup'] ) ? trim( (string) $init['setup'] ) : '';
+		if ( $prev && preg_match( '/^\(?function\s*\(/', $prev ) ) {
+			$init['setup'] = 'function(editor){(' . rtrim( $prev, ';' ) . ')(editor);' . $call . '}';
+		} else {
+			$init['setup'] = 'function(editor){' . $call . '}';
+		}
+
+		return $init;
+	}
+
+	/**
+	 * Render the Interests wp_editor plus a live character counter.
+	 *
+	 * @param string $content        Current HTML.
+	 * @param string $editor_id      TinyMCE / textarea id.
+	 * @param string $textarea_name  POST name.
+	 * @param string $editor_class   Optional editor_class.
+	 * @return void
+	 */
+	public static function render_interests_editor( $content, $editor_id, $textarea_name, $editor_class = '' ) {
+		if ( ! wp_script_is( 'editor', 'enqueued' ) && ! wp_script_is( 'editor', 'done' ) ) {
+			wp_enqueue_editor();
+		}
+
+		if ( ! has_filter( 'tiny_mce_before_init', array( __CLASS__, 'tinymce_interests_setup' ) ) ) {
+			add_filter( 'tiny_mce_before_init', array( __CLASS__, 'tinymce_interests_setup' ), 20, 2 );
+		}
+
+		$settings = array(
+			'textarea_name' => $textarea_name,
+			'textarea_rows' => 6,
+			'media_buttons' => false,
+			'teeny'         => true,
+			'quicktags'     => false,
+		);
+		if ( '' !== $editor_class ) {
+			$settings['editor_class'] = $editor_class;
+		}
+
+		wp_editor( $content, $editor_id, $settings );
+
+		$max   = self::interests_max_length();
+		$count = self::interests_char_count( $content );
+		/* translators: 1: current character count, 2: maximum */
+		$count_template = __( '%1$s / %2$s characters', 'remember' );
+		printf(
+			'<p class="description remember-interests-count" data-remember-interests-editor="%1$s" data-remember-interests-max="%2$s" data-remember-interests-template="%3$s">%4$s</p>',
+			esc_attr( $editor_id ),
+			esc_attr( (string) $max ),
+			esc_attr( $count_template ),
+			esc_html( sprintf( $count_template, number_format_i18n( $count ), number_format_i18n( $max ) ) )
+		);
 	}
 
 	/**
