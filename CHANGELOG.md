@@ -6,7 +6,7 @@ All notable changes to reMember are listed here. The current plugin version is i
 
 - **Security:** Browser security headers on front, login, admin, and REST: `X-Content-Type-Options`, `X-Frame-Options: SAMEORIGIN`, `Referrer-Policy`, HSTS on HTTPS, and a WordPress-compatible Content-Security-Policy. Filter `remember_security_headers` to tighten or disable. Does not replace headers the host already sends.
 - **Security:** Unauthenticated `GET /wp-json/wp/v2/users` no longer returns login slugs. Editors/admins still can (block editor); everyone else gets 401.
-- **Security:** XML-RPC is disabled (`xmlrpc.php` returns 403). That endpoint is unused by reMember and is a classic brute-force amplifier (`system.multicall`) plus pingback SSRF. Pingbacks, the X-Pingback header, and RSD/WLW discovery links are removed. If a site needs Jetpack or the WordPress mobile app, add `add_filter( 'remember_xmlrpc_enabled', '__return_true' );` — multicall and pingbacks stay off.
+- **Security:** XML-RPC stays available for Jetpack and the WordPress mobile app (`system.multicall` included). Pingback methods, the X-Pingback header, and open pings are removed (SSRF). Multicall brute-force is a server concern (fail2ban / rate-limit / WAF), not a plugin 403.
 - **Security:** Debug logs no longer write to the public `/wp-content/debug.log` URL. reMember stores them in a web-blocked uploads directory, Apache/LiteSpeed deny HTTP GET of `debug.log`, and PHP’s error_log is redirected there when `WP_DEBUG_LOG` is the boolean default.
 - **Enhancement:** Interests is limited to 2,000 characters (plain text) on registration, profile edit, and admin member edit, with a live counter. Closes [#29](https://github.com/ctucker1984/remember/issues/29).
 
