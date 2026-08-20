@@ -45,7 +45,7 @@ class Remember_Import_Export {
 		fprintf( $output, chr( 0xEF ) . chr( 0xBB ) . chr( 0xBF ) );
 		
 		$headers = self::member_csv_headers();
-		fputcsv( $output, $headers );
+		self::write_csv_line( $output, $headers );
 
 		// Example row (core columns; custom field short-name columns empty).
 		$example = array(
@@ -81,7 +81,7 @@ class Remember_Import_Export {
 		while ( count( $example ) < count( $headers ) ) {
 			$example[] = '';
 		}
-		fputcsv( $output, $example );
+		self::write_csv_line( $output, $example );
 		
 		fclose( $output );
 		exit;
@@ -181,7 +181,7 @@ class Remember_Import_Export {
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-profile-questions.php';
 		$headers    = self::member_csv_headers();
 		$field_keys = Remember_Profile_Questions::export_field_keys();
-		fputcsv( $output, $headers );
+		self::write_csv_line( $output, $headers );
 		
 		// Data rows
 		foreach ( $members as $member ) {
@@ -243,7 +243,7 @@ class Remember_Import_Export {
 			foreach ( $field_keys as $fkey ) {
 				$row[] = isset( $custom[ $fkey ] ) ? $custom[ $fkey ] : '';
 			}
-			fputcsv( $output, $row );
+			self::write_csv_line( $output, $row );
 		}
 		
 		fclose( $output );
@@ -269,7 +269,7 @@ class Remember_Import_Export {
 		fprintf( $output, chr( 0xEF ) . chr( 0xBB ) . chr( 0xBF ) );
 		
 		// Headers only
-		fputcsv( $output, array(
+		self::write_csv_line( $output, array(
 			'Event ID',
 			'Event Name',
 			'Description',
@@ -282,7 +282,7 @@ class Remember_Import_Export {
 		) );
 		
 		// Add example row
-		fputcsv( $output, array(
+		self::write_csv_line( $output, array(
 			'', // Event ID - leave blank for new events
 			'Summer Retreat 2024',
 			'Annual summer gathering',
@@ -320,7 +320,7 @@ class Remember_Import_Export {
 		fprintf( $output, chr( 0xEF ) . chr( 0xBB ) . chr( 0xBF ) );
 		
 		// Headers
-		fputcsv( $output, array(
+		self::write_csv_line( $output, array(
 			'Event ID',
 			'Event Name',
 			'Description',
@@ -341,7 +341,7 @@ class Remember_Import_Export {
 				$location_name = $location ? $location->location_name : '';
 			}
 			
-			fputcsv( $output, array(
+			self::write_csv_line( $output, array(
 				$event->event_id,
 				$event->event_name,
 				$event->event_description ?? '',
@@ -377,7 +377,7 @@ class Remember_Import_Export {
 		fprintf( $output, chr( 0xEF ) . chr( 0xBB ) . chr( 0xBF ) );
 		
 		// Headers only
-		fputcsv( $output, array(
+		self::write_csv_line( $output, array(
 			'Location ID',
 			'Location Name',
 			'Street Address',
@@ -390,7 +390,7 @@ class Remember_Import_Export {
 		) );
 		
 		// Add example row
-		fputcsv( $output, array(
+		self::write_csv_line( $output, array(
 			'', // Location ID - leave blank for new locations
 			'Main Campus',
 			'456 University Ave',
@@ -428,7 +428,7 @@ class Remember_Import_Export {
 		fprintf( $output, chr( 0xEF ) . chr( 0xBB ) . chr( 0xBF ) );
 		
 		// Headers
-		fputcsv( $output, array(
+		self::write_csv_line( $output, array(
 			'Location ID',
 			'Location Name',
 			'Street Address',
@@ -442,7 +442,7 @@ class Remember_Import_Export {
 		
 		// Data rows
 		foreach ( $locations as $location ) {
-			fputcsv( $output, array(
+			self::write_csv_line( $output, array(
 				$location->location_id,
 				$location->location_name,
 				$location->address_street ?? '',
@@ -1067,13 +1067,88 @@ class Remember_Import_Export {
 	}
 
 	/**
+	 * Characters that make Excel/LibreOffice treat a CSV cell as a formula.
+	 *
+	 * @return string[]
+	 */
+	private static function csv_formula_prefixes() {
+		return array( '=', '+', '-', '@', "\t", "\r" );
+	}
+
+	/**
+	 * Prefix formula-like cells so spreadsheets open them as text.
+	 *
+	 * @param mixed $value Cell.
+	 * @return string
+	 */
+	private static function csv_formula_escape_cell( $value ) {
+		if ( is_bool( $value ) ) {
+			$value = $value ? '1' : '0';
+		} elseif ( is_int( $value ) || is_float( $value ) ) {
+			$value = (string) $value;
+		} elseif ( null === $value ) {
+			$value = '';
+		} else {
+			$value = (string) $value;
+		}
+		if ( '' === $value ) {
+			return $value;
+		}
+		$first = substr( $value, 0, 1 );
+		if ( in_array( $first, self::csv_formula_prefixes(), true ) ) {
+			return "'" . $value;
+		}
+		return $value;
+	}
+
+	/**
+	 * Undo export escaping so a re-imported file round-trips.
+	 *
+	 * @param mixed $value Cell.
+	 * @return string
+	 */
+	private static function csv_formula_unescape_cell( $value ) {
+		$value = (string) $value;
+		if ( strlen( $value ) < 2 || "'" !== $value[0] ) {
+			return $value;
+		}
+		$second = $value[1];
+		if ( in_array( $second, self::csv_formula_prefixes(), true ) ) {
+			return substr( $value, 1 );
+		}
+		return $value;
+	}
+
+	/**
+	 * Write one CSV row with formula-injection escaping.
+	 *
+	 * @param resource          $handle Open write handle.
+	 * @param array<int, mixed> $row    Cells.
+	 * @return int|false
+	 */
+	private static function write_csv_line( $handle, $row ) {
+		$safe = array();
+		foreach ( $row as $cell ) {
+			$safe[] = self::csv_formula_escape_cell( $cell );
+		}
+		return fputcsv( $handle, $safe, ',', '"', '\\' );
+	}
+
+	/**
 	 * Read one CSV row (PHP 8.4+ requires explicit $escape for fgetcsv()).
 	 *
 	 * @param resource $handle Open read handle.
 	 * @return array<int, string>|false|null
 	 */
 	private static function read_csv_line( $handle ) {
-		return fgetcsv( $handle, 0, ',', '"', '\\' );
+		$row = fgetcsv( $handle, 0, ',', '"', '\\' );
+		if ( ! is_array( $row ) ) {
+			return $row;
+		}
+		foreach ( $row as $i => $cell ) {
+			$row[ $i ] = self::csv_formula_unescape_cell( $cell );
+		}
+		return $row;
 	}
 
 	/**
@@ -1202,7 +1277,7 @@ class Remember_Import_Export {
 
 		$output = fopen( 'php://output', 'w' );
 		fprintf( $output, chr( 0xEF ) . chr( 0xBB ) . chr( 0xBF ) );
-		fputcsv( $output, $headers );
+		self::write_csv_line( $output, $headers );
 
 		foreach ( $applications as $app ) {
 			$user = get_user_by( 'ID', (int) $app->member_id );
@@ -1291,7 +1366,7 @@ class Remember_Import_Export {
 			}
 			$row[] = implode( '; ', $summary_parts );
 
-			fputcsv( $output, $row );
+			self::write_csv_line( $output, $row );
 		}
 
 		fclose( $output );
@@ -1329,8 +1404,8 @@ class Remember_Import_Export {
 		header( 'Expires: 0' );
 		$output = fopen( 'php://output', 'w' );
 		fprintf( $output, chr( 0xEF ) . chr( 0xBB ) . chr( 0xBF ) );
-		fputcsv( $output, self::profile_questions_csv_headers() );
-		fputcsv(
+		self::write_csv_line( $output, self::profile_questions_csv_headers() );
+		self::write_csv_line(
 			$output,
 			array(
 				'ice_cream_flavor',
@@ -1369,14 +1444,14 @@ class Remember_Import_Export {
 		header( 'Expires: 0' );
 		$output = fopen( 'php://output', 'w' );
 		fprintf( $output, chr( 0xEF ) . chr( 0xBB ) . chr( 0xBF ) );
-		fputcsv( $output, self::profile_questions_csv_headers() );
+		self::write_csv_line( $output, self::profile_questions_csv_headers() );
 
 		foreach ( $rows as $q ) {
 			$opt_parts = array();
 			foreach ( Remember_Profile_Questions::parse_options( $q->options_json ) as $opt ) {
 				$opt_parts[] = $opt['key'] . '|' . $opt['label'];
 			}
-			fputcsv(
+			self::write_csv_line(
 				$output,
 				array(
 					$q->field_key,

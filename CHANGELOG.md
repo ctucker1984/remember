@@ -4,6 +4,7 @@ All notable changes to reMember are listed here. The current plugin version is i
 
 ## 1.3.8
 
+- **Security:** CSV exports prefix cells that start with `=`, `+`, `-`, or `@` so Excel/LibreOffice will not treat member-controlled text as a formula. Re-import strips that prefix so phones and IM handles round-trip.
 - **Security:** Browser security headers on front, login, admin, and REST: `X-Content-Type-Options`, `X-Frame-Options: SAMEORIGIN`, `Referrer-Policy`, HSTS on HTTPS, and a WordPress-compatible Content-Security-Policy. Filter `remember_security_headers` to tighten or disable. Does not replace headers the host already sends.
 - **Security:** Unauthenticated `GET /wp-json/wp/v2/users` no longer returns login slugs. Editors/admins still can (block editor); everyone else gets 401.
 - **Security:** XML-RPC stays available for Jetpack and the WordPress mobile app (`system.multicall` included). Pingback methods, the X-Pingback header, and open pings are removed (SSRF). Multicall brute-force is a server concern (fail2ban / rate-limit / WAF), not a plugin 403.
