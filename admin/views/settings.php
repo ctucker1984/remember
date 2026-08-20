@@ -836,6 +836,7 @@ $im_platforms = Remember_Im_Platforms::get_all();
 								<h4 style="margin-top: 0;"><?php esc_html_e( 'Features:', 'remember' ); ?></h4>
 								<ul style="margin: 0; padding-left: 20px;">
 									<li><?php esc_html_e( 'View and edit profile information', 'remember' ); ?></li>
+									<li><?php esc_html_e( 'Change their password without using wp-admin', 'remember' ); ?></li>
 									<li><?php esc_html_e( 'Manage privacy settings for event sharing', 'remember' ); ?></li>
 									<li><?php esc_html_e( 'Supports ?edit=1 URL parameter to show edit mode', 'remember' ); ?></li>
 								</ul>

@@ -4,6 +4,7 @@ All notable changes to reMember are listed here. The current plugin version is i
 
 ## 1.3.8
 
+- **Enhancement:** Members can change their password on Edit Profile (current, new, confirm under Basic Information) with Save Profile. Leave the fields blank to keep the current password. Closes [#27](https://github.com/ctucker1984/remember/issues/27).
 - **Security:** Event apply builds add-on names/descriptions and role labels as text, not HTML, so a product name cannot run markup in the member's browser. The dashboard already escaped these in PHP.
 - **Security:** CSV exports prefix cells that start with `=`, `+`, `-`, or `@` so Excel/LibreOffice will not treat member-controlled text as a formula. Re-import strips that prefix so phones and IM handles round-trip.
 - **Security:** Browser security headers on front, login, admin, and REST: `X-Content-Type-Options`, `X-Frame-Options: SAMEORIGIN`, `Referrer-Policy`, HSTS on HTTPS, and a WordPress-compatible Content-Security-Policy. Filter `remember_security_headers` to tighten or disable. Does not replace headers the host already sends.
