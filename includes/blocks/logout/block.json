@@ -1,0 +1,23 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "remember/logout",
+	"title": "Log out",
+	"category": "theme",
+	"parent": ["core/navigation"],
+	"icon": "unlock",
+	"description": "Nonce-protected log out link. Hidden when the visitor is not logged in.",
+	"keywords": ["logout", "log out", "sign out", "remember"],
+	"textdomain": "remember",
+	"attributes": {
+		"label": {
+			"type": "string",
+			"default": ""
+		}
+	},
+	"supports": {
+		"html": false,
+		"reusable": false,
+		"lock": false
+	}
+}

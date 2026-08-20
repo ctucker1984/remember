@@ -845,6 +845,31 @@ $im_platforms = Remember_Im_Platforms::get_all();
 					</div>
 				<?php endforeach; ?>
 
+				<!-- Log out -->
+				<div style="background: #fff; border: 1px solid #ccd0d4; border-radius: 4px; padding: 20px; margin-bottom: 20px;">
+					<h3 style="margin-top: 0;"><?php esc_html_e( 'Log out', 'remember' ); ?></h3>
+					<p style="color: #646970; margin: 10px 0;">
+						<?php esc_html_e( 'A nonce-protected log out link for the front end. Hidden when the visitor is not logged in. After logout they land on the site home.', 'remember' ); ?>
+					</p>
+					<div style="background: #f6f7f7; border: 1px solid #ddd; border-radius: 3px; padding: 15px; margin: 15px 0;">
+						<strong style="display: block; margin-bottom: 8px;"><?php esc_html_e( 'Nav menu (classic):', 'remember' ); ?></strong>
+						<p style="margin: 0 0 10px 0;"><?php esc_html_e( 'Appearance → Menus → reMember → Log out → Add to Menu.', 'remember' ); ?></p>
+						<strong style="display: block; margin-bottom: 8px;"><?php esc_html_e( 'Nav menu (block theme / FSE):', 'remember' ); ?></strong>
+						<p style="margin: 0 0 10px 0;"><?php esc_html_e( 'Site Editor → open the Navigation block → + → search “Log out” (reMember). That inserts a nonce-protected item. A Custom Link to /remember-logout also works.', 'remember' ); ?></p>
+						<strong style="display: block; margin-bottom: 8px;"><?php esc_html_e( 'Shortcode:', 'remember' ); ?></strong>
+						<code style="display: block; padding: 10px; background: #fff; border: 1px solid #ddd; border-radius: 3px; font-size: 14px; word-break: break-all;">
+							[remember_logout]
+						</code>
+						<button type="button" class="button button-small remember-copy-shortcode" data-shortcode="[remember_logout]" style="margin-top: 8px;">
+							<?php esc_html_e( 'Copy to Clipboard', 'remember' ); ?>
+						</button>
+						<p style="margin: 10px 0 0 0;"><?php esc_html_e( 'Optional: [remember_logout text="Sign out"]', 'remember' ); ?></p>
+					</div>
+					<p class="description" style="margin: 0;">
+						<?php esc_html_e( 'The WordPress admin bar is hidden for accounts whose only WordPress role is Subscriber. Editor, Author, Administrator, and any other WP role still see it. reMember roles do not change this.', 'remember' ); ?>
+					</p>
+				</div>
+
 				<!-- Event Detail Shortcode -->
 				<div style="background: #fff; border: 1px solid #ccd0d4; border-radius: 4px; padding: 20px; margin-bottom: 20px;">
 					<h3 style="margin-top: 0;"><?php esc_html_e( 'Event Detail', 'remember' ); ?></h3>
