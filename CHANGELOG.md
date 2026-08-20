@@ -4,6 +4,7 @@ All notable changes to reMember are listed here. The current plugin version is i
 
 ## 1.3.8
 
+- **Security:** XML-RPC is disabled (`xmlrpc.php` returns 403). That endpoint is unused by reMember and is a classic brute-force amplifier (`system.multicall`) plus pingback SSRF. Pingbacks, the X-Pingback header, and RSD/WLW discovery links are removed. If a site needs Jetpack or the WordPress mobile app, add `add_filter( 'remember_xmlrpc_enabled', '__return_true' );` — multicall and pingbacks stay off.
 - **Enhancement:** Interests is limited to 2,000 characters (plain text) on registration, profile edit, and admin member edit, with a live counter. Closes [#29](https://github.com/ctucker1984/remember/issues/29).
 
 ## 1.3.7

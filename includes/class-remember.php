@@ -113,6 +113,8 @@ class Remember {
 		 */
 		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'public/class-remember-public.php';
 
+		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/utilities/class-remember-xmlrpc.php';
+
 		$this->loader = new Remember_Loader();
 	}
 
@@ -207,6 +209,8 @@ class Remember {
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-fse.php';
 		$this->loader->add_action( 'init', 'Remember_FSE', 'register_block_pattern_category' );
 		$this->loader->add_action( 'init', 'Remember_FSE', 'register_block_patterns' );
+
+		Remember_Xmlrpc::init();
 	}
 
 	/**
