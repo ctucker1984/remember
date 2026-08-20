@@ -4,6 +4,7 @@ All notable changes to reMember are listed here. The current plugin version is i
 
 ## 1.3.8
 
+- **Fix:** Hide the Bluehost plugin’s “Login with Bluehost” button on `wp-login.php` so members use username and password. Does not replace WordPress login or block Bluehost Account Manager → Log in to WordPress. Filter `remember_hide_hosting_sso` to keep the button.
 - **Enhancement:** Nonced front-end Log out via Appearance → Menus (reMember box), a **Log out** block in the Site Editor Navigation, a Custom Link to `/remember-logout`, or `[remember_logout]`. The admin bar is hidden when the only WordPress role is Subscriber; other WP roles still see it. reMember roles do not affect the bar.
 - **Enhancement:** Members can change their password on Edit Profile (current, new, confirm under Basic Information) with Save Profile. Leave the fields blank to keep the current password. Closes [#27](https://github.com/ctucker1984/remember/issues/27).
 - **Security:** Event apply builds add-on names/descriptions and role labels as text, not HTML, so a product name cannot run markup in the member's browser. The dashboard already escaped these in PHP.

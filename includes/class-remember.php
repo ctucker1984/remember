@@ -117,6 +117,7 @@ class Remember {
 		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/utilities/class-remember-rest-privacy.php';
 		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/utilities/class-remember-security-headers.php';
 		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/utilities/class-remember-frontend.php';
+		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/utilities/class-remember-login-screen.php';
 		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/utilities/class-remember-logger.php';
 
 		$this->loader = new Remember_Loader();
@@ -219,6 +220,7 @@ class Remember {
 		Remember_Rest_Privacy::init();
 		Remember_Security_Headers::init();
 		Remember_Frontend::init();
+		Remember_Login_Screen::init();
 	}
 
 	/**
