@@ -735,7 +735,7 @@ if ( ! empty( $selected_allergy_ids ) ) {
 
 			<div class="remember-form-section">
 				<h3 class="remember-form-section-title"><?php esc_html_e( 'Clothing Sizes', 'remember' ); ?></h3>
-				<p class="remember-form-help"><?php esc_html_e( 'US men\'s sizes. Shirt and pants: S-6XL. Shoes: 6-15.', 'remember' ); ?></p>
+				<p class="remember-form-help"><?php echo esc_html( Remember_Clothing_Sizes::section_help() ); ?></p>
 				<div class="remember-form-row">
 					<div class="remember-form-col">
 						<label for="shirt_size" class="remember-form-label"><?php esc_html_e( 'Shirt', 'remember' ); ?></label>
@@ -1077,19 +1077,19 @@ if ( ! empty( $selected_allergy_ids ) ) {
 							<?php if ( ! empty( $profile->shirt_size ) ) : ?>
 								<div class="remember-profile-view-item">
 									<strong class="remember-profile-view-label"><?php esc_html_e( 'Shirt', 'remember' ); ?></strong>
-									<span class="remember-profile-view-value"><?php echo esc_html( $profile->shirt_size ); ?></span>
+									<span class="remember-profile-view-value"><?php echo esc_html( Remember_Clothing_Sizes::format_pair( 'shirt', $profile->shirt_size ) ); ?></span>
 								</div>
 							<?php endif; ?>
 							<?php if ( ! empty( $profile->pants_size ) ) : ?>
 								<div class="remember-profile-view-item">
 									<strong class="remember-profile-view-label"><?php esc_html_e( 'Pants', 'remember' ); ?></strong>
-									<span class="remember-profile-view-value"><?php echo esc_html( $profile->pants_size ); ?></span>
+									<span class="remember-profile-view-value"><?php echo esc_html( Remember_Clothing_Sizes::format_pair( 'pants', $profile->pants_size ) ); ?></span>
 								</div>
 							<?php endif; ?>
 							<?php if ( ! empty( $profile->shoe_size ) ) : ?>
 								<div class="remember-profile-view-item">
 									<strong class="remember-profile-view-label"><?php esc_html_e( 'Shoes', 'remember' ); ?></strong>
-									<span class="remember-profile-view-value"><?php echo esc_html( $profile->shoe_size ); ?></span>
+									<span class="remember-profile-view-value"><?php echo esc_html( Remember_Clothing_Sizes::format_pair( 'shoe', $profile->shoe_size ) ); ?></span>
 								</div>
 							<?php endif; ?>
 						</div>

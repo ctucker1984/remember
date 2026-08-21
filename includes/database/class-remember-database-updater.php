@@ -1307,12 +1307,70 @@ class Remember_Database_Updater {
 			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.39.0' ) );
 		}
 
+		// Update to 1.40.0 — clothing inventory mapping (stocked + issued size).
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.40.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.40.0' ) );
+
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-database.php';
+			$db = new Remember_Database();
+			$db->create_clothing_size_options_table();
+
+			$sizes_table = $wpdb->prefix . 'remember_clothing_size_options';
+			if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $sizes_table ) ) === $sizes_table ) {
+				$cols = $wpdb->get_col( "SHOW COLUMNS FROM {$sizes_table}", 0 );
+				if ( is_array( $cols ) ) {
+					if ( ! in_array( 'is_stocked', $cols, true ) ) {
+						$ok = $wpdb->query( "ALTER TABLE {$sizes_table} ADD COLUMN is_stocked TINYINT(1) DEFAULT 1 AFTER is_active" );
+						if ( false === $ok ) {
+							Remember_Logger::error( 'Failed to add is_stocked to clothing_size_options', array( 'error' => $wpdb->last_error ) );
+						} else {
+							$cols[] = 'is_stocked';
+						}
+					}
+					if ( ! in_array( 'issued_size_code', $cols, true ) ) {
+						$ok = $wpdb->query( "ALTER TABLE {$sizes_table} ADD COLUMN issued_size_code VARCHAR(20) DEFAULT NULL AFTER is_stocked" );
+						if ( false === $ok ) {
+							Remember_Logger::error( 'Failed to add issued_size_code to clothing_size_options', array( 'error' => $wpdb->last_error ) );
+						} else {
+							$cols[] = 'issued_size_code';
+						}
+					}
+				}
+				if ( is_array( $cols ) && in_array( 'issued_size_code', $cols, true ) ) {
+					$wpdb->query( "UPDATE {$sizes_table} SET issued_size_code = size_code WHERE issued_size_code IS NULL OR issued_size_code = ''" );
+				}
+				if ( is_array( $cols ) && in_array( 'is_stocked', $cols, true ) ) {
+					$wpdb->query( "UPDATE {$sizes_table} SET is_stocked = 1 WHERE is_stocked IS NULL" );
+				}
+			}
+
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-seeder.php';
+			$seeder = new Remember_Seeder();
+			$seeder->ensure_clothing_size_options();
+
+			update_option( 'remember_db_version', '1.40.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.40.0' ) );
+		}
+
+		// Update to 1.41.0 — write-in clothing stock table (qty later).
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '1.41.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '1.41.0' ) );
+
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-database.php';
+			$db = new Remember_Database();
+			$db->create_clothing_stock_table();
+
+			update_option( 'remember_db_version', '1.41.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.41.0' ) );
+		}
+
 		// Always re-ensure health catalogs (idempotent). Catches sites that stalled mid-migration
 		// or activated before catalog seed rows were added.
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-seeder.php';
 		$seeder = new Remember_Seeder();
 		$seeder->ensure_health_catalog_options();
 		$seeder->ensure_im_platforms();
+		$seeder->ensure_clothing_size_options();
 
 		Remember_Logger::activation_debug(
 			'update_schema: exit',

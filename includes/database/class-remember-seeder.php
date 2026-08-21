@@ -485,6 +485,9 @@ class Remember_Seeder {
 
 		$table_name = $this->prefix . 'clothing_size_options';
 		$defaults   = Remember_Clothing_Sizes::defaults();
+		$cols       = $this->wpdb->get_col( "SHOW COLUMNS FROM {$table_name}", 0 ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is plugin-controlled.
+		$has_stocked = is_array( $cols ) && in_array( 'is_stocked', $cols, true );
+		$has_issued  = is_array( $cols ) && in_array( 'issued_size_code', $cols, true );
 
 		foreach ( $defaults as $category => $codes ) {
 			foreach ( $codes as $index => $code ) {
@@ -498,16 +501,20 @@ class Remember_Seeder {
 				if ( $existing ) {
 					continue;
 				}
-				$this->wpdb->insert(
-					$table_name,
-					array(
-						'size_category' => $category,
-						'size_code'     => $code,
-						'is_active'     => 1,
-						'sort_order'    => (int) $index,
-						'created_at'    => current_time( 'mysql' ),
-					)
+				$row = array(
+					'size_category' => $category,
+					'size_code'     => $code,
+					'is_active'     => 1,
+					'sort_order'    => (int) $index,
+					'created_at'    => current_time( 'mysql' ),
 				);
+				if ( $has_stocked ) {
+					$row['is_stocked'] = 1;
+				}
+				if ( $has_issued ) {
+					$row['issued_size_code'] = $code;
+				}
+				$this->wpdb->insert( $table_name, $row );
 			}
 		}
 	}

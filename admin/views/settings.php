@@ -563,6 +563,43 @@ if ( isset( $_POST['remember_settings_action'] ) && check_admin_referer( 'rememb
 		}
 	}
 
+	if ( 'update_clothing_sizes' === $action ) {
+		require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-clothing-sizes.php';
+		$posted       = isset( $_POST['clothing_sizes'] ) && is_array( $_POST['clothing_sizes'] ) ? wp_unslash( $_POST['clothing_sizes'] ) : array();
+		$stock_posted = isset( $_POST['clothing_stock'] ) && is_array( $_POST['clothing_stock'] ) ? wp_unslash( $_POST['clothing_stock'] ) : array();
+		$result       = Remember_Clothing_Sizes::save_catalog( $posted, $stock_posted );
+		$remember_open_clothing_tab = true;
+		if ( is_wp_error( $result ) ) {
+			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html( $result->get_error_message() ) . '</p></div>';
+		} else {
+			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Clothing sizes updated successfully.', 'remember' ) . '</p></div>';
+		}
+	}
+
+	if ( 'add_clothing_stock' === $action ) {
+		require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-clothing-sizes.php';
+		$remember_open_clothing_tab = true;
+		$stock_cat  = isset( $_POST['size_category'] ) ? sanitize_key( wp_unslash( $_POST['size_category'] ) ) : '';
+		$stock_code = isset( $_POST['stock_size_code'] ) ? wp_unslash( $_POST['stock_size_code'] ) : '';
+		$result     = Remember_Clothing_Sizes::add_stock( $stock_cat, $stock_code );
+		if ( is_wp_error( $result ) ) {
+			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html( $result->get_error_message() ) . '</p></div>';
+		} else {
+			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Stock size added.', 'remember' ) . '</p></div>';
+		}
+	}
+
+	if ( 'delete_clothing_stock' === $action && isset( $_POST['stock_id'] ) ) {
+		require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-clothing-sizes.php';
+		$remember_open_clothing_tab = true;
+		$result = Remember_Clothing_Sizes::delete_stock( absint( $_POST['stock_id'] ) );
+		if ( is_wp_error( $result ) ) {
+			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html( $result->get_error_message() ) . '</p></div>';
+		} else {
+			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Stock size deleted.', 'remember' ) . '</p></div>';
+		}
+	}
+
 	if ( 'delete_im_platform' === $action && isset( $_POST['platform_id'] ) ) {
 		global $wpdb;
 		$platform_id = absint( $_POST['platform_id'] );
@@ -611,6 +648,7 @@ $im_platforms = Remember_Im_Platforms::get_all();
 			<a href="#general" class="nav-tab nav-tab-active"><?php esc_html_e( 'General', 'remember' ); ?></a>
 			<a href="#shortcodes" class="nav-tab" id="shortcodes-tab-link"><?php esc_html_e( 'Shortcodes', 'remember' ); ?></a>
 			<a href="#platforms" class="nav-tab"><?php esc_html_e( 'Platforms', 'remember' ); ?></a>
+			<a href="#clothing" class="nav-tab"><?php esc_html_e( 'Clothing', 'remember' ); ?></a>
 			<a href="#quickbooks" class="nav-tab"><?php esc_html_e( 'QuickBooks', 'remember' ); ?></a>
 			<a href="#xero" class="nav-tab"><?php esc_html_e( 'Xero', 'remember' ); ?></a>
 			<a href="#notifications" class="nav-tab"><?php esc_html_e( 'Notifications', 'remember' ); ?></a>
@@ -1079,6 +1117,139 @@ $im_platforms = Remember_Im_Platforms::get_all();
 					</form>
 				</div>
 			</div>
+		</div>
+
+		<!-- Clothing sizes vs issued inventory -->
+		<div id="clothing" class="remember-settings-tab" style="display: none;">
+			<?php
+			require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-clothing-sizes.php';
+			$clothing_help = Remember_Clothing_Sizes::section_help();
+			?>
+			<h2><?php esc_html_e( 'Clothing Sizes', 'remember' ); ?></h2>
+			<p class="description">
+				<?php esc_html_e( 'Write the sizes you actually have in Stock. Map each member body size to one of those. Quantity tracking is a later table related to Stock.', 'remember' ); ?>
+			</p>
+			<p class="description"><?php echo esc_html( $clothing_help ); ?></p>
+
+			<?php if ( ! Remember_Clothing_Sizes::has_mapping_columns() || ! Remember_Clothing_Sizes::has_stock_table() ) : ?>
+				<p><?php esc_html_e( 'Reload this page after the database update finishes so the stock table is available.', 'remember' ); ?></p>
+			<?php else : ?>
+				<h3><?php esc_html_e( 'Add stock size', 'remember' ); ?></h3>
+				<form method="post" action="" style="max-width: 480px; margin-bottom: 24px;">
+					<?php wp_nonce_field( 'remember_settings_action', 'remember_settings_nonce' ); ?>
+					<input type="hidden" name="remember_settings_action" value="add_clothing_stock">
+					<p>
+						<label for="clothing_stock_category"><?php esc_html_e( 'Category', 'remember' ); ?></label><br>
+						<select id="clothing_stock_category" name="size_category">
+							<?php foreach ( Remember_Clothing_Sizes::categories() as $stock_cat ) : ?>
+								<option value="<?php echo esc_attr( $stock_cat ); ?>"><?php echo esc_html( Remember_Clothing_Sizes::category_label( $stock_cat ) ); ?></option>
+							<?php endforeach; ?>
+						</select>
+					</p>
+					<p>
+						<label for="clothing_stock_code"><?php esc_html_e( 'Size', 'remember' ); ?></label><br>
+						<input type="text" id="clothing_stock_code" name="stock_size_code" class="regular-text" maxlength="20" required placeholder="<?php esc_attr_e( 'e.g. L, XL, 10.5', 'remember' ); ?>">
+					</p>
+					<p class="submit" style="margin-top:0;">
+						<input type="submit" class="button button-primary" value="<?php esc_attr_e( 'Add Stock Size', 'remember' ); ?>">
+					</p>
+				</form>
+
+				<form method="post" action="">
+					<?php wp_nonce_field( 'remember_settings_action', 'remember_settings_nonce' ); ?>
+					<input type="hidden" name="remember_settings_action" value="update_clothing_sizes">
+					<?php foreach ( Remember_Clothing_Sizes::categories() as $clothing_cat ) : ?>
+						<?php
+						$clothing_rows    = Remember_Clothing_Sizes::rows_for( $clothing_cat );
+						$clothing_stocked = Remember_Clothing_Sizes::stocked_codes( $clothing_cat );
+						$clothing_stock   = Remember_Clothing_Sizes::stock_rows( $clothing_cat );
+						?>
+						<h3><?php echo esc_html( Remember_Clothing_Sizes::category_label( $clothing_cat ) ); ?></h3>
+						<h4><?php esc_html_e( 'Stock', 'remember' ); ?></h4>
+						<p class="description"><?php esc_html_e( 'Sizes you can issue. These populate Available as.', 'remember' ); ?></p>
+						<?php if ( empty( $clothing_stock ) ) : ?>
+							<p><?php esc_html_e( 'No stock sizes yet. Add them above, then map member sizes.', 'remember' ); ?></p>
+						<?php else : ?>
+							<table class="wp-list-table widefat striped" style="max-width: 480px; margin-bottom: 12px;">
+								<thead>
+									<tr>
+										<th><?php esc_html_e( 'Size', 'remember' ); ?></th>
+										<th><?php esc_html_e( 'Sort', 'remember' ); ?></th>
+										<th><?php esc_html_e( 'Actions', 'remember' ); ?></th>
+									</tr>
+								</thead>
+								<tbody>
+									<?php foreach ( $clothing_stock as $s_row ) : ?>
+										<?php $s_id = (int) $s_row->stock_id; ?>
+										<tr>
+											<td><strong><?php echo esc_html( (string) $s_row->size_code ); ?></strong></td>
+											<td>
+												<input type="number" name="clothing_stock[<?php echo esc_attr( $s_id ); ?>][sort_order]" value="<?php echo esc_attr( (int) $s_row->sort_order ); ?>" class="small-text" min="0">
+											</td>
+											<td>
+												<button type="button" class="button button-small remember-delete-clothing-stock"
+													data-stock-id="<?php echo esc_attr( $s_id ); ?>"
+													data-stock-code="<?php echo esc_attr( (string) $s_row->size_code ); ?>">
+													<?php esc_html_e( 'Delete', 'remember' ); ?>
+												</button>
+											</td>
+										</tr>
+									<?php endforeach; ?>
+								</tbody>
+							</table>
+						<?php endif; ?>
+
+						<h4><?php esc_html_e( 'Member sizes', 'remember' ); ?></h4>
+						<?php if ( empty( $clothing_rows ) ) : ?>
+							<p><?php esc_html_e( 'No sizes in this catalog yet.', 'remember' ); ?></p>
+						<?php else : ?>
+							<table class="wp-list-table widefat striped" style="max-width: 640px; margin-bottom: 24px;">
+								<thead>
+									<tr>
+										<th><?php esc_html_e( 'Size', 'remember' ); ?></th>
+										<th><?php esc_html_e( 'Active', 'remember' ); ?></th>
+										<th><?php esc_html_e( 'Available as', 'remember' ); ?></th>
+										<th><?php esc_html_e( 'Sort', 'remember' ); ?></th>
+									</tr>
+								</thead>
+								<tbody>
+									<?php foreach ( $clothing_rows as $c_row ) : ?>
+										<?php
+										$c_id     = (int) $c_row->option_id;
+										$c_code   = (string) $c_row->size_code;
+										$c_issued = ! empty( $c_row->issued_size_code ) ? (string) $c_row->issued_size_code : '';
+										$c_base   = 'clothing_sizes[' . $clothing_cat . '][' . $c_id . ']';
+										?>
+										<tr>
+											<td><strong><?php echo esc_html( $c_code ); ?></strong></td>
+											<td>
+												<label>
+													<input type="checkbox" name="<?php echo esc_attr( $c_base ); ?>[is_active]" value="1" <?php checked( ! empty( $c_row->is_active ) ); ?>>
+													<?php esc_html_e( 'Show to members', 'remember' ); ?>
+												</label>
+											</td>
+											<td>
+												<select name="<?php echo esc_attr( $c_base ); ?>[issued_size_code]">
+													<option value=""><?php esc_html_e( '— Select —', 'remember' ); ?></option>
+													<?php foreach ( $clothing_stocked as $stock_code ) : ?>
+														<option value="<?php echo esc_attr( $stock_code ); ?>" <?php selected( $c_issued, $stock_code ); ?>><?php echo esc_html( $stock_code ); ?></option>
+													<?php endforeach; ?>
+												</select>
+											</td>
+											<td>
+												<input type="number" name="<?php echo esc_attr( $c_base ); ?>[sort_order]" value="<?php echo esc_attr( (int) $c_row->sort_order ); ?>" class="small-text" min="0">
+											</td>
+										</tr>
+									<?php endforeach; ?>
+								</tbody>
+							</table>
+						<?php endif; ?>
+					<?php endforeach; ?>
+					<p class="submit">
+						<input type="submit" class="button button-primary" value="<?php esc_attr_e( 'Save Clothing Sizes', 'remember' ); ?>">
+					</p>
+				</form>
+			<?php endif; ?>
 		</div>
 
 		<!-- QuickBooks Settings -->
@@ -2032,5 +2203,27 @@ jQuery(document).ready(function($) {
 		$('body').append($form);
 		$form.submit();
 	});
+
+	$('.remember-delete-clothing-stock').on('click', function(e) {
+		e.preventDefault();
+		var $button = $(this);
+		var stockId = $button.data('stock-id');
+		var stockCode = $button.data('stock-code');
+
+		if (!confirm('<?php echo esc_js( __( 'Delete stock size "%s"? Remap member sizes that use it first.', 'remember' ) ); ?>'.replace('%s', stockCode))) {
+			return;
+		}
+
+		var $form = $('<form>', { method: 'post', action: '' });
+		$form.append($('<input>', { type: 'hidden', name: 'remember_settings_action', value: 'delete_clothing_stock' }));
+		$form.append($('<input>', { type: 'hidden', name: 'stock_id', value: stockId }));
+		$form.append($('<input>', { type: 'hidden', name: 'remember_settings_nonce', value: '<?php echo esc_js( wp_create_nonce( 'remember_settings_action' ) ); ?>' }));
+		$('body').append($form);
+		$form.submit();
+	});
+
+	<?php if ( ! empty( $remember_open_clothing_tab ) ) : ?>
+	$('.remember-settings #remember-main-settings > .nav-tab-wrapper a[href="#clothing"]').trigger('click');
+	<?php endif; ?>
 });
 </script>

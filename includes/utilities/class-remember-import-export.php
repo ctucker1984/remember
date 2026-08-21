@@ -70,6 +70,9 @@ class Remember_Import_Export {
 			'L',
 			'L',
 			'10',
+			'L',
+			'L',
+			'10',
 			'Gaming, Hiking',
 		);
 		if ( current_user_can( 'remember_access_emergency_contact' ) ) {
@@ -119,6 +122,9 @@ class Remember_Import_Export {
 			'Shirt Size',
 			'Pants Size',
 			'Shoe Size',
+			'Available Shirt',
+			'Available Pants',
+			'Available Shoe',
 			'Interests',
 		);
 		if ( current_user_can( 'remember_access_emergency_contact' ) ) {
@@ -179,6 +185,7 @@ class Remember_Import_Export {
 		fprintf( $output, chr( 0xEF ) . chr( 0xBB ) . chr( 0xBF ) );
 
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-profile-questions.php';
+		require_once plugin_dir_path( __FILE__ ) . 'class-remember-clothing-sizes.php';
 		$headers    = self::member_csv_headers();
 		$field_keys = Remember_Profile_Questions::export_field_keys();
 		self::write_csv_line( $output, $headers );
@@ -227,6 +234,9 @@ class Remember_Import_Export {
 				$profile->shirt_size ?? '',
 				$profile->pants_size ?? '',
 				$profile->shoe_size ?? '',
+				Remember_Clothing_Sizes::issued_for( 'shirt', $profile->shirt_size ?? '' ),
+				Remember_Clothing_Sizes::issued_for( 'pants', $profile->pants_size ?? '' ),
+				Remember_Clothing_Sizes::issued_for( 'shoe', $profile->shoe_size ?? '' ),
 				$profile->interests ?? '',
 			);
 			if ( current_user_can( 'remember_access_emergency_contact' ) ) {
@@ -1167,6 +1177,7 @@ class Remember_Import_Export {
 
 		require_once plugin_dir_path( __FILE__ ) . '../models/class-event.php';
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-profile-questions.php';
+		require_once plugin_dir_path( __FILE__ ) . 'class-remember-clothing-sizes.php';
 
 		$event_model = new Remember_Event();
 		$event       = $event_model->get( $event_id );
@@ -1223,6 +1234,9 @@ class Remember_Import_Export {
 			'Shirt Size',
 			'Pants Size',
 			'Shoe Size',
+			'Available Shirt',
+			'Available Pants',
+			'Available Shoe',
 		);
 		if ( current_user_can( 'remember_access_emergency_contact' ) ) {
 			$headers = array_merge(
@@ -1344,6 +1358,9 @@ class Remember_Import_Export {
 				$profile->shirt_size ?? '',
 				$profile->pants_size ?? '',
 				$profile->shoe_size ?? '',
+				Remember_Clothing_Sizes::issued_for( 'shirt', $profile->shirt_size ?? '' ),
+				Remember_Clothing_Sizes::issued_for( 'pants', $profile->pants_size ?? '' ),
+				Remember_Clothing_Sizes::issued_for( 'shoe', $profile->shoe_size ?? '' ),
 			);
 			if ( current_user_can( 'remember_access_emergency_contact' ) ) {
 				$row[] = $profile->emergency_contact_first ?? '';
