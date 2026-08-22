@@ -2,7 +2,7 @@
 
 All notable changes to reMember are listed here. The current plugin version is in `remember.php` (`REMEMBER_VERSION`) and [GitHub Releases](https://github.com/ctucker1984/remember/releases).
 
-## 1.3.8
+## 1.4.0
 
 - **Enhancement:** Clothing sizes keep the member’s actual size and show the inventory size that is available. Settings → Clothing has a write-in Stock table per category; **Available as** is filled from that, not the seeded body-size list. Dropdowns and staff views use labels like `XL (available L)`. Quantity is a later table related to Stock. Database 1.41.0. Closes [#31](https://github.com/ctucker1984/remember/issues/31).
 - **Fix:** Hide the Bluehost plugin’s “Login with Bluehost” button on `wp-login.php` so members use username and password. Does not replace WordPress login or block Bluehost Account Manager → Log in to WordPress. Filter `remember_hide_hosting_sso` to keep the button.
