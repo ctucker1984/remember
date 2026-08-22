@@ -928,6 +928,23 @@
 	display: none;
 }
 
+.remember-interests-count,
+p.remember-interests-count,
+p.description.remember-interests-count {
+	margin: 0.4em 0 0;
+	color: #646970;
+	font-size: 13px !important;
+	font-weight: 400 !important;
+	line-height: 1.5;
+	font-family: inherit;
+}
+
+.remember-interests-count.is-over,
+p.remember-interests-count.is-over {
+	color: #b32d2e !important;
+	font-weight: 600 !important;
+}
+
 .remember-form-section {
 	margin-bottom: 2em;
 	padding-bottom: 1.5em;

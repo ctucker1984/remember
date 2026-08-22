@@ -978,11 +978,11 @@ jQuery(document).ready(function($) {
 			},
 			success: function(response) {
 				if (response.success && response.data && response.data.length > 0) {
-					var options = '<option value=""><?php esc_html_e( '-- Select Event Role --', 'remember' ); ?></option>';
+					$roleSelect.empty().append($('<option>', { value: '' }).text(<?php echo wp_json_encode( __( '-- Select Event Role --', 'remember' ) ); ?>));
 					$.each(response.data, function(index, role) {
-						options += '<option value="' + role.event_role_id + '">' + role.role_name + '</option>';
+						$roleSelect.append($('<option>', { value: String(role.event_role_id) }).text(role.role_name || ''));
 					});
-					$roleSelect.html(options).prop('disabled', false);
+					$roleSelect.prop('disabled', false);
 				} else {
 					$roleSelect.html('<option value=""><?php esc_html_e( 'No roles available for this event', 'remember' ); ?></option>').prop('disabled', true);
 				}

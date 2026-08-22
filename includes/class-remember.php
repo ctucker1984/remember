@@ -113,7 +113,15 @@ class Remember {
 		 */
 		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'public/class-remember-public.php';
 
+		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/utilities/class-remember-xmlrpc.php';
+		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/utilities/class-remember-rest-privacy.php';
+		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/utilities/class-remember-security-headers.php';
+		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/utilities/class-remember-frontend.php';
+		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/utilities/class-remember-login-screen.php';
+		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/utilities/class-remember-logger.php';
+
 		$this->loader = new Remember_Loader();
+		Remember_Logger::bootstrap();
 	}
 
 	/**
@@ -207,6 +215,12 @@ class Remember {
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-fse.php';
 		$this->loader->add_action( 'init', 'Remember_FSE', 'register_block_pattern_category' );
 		$this->loader->add_action( 'init', 'Remember_FSE', 'register_block_patterns' );
+
+		Remember_Xmlrpc::init();
+		Remember_Rest_Privacy::init();
+		Remember_Security_Headers::init();
+		Remember_Frontend::init();
+		Remember_Login_Screen::init();
 	}
 
 	/**

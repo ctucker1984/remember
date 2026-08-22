@@ -67,6 +67,34 @@ if ( isset( $_POST['remember_profile_action'] ) && check_admin_referer( 'remembe
 		wp_safe_redirect( add_query_arg( array( 'edit' => '1', 'remember_profile_error' => $missing_health ) ) );
 		exit;
 	}
+	if ( Remember_Profile_Fields::interests_is_over_limit( $profile_data['interests'] ) ) {
+		wp_safe_redirect( add_query_arg( array( 'edit' => '1', 'remember_profile_error' => 'interests_too_long' ) ) );
+		exit;
+	}
+
+	$current_password = isset( $_POST['current_password'] ) ? (string) wp_unslash( $_POST['current_password'] ) : '';
+	$new_password     = isset( $_POST['new_password'] ) ? (string) wp_unslash( $_POST['new_password'] ) : '';
+	$confirm_password = isset( $_POST['new_password_confirm'] ) ? (string) wp_unslash( $_POST['new_password_confirm'] ) : '';
+	$change_password  = ( '' !== $current_password || '' !== $new_password || '' !== $confirm_password );
+	if ( $change_password ) {
+		$password_error = '';
+		if ( '' === $current_password || '' === $new_password || '' === $confirm_password ) {
+			$password_error = 'password_missing';
+		} elseif ( ! wp_check_password( $current_password, $user->user_pass, $user->ID ) ) {
+			$password_error = 'password_wrong';
+		} elseif ( $new_password !== $confirm_password ) {
+			$password_error = 'password_mismatch';
+		} else {
+			$min_len = (int) apply_filters( 'remember_registration_password_min_length', 8 );
+			if ( $min_len > 0 && strlen( $new_password ) < $min_len ) {
+				$password_error = 'weak_password';
+			}
+		}
+		if ( '' !== $password_error ) {
+			wp_safe_redirect( add_query_arg( array( 'edit' => '1', 'remember_password_error' => $password_error ), remove_query_arg( array( 'remember_password_updated', 'remember_profile_error' ) ) ) );
+			exit;
+		}
+	}
 
 	$photo_error   = '';
 	$has_new_photo = ! empty( $_FILES['photo_file']['name'] );
@@ -163,6 +191,12 @@ if ( isset( $_POST['remember_profile_action'] ) && check_admin_referer( 'remembe
 
 	do_action( 'remember_member_profile_saved', $user->ID );
 
+	if ( $change_password ) {
+		wp_set_password( $new_password, $user->ID );
+		wp_set_current_user( $user->ID );
+		wp_set_auth_cookie( $user->ID, true, is_ssl() );
+	}
+
 	// Redirect: stay on edit if photo failed so the member can retry.
 	if ( ! empty( $photo_error ) ) {
 		set_transient( 'remember_profile_photo_error_' . $user->ID, $photo_error, MINUTE_IN_SECONDS );
@@ -170,7 +204,13 @@ if ( isset( $_POST['remember_profile_action'] ) && check_admin_referer( 'remembe
 		exit;
 	}
 
-	wp_safe_redirect( remove_query_arg( array( 'edit', 'remember_photo_error' ) ) );
+	$redirect_url = remove_query_arg( array( 'edit', 'remember_photo_error', 'remember_password_error', 'remember_profile_error' ) );
+	if ( $change_password ) {
+		$redirect_url = add_query_arg( 'remember_password_updated', '1', $redirect_url );
+	} else {
+		$redirect_url = remove_query_arg( 'remember_password_updated', $redirect_url );
+	}
+	wp_safe_redirect( $redirect_url );
 	exit;
 }
 
@@ -298,7 +338,8 @@ if ( ! empty( $selected_allergy_ids ) ) {
 		if ( $photo_error_notice ) {
 			delete_transient( 'remember_profile_photo_error_' . $user->ID );
 		}
-		$profile_error = isset( $_GET['remember_profile_error'] ) ? sanitize_text_field( wp_unslash( $_GET['remember_profile_error'] ) ) : '';
+		$profile_error  = isset( $_GET['remember_profile_error'] ) ? sanitize_text_field( wp_unslash( $_GET['remember_profile_error'] ) ) : '';
+		$password_error = isset( $_GET['remember_password_error'] ) ? sanitize_key( wp_unslash( $_GET['remember_password_error'] ) ) : '';
 		// Refresh member so photo preview reflects latest save.
 		$member = $member_model->get( $user->ID );
 		?>
@@ -310,7 +351,9 @@ if ( ! empty( $selected_allergy_ids ) ) {
 				<p>
 					<?php
 					$labels = Remember_Profile_Fields::labels();
-					if ( isset( $labels[ $profile_error ] ) ) {
+					if ( 'interests_too_long' === $profile_error ) {
+						echo esc_html( Remember_Profile_Fields::interests_too_long_message() );
+					} elseif ( isset( $labels[ $profile_error ] ) ) {
 						echo esc_html(
 							sprintf(
 								/* translators: %s: field label */
@@ -320,6 +363,23 @@ if ( ! empty( $selected_allergy_ids ) ) {
 						);
 					} else {
 						esc_html_e( 'Please fill in all required fields.', 'remember' );
+					}
+					?>
+				</p>
+			</div>
+		<?php endif; ?>
+		<?php if ( $password_error ) : ?>
+			<div class="remember-notice remember-error" role="alert">
+				<p>
+					<?php
+					if ( 'password_wrong' === $password_error ) {
+						esc_html_e( 'That current password is not correct.', 'remember' );
+					} elseif ( 'password_mismatch' === $password_error ) {
+						esc_html_e( 'Password and confirm password do not match.', 'remember' );
+					} elseif ( 'weak_password' === $password_error ) {
+						esc_html_e( 'Please choose a stronger password (at least eight characters).', 'remember' );
+					} else {
+						esc_html_e( 'Please enter your current password, a new password, and the confirmation.', 'remember' );
 					}
 					?>
 				</p>
@@ -480,6 +540,27 @@ if ( ! empty( $selected_allergy_ids ) ) {
 					?>
 					<p class="remember-profile-audit-meta"><?php echo esc_html( implode( ' · ', $remember_audit_bits ) ); ?></p>
 				<?php endif; ?>
+			</div>
+
+			<div class="remember-form-section" id="remember-change-password">
+				<h3 class="remember-form-section-title"><?php esc_html_e( 'Change Password', 'remember' ); ?></h3>
+				<p class="remember-form-help"><?php esc_html_e( 'Leave these blank to keep your current password. A new password must be at least eight characters. Save Profile applies the change; you stay logged in.', 'remember' ); ?></p>
+				<div class="remember-form-row">
+					<div class="remember-form-col remember-form-col-full">
+						<label for="current_password" class="remember-form-label"><?php esc_html_e( 'Current password', 'remember' ); ?></label>
+						<input type="password" id="current_password" name="current_password" class="remember-form-control" autocomplete="current-password" value="">
+					</div>
+				</div>
+				<div class="remember-form-row">
+					<div class="remember-form-col">
+						<label for="new_password" class="remember-form-label"><?php esc_html_e( 'New password', 'remember' ); ?></label>
+						<input type="password" id="new_password" name="new_password" class="remember-form-control" autocomplete="new-password" minlength="8" value="">
+					</div>
+					<div class="remember-form-col">
+						<label for="new_password_confirm" class="remember-form-label"><?php esc_html_e( 'Confirm new password', 'remember' ); ?></label>
+						<input type="password" id="new_password_confirm" name="new_password_confirm" class="remember-form-control" autocomplete="new-password" minlength="8" value="">
+					</div>
+				</div>
 			</div>
 
 			<div class="remember-form-section">
@@ -654,7 +735,7 @@ if ( ! empty( $selected_allergy_ids ) ) {
 
 			<div class="remember-form-section">
 				<h3 class="remember-form-section-title"><?php esc_html_e( 'Clothing Sizes', 'remember' ); ?></h3>
-				<p class="remember-form-help"><?php esc_html_e( 'US men\'s sizes. Shirt and pants: S-6XL. Shoes: 6-15.', 'remember' ); ?></p>
+				<p class="remember-form-help"><?php echo esc_html( Remember_Clothing_Sizes::section_help() ); ?></p>
 				<div class="remember-form-row">
 					<div class="remember-form-col">
 						<label for="shirt_size" class="remember-form-label"><?php esc_html_e( 'Shirt', 'remember' ); ?></label>
@@ -707,20 +788,11 @@ if ( ! empty( $selected_allergy_ids ) ) {
 					<div class="remember-form-col remember-form-col-full">
 						<label for="interests" class="remember-form-label"><?php esc_html_e( 'Interests', 'remember' ); ?></label>
 						<?php
-						if ( ! wp_script_is( 'editor', 'enqueued' ) && ! wp_script_is( 'editor', 'done' ) ) {
-							wp_enqueue_editor();
-						}
-						wp_editor(
+						Remember_Profile_Fields::render_interests_editor(
 							$profile && isset( $profile->interests ) ? $profile->interests : '',
 							'interests',
-							array(
-								'textarea_name' => 'interests',
-								'textarea_rows' => 6,
-								'media_buttons' => false,
-								'teeny'         => true,
-								'quicktags'     => false,
-								'editor_class'  => 'remember-form-control',
-							)
+							'interests',
+							'remember-form-control'
 						);
 						?>
 					</div>
@@ -802,8 +874,14 @@ if ( ! empty( $selected_allergy_ids ) ) {
 		</form>
 	<?php else : ?>
 		<?php
-		$member = $member_model->get( $user->ID );
+		$member      = $member_model->get( $user->ID );
+		$password_ok = isset( $_GET['remember_password_updated'] ) && '1' === (string) wp_unslash( $_GET['remember_password_updated'] );
 		?>
+		<?php if ( $password_ok ) : ?>
+			<div class="remember-notice remember-success" role="status">
+				<p><?php esc_html_e( 'Your password has been updated.', 'remember' ); ?></p>
+			</div>
+		<?php endif; ?>
 		<div class="remember-profile-edit-header">
 			<?php if ( $member && ! empty( $member->photo_url ) ) : ?>
 				<div class="remember-profile-photo-preview remember-profile-photo-preview--header">
@@ -999,19 +1077,19 @@ if ( ! empty( $selected_allergy_ids ) ) {
 							<?php if ( ! empty( $profile->shirt_size ) ) : ?>
 								<div class="remember-profile-view-item">
 									<strong class="remember-profile-view-label"><?php esc_html_e( 'Shirt', 'remember' ); ?></strong>
-									<span class="remember-profile-view-value"><?php echo esc_html( $profile->shirt_size ); ?></span>
+									<span class="remember-profile-view-value"><?php echo esc_html( Remember_Clothing_Sizes::format_pair( 'shirt', $profile->shirt_size ) ); ?></span>
 								</div>
 							<?php endif; ?>
 							<?php if ( ! empty( $profile->pants_size ) ) : ?>
 								<div class="remember-profile-view-item">
 									<strong class="remember-profile-view-label"><?php esc_html_e( 'Pants', 'remember' ); ?></strong>
-									<span class="remember-profile-view-value"><?php echo esc_html( $profile->pants_size ); ?></span>
+									<span class="remember-profile-view-value"><?php echo esc_html( Remember_Clothing_Sizes::format_pair( 'pants', $profile->pants_size ) ); ?></span>
 								</div>
 							<?php endif; ?>
 							<?php if ( ! empty( $profile->shoe_size ) ) : ?>
 								<div class="remember-profile-view-item">
 									<strong class="remember-profile-view-label"><?php esc_html_e( 'Shoes', 'remember' ); ?></strong>
-									<span class="remember-profile-view-value"><?php echo esc_html( $profile->shoe_size ); ?></span>
+									<span class="remember-profile-view-value"><?php echo esc_html( Remember_Clothing_Sizes::format_pair( 'shoe', $profile->shoe_size ) ); ?></span>
 								</div>
 							<?php endif; ?>
 						</div>

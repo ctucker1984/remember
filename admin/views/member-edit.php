@@ -315,25 +315,16 @@ if ( $photo_max_bytes < 1 ) {
 			<th><label for="shoe_size"><?php esc_html_e( 'Shoe Size', 'remember' ); ?></label></th>
 			<td>
 				<?php echo Remember_Clothing_Sizes::dropdown( 'shoe', $shoe_size, 'shoe_size', 'shoe_size' ); ?>
-				<p class="description"><?php esc_html_e( 'US men\'s sizes. Shirt/pants: S-6XL. Shoes: 6-15.', 'remember' ); ?></p>
+				<p class="description"><?php echo esc_html( Remember_Clothing_Sizes::section_help() ); ?></p>
 			</td>
 		</tr>
 		<tr>
 			<th><label for="interests"><?php esc_html_e( 'Interests', 'remember' ); ?></label></th>
 			<td>
 				<?php
+				require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-fields.php';
 				$interests_value = $view_profile && isset( $view_profile->interests ) ? $view_profile->interests : '';
-				wp_editor(
-					$interests_value,
-					'interests',
-					array(
-						'textarea_name' => 'interests',
-						'textarea_rows' => 6,
-						'media_buttons' => false,
-						'teeny'         => true,
-						'quicktags'     => false,
-					)
-				);
+				Remember_Profile_Fields::render_interests_editor( $interests_value, 'interests', 'interests' );
 				?>
 			</td>
 		</tr>

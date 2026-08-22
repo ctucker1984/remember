@@ -322,15 +322,16 @@ require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remem
 						<th><?php esc_html_e( 'Clothing Sizes', 'remember' ); ?></th>
 						<td>
 							<?php
+							require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-clothing-sizes.php';
 							$size_bits = array();
 							if ( $view_profile && ! empty( $view_profile->shirt_size ) ) {
-								$size_bits[] = sprintf( /* translators: %s: shirt size */ __( 'Shirt: %s', 'remember' ), $view_profile->shirt_size );
+								$size_bits[] = sprintf( /* translators: %s: shirt size with available mapping */ __( 'Shirt: %s', 'remember' ), Remember_Clothing_Sizes::format_pair( 'shirt', $view_profile->shirt_size ) );
 							}
 							if ( $view_profile && ! empty( $view_profile->pants_size ) ) {
-								$size_bits[] = sprintf( /* translators: %s: pants size */ __( 'Pants: %s', 'remember' ), $view_profile->pants_size );
+								$size_bits[] = sprintf( /* translators: %s: pants size with available mapping */ __( 'Pants: %s', 'remember' ), Remember_Clothing_Sizes::format_pair( 'pants', $view_profile->pants_size ) );
 							}
 							if ( $view_profile && ! empty( $view_profile->shoe_size ) ) {
-								$size_bits[] = sprintf( /* translators: %s: shoe size */ __( 'Shoes: %s', 'remember' ), $view_profile->shoe_size );
+								$size_bits[] = sprintf( /* translators: %s: shoe size with available mapping */ __( 'Shoes: %s', 'remember' ), Remember_Clothing_Sizes::format_pair( 'shoe', $view_profile->shoe_size ) );
 							}
 							echo $size_bits
 								? esc_html( implode( ' · ', $size_bits ) )

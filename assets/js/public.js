@@ -554,9 +554,214 @@
 		initRequireOneCheckboxGroups();
 		initConditionalProfileQuestions();
 		initProfileCurrencyConfirm();
+		initInterestsLimitFallback();
+		hookTinymceAddEditor();
+		bindKnownInterestsEditors();
+		var tries = 0;
+		var timer = window.setInterval(function() {
+			tries += 1;
+			hookTinymceAddEditor();
+			bindKnownInterestsEditors();
+			if (tries >= 40) {
+				window.clearInterval(timer);
+			}
+		}, 250);
 		if (typeof window.rememberInitTimezoneComboboxes === 'function') {
 			window.rememberInitTimezoneComboboxes();
 		}
 	});
+
+	/**
+	 * Count Unicode code points (matches PHP mb_strlen for typical Interests text).
+	 *
+	 * @param {string} text
+	 * @return {number}
+	 */
+	function rememberInterestsCodepoints(text) {
+		if (!text) {
+			return 0;
+		}
+		if (typeof Array.from === 'function') {
+			return Array.from(text).length;
+		}
+		return text.length;
+	}
+
+	/**
+	 * Format "current / max characters" without depending on wp.i18n.
+	 *
+	 * @param {number} count
+	 * @param {number} max
+	 * @return {string}
+	 */
+	function rememberInterestsCountLabel(count, max, template) {
+		var label = template || '%1$s / %2$s characters';
+		return label.replace('%1$s', String(count)).replace('%2$s', String(max));
+	}
+
+	/**
+	 * Live character limit for Interests TinyMCE editors.
+	 *
+	 * @param {object} editor TinyMCE editor instance.
+	 * @return {void}
+	 */
+	function initInterestsLimitEditor(editor) {
+		if (!editor || !editor.id) {
+			return;
+		}
+		if (editor.id !== 'interests' && editor.id !== 'remember_reg_interests') {
+			return;
+		}
+		if (editor.rememberInterestsLimited) {
+			return;
+		}
+		editor.rememberInterestsLimited = true;
+
+		var $counter = $('.remember-interests-count[data-remember-interests-editor="' + editor.id + '"]');
+		var max = parseInt($counter.attr('data-remember-interests-max'), 10) || 2000;
+		var template = $counter.attr('data-remember-interests-template') || '';
+
+		function plainLen() {
+			return rememberInterestsCodepoints(editor.getContent({ format: 'text' }) || '');
+		}
+
+		function updateCounter() {
+			var len = plainLen();
+			$counter.text(rememberInterestsCountLabel(len, max, template));
+			$counter.toggleClass('is-over', len > max);
+		}
+
+		function isEditNav(e) {
+			if (!e) {
+				return false;
+			}
+			if (e.ctrlKey || e.metaKey || e.altKey) {
+				return true;
+			}
+			var key = e.key || '';
+			return (
+				key === 'Backspace' ||
+				key === 'Delete' ||
+				key === 'ArrowLeft' ||
+				key === 'ArrowRight' ||
+				key === 'ArrowUp' ||
+				key === 'ArrowDown' ||
+				key === 'Home' ||
+				key === 'End' ||
+				key === 'Tab' ||
+				key === 'Escape'
+			);
+		}
+
+		editor.on('keydown', function(e) {
+			if (isEditNav(e)) {
+				return;
+			}
+			if (plainLen() >= max) {
+				e.preventDefault();
+			}
+		});
+
+		editor.on('keyup', updateCounter);
+		editor.on('change', updateCounter);
+		editor.on('undo', updateCounter);
+		editor.on('redo', updateCounter);
+		editor.on('input', updateCounter);
+		editor.on('NodeChange', updateCounter);
+		editor.on('SetContent', updateCounter);
+
+		editor.on('paste', function() {
+			window.setTimeout(function() {
+				if (plainLen() <= max) {
+					updateCounter();
+					return;
+				}
+				if (editor.undoManager) {
+					editor.undoManager.undo();
+				}
+				updateCounter();
+			}, 0);
+		});
+
+		editor.on('init', updateCounter);
+		updateCounter();
+	}
+
+	window.rememberInitInterestsLimitEditor = initInterestsLimitEditor;
+
+	function hookTinymceAddEditor() {
+		if (!window.tinymce || typeof tinymce.on !== 'function') {
+			return false;
+		}
+		if (tinymce.rememberInterestsHooked) {
+			return true;
+		}
+		tinymce.rememberInterestsHooked = true;
+		tinymce.on('AddEditor', function(e) {
+			if (e && e.editor) {
+				initInterestsLimitEditor(e.editor);
+			}
+		});
+		return true;
+	}
+
+	function bindKnownInterestsEditors() {
+		if (!window.tinymce || typeof tinymce.get !== 'function') {
+			return;
+		}
+		['interests', 'remember_reg_interests'].forEach(function(id) {
+			var existing = tinymce.get(id);
+			if (existing) {
+				initInterestsLimitEditor(existing);
+			}
+		});
+	}
+
+	hookTinymceAddEditor();
+	$(document).on('tinymce-editor-init', function(event, editor) {
+		initInterestsLimitEditor(editor);
+	});
+
+	/**
+	 * Textarea fallback when TinyMCE is not active.
+	 *
+	 * @return {void}
+	 */
+	function initInterestsLimitFallback() {
+		$('textarea#interests, textarea#remember_reg_interests').each(function() {
+			var $area = $(this);
+			if ($area.closest('.wp-editor-wrap').find('.mce-tinymce').length) {
+				return;
+			}
+			var id = $area.attr('id');
+			var $counter = $('.remember-interests-count[data-remember-interests-editor="' + id + '"]');
+			if (!$counter.length) {
+				return;
+			}
+			var max = parseInt($counter.attr('data-remember-interests-max'), 10) || 2000;
+			var template = $counter.attr('data-remember-interests-template') || '';
+
+			function sync(fromUser) {
+				var value = $area.val() || '';
+				var len = rememberInterestsCodepoints(value);
+				if (fromUser && len > max) {
+					if (typeof Array.from === 'function') {
+						value = Array.from(value).slice(0, max).join('');
+					} else {
+						value = value.substring(0, max);
+					}
+					$area.val(value);
+					len = max;
+				}
+				$counter.text(rememberInterestsCountLabel(len, max, template));
+				$counter.toggleClass('is-over', len > max);
+			}
+
+			$area.on('input change', function() {
+				sync(true);
+			});
+			sync(false);
+		});
+	}
 
 })(jQuery);

@@ -62,6 +62,7 @@ class Remember_Database {
 			'allergies'                      => 'create_allergies_table',
 			'member_allergies'               => 'create_member_allergies_table',
 			'clothing_size_options'          => 'create_clothing_size_options_table',
+			'clothing_stock'                 => 'create_clothing_stock_table',
 			'medical_accommodations'         => 'create_medical_accommodations_table',
 			'member_medical_accommodations'  => 'create_member_medical_accommodations_table',
 			'roles'                          => 'create_roles_table',
@@ -290,9 +291,32 @@ class Remember_Database {
 			size_category ENUM('shirt','pants','shoe') NOT NULL,
 			size_code VARCHAR(20) NOT NULL,
 			is_active TINYINT(1) DEFAULT 1,
+			is_stocked TINYINT(1) DEFAULT 1,
+			issued_size_code VARCHAR(20) DEFAULT NULL,
 			sort_order INT(11) DEFAULT 0,
 			created_at DATETIME NOT NULL,
 			PRIMARY KEY (option_id),
+			UNIQUE KEY category_code (size_category, size_code),
+			KEY size_category (size_category)
+		) $charset_collate;";
+
+		dbDelta( $sql );
+	}
+
+	/**
+	 * Write-in stock sizes (what you actually have to issue). Qty is a later table.
+	 */
+	public function create_clothing_stock_table() {
+		$table_name      = $this->prefix . 'clothing_stock';
+		$charset_collate = $this->wpdb->get_charset_collate();
+
+		$sql = "CREATE TABLE $table_name (
+			stock_id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+			size_category ENUM('shirt','pants','shoe') NOT NULL,
+			size_code VARCHAR(20) NOT NULL,
+			sort_order INT(11) DEFAULT 0,
+			created_at DATETIME NOT NULL,
+			PRIMARY KEY (stock_id),
 			UNIQUE KEY category_code (size_category, size_code),
 			KEY size_category (size_category)
 		) $charset_collate;";

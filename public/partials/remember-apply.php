@@ -317,11 +317,11 @@ if ( ! $selected_event ) {
 				},
 				success: function(response) {
 					if (response.success && response.data && response.data.length > 0) {
-						var options = '<option value=""><?php esc_html_e( '-- Select Role --', 'remember' ); ?></option>';
+						$roleSelect.empty().append($('<option>', { value: '' }).text(<?php echo wp_json_encode( __( '-- Select Role --', 'remember' ) ); ?>));
 						$.each(response.data, function(index, role) {
-							options += '<option value="' + role.event_role_id + '">' + role.role_name + '</option>';
+							$roleSelect.append($('<option>', { value: String(role.event_role_id) }).text(role.role_name || ''));
 						});
-						$roleSelect.html(options).prop('disabled', false);
+						$roleSelect.prop('disabled', false);
 					} else {
 						$roleSelect.html('<option value=""><?php esc_html_e( 'No roles available. You may not have any event roles assigned, or this event has no roles matching your assigned roles.', 'remember' ); ?></option>').prop('disabled', true);
 					}
@@ -338,20 +338,67 @@ if ( ! $selected_event ) {
 				return;
 			}
 
-			var html = '';
+			$addonsContainer.empty();
 			$.each(addons, function(index, addon) {
-				var maxAttr = addon.max_quantity ? ' max="' + addon.max_quantity + '"' : '';
-				var maxHint = addon.max_quantity ? ' (max ' + addon.max_quantity + ')' : '';
-				html += '<div class="remember-addon-item" style="border:1px solid #ddd; padding:10px; margin-bottom:10px;">';
-				html += '<label style="display:block; margin-bottom:6px;"><input type="checkbox" class="remember-addon-toggle" data-addon-id="' + addon.merchandise_id + '" name="event_addons[' + addon.merchandise_id + '][selected]" value="1"> <strong>' + addon.merchandise_name + '</strong> - $' + addon.cost.toFixed(2) + ' <?php echo esc_js( __( 'subtotal', 'remember' ) ); ?></label>';
-				if (addon.description) {
-					html += '<p class="remember-form-help" style="margin:0 0 8px 0;">' + addon.description + '</p>';
+				var id = parseInt(addon.merchandise_id, 10);
+				if (!id) {
+					return;
 				}
-				html += '<label><?php echo esc_js( __( 'Quantity', 'remember' ) ); ?> <input type="number" class="small-text remember-addon-qty" name="event_addons[' + addon.merchandise_id + '][quantity]" value="1" min="1"' + maxAttr + ' disabled></label>';
-				html += '<span class="remember-form-help" style="margin-left:8px;">' + maxHint + '</span>';
-				html += '</div>';
+				var cost = Number(addon.cost);
+				if (isNaN(cost)) {
+					cost = 0;
+				}
+				var maxQty = parseInt(addon.max_quantity, 10);
+				if (isNaN(maxQty) || maxQty < 1) {
+					maxQty = 0;
+				}
+
+				var $item = $('<div>', {
+					'class': 'remember-addon-item',
+					css: { border: '1px solid #ddd', padding: '10px', marginBottom: '10px' }
+				});
+
+				var $label = $('<label>', { css: { display: 'block', marginBottom: '6px' } });
+				$label.append($('<input>', {
+					type: 'checkbox',
+					'class': 'remember-addon-toggle',
+					name: 'event_addons[' + id + '][selected]',
+					value: '1',
+					'data-addon-id': id
+				}));
+				$label.append(' ');
+				$label.append($('<strong>').text(addon.merchandise_name || ''));
+				$label.append(' - $' + cost.toFixed(2) + ' ' + <?php echo wp_json_encode( __( 'subtotal', 'remember' ) ); ?>);
+				$item.append($label);
+
+				if (addon.description) {
+					$item.append($('<p>', {
+						'class': 'remember-form-help',
+						css: { margin: '0 0 8px 0' }
+					}).text(addon.description));
+				}
+
+				var $qty = $('<input>', {
+					type: 'number',
+					'class': 'small-text remember-addon-qty',
+					name: 'event_addons[' + id + '][quantity]',
+					value: 1,
+					min: 1,
+					disabled: true
+				});
+				if (maxQty > 0) {
+					$qty.attr('max', maxQty);
+				}
+				$item.append($('<label>').text(<?php echo wp_json_encode( __( 'Quantity', 'remember' ) ); ?> + ' ').append($qty));
+				if (maxQty > 0) {
+					$item.append($('<span>', {
+						'class': 'remember-form-help',
+						css: { marginLeft: '8px' }
+					}).text(' (max ' + maxQty + ')'));
+				}
+
+				$addonsContainer.append($item);
 			});
-			$addonsContainer.html(html);
 		}
 
 		function loadEventAddons(selectedEventId, selectedRoleId) {

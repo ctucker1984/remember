@@ -2,6 +2,20 @@
 
 All notable changes to reMember are listed here. The current plugin version is in `remember.php` (`REMEMBER_VERSION`) and [GitHub Releases](https://github.com/ctucker1984/remember/releases).
 
+## 1.3.8
+
+- **Enhancement:** Clothing sizes keep the member’s actual size and show the inventory size that is available. Settings → Clothing has a write-in Stock table per category; **Available as** is filled from that, not the seeded body-size list. Dropdowns and staff views use labels like `XL (available L)`. Quantity is a later table related to Stock. Database 1.41.0. Closes [#31](https://github.com/ctucker1984/remember/issues/31).
+- **Fix:** Hide the Bluehost plugin’s “Login with Bluehost” button on `wp-login.php` so members use username and password. Does not replace WordPress login or block Bluehost Account Manager → Log in to WordPress. Filter `remember_hide_hosting_sso` to keep the button.
+- **Enhancement:** Nonced front-end Log out via Appearance → Menus (reMember box), a **Log out** block in the Site Editor Navigation, a Custom Link to `/remember-logout`, or `[remember_logout]`. The admin bar is hidden when the only WordPress role is Subscriber; other WP roles still see it. reMember roles do not affect the bar.
+- **Enhancement:** Members can change their password on Edit Profile (current, new, confirm under Basic Information) with Save Profile. Leave the fields blank to keep the current password. Closes [#27](https://github.com/ctucker1984/remember/issues/27).
+- **Security:** Event apply builds add-on names/descriptions and role labels as text, not HTML, so a product name cannot run markup in the member's browser. The dashboard already escaped these in PHP.
+- **Security:** CSV exports prefix cells that start with `=`, `+`, `-`, or `@` so Excel/LibreOffice will not treat member-controlled text as a formula. Re-import strips that prefix so phones and IM handles round-trip.
+- **Security:** Browser security headers on front, login, admin, and REST: `X-Content-Type-Options`, `X-Frame-Options: SAMEORIGIN`, `Referrer-Policy`, HSTS on HTTPS, and a WordPress-compatible Content-Security-Policy. Filter `remember_security_headers` to tighten or disable. Does not replace headers the host already sends.
+- **Security:** Unauthenticated `GET /wp-json/wp/v2/users` no longer returns login slugs. Editors/admins still can (block editor); everyone else gets 401.
+- **Security:** XML-RPC stays available for Jetpack and the WordPress mobile app (`system.multicall` included). Pingback methods, the X-Pingback header, and open pings are removed (SSRF). Multicall brute-force is a server concern (fail2ban / rate-limit / WAF), not a plugin 403.
+- **Security:** Debug logs no longer write to the public `/wp-content/debug.log` URL. reMember stores them in a web-blocked uploads directory, Apache/LiteSpeed deny HTTP GET of `debug.log`, and PHP’s error_log is redirected there when `WP_DEBUG_LOG` is the boolean default.
+- **Enhancement:** Interests is limited to 2,000 characters (plain text) on registration, profile edit, and admin member edit, with a live counter. Closes [#29](https://github.com/ctucker1984/remember/issues/29).
+
 ## 1.3.7
 
 - **Enhancement:** The event card printout uses a larger square photo at top left, with the display name and the first four opted-in custom fields in the column beside it. Remaining event-card fields continue in two columns under that row, then Interests.
