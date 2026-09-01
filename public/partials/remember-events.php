@@ -157,18 +157,14 @@ $status_colors = array(
 								</span>
 							<?php elseif ( 'open' === $event->status && Remember_Member::is_vetted_member( $current_member ) ) : ?>
 								<?php
-								// No application yet, event is open, member is vetted - show apply button
-								$created_pages = Remember_Page_Creator::get_created_pages();
-								$apply_page_id = isset( $created_pages['apply'] ) ? $created_pages['apply'] : 0;
-								
-								if ( $apply_page_id ) {
-									$apply_url = add_query_arg( 'event_id', $event->event_id, get_permalink( $apply_page_id ) );
-								} else {
-									// Fallback: try to find page with apply shortcode
-									$apply_url = add_query_arg( 'event_id', $event->event_id, home_url( '/apply/' ) );
-								}
+								require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-audit.php';
+								$apply_url   = Remember_Profile_Audit::get_apply_url( (int) $event->event_id );
+								$profile_url = Remember_Profile_Audit::get_profile_edit_url_for_apply( (int) $event->event_id );
 								?>
-								<a href="<?php echo esc_url( $apply_url ); ?>" class="remember-button remember-button-primary">
+								<a href="<?php echo esc_url( $apply_url ); ?>"
+									class="remember-button remember-button-primary remember-apply-gate"
+									data-profile-url="<?php echo esc_url( $profile_url ); ?>"
+									data-apply-url="<?php echo esc_url( $apply_url ); ?>">
 									<?php esc_html_e( 'Apply for Event', 'remember' ); ?>
 								</a>
 							<?php elseif ( 'open' === $event->status ) : ?>

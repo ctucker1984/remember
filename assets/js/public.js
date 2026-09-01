@@ -548,12 +548,88 @@
 		});
 	}
 
+	function applyGateI18n(key, fallback) {
+		if (typeof rememberPublic !== 'undefined' && rememberPublic.i18n && rememberPublic.i18n[key]) {
+			return rememberPublic.i18n[key];
+		}
+		return fallback;
+	}
+
+	function closeApplyGate($dialog) {
+		if (!$dialog || !$dialog.length) {
+			return;
+		}
+		$dialog.removeAttr('open');
+		$dialog.find('[data-remember-apply-continue]').off('click.rememberApplyGate');
+		$dialog.find('[data-remember-apply-cancel]').off('click.rememberApplyGate');
+	}
+
+	function initApplyGate() {
+		$(document).on('click', 'a.remember-apply-gate', function(e) {
+			var $link = $(this);
+			var profileUrl = $link.attr('data-profile-url') || '';
+			if (!profileUrl) {
+				return;
+			}
+			e.preventDefault();
+
+			var $dialog = $('#remember-apply-gate-dialog');
+			if (!$dialog.length) {
+				$dialog = $('<dialog>', {
+					id: 'remember-apply-gate-dialog',
+					class: 'remember-apply-gate-dialog',
+					'aria-labelledby': 'remember-apply-gate-title'
+				});
+				$dialog.append(
+					$('<h2>', { id: 'remember-apply-gate-title', class: 'remember-apply-gate-title' }).text(applyGateI18n('applyGateTitle', 'Confirm your profile first')),
+					$('<p>', { class: 'remember-apply-gate-body' }).text(applyGateI18n('applyGateBody', '')),
+					$('<div>', { class: 'remember-apply-gate-actions' }).append(
+						$('<button>', {
+							type: 'button',
+							class: 'remember-button remember-button-primary',
+							'data-remember-apply-continue': '1'
+						}).text(applyGateI18n('applyGateContinue', 'Review profile')),
+						$('<button>', {
+							type: 'button',
+							class: 'remember-button remember-button-secondary',
+							'data-remember-apply-cancel': '1'
+						}).text(applyGateI18n('applyGateCancel', 'Cancel'))
+					)
+				);
+				$('body').append($dialog);
+			}
+
+			$dialog.find('[data-remember-apply-continue]').off('click.rememberApplyGate').on('click.rememberApplyGate', function() {
+				window.location.href = profileUrl;
+			});
+			$dialog.find('[data-remember-apply-cancel]').off('click.rememberApplyGate').on('click.rememberApplyGate', function() {
+				if (typeof $dialog[0].close === 'function') {
+					$dialog[0].close();
+				} else {
+					closeApplyGate($dialog);
+				}
+			});
+
+			if (typeof $dialog[0].showModal === 'function') {
+				$dialog[0].showModal();
+			} else {
+				$dialog.attr('open', 'open');
+			}
+			$dialog.find('[data-remember-apply-continue]').trigger('focus');
+		});
+
+		$(document).on('cancel', '#remember-apply-gate-dialog', function() {
+			closeApplyGate($(this));
+		});
+	}
+
 	$(function() {
 		initDisplayNameNicknameSync();
 		initProfilePhotoCropper();
 		initRequireOneCheckboxGroups();
 		initConditionalProfileQuestions();
 		initProfileCurrencyConfirm();
+		initApplyGate();
 		initInterestsLimitFallback();
 		hookTinymceAddEditor();
 		bindKnownInterestsEditors();

@@ -17,6 +17,7 @@ require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remem
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-image-uploader.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-clothing-sizes.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-fields.php';
+require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-audit.php';
 
 $user = wp_get_current_user();
 $member_model = new Remember_Member();
@@ -54,21 +55,21 @@ if ( isset( $_POST['remember_profile_action'] ) && check_admin_referer( 'remembe
 	$pq_answers   = Remember_Profile_Questions::collect_from_request();
 	$missing      = Remember_Profile_Fields::first_missing_required( $profile_data, $meta_data );
 	if ( '' !== $missing ) {
-		wp_safe_redirect( add_query_arg( array( 'edit' => '1', 'remember_profile_error' => $missing ) ) );
+		wp_safe_redirect( Remember_Profile_Audit::with_return_args( add_query_arg( array( 'edit' => '1', 'remember_profile_error' => $missing ) ) ) );
 		exit;
 	}
 	$missing_pq = Remember_Profile_Questions::first_missing_required( $pq_answers );
 	if ( null !== $missing_pq ) {
-		wp_safe_redirect( add_query_arg( array( 'edit' => '1', 'remember_profile_error' => 'custom_field' ) ) );
+		wp_safe_redirect( Remember_Profile_Audit::with_return_args( add_query_arg( array( 'edit' => '1', 'remember_profile_error' => 'custom_field' ) ) ) );
 		exit;
 	}
 	$missing_health = Remember_Profile_Fields::first_missing_required_health_catalog();
 	if ( '' !== $missing_health ) {
-		wp_safe_redirect( add_query_arg( array( 'edit' => '1', 'remember_profile_error' => $missing_health ) ) );
+		wp_safe_redirect( Remember_Profile_Audit::with_return_args( add_query_arg( array( 'edit' => '1', 'remember_profile_error' => $missing_health ) ) ) );
 		exit;
 	}
 	if ( Remember_Profile_Fields::interests_is_over_limit( $profile_data['interests'] ) ) {
-		wp_safe_redirect( add_query_arg( array( 'edit' => '1', 'remember_profile_error' => 'interests_too_long' ) ) );
+		wp_safe_redirect( Remember_Profile_Audit::with_return_args( add_query_arg( array( 'edit' => '1', 'remember_profile_error' => 'interests_too_long' ) ) ) );
 		exit;
 	}
 
@@ -91,7 +92,7 @@ if ( isset( $_POST['remember_profile_action'] ) && check_admin_referer( 'remembe
 			}
 		}
 		if ( '' !== $password_error ) {
-			wp_safe_redirect( add_query_arg( array( 'edit' => '1', 'remember_password_error' => $password_error ), remove_query_arg( array( 'remember_password_updated', 'remember_profile_error' ) ) ) );
+			wp_safe_redirect( Remember_Profile_Audit::with_return_args( add_query_arg( array( 'edit' => '1', 'remember_password_error' => $password_error ), remove_query_arg( array( 'remember_password_updated', 'remember_profile_error' ) ) ) ) );
 			exit;
 		}
 	}
@@ -200,11 +201,17 @@ if ( isset( $_POST['remember_profile_action'] ) && check_admin_referer( 'remembe
 	// Redirect: stay on edit if photo failed so the member can retry.
 	if ( ! empty( $photo_error ) ) {
 		set_transient( 'remember_profile_photo_error_' . $user->ID, $photo_error, MINUTE_IN_SECONDS );
-		wp_safe_redirect( add_query_arg( 'edit', '1' ) );
+		wp_safe_redirect( Remember_Profile_Audit::with_return_args( add_query_arg( 'edit', '1' ) ) );
 		exit;
 	}
 
-	$redirect_url = remove_query_arg( array( 'edit', 'remember_photo_error', 'remember_password_error', 'remember_profile_error' ) );
+	$return_url = Remember_Profile_Audit::consume_return_url();
+	if ( '' !== $return_url ) {
+		wp_safe_redirect( $return_url );
+		exit;
+	}
+
+	$redirect_url = remove_query_arg( array( 'edit', 'remember_photo_error', 'remember_password_error', 'remember_profile_error', 'remember_return_event', 'remember_return_apply' ) );
 	if ( $change_password ) {
 		$redirect_url = add_query_arg( 'remember_password_updated', '1', $redirect_url );
 	} else {
@@ -345,6 +352,11 @@ if ( ! empty( $selected_allergy_ids ) ) {
 		?>
 		<div class="remember-profile-edit-header">
 			<h2><?php esc_html_e( 'Edit Profile', 'remember' ); ?></h2>
+			<?php if ( Remember_Profile_Audit::requested_return_event_id() > 0 || Remember_Profile_Audit::requested_return_apply() ) : ?>
+				<p class="remember-form-help" style="margin: 0.5em 0 0;">
+					<?php esc_html_e( 'Save this profile to continue your event application. You can save even if nothing changed — that still confirms it is current.', 'remember' ); ?>
+				</p>
+			<?php endif; ?>
 		</div>
 		<?php if ( $profile_error ) : ?>
 			<div class="remember-notice remember-error" role="alert">
@@ -393,6 +405,14 @@ if ( ! empty( $selected_allergy_ids ) ) {
 		<form method="post" action="" class="remember-profile-form-modern" enctype="multipart/form-data">
 			<?php wp_nonce_field( 'remember_profile_action', 'remember_profile_nonce' ); ?>
 			<input type="hidden" name="remember_profile_action" value="update">
+			<?php
+			$remember_return_event = Remember_Profile_Audit::requested_return_event_id();
+			if ( $remember_return_event > 0 ) :
+				?>
+				<input type="hidden" name="remember_return_event" value="<?php echo esc_attr( (string) $remember_return_event ); ?>">
+			<?php elseif ( Remember_Profile_Audit::requested_return_apply() ) : ?>
+				<input type="hidden" name="remember_return_apply" value="1">
+			<?php endif; ?>
 
 			<div class="remember-form-section">
 				<h3 class="remember-form-section-title"><?php esc_html_e( 'Profile Photo', 'remember' ); ?></h3>
