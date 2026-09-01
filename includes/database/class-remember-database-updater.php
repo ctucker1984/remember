@@ -1364,6 +1364,18 @@ class Remember_Database_Updater {
 			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.41.0' ) );
 		}
 
+		// Update to 2.0.0 — profile-level notes (member-visible + admin-private).
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '2.0.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '2.0.0' ) );
+
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-database.php';
+			$db = new Remember_Database();
+			$db->create_profile_notes_table();
+
+			update_option( 'remember_db_version', '2.0.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '2.0.0' ) );
+		}
+
 		// Always re-ensure health catalogs (idempotent). Catches sites that stalled mid-migration
 		// or activated before catalog seed rows were added.
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-seeder.php';

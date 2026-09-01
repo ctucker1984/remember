@@ -1205,6 +1205,28 @@ if ( ! empty( $selected_allergy_ids ) ) {
 						</div>
 					</div>
 				<?php endif; ?>
+
+				<?php
+				require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-profile-note.php';
+				$member_profile_notes = ( new Remember_Profile_Note() )->get_for_member( (int) $user->ID, false );
+				if ( ! empty( $member_profile_notes ) ) :
+					?>
+					<div class="remember-form-section remember-profile-notes">
+						<h3 class="remember-form-section-title"><?php esc_html_e( 'Notes from staff', 'remember' ); ?></h3>
+						<ul class="remember-profile-notes-list">
+							<?php foreach ( $member_profile_notes as $p_note ) : ?>
+								<?php $p_note_author = get_user_by( 'ID', $p_note->author_id ); ?>
+								<li>
+									<div class="remember-profile-notes-meta">
+										<strong><?php echo $p_note_author ? esc_html( $p_note_author->display_name ) : esc_html__( 'Staff', 'remember' ); ?></strong>
+										<span class="remember-note-date"><?php echo esc_html( date_i18n( get_option( 'date_format' ), strtotime( $p_note->created_at ) ) ); ?></span>
+									</div>
+									<div class="remember-profile-notes-body"><?php echo wp_kses_post( nl2br( esc_html( $p_note->note_content ) ) ); ?></div>
+								</li>
+							<?php endforeach; ?>
+						</ul>
+					</div>
+				<?php endif; ?>
 			</div>
 		<?php else : ?>
 			<p class="remember-description"><?php esc_html_e( 'No profile information yet. Edit your profile to get started.', 'remember' ); ?></p>

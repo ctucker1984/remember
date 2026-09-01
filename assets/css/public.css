@@ -1485,6 +1485,36 @@ button.remember-button-primary:disabled {
 	font-size: 0.875em;
 }
 
+.remember-profile-notes-list {
+	list-style: none;
+	padding: 0;
+	margin: 0;
+}
+
+.remember-profile-notes-list li {
+	padding: 0.75em 0;
+	border-bottom: 1px solid #eee;
+}
+
+.remember-profile-notes-list li:last-child {
+	border-bottom: none;
+}
+
+.remember-profile-notes-meta {
+	display: flex;
+	justify-content: space-between;
+	gap: 0.75em;
+	flex-wrap: wrap;
+	margin-bottom: 0.35em;
+	font-size: 0.875em;
+}
+
+.remember-profile-notes-body {
+	font-size: 0.9375em;
+	line-height: 1.5;
+	color: #1d2327;
+}
+
 .remember-view-more {
 	margin-top: 0.5em;
 	text-align: center;

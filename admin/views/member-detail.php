@@ -457,6 +457,55 @@ require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remem
 			<?php endif; ?>
 		</div>
 
+		<!-- Profile notes (not vetting case notes). Confidential print only; stay off the event card. -->
+		<div class="remember-member-detail-section remember-member-detail-section--full remember-print-confidential-only">
+			<div class="remember-section-heading">
+				<h3><?php esc_html_e( 'Profile Notes', 'remember' ); ?></h3>
+			</div>
+			<p class="description"><?php esc_html_e( 'These notes belong to the profile, not a vetting case. Unchecked notes are visible to the member.', 'remember' ); ?></p>
+			<?php if ( current_user_can( 'remember_update_members' ) ) : ?>
+				<div class="remember-no-print" style="margin: 12px 0 16px; padding: 12px; background: #f9f9f9; border: 1px solid #ddd; border-radius: 4px;">
+					<h4 style="margin: 0 0 8px 0; font-size: 13px; font-weight: 600;"><?php esc_html_e( 'Add Note', 'remember' ); ?></h4>
+					<form method="post" action="">
+						<?php wp_nonce_field( 'remember_member_action', 'remember_member_nonce' ); ?>
+						<input type="hidden" name="remember_member_action" value="add_profile_note">
+						<input type="hidden" name="member_id" value="<?php echo esc_attr( (string) $view_member_id ); ?>">
+						<textarea name="note_content" class="large-text" rows="3" required placeholder="<?php esc_attr_e( 'Enter a profile note…', 'remember' ); ?>" style="margin-bottom: 8px;"></textarea>
+						<div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
+							<label style="font-size: 12px;">
+								<input type="checkbox" name="is_admin_only" value="1">
+								<?php esc_html_e( 'Private to admin', 'remember' ); ?>
+							</label>
+							<input type="submit" class="button button-small button-primary" value="<?php esc_attr_e( 'Add Note', 'remember' ); ?>">
+						</div>
+					</form>
+				</div>
+			<?php endif; ?>
+			<?php if ( ! empty( $view_profile_notes ) ) : ?>
+				<?php foreach ( $view_profile_notes as $p_note ) : ?>
+					<?php $p_note_author = get_user_by( 'ID', $p_note->author_id ); ?>
+					<div style="margin-bottom: 12px; padding: 10px; background: #f9f9f9; border-left: 3px solid <?php echo ! empty( $p_note->is_admin_only ) ? '#dc3232' : '#2271b1'; ?>; border-radius: 2px;">
+						<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 12px; gap: 8px; flex-wrap: wrap;">
+							<strong style="font-size: 13px;"><?php echo $p_note_author ? esc_html( $p_note_author->display_name ) : esc_html__( 'Unknown', 'remember' ); ?></strong>
+							<span class="description" style="font-size: 11px; color: #666;">
+								<?php echo esc_html( date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), strtotime( $p_note->created_at ) ) ); ?>
+								<?php if ( ! empty( $p_note->is_admin_only ) ) : ?>
+									<span style="color: #dc3232;">(<?php esc_html_e( 'Private to admin', 'remember' ); ?>)</span>
+								<?php else : ?>
+									<span>(<?php esc_html_e( 'Visible to member', 'remember' ); ?>)</span>
+								<?php endif; ?>
+							</span>
+						</div>
+						<div style="color: #333; font-size: 13px; line-height: 1.5;">
+							<?php echo wp_kses_post( nl2br( esc_html( $p_note->note_content ) ) ); ?>
+						</div>
+					</div>
+				<?php endforeach; ?>
+			<?php else : ?>
+				<p class="description"><?php esc_html_e( 'No profile notes yet.', 'remember' ); ?></p>
+			<?php endif; ?>
+		</div>
+
 		<!-- Vetting Cases (Full Width) -->
 		<?php if ( isset( $view_vetting_cases ) && current_user_can( 'remember_read_vetting' ) ) : ?>
 			<div class="remember-member-detail-section remember-member-detail-section--full remember-no-print">

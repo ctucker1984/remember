@@ -83,6 +83,7 @@ class Remember_Database {
 			'vetting'                        => 'create_vetting_table',
 			'vetting_collaborators'          => 'create_vetting_collaborators_table',
 			'vetting_notes'                  => 'create_vetting_notes_table',
+			'profile_notes'                  => 'create_profile_notes_table',
 			'notification_settings'          => 'create_notification_settings_table',
 			'profile_questions'              => 'create_profile_questions_table',
 			'profile_question_responses'     => 'create_profile_question_responses_table',
@@ -861,6 +862,28 @@ class Remember_Database {
 			PRIMARY KEY (note_id),
 			KEY vetting_id (vetting_id),
 			KEY member_id (member_id)
+		) $charset_collate;";
+
+		dbDelta( $sql );
+	}
+
+	/**
+	 * Profile notes (member-visible or private to admin). Separate from vetting notes.
+	 */
+	public function create_profile_notes_table() {
+		$table_name      = $this->prefix . 'profile_notes';
+		$charset_collate = $this->wpdb->get_charset_collate();
+
+		$sql = "CREATE TABLE $table_name (
+			note_id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+			member_id BIGINT(20) UNSIGNED NOT NULL,
+			author_id BIGINT(20) UNSIGNED NOT NULL,
+			note_content TEXT NOT NULL,
+			is_admin_only TINYINT(1) DEFAULT 0,
+			created_at DATETIME NOT NULL,
+			PRIMARY KEY (note_id),
+			KEY member_id (member_id),
+			KEY author_id (author_id)
 		) $charset_collate;";
 
 		dbDelta( $sql );

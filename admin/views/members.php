@@ -604,6 +604,29 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 			}
 		}
 		$view_member_id = $member_id;
+	} elseif ( $member_id > 0 && 'add_profile_note' === $action ) {
+		if ( ! current_user_can( 'remember_update_members' ) ) {
+			wp_die( __( 'You do not have sufficient permissions to perform this action.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+		}
+		require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-profile-note.php';
+		$note_content  = isset( $_POST['note_content'] ) ? wp_unslash( $_POST['note_content'] ) : '';
+		$is_admin_only = ! empty( $_POST['is_admin_only'] );
+		$note_model    = new Remember_Profile_Note();
+		$note_id       = $note_model->add( $member_id, get_current_user_id(), $note_content, $is_admin_only );
+		if ( $note_id ) {
+			Remember_Logger::info(
+				'Profile note added',
+				array(
+					'member_id'     => $member_id,
+					'note_id'       => $note_id,
+					'is_admin_only' => $is_admin_only ? 1 : 0,
+				)
+			);
+			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Profile note added.', 'remember' ) . '</p></div>';
+		} else {
+			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Enter a note before saving.', 'remember' ) . '</p></div>';
+		}
+		$view_member_id = $member_id;
 	}
 }
 
@@ -741,6 +764,9 @@ if ( $view_member_id > 0 ) {
 	
 	// Get all vetting cases for this member
 	$view_vetting_cases = $vetting_model->get_all_by_member( $view_member_id );
+
+	require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-profile-note.php';
+	$view_profile_notes = ( new Remember_Profile_Note() )->get_for_member( $view_member_id, true );
 	
 	// Update member status based on last completed vetting case
 	if ( ! empty( $view_vetting_cases ) ) {
