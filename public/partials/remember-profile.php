@@ -194,6 +194,8 @@ if ( isset( $_POST['remember_profile_action'] ) && check_admin_referer( 'remembe
 
 	if ( $change_password ) {
 		wp_set_password( $new_password, $user->ID );
+		require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-duplicates.php';
+		Remember_Profile_Duplicates::stamp_password( $user->ID );
 		wp_set_current_user( $user->ID );
 		wp_set_auth_cookie( $user->ID, true, is_ssl() );
 	}

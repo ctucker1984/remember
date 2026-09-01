@@ -15,6 +15,10 @@ if ( ! defined( 'WPINC' ) ) {
 // Also: $view_social_media, $view_dietary_restrictions, $view_medical_accommodations, $view_allergies
 // Check if editing
 $is_editing = isset( $_GET['edit'] ) && $_GET['edit'] === '1';
+$is_merged  = isset( $view_member->status ) && 'merged' === $view_member->status;
+if ( $is_merged ) {
+	$is_editing = false;
+}
 if ( $is_editing && ! current_user_can( 'remember_update_members' ) ) {
 	wp_die( __( 'You do not have sufficient permissions to edit members.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
 }
@@ -61,6 +65,22 @@ require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remem
 	<p class="remember-print-denied-note" hidden>
 		<?php esc_html_e( 'You do not have permission to print this member profile.', 'remember' ); ?>
 	</p>
+	<?php if ( $is_merged ) : ?>
+		<?php
+		require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-duplicates.php';
+		$merged_into = absint( get_user_meta( $view_member_id, Remember_Profile_Duplicates::MERGED_META, true ) );
+		?>
+		<div class="notice notice-warning remember-no-print" style="margin: 0 0 16px;">
+			<p>
+				<?php esc_html_e( 'This profile was merged and can no longer log in.', 'remember' ); ?>
+				<?php if ( $merged_into > 0 ) : ?>
+					<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-members&view=' . $merged_into ) ); ?>">
+						<?php echo esc_html( sprintf( __( 'Open remaining profile (ID %d)', 'remember' ), $merged_into ) ); ?>
+					</a>
+				<?php endif; ?>
+			</p>
+		</div>
+	<?php endif; ?>
 
 	<!-- Member Header -->
 	<div class="remember-member-detail-card">
@@ -166,7 +186,7 @@ require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remem
 					</div>
 				<?php endif; ?>
 				<?php if ( ! $is_editing ) : ?>
-					<?php if ( current_user_can( 'remember_update_members' ) ) : ?>
+					<?php if ( ! $is_merged && current_user_can( 'remember_update_members' ) ) : ?>
 						<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-members&view=' . $view_member_id . '&edit=1' ) ); ?>" class="button button-primary">
 							<?php esc_html_e( 'Edit Profile', 'remember' ); ?>
 						</a>

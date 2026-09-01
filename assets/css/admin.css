@@ -1972,3 +1972,38 @@
 		margin-bottom: 0;
 	}
 }
+
+.remember-duplicates .remember-dup-survivor {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 16px 32px;
+	margin: 12px 0 20px;
+}
+
+.remember-duplicates .remember-dup-compare th,
+.remember-duplicates .remember-dup-compare td {
+	vertical-align: top;
+}
+
+.remember-duplicates .remember-dup-dates {
+	font-weight: 400;
+	font-size: 12px;
+	color: #646970;
+	margin-top: 6px;
+}
+
+.remember-duplicates .remember-dup-pick {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+}
+
+.remember-duplicates .remember-dup-photo {
+	max-width: 80px;
+	height: auto;
+	border-radius: 4px;
+}
+
+.remember-duplicates .remember-dup-dismiss-form {
+	margin-top: 8px;
+}

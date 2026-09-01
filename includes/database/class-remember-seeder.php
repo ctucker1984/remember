@@ -625,6 +625,10 @@ class Remember_Seeder {
 			'payment_recorded',
 			'payment_due_reminder',
 			'vetting_collaborator_invited',
+			'duplicate_hit_admin',
+			'duplicate_hit_member',
+			'duplicate_merged_survivor',
+			'duplicate_merged_locked',
 		);
 
 		foreach ( $notification_types as $type ) {

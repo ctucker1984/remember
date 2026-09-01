@@ -37,6 +37,7 @@ $status_labels = array(
 	'vetted'          => __( 'Vetted', 'remember' ),
 	'rejected'        => __( 'Rejected', 'remember' ),
 	'inactive'        => __( 'Inactive', 'remember' ),
+	'merged'          => __( 'Merged', 'remember' ),
 );
 $status_colors = array(
 	'pending_vetting' => '#f0b849',
@@ -45,6 +46,7 @@ $status_colors = array(
 	'vetted'          => '#46b450',
 	'rejected'        => '#dc3232',
 	'inactive'        => '#72777c',
+	'merged'          => '#50575e',
 );
 
 // Check if viewing a specific member
@@ -1159,6 +1161,7 @@ if ( $view_member_id > 0 ) {
 					<td>
 						<select id="status" name="status" class="regular-text">
 							<?php foreach ( $status_labels as $status => $label ) : ?>
+								<?php if ( 'merged' === $status ) { continue; } ?>
 								<option value="<?php echo esc_attr( $status ); ?>" <?php selected( 'pending_vetting', $status ); ?>>
 									<?php echo esc_html( $label ); ?>
 								</option>
@@ -1218,6 +1221,7 @@ if ( $view_member_id > 0 ) {
 						<td>
 							<select id="convert_status" name="convert_status" class="regular-text">
 								<?php foreach ( $status_labels as $status => $label ) : ?>
+									<?php if ( 'merged' === $status ) { continue; } ?>
 									<option value="<?php echo esc_attr( $status ); ?>" <?php selected( 'pending_vetting', $status ); ?>>
 										<?php echo esc_html( $label ); ?>
 									</option>

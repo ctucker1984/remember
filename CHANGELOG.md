@@ -6,6 +6,7 @@ All notable changes to reMember are listed here. The current plugin version is i
 
 - **Enhancement:** Applying for an event first shows a dialog: review and save the profile (changes optional), then return to the application. The “my profile is current” confirmation remains required. Closes [#33](https://github.com/ctucker1984/remember/issues/33).
 - **Enhancement:** Staff can append profile notes on a member record, separate from vetting case notes. Notes are either visible to the member on their profile or private to admin. Confidential print includes them; the event card does not. Database 2.0.0. Closes [#34](https://github.com/ctucker1984/remember/issues/34).
+- **Enhancement:** Daily duplicate-profile scan (legal names, city, state, display names, IM/social handles). Staff with **Merge Duplicate Profiles** get a review link (seeded to System Administrator; grant it on Roles). Both members are notified without seeing the other profile. Admins pick field values side by side (with save dates), keep the later-entered password, then merge — the discarded profile is locked out. Pairs can be marked not-duplicates so they do not re-flag. Database 2.1.0 / 2.1.1. Closes [#35](https://github.com/ctucker1984/remember/issues/35).
 
 ## 1.4.0
 

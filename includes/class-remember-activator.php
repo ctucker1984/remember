@@ -137,6 +137,9 @@ class Remember_Activator {
 			Remember_Logger::debug( 'Scheduled QuickBooks sync cron job' );
 		}
 
+		require_once plugin_dir_path( __FILE__ ) . 'utilities/class-remember-profile-duplicates.php';
+		Remember_Profile_Duplicates::maybe_schedule();
+
 		// Defer rewrite flush to next request so activation does not hit gateway/proxy timeouts.
 		update_option( 'remember_activation_needs_rewrite_flush', '1' );
 

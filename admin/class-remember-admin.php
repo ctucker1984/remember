@@ -309,6 +309,23 @@ class Remember_Admin {
 			array( $this, 'display_members_page' )
 		);
 
+		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-profile-duplicates.php';
+		$dup_label = __( 'Duplicate Profiles', 'remember' );
+		if ( current_user_can( Remember_Profile_Duplicates::MERGE_CAP ) ) {
+			$pending = Remember_Profile_Duplicates::pending_count();
+			if ( $pending > 0 ) {
+				$dup_label .= ' <span class="awaiting-mod">' . esc_html( (string) $pending ) . '</span>';
+			}
+		}
+		add_submenu_page(
+			'remember',
+			__( 'Duplicate Profiles', 'remember' ),
+			$dup_label,
+			Remember_Profile_Duplicates::MERGE_CAP,
+			'remember-duplicates',
+			array( $this, 'display_duplicates_page' )
+		);
+
 		// Events
 		add_submenu_page(
 			'remember',
@@ -562,6 +579,19 @@ class Remember_Admin {
 		
 		require_once plugin_dir_path( __FILE__ ) . '../includes/models/class-member.php';
 		include_once 'views/members.php';
+	}
+
+	/**
+	 * Duplicate profile review and merge.
+	 *
+	 * @return void
+	 */
+	public function display_duplicates_page() {
+		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-profile-duplicates.php';
+		if ( ! current_user_can( Remember_Profile_Duplicates::MERGE_CAP ) ) {
+			wp_die( __( 'You do not have sufficient permissions to access this page.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+		}
+		include_once 'views/duplicates.php';
 	}
 
 	/**
