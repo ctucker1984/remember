@@ -144,7 +144,7 @@ $hit = $hit_id > 0 ? Remember_Profile_Duplicates::get_hit( $hit_id ) : null;
 <div class="wrap remember-duplicates">
 	<h1><?php esc_html_e( 'Duplicate Profiles', 'remember' ); ?></h1>
 	<p class="description">
-		<?php esc_html_e( 'Possible duplicates are found from matching or similar legal names, city, state, display names, or IM/social handles. Affirm a match and pick field values, or mark the pair as not duplicates so they will not re-flag. The later-entered password is always kept. Assign Merge Duplicate Profiles on Roles to grant this screen; System Administrator has it by default.', 'remember' ); ?>
+		<?php esc_html_e( 'Possible duplicates are found from matching or similar legal names, location (city/state count as one), display names, or IM/social handles. Affirm a match and pick field values, or mark the pair as not duplicates so they will not re-flag. The later-entered password is always kept. Assign Merge Duplicate Profiles on Roles to grant this screen; System Administrator has it by default.', 'remember' ); ?>
 	</p>
 
 	<?php if ( $hit ) : ?>

@@ -483,7 +483,8 @@ class Remember_Profile_Duplicates {
 	}
 
 	/**
-	 * Match dimensions. A hit needs an exact handle match, or two overlapping dimensions.
+	 * Match dimensions. A hit needs a handle match, or two overlapping dimensions.
+	 * City and state together count as one location dimension so same-town pairs do not flood.
 	 *
 	 * @param object $a        Member row A.
 	 * @param object $b        Member row B.
@@ -514,23 +515,26 @@ class Remember_Profile_Duplicates {
 				'b'     => (string) $b->legal_last_name,
 			);
 		}
-		if ( self::similar( isset( $a->address_city ) ? $a->address_city : '', isset( $b->address_city ) ? $b->address_city : '', 90 ) ) {
+		$city_match  = self::similar( isset( $a->address_city ) ? $a->address_city : '', isset( $b->address_city ) ? $b->address_city : '', 90 );
+		$state_match = self::similar( isset( $a->address_state ) ? $a->address_state : '', isset( $b->address_state ) ? $b->address_state : '', 90 );
+		if ( $city_match || $state_match ) {
 			++$dimension;
-			$hits[] = array(
-				'field' => 'address_city',
-				'label' => __( 'City', 'remember' ),
-				'a'     => (string) $a->address_city,
-				'b'     => (string) $b->address_city,
-			);
-		}
-		if ( self::similar( isset( $a->address_state ) ? $a->address_state : '', isset( $b->address_state ) ? $b->address_state : '', 90 ) ) {
-			++$dimension;
-			$hits[] = array(
-				'field' => 'address_state',
-				'label' => __( 'State', 'remember' ),
-				'a'     => (string) $a->address_state,
-				'b'     => (string) $b->address_state,
-			);
+			if ( $city_match ) {
+				$hits[] = array(
+					'field' => 'address_city',
+					'label' => __( 'City', 'remember' ),
+					'a'     => (string) $a->address_city,
+					'b'     => (string) $b->address_city,
+				);
+			}
+			if ( $state_match ) {
+				$hits[] = array(
+					'field' => 'address_state',
+					'label' => __( 'State', 'remember' ),
+					'a'     => (string) $a->address_state,
+					'b'     => (string) $b->address_state,
+				);
+			}
 		}
 		if ( self::similar( isset( $a->display_name ) ? $a->display_name : '', isset( $b->display_name ) ? $b->display_name : '' ) ) {
 			++$dimension;
