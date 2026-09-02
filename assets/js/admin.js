@@ -10,22 +10,76 @@
 	$(document).ready(function() {
 		// Handle tab clicks (Settings page only — do not intercept other nav-tab-wrappers).
 		var $settingsTabs = $('.remember-settings #remember-main-settings > .nav-tab-wrapper a');
+
+		function notificationCategoryFromHash(hash) {
+			var match = /^#notifications(?:-(.+))?$/.exec(hash || '');
+			if (!match) {
+				return null;
+			}
+			return match[1] || '';
+		}
+
+		function showNotificationSubtab(category) {
+			var $links = $('.remember-notification-subtab-link');
+			if (!$links.length) {
+				return '';
+			}
+			var $link = category ? $links.filter('[data-category="' + category + '"]') : $();
+			if (!$link.length) {
+				$link = $links.first();
+			}
+			var activeCategory = $link.data('category');
+			$links.removeClass('nav-tab-active');
+			$link.addClass('nav-tab-active');
+			$('.remember-notification-panel').hide();
+			$('#notification-panel-' + activeCategory).show();
+			$('#remember-notification-category').val(activeCategory);
+			return activeCategory ? '#notifications-' + activeCategory : '#notifications';
+		}
+
+		function activateSettingsTab(target) {
+			var parentTarget = target;
+			var notifCategory = notificationCategoryFromHash(target);
+			if (notifCategory !== null) {
+				parentTarget = '#notifications';
+			}
+
+			$settingsTabs.removeClass('nav-tab-active');
+			$settingsTabs.filter('[href="' + parentTarget + '"]').addClass('nav-tab-active');
+
+			$('.remember-settings-tab').hide();
+			$(parentTarget).show();
+
+			var hash = parentTarget;
+			if (parentTarget === '#notifications') {
+				hash = showNotificationSubtab(notifCategory);
+			}
+
+			if (history.pushState) {
+				history.pushState(null, null, hash);
+			}
+		}
+
 		$settingsTabs.on('click', function(e) {
 			e.preventDefault();
 			var target = $(this).attr('href');
-			
-			$settingsTabs.removeClass('nav-tab-active');
-			$(this).addClass('nav-tab-active');
-			
-			$('.remember-settings-tab').hide();
-			$(target).show();
-			
-			// Update URL hash without scrolling
-			if (history.pushState) {
-				history.pushState(null, null, target);
+			if (target === '#notifications') {
+				var currentNotif = notificationCategoryFromHash(window.location.hash);
+				if (currentNotif) {
+					target = '#notifications-' + currentNotif;
+				} else {
+					var $first = $('.remember-notification-subtab-link').first();
+					target = $first.length ? $first.attr('href') : '#notifications';
+				}
 			}
+			activateSettingsTab(target);
 		});
-		
+
+		$(document).on('click', '.remember-notification-subtab-link', function(e) {
+			e.preventDefault();
+			activateSettingsTab($(this).attr('href'));
+		});
+
 		// Handle URL hash on page load
 		if (window.location.hash) {
 			var hash = window.location.hash;
@@ -33,9 +87,13 @@
 			if (hash === '#social-media' || hash === '#im-platforms') {
 				hash = '#platforms';
 			}
-			var $tab = $('.remember-settings #remember-main-settings > .nav-tab-wrapper a[href="' + hash + '"]');
-			if ($tab.length) {
-				$tab.trigger('click');
+			if (notificationCategoryFromHash(hash) !== null) {
+				activateSettingsTab(hash);
+			} else {
+				var $tab = $('.remember-settings #remember-main-settings > .nav-tab-wrapper a[href="' + hash + '"]');
+				if ($tab.length) {
+					$tab.trigger('click');
+				}
 			}
 		} else {
 			// Support ?tab=xero (and similar) from OAuth redirect URIs.

@@ -249,6 +249,19 @@
 	margin-bottom: 20px;
 }
 
+.remember-settings .remember-notification-subtabs {
+	margin: 0 0 16px;
+	padding-top: 0;
+}
+
+.remember-settings .remember-notification-card {
+	margin-bottom: 25px;
+	padding: 15px;
+	background: #f9f9f9;
+	border: 1px solid #ddd;
+	border-radius: 3px;
+}
+
 /* Role capability matrix: modules as rows, Create / Read / Edit / Delete as columns. */
 .remember-cap-matrix-wrap {
 	margin-top: 10px;

@@ -352,6 +352,9 @@ if ( isset( $_POST['remember_settings_action'] ) && check_admin_referer( 'rememb
 			}
 			Remember_Logger::info( 'Notification settings updated' );
 			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Notification settings saved successfully.', 'remember' ) . '</p></div>';
+			if ( isset( $_POST['notification_category'] ) ) {
+				$remember_open_notification_category = sanitize_key( wp_unslash( $_POST['notification_category'] ) );
+			}
 		}
 	}
 	
@@ -1975,46 +1978,68 @@ $im_platforms = Remember_Im_Platforms::get_all();
 			<form method="post" action="">
 				<?php wp_nonce_field( 'remember_settings_action', 'remember_settings_nonce' ); ?>
 				<input type="hidden" name="remember_settings_action" value="update_notifications">
-				
-				<p class="description" style="margin-bottom: 20px;">
+				<input type="hidden" name="notification_category" id="remember-notification-category" value="vetting">
+
+				<p class="description" style="margin-bottom: 12px;">
 					<?php esc_html_e( 'Configure email notifications and templates. Enable or disable specific notification types and customize the email subject and body templates.', 'remember' ); ?>
 				</p>
-				
+
 				<?php
 				$category_labels = array(
-					'vetting'      => __( 'Vetting Notifications', 'remember' ),
-					'applications' => __( 'Application Notifications', 'remember' ),
-					'billing'      => __( 'Billing Notifications', 'remember' ),
-					'general'      => __( 'General Notifications', 'remember' ),
+					'vetting'      => __( 'Vetting', 'remember' ),
+					'applications' => __( 'Applications', 'remember' ),
+					'billing'      => __( 'Billing', 'remember' ),
+					'general'      => __( 'General', 'remember' ),
 				);
-				
-				foreach ( $category_labels as $category => $label ) :
-					if ( ! isset( $notifications_by_category[ $category ] ) ) {
-						continue;
+				$visible_categories = array();
+				foreach ( $category_labels as $category => $label ) {
+					if ( isset( $notifications_by_category[ $category ] ) ) {
+						$visible_categories[ $category ] = $label;
 					}
+				}
 				?>
-					<div style="margin-bottom: 30px; padding: 20px; background: #fff; border: 1px solid #ccd0d4; border-radius: 4px;">
-						<h3 style="margin-top: 0; padding-bottom: 10px; border-bottom: 1px solid #ddd;">
-							<?php echo esc_html( $label ); ?>
-						</h3>
-						
-						<?php foreach ( $notifications_by_category[ $category ] as $notification ) : 
+
+				<?php if ( ! empty( $visible_categories ) ) : ?>
+					<nav class="nav-tab-wrapper remember-notification-subtabs" aria-label="<?php esc_attr_e( 'Notification groups', 'remember' ); ?>">
+						<?php
+						$sub_i = 0;
+						foreach ( $visible_categories as $category => $label ) :
+							++$sub_i;
+							?>
+							<a href="#notifications-<?php echo esc_attr( $category ); ?>"
+								class="nav-tab remember-notification-subtab-link<?php echo 1 === $sub_i ? ' nav-tab-active' : ''; ?>"
+								data-category="<?php echo esc_attr( $category ); ?>">
+								<?php echo esc_html( $label ); ?>
+							</a>
+						<?php endforeach; ?>
+					</nav>
+				<?php endif; ?>
+
+				<?php
+				$panel_i = 0;
+				foreach ( $visible_categories as $category => $label ) :
+					++$panel_i;
+					?>
+					<div id="notification-panel-<?php echo esc_attr( $category ); ?>"
+						class="remember-notification-panel"
+						<?php echo 1 === $panel_i ? '' : ' style="display: none;"'; ?>>
+						<?php
+						foreach ( $notifications_by_category[ $category ] as $notification ) :
 							$type_id = 'notification_' . esc_attr( $notification->notification_type );
-							// Use defaults if templates are empty
-							$subject_template = ! empty( $notification->subject_template ) 
-								? $notification->subject_template 
+							$subject_template = ! empty( $notification->subject_template )
+								? $notification->subject_template
 								: Remember_Notification_Setting::get_default_subject( $notification->notification_type );
-							$body_template = ! empty( $notification->body_template ) 
-								? $notification->body_template 
+							$body_template = ! empty( $notification->body_template )
+								? $notification->body_template
 								: Remember_Notification_Setting::get_default_body( $notification->notification_type );
-						?>
-							<div style="margin-bottom: 25px; padding: 15px; background: #f9f9f9; border: 1px solid #ddd; border-radius: 3px;">
+							?>
+							<div class="remember-notification-card">
 								<div style="display: flex; align-items: center; margin-bottom: 10px;">
 									<label class="remember-toggle-switch" style="margin-right: 10px;">
-										<input type="checkbox" 
+										<input type="checkbox"
 										       id="<?php echo esc_attr( $type_id ); ?>_enabled"
-										       name="notification_settings[<?php echo esc_attr( $notification->notification_type ); ?>][enabled]" 
-										       value="1" 
+										       name="notification_settings[<?php echo esc_attr( $notification->notification_type ); ?>][enabled]"
+										       value="1"
 										       <?php checked( $notification->is_enabled, 1 ); ?>>
 										<span class="remember-toggle-slider"></span>
 									</label>
@@ -2025,7 +2050,7 @@ $im_platforms = Remember_Im_Platforms::get_all();
 								<p class="description" style="margin: 5px 0 15px 25px; font-size: 13px;">
 									<?php echo esc_html( Remember_Notification_Setting::get_type_description( $notification->notification_type ) ); ?>
 								</p>
-								
+
 								<div style="margin-left: 25px;">
 									<table class="form-table" style="margin: 0;">
 										<tr>
@@ -2033,11 +2058,11 @@ $im_platforms = Remember_Im_Platforms::get_all();
 												<label for="<?php echo esc_attr( $type_id ); ?>_subject"><?php esc_html_e( 'Subject', 'remember' ); ?></label>
 											</th>
 											<td style="padding: 10px 0;">
-												<input type="text" 
-												       id="<?php echo esc_attr( $type_id ); ?>_subject" 
-												       name="notification_settings[<?php echo esc_attr( $notification->notification_type ); ?>][subject]" 
-												       value="<?php echo esc_attr( $subject_template ); ?>" 
-												       class="regular-text" 
+												<input type="text"
+												       id="<?php echo esc_attr( $type_id ); ?>_subject"
+												       name="notification_settings[<?php echo esc_attr( $notification->notification_type ); ?>][subject]"
+												       value="<?php echo esc_attr( $subject_template ); ?>"
+												       class="regular-text"
 												       placeholder="<?php esc_attr_e( 'Email subject line', 'remember' ); ?>">
 												<p class="description" style="margin-top: 5px; font-size: 12px;">
 													<?php esc_html_e( 'Available variables: {member_name}, {event_name}, {application_id}, {vetting_id}, {amount}, {date}', 'remember' ); ?>
@@ -2049,10 +2074,10 @@ $im_platforms = Remember_Im_Platforms::get_all();
 												<label for="<?php echo esc_attr( $type_id ); ?>_body"><?php esc_html_e( 'Body', 'remember' ); ?></label>
 											</th>
 											<td style="padding: 10px 0;">
-												<textarea id="<?php echo esc_attr( $type_id ); ?>_body" 
-												          name="notification_settings[<?php echo esc_attr( $notification->notification_type ); ?>][body]" 
-												          class="large-text" 
-												          rows="6" 
+												<textarea id="<?php echo esc_attr( $type_id ); ?>_body"
+												          name="notification_settings[<?php echo esc_attr( $notification->notification_type ); ?>][body]"
+												          class="large-text"
+												          rows="6"
 												          placeholder="<?php esc_attr_e( 'Email body template', 'remember' ); ?>"><?php echo esc_textarea( $body_template ); ?></textarea>
 												<p class="description" style="margin-top: 5px; font-size: 12px;">
 													<?php esc_html_e( 'HTML is allowed. Use the same variables as in the subject line.', 'remember' ); ?>
@@ -2065,7 +2090,7 @@ $im_platforms = Remember_Im_Platforms::get_all();
 						<?php endforeach; ?>
 					</div>
 				<?php endforeach; ?>
-				
+
 				<?php submit_button( __( 'Save Notification Settings', 'remember' ) ); ?>
 			</form>
 		</div>
@@ -2224,6 +2249,12 @@ jQuery(document).ready(function($) {
 
 	<?php if ( ! empty( $remember_open_clothing_tab ) ) : ?>
 	$('.remember-settings #remember-main-settings > .nav-tab-wrapper a[href="#clothing"]').trigger('click');
+	<?php endif; ?>
+	<?php if ( ! empty( $remember_open_notification_category ) ) : ?>
+	if (history.replaceState) {
+		history.replaceState(null, null, '#notifications-<?php echo esc_js( $remember_open_notification_category ); ?>');
+	}
+	$('.remember-settings #remember-main-settings > .nav-tab-wrapper a[href="#notifications"]').trigger('click');
 	<?php endif; ?>
 });
 </script>
