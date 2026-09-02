@@ -41,7 +41,7 @@ class Remember_Profile_Duplicates {
 	}
 
 	/**
-	 * Emails for staff whose roles include Merge Duplicate Profiles.
+	 * Emails for reMember System Administrators (not WordPress administrators).
 	 *
 	 * @return string[]
 	 */
@@ -51,9 +51,9 @@ class Remember_Profile_Duplicates {
 			$wpdb->prepare(
 				"SELECT DISTINCT mr.member_id
 				FROM {$wpdb->prefix}remember_member_roles mr
-				INNER JOIN {$wpdb->prefix}remember_role_capabilities rc ON rc.role_id = mr.role_id
-				WHERE rc.capability = %s",
-				self::MERGE_CAP
+				INNER JOIN {$wpdb->prefix}remember_roles r ON r.role_id = mr.role_id
+				WHERE r.role_name = %s",
+				'System Administrator'
 			)
 		);
 		$emails = array();
@@ -579,7 +579,8 @@ class Remember_Profile_Duplicates {
 	}
 
 	/**
-	 * Emails when a new pending hit is stored. Members never receive the other profile's data.
+	 * Emails reMember System Administrators when a new pending hit is stored.
+	 * Members are not emailed on scan (false positives); they are emailed when a merge completes.
 	 *
 	 * @param int   $hit_id  Hit ID.
 	 * @param int   $id_a    Member A.
@@ -610,21 +611,6 @@ class Remember_Profile_Duplicates {
 					'member_b_id' => (string) $id_b,
 				),
 				$email
-			);
-		}
-
-		foreach ( array( $id_a, $id_b ) as $member_id ) {
-			$user = get_userdata( (int) $member_id );
-			if ( ! $user || ! is_email( $user->user_email ) ) {
-				continue;
-			}
-			Remember_Notifications::send(
-				'duplicate_hit_member',
-				array(
-					'member_name' => $user->display_name,
-					'date'        => date_i18n( get_option( 'date_format' ) ),
-				),
-				$user->user_email
 			);
 		}
 

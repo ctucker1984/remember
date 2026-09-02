@@ -144,8 +144,8 @@ class Remember_Notification_Setting extends Remember_Base_Model {
 			'payment_recorded'              => __( 'Sent when a payment is recorded.', 'remember' ),
 			'payment_due_reminder'          => __( 'Sent as a reminder when payment is due (also used for balance-due blasts).', 'remember' ),
 			'vetting_collaborator_invited'  => __( 'Sent when a collaborator is invited to a vetting case.', 'remember' ),
-			'duplicate_hit_admin'           => __( 'Sent to staff with Merge Duplicate Profiles when two profiles look like duplicates.', 'remember' ),
-			'duplicate_hit_member'          => __( 'Sent to both members when their profiles are flagged as possible duplicates. Does not include the other profile’s data.', 'remember' ),
+			'duplicate_hit_admin'           => __( 'Sent to reMember System Administrators when two profiles look like duplicates.', 'remember' ),
+			'duplicate_hit_member'          => __( 'Not sent on scan. Kept for templates; members are emailed when a merge completes instead.', 'remember' ),
 			'duplicate_merged_survivor'     => __( 'Sent to the remaining profile after a merge.', 'remember' ),
 			'duplicate_merged_locked'       => __( 'Sent to the locked-out profile after a merge.', 'remember' ),
 		);
