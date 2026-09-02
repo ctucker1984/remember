@@ -908,6 +908,7 @@ class Remember_Database {
 			reviewed_at DATETIME DEFAULT NULL,
 			survivor_id BIGINT(20) UNSIGNED DEFAULT NULL,
 			locked_id BIGINT(20) UNSIGNED DEFAULT NULL,
+			undo_snapshot LONGTEXT DEFAULT NULL,
 			created_at DATETIME NOT NULL,
 			PRIMARY KEY (hit_id),
 			UNIQUE KEY member_pair (member_a_id, member_b_id),
@@ -945,6 +946,24 @@ class Remember_Database {
 		$this->wpdb->query(
 			"ALTER TABLE {$table_name} MODIFY COLUMN status ENUM('pending', 'dismissed', 'merged', 'closed') DEFAULT 'pending'"
 		);
+	}
+
+	/**
+	 * Store a pre-merge snapshot so a merge can be undone (existing installs).
+	 *
+	 * @return void
+	 */
+	public function add_duplicate_hit_undo_snapshot() {
+		$table_name = $this->prefix . 'profile_duplicate_hits';
+		$exists     = $this->wpdb->get_var( $this->wpdb->prepare( 'SHOW TABLES LIKE %s', $table_name ) );
+		if ( $exists !== $table_name ) {
+			return;
+		}
+		$col = $this->wpdb->get_var( $this->wpdb->prepare( "SHOW COLUMNS FROM {$table_name} LIKE %s", 'undo_snapshot' ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		if ( $col ) {
+			return;
+		}
+		$this->wpdb->query( "ALTER TABLE {$table_name} ADD COLUMN undo_snapshot LONGTEXT DEFAULT NULL AFTER locked_id" );
 	}
 
 	/**

@@ -1438,6 +1438,18 @@ class Remember_Database_Updater {
 			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '2.1.2' ) );
 		}
 
+		// Update to 2.1.3 — pre-merge snapshot for undo.
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '2.1.3', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '2.1.3' ) );
+
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-database.php';
+			$db = new Remember_Database();
+			$db->add_duplicate_hit_undo_snapshot();
+
+			update_option( 'remember_db_version', '2.1.3' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '2.1.3' ) );
+		}
+
 		// Always re-ensure health catalogs (idempotent). Catches sites that stalled mid-migration
 		// or activated before catalog seed rows were added.
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-seeder.php';

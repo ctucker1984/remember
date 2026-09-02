@@ -2004,6 +2004,17 @@
 	border-radius: 4px;
 }
 
-.remember-duplicates .remember-dup-dismiss-form {
+.remember-duplicates .remember-dup-dismiss-form,
+.remember-duplicates .remember-dup-undo-form {
 	margin-top: 8px;
+}
+
+.remember-duplicates .remember-dup-roles {
+	margin: 12px 0 20px;
+	max-width: 960px;
+}
+
+.remember-duplicates .remember-dup-role-fixed {
+	display: inline-block;
+	max-width: 28em;
 }

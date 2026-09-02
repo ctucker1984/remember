@@ -129,12 +129,30 @@ if ( isset( $_POST['remember_dup_action'] ) && check_admin_referer( 'remember_du
 				}
 			}
 		}
-		$result = Remember_Profile_Duplicates::merge( $post_hit, $survivor_id, $choices );
+		$keep_roles = array();
+		if ( isset( $_POST['keep_role'] ) && is_array( $_POST['keep_role'] ) ) {
+			foreach ( wp_unslash( $_POST['keep_role'] ) as $role_id ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+				$role_id = absint( $role_id );
+				if ( $role_id > 0 ) {
+					$keep_roles[] = $role_id;
+				}
+			}
+		}
+		$result = Remember_Profile_Duplicates::merge( $post_hit, $survivor_id, $choices, $keep_roles );
 		if ( is_wp_error( $result ) ) {
 			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html( $result->get_error_message() ) . '</p></div>';
 		} else {
-			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Profiles merged. The discarded profile can no longer log in.', 'remember' ) . '</p></div>';
-			$hit_id = 0;
+			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Profiles merged. The discarded profile can no longer log in. You can undo this merge from the review below.', 'remember' ) . '</p></div>';
+			$hit_id = $post_hit;
+		}
+	} elseif ( 'undo' === $action && $post_hit > 0 ) {
+		$result = Remember_Profile_Duplicates::undo( $post_hit );
+		if ( is_wp_error( $result ) ) {
+			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html( $result->get_error_message() ) . '</p></div>';
+			$hit_id = $post_hit;
+		} else {
+			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Merge undone. Both profiles are restored as they were before the merge. Members were not emailed.', 'remember' ) . '</p></div>';
+			$hit_id = $post_hit;
 		}
 	}
 }
@@ -144,7 +162,7 @@ $hit = $hit_id > 0 ? Remember_Profile_Duplicates::get_hit( $hit_id ) : null;
 <div class="wrap remember-duplicates">
 	<h1><?php esc_html_e( 'Duplicate Profiles', 'remember' ); ?></h1>
 	<p class="description">
-		<?php esc_html_e( 'Possible duplicates are found from matching or similar legal names, location (city/state count as one), display names, or IM/social handles. Affirm a match and pick field values, or mark the pair as not duplicates so they will not re-flag. The later-entered password is always kept. Assign Merge Duplicate Profiles on Roles to grant this screen; System Administrator has it by default. reMember System Administrators are emailed new hits; members are emailed only after a merge.', 'remember' ); ?>
+		<?php esc_html_e( 'Possible duplicates are found from matching or similar legal names, location (city/state count as one), display names, or IM/social handles. Affirm a match and pick field values and roles, or mark the pair as not duplicates so they will not re-flag. The later-entered password is always kept. Merged profiles cannot request a password reset. A merge can be undone from that review (later edits to the remaining profile are lost). Assign Merge Duplicate Profiles on Roles to grant this screen; System Administrator has it by default. reMember System Administrators are emailed new hits; members are emailed only after a merge.', 'remember' ); ?>
 	</p>
 
 	<?php if ( $hit ) : ?>
@@ -199,7 +217,7 @@ $hit = $hit_id > 0 ? Remember_Profile_Duplicates::get_hit( $hit_id ) : null;
 				<input type="hidden" name="remember_dup_action" value="merge">
 
 				<h2><?php esc_html_e( 'Which profile remains?', 'remember' ); ?></h2>
-				<p class="description"><?php esc_html_e( 'The other profile is locked out after the merge. Roles, health options, extra social handles, custom fields, applications, payments, vetting, and profile notes move onto the remaining profile when they do not conflict.', 'remember' ); ?></p>
+				<p class="description"><?php esc_html_e( 'The other profile is locked out after the merge. Health options, extra social handles, custom fields, applications, payments, vetting, and profile notes move onto the remaining profile when they do not conflict. Choose which roles stay on the remaining profile below.', 'remember' ); ?></p>
 				<fieldset class="remember-dup-survivor">
 					<label>
 						<input type="radio" name="survivor_id" value="<?php echo esc_attr( (string) $hit->member_a_id ); ?>" <?php checked( $default_survivor, 'a' ); ?>>
@@ -280,8 +298,28 @@ $hit = $hit_id > 0 ? Remember_Profile_Duplicates::get_hit( $hit_id ) : null;
 						</tr>
 					</thead>
 					<tbody>
-						<?php foreach ( $fields as $field => $label ) : ?>
-							<?php
+						<?php
+						$can_emergency = current_user_can( 'remember_access_emergency_contact' );
+						$emergency_keys = Remember_Profile_Duplicates::emergency_fields();
+						$emergency_shown = false;
+						foreach ( $fields as $field => $label ) :
+							if ( in_array( $field, $emergency_keys, true ) ) {
+								if ( ! $can_emergency ) {
+									if ( $emergency_shown ) {
+										continue;
+									}
+									$emergency_shown = true;
+									?>
+									<tr>
+										<th scope="row"><?php esc_html_e( 'Emergency contact', 'remember' ); ?></th>
+										<td colspan="2">
+											<?php esc_html_e( 'Hidden. You do not have Access Emergency Contact. The remaining profile keeps its current emergency-contact values.', 'remember' ); ?>
+										</td>
+									</tr>
+									<?php
+									continue;
+								}
+							}
 							$val_a = Remember_Profile_Duplicates::snapshot_display( $snap_a, $field );
 							$val_b = Remember_Profile_Duplicates::snapshot_display( $snap_b, $field );
 							$pick  = remember_dup_default_side( $val_a, $val_b, $updated_a, $updated_b, $default_survivor );
@@ -327,6 +365,62 @@ $hit = $hit_id > 0 ? Remember_Profile_Duplicates::get_hit( $hit_id ) : null;
 					</tbody>
 				</table>
 
+				<?php
+				$role_rows = Remember_Profile_Duplicates::combined_role_rows( $snap_a, $snap_b );
+				?>
+				<h2><?php esc_html_e( 'Roles on the remaining profile', 'remember' ); ?></h2>
+				<?php if ( empty( $role_rows ) ) : ?>
+					<p class="description"><?php esc_html_e( 'Neither profile has reMember roles.', 'remember' ); ?></p>
+				<?php else : ?>
+					<p class="description"><?php esc_html_e( 'Check the roles that should remain after the merge. Roles you cannot assign stay only if the remaining profile already has them; they are never copied from the locked profile.', 'remember' ); ?></p>
+					<table class="widefat striped remember-dup-roles">
+						<thead>
+							<tr>
+								<th><?php esc_html_e( 'Role', 'remember' ); ?></th>
+								<th><?php echo esc_html( $name_a ); ?></th>
+								<th><?php echo esc_html( $name_b ); ?></th>
+								<th><?php esc_html_e( 'Keep on remaining profile', 'remember' ); ?></th>
+							</tr>
+						</thead>
+						<tbody>
+							<?php foreach ( $role_rows as $role_row ) : ?>
+								<?php
+								$role_id    = (int) $role_row['role_id'];
+								$can_assign = ! empty( $role_row['can_assign'] );
+								$on_a       = ! empty( $role_row['on_a'] );
+								$on_b       = ! empty( $role_row['on_b'] );
+								$default_on = $on_a || $on_b;
+								?>
+								<tr
+									class="remember-dup-role"
+									data-on-a="<?php echo $on_a ? '1' : '0'; ?>"
+									data-on-b="<?php echo $on_b ? '1' : '0'; ?>"
+									data-can-assign="<?php echo $can_assign ? '1' : '0'; ?>"
+								>
+									<td>
+										<?php echo esc_html( $role_row['role_name'] ); ?>
+										<?php if ( ! empty( $role_row['is_event_role'] ) ) : ?>
+											<span class="description"><?php esc_html_e( '(event)', 'remember' ); ?></span>
+										<?php endif; ?>
+									</td>
+									<td><?php echo $on_a ? esc_html__( 'Yes', 'remember' ) : esc_html__( 'No', 'remember' ); ?></td>
+									<td><?php echo $on_b ? esc_html__( 'Yes', 'remember' ) : esc_html__( 'No', 'remember' ); ?></td>
+									<td>
+										<?php if ( $can_assign ) : ?>
+											<label>
+												<input type="checkbox" name="keep_role[]" value="<?php echo esc_attr( (string) $role_id ); ?>" <?php checked( $default_on ); ?>>
+												<?php esc_html_e( 'Keep', 'remember' ); ?>
+											</label>
+										<?php else : ?>
+											<span class="remember-dup-role-fixed description"></span>
+										<?php endif; ?>
+									</td>
+								</tr>
+							<?php endforeach; ?>
+						</tbody>
+					</table>
+				<?php endif; ?>
+
 				<p class="submit">
 					<button type="submit" class="button button-primary"><?php esc_html_e( 'Merge profiles', 'remember' ); ?></button>
 				</p>
@@ -340,6 +434,37 @@ $hit = $hit_id > 0 ? Remember_Profile_Duplicates::get_hit( $hit_id ) : null;
 					<button type="submit" class="button"><?php esc_html_e( 'Not duplicates', 'remember' ); ?></button>
 				</p>
 			</form>
+			<script>
+			(function () {
+				var keepIfRemaining = <?php echo wp_json_encode( __( 'Kept if the remaining profile already has it. You cannot assign this role.', 'remember' ) ); ?>;
+				var notCopied = <?php echo wp_json_encode( __( 'Will not be added from the locked profile. You cannot assign this role.', 'remember' ) ); ?>;
+				var idA = <?php echo wp_json_encode( (string) $hit->member_a_id ); ?>;
+				function survivorSide() {
+					var checked = document.querySelector('input[name="survivor_id"]:checked');
+					if (!checked) {
+						return 'a';
+					}
+					return checked.value === idA ? 'a' : 'b';
+				}
+				function refresh() {
+					var side = survivorSide();
+					document.querySelectorAll('.remember-dup-role').forEach(function (row) {
+						if (row.getAttribute('data-can-assign') === '1') {
+							return;
+						}
+						var el = row.querySelector('.remember-dup-role-fixed');
+						if (!el) {
+							return;
+						}
+						el.textContent = row.getAttribute('data-on-' + side) === '1' ? keepIfRemaining : notCopied;
+					});
+				}
+				document.querySelectorAll('input[name="survivor_id"]').forEach(function (input) {
+					input.addEventListener('change', refresh);
+				});
+				refresh();
+			})();
+			</script>
 		<?php else : ?>
 			<p>
 				<?php
@@ -358,6 +483,23 @@ $hit = $hit_id > 0 ? Remember_Profile_Duplicates::get_hit( $hit_id ) : null;
 				}
 				?>
 			</p>
+			<?php if ( 'merged' === $hit->status ) : ?>
+				<?php if ( ! empty( $hit->undo_snapshot ) ) : ?>
+					<form method="post" action="" class="remember-dup-undo-form" onsubmit="return confirm('<?php echo esc_js( __( 'Undo this merge? Both profiles return to how they were immediately before the merge. Any edits made to the remaining profile after the merge will be lost. Members will not be emailed.', 'remember' ) ); ?>');">
+						<?php wp_nonce_field( 'remember_dup_action', 'remember_dup_nonce' ); ?>
+						<input type="hidden" name="hit_id" value="<?php echo esc_attr( (string) $hit->hit_id ); ?>">
+						<input type="hidden" name="remember_dup_action" value="undo">
+						<p class="description">
+							<?php esc_html_e( 'Undo restores both logins, passwords, fields, and roles from the snapshot taken at merge time. Applications, payments, vetting, and notes go back to the profile that originally had them. Members are not emailed.', 'remember' ); ?>
+						</p>
+						<p>
+							<button type="submit" class="button"><?php esc_html_e( 'Undo merge', 'remember' ); ?></button>
+						</p>
+					</form>
+				<?php else : ?>
+					<p class="description"><?php esc_html_e( 'This merge was completed before undo snapshots existed, so it cannot be reversed automatically.', 'remember' ); ?></p>
+				<?php endif; ?>
+			<?php endif; ?>
 		<?php endif; ?>
 
 		<p>
