@@ -2,6 +2,13 @@
 
 All notable changes to reMember are listed here. The current plugin version is in `remember.php` (`REMEMBER_VERSION`) and [GitHub Releases](https://github.com/ctucker1984/remember/releases).
 
+## 2.0.0
+
+- **Enhancement:** Applying for an event first shows a dialog: review and save the profile (changes optional), then return to the application. The “my profile is current” confirmation remains required. Closes [#33](https://github.com/ctucker1984/remember/issues/33).
+- **Enhancement:** Settings → Notifications uses sub-tabs (Vetting, Applications, Billing, General) instead of one long list.
+- **Enhancement:** Staff can append profile notes on a member record, separate from vetting case notes. Notes are either visible to the member on their profile or private to wp-admin (not shown on the member front end). Confidential print includes them; the event card does not. Database 2.0.0. Closes [#34](https://github.com/ctucker1984/remember/issues/34).
+- **Enhancement:** Daily duplicate-profile scan (legal names, location, display names, IM/social handles). City and state count as one location match so same-town pairs do not flood. Staff with **Merge Duplicate Profiles** get a review link (seeded to System Administrator; grant it on Roles; WordPress administrators keep full access). reMember System Administrators are emailed new hits; members are emailed only after a merge (no other-profile data). Admins pick field values and which roles survive (roles they cannot assign stay on the remaining profile only if it already had them). Emergency contact is hidden without Access Emergency Contact; the remaining profile keeps its existing values. The later-entered password is always kept; merged (locked) profiles cannot request a password reset. After merge, the discarded profile is locked out, leftover pending reviews of it are closed, and the merge can be undone (edits to the remaining profile after the merge are lost; members are not emailed). Pairs can be marked not-duplicates so they do not re-flag. Database 2.1.0–2.1.3. Closes [#35](https://github.com/ctucker1984/remember/issues/35).
+
 ## 1.4.0
 
 - **Enhancement:** Clothing sizes keep the member’s actual size and show the inventory size that is available. Settings → Clothing has a write-in Stock table per category; **Available as** is filled from that, not the seeded body-size list. Dropdowns and staff views use labels like `XL (available L)`. Quantity is a later table related to Stock. Database 1.41.0. Closes [#31](https://github.com/ctucker1984/remember/issues/31).

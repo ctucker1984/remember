@@ -39,6 +39,9 @@ class Remember_Deactivator {
 			Remember_Logger::debug( 'Cleared scheduled cron events' );
 		}
 
+		require_once plugin_dir_path( __FILE__ ) . 'utilities/class-remember-profile-duplicates.php';
+		Remember_Profile_Duplicates::unschedule();
+
 		// Flush rewrite rules
 		flush_rewrite_rules();
 

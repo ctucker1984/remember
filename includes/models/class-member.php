@@ -36,6 +36,38 @@ class Remember_Member extends Remember_Base_Model {
 	protected $primary_key = 'member_id';
 
 	/**
+	 * Get all members, excluding merged (locked) profiles unless requested.
+	 *
+	 * @param array $args Query arguments. Set include_merged to true to include locked profiles.
+	 * @return array
+	 */
+	public function get_all( $args = array() ) {
+		$defaults = array(
+			'limit'           => -1,
+			'offset'          => 0,
+			'orderby'         => $this->primary_key,
+			'order'           => 'ASC',
+			'include_merged'  => false,
+		);
+		$args = wp_parse_args( $args, $defaults );
+
+		$query = "SELECT * FROM {$this->get_table()}";
+		if ( empty( $args['include_merged'] ) ) {
+			$query .= " WHERE (status IS NULL OR status != 'merged')";
+		}
+
+		if ( ! empty( $args['orderby'] ) ) {
+			$query .= " ORDER BY {$args['orderby']} {$args['order']}";
+		}
+
+		if ( $args['limit'] > 0 ) {
+			$query .= $this->wpdb->prepare( ' LIMIT %d OFFSET %d', $args['limit'], $args['offset'] );
+		}
+
+		return $this->wpdb->get_results( $query );
+	}
+
+	/**
 	 * Create a new member.
 	 *
 	 * @param int    $user_id WordPress user ID.
@@ -210,7 +242,7 @@ class Remember_Member extends Remember_Base_Model {
 		
 		$query = "SELECT m.* FROM {$this->get_table()} m 
 			INNER JOIN {$wpdb->prefix}remember_member_roles mr ON m.member_id = mr.member_id 
-			WHERE mr.role_id = %d 
+			WHERE mr.role_id = %d AND (m.status IS NULL OR m.status != 'merged')
 			ORDER BY m.member_id ASC";
 		
 		return $wpdb->get_results( $wpdb->prepare( $query, $role_id ) );
@@ -341,7 +373,8 @@ class Remember_Member extends Remember_Base_Model {
 		$args = wp_parse_args( $args, $defaults );
 
 		$query = "SELECT m.* FROM {$this->get_table()} m 
-			INNER JOIN {$wpdb->prefix}users u ON m.member_id = u.ID";
+			INNER JOIN {$wpdb->prefix}users u ON m.member_id = u.ID
+			WHERE (m.status IS NULL OR m.status != 'merged')";
 
 		if ( ! empty( $args['orderby'] ) ) {
 			$query .= " ORDER BY m.{$args['orderby']} {$args['order']}";

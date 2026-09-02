@@ -1485,6 +1485,36 @@ button.remember-button-primary:disabled {
 	font-size: 0.875em;
 }
 
+.remember-profile-notes-list {
+	list-style: none;
+	padding: 0;
+	margin: 0;
+}
+
+.remember-profile-notes-list li {
+	padding: 0.75em 0;
+	border-bottom: 1px solid #eee;
+}
+
+.remember-profile-notes-list li:last-child {
+	border-bottom: none;
+}
+
+.remember-profile-notes-meta {
+	display: flex;
+	justify-content: space-between;
+	gap: 0.75em;
+	flex-wrap: wrap;
+	margin-bottom: 0.35em;
+	font-size: 0.875em;
+}
+
+.remember-profile-notes-body {
+	font-size: 0.9375em;
+	line-height: 1.5;
+	color: #1d2327;
+}
+
 .remember-view-more {
 	margin-top: 0.5em;
 	text-align: center;
@@ -1573,4 +1603,34 @@ button.remember-button-primary:disabled {
 	.remember-form-group {
 		display: none;
 	}
+}
+
+.remember-apply-gate-dialog {
+	max-width: 32rem;
+	padding: 1.25rem 1.5rem;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+	background: #fff;
+	color: #1d2327;
+}
+
+.remember-apply-gate-dialog::backdrop {
+	background: rgba(0, 0, 0, 0.45);
+}
+
+.remember-apply-gate-title {
+	margin: 0 0 0.75em;
+	font-size: 1.15em;
+}
+
+.remember-apply-gate-body {
+	margin: 0 0 1.25em;
+	line-height: 1.5;
+}
+
+.remember-apply-gate-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.75em;
+	justify-content: flex-end;
 }

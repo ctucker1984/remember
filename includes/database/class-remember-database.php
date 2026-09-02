@@ -83,6 +83,8 @@ class Remember_Database {
 			'vetting'                        => 'create_vetting_table',
 			'vetting_collaborators'          => 'create_vetting_collaborators_table',
 			'vetting_notes'                  => 'create_vetting_notes_table',
+			'profile_notes'                  => 'create_profile_notes_table',
+			'profile_duplicate_hits'         => 'create_profile_duplicate_hits_table',
 			'notification_settings'          => 'create_notification_settings_table',
 			'profile_questions'              => 'create_profile_questions_table',
 			'profile_question_responses'     => 'create_profile_question_responses_table',
@@ -119,7 +121,7 @@ class Remember_Database {
 
 		$sql = "CREATE TABLE $table_name (
 			member_id BIGINT(20) UNSIGNED NOT NULL,
-			status ENUM('pending_vetting', 'unvetted', 'in_vetting', 'vetted', 'rejected', 'inactive') DEFAULT 'pending_vetting',
+			status ENUM('pending_vetting', 'unvetted', 'in_vetting', 'vetted', 'rejected', 'inactive', 'merged') DEFAULT 'pending_vetting',
 			photo_url VARCHAR(255) DEFAULT NULL,
 			created_at DATETIME NOT NULL,
 			updated_at DATETIME NOT NULL,
@@ -864,6 +866,104 @@ class Remember_Database {
 		) $charset_collate;";
 
 		dbDelta( $sql );
+	}
+
+	/**
+	 * Profile notes (member-visible or private to admin). Separate from vetting notes.
+	 */
+	public function create_profile_notes_table() {
+		$table_name      = $this->prefix . 'profile_notes';
+		$charset_collate = $this->wpdb->get_charset_collate();
+
+		$sql = "CREATE TABLE $table_name (
+			note_id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+			member_id BIGINT(20) UNSIGNED NOT NULL,
+			author_id BIGINT(20) UNSIGNED NOT NULL,
+			note_content TEXT NOT NULL,
+			is_admin_only TINYINT(1) DEFAULT 0,
+			created_at DATETIME NOT NULL,
+			PRIMARY KEY (note_id),
+			KEY member_id (member_id),
+			KEY author_id (author_id)
+		) $charset_collate;";
+
+		dbDelta( $sql );
+	}
+
+	/**
+	 * Duplicate profile hits awaiting review or already decided.
+	 */
+	public function create_profile_duplicate_hits_table() {
+		$table_name      = $this->prefix . 'profile_duplicate_hits';
+		$charset_collate = $this->wpdb->get_charset_collate();
+
+		$sql = "CREATE TABLE $table_name (
+			hit_id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+			member_a_id BIGINT(20) UNSIGNED NOT NULL,
+			member_b_id BIGINT(20) UNSIGNED NOT NULL,
+			status ENUM('pending', 'dismissed', 'merged', 'closed') DEFAULT 'pending',
+			match_reasons LONGTEXT DEFAULT NULL,
+			notified_at DATETIME DEFAULT NULL,
+			reviewed_by BIGINT(20) UNSIGNED DEFAULT NULL,
+			reviewed_at DATETIME DEFAULT NULL,
+			survivor_id BIGINT(20) UNSIGNED DEFAULT NULL,
+			locked_id BIGINT(20) UNSIGNED DEFAULT NULL,
+			undo_snapshot LONGTEXT DEFAULT NULL,
+			created_at DATETIME NOT NULL,
+			PRIMARY KEY (hit_id),
+			UNIQUE KEY member_pair (member_a_id, member_b_id),
+			KEY status (status),
+			KEY member_a_id (member_a_id),
+			KEY member_b_id (member_b_id)
+		) $charset_collate;";
+
+		dbDelta( $sql );
+	}
+
+	/**
+	 * Add merged to the members status enum (existing installs).
+	 *
+	 * @return void
+	 */
+	public function add_merged_member_status() {
+		$table_name = $this->prefix . 'members';
+		$this->wpdb->query(
+			"ALTER TABLE {$table_name} MODIFY COLUMN status ENUM('pending_vetting', 'unvetted', 'in_vetting', 'vetted', 'rejected', 'inactive', 'merged') DEFAULT 'pending_vetting'"
+		);
+	}
+
+	/**
+	 * Add closed to duplicate-hit status enum (existing installs).
+	 *
+	 * @return void
+	 */
+	public function add_closed_duplicate_hit_status() {
+		$table_name = $this->prefix . 'profile_duplicate_hits';
+		$exists     = $this->wpdb->get_var( $this->wpdb->prepare( 'SHOW TABLES LIKE %s', $table_name ) );
+		if ( $exists !== $table_name ) {
+			return;
+		}
+		$this->wpdb->query(
+			"ALTER TABLE {$table_name} MODIFY COLUMN status ENUM('pending', 'dismissed', 'merged', 'closed') DEFAULT 'pending'"
+		);
+	}
+
+	/**
+	 * Store a pre-merge snapshot so a merge can be undone (existing installs).
+	 *
+	 * @return void
+	 */
+	public function add_duplicate_hit_undo_snapshot() {
+		$table_name = $this->prefix . 'profile_duplicate_hits';
+		$exists     = $this->wpdb->get_var( $this->wpdb->prepare( 'SHOW TABLES LIKE %s', $table_name ) );
+		if ( $exists !== $table_name ) {
+			return;
+		}
+		$col = $this->wpdb->get_var( $this->wpdb->prepare( "SHOW COLUMNS FROM {$table_name} LIKE %s", 'undo_snapshot' ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		if ( $col ) {
+			return;
+		}
+		$this->wpdb->query( "ALTER TABLE {$table_name} ADD COLUMN undo_snapshot LONGTEXT DEFAULT NULL AFTER locked_id" );
 	}
 
 	/**

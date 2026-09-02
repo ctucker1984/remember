@@ -79,7 +79,11 @@ class Remember_Public {
 			'nonce'                => wp_create_nonce( 'remember_public_nonce' ),
 			'profileCurrencyNonce' => wp_create_nonce( 'remember_profile_currency_status' ),
 			'i18n'                 => array(
-				'profileStale' => __( 'Save your profile first (within the last 24 hours), then type the confirmation phrase.', 'remember' ),
+				'profileStale'     => __( 'Save your profile first (within the last 24 hours), then type the confirmation phrase.', 'remember' ),
+				'applyGateTitle'   => __( 'Confirm your profile first', 'remember' ),
+				'applyGateBody'    => __( 'Before you apply, you will review your profile and save it. Saving with or without changes is enough — that affirms it is current. After you save, you will return here to finish the application, including typing “my profile is current.”', 'remember' ),
+				'applyGateContinue'=> __( 'Review profile', 'remember' ),
+				'applyGateCancel'  => __( 'Cancel', 'remember' ),
 			),
 		) );
 

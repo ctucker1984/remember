@@ -1364,6 +1364,92 @@ class Remember_Database_Updater {
 			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '1.41.0' ) );
 		}
 
+		// Update to 2.0.0 — profile-level notes (member-visible + admin-private).
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '2.0.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '2.0.0' ) );
+
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-database.php';
+			$db = new Remember_Database();
+			$db->create_profile_notes_table();
+
+			update_option( 'remember_db_version', '2.0.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '2.0.0' ) );
+		}
+
+		// Update to 2.1.0 — duplicate profile hits + merged member status.
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '2.1.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '2.1.0' ) );
+
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-database.php';
+			$db = new Remember_Database();
+			$db->create_profile_duplicate_hits_table();
+			$db->add_merged_member_status();
+
+			update_option( 'remember_db_version', '2.1.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '2.1.0' ) );
+		}
+
+		// Update to 2.1.1 — Merge Duplicate Profiles capability (default: System Administrator).
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '2.1.1', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '2.1.1' ) );
+
+			require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-capabilities.php';
+			require_once plugin_dir_path( __FILE__ ) . '../models/class-role.php';
+			require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-profile-duplicates.php';
+
+			Remember_Capabilities::setup_capabilities();
+
+			$role_model = new Remember_Role();
+			$cap        = Remember_Profile_Duplicates::MERGE_CAP;
+			$role_id    = (int) $wpdb->get_var(
+				$wpdb->prepare(
+					"SELECT role_id FROM {$wpdb->prefix}remember_roles WHERE role_name = %s",
+					'System Administrator'
+				)
+			);
+			if ( $role_id > 0 ) {
+				$role_model->add_capability( $role_id, $cap );
+				$member_ids = $wpdb->get_col(
+					$wpdb->prepare(
+						"SELECT DISTINCT member_id FROM {$wpdb->prefix}remember_member_roles WHERE role_id = %d",
+						$role_id
+					)
+				);
+				if ( is_array( $member_ids ) ) {
+					foreach ( $member_ids as $member_id ) {
+						Remember_Capabilities::sync_user_capabilities_from_roles( (int) $member_id );
+					}
+				}
+			}
+
+			update_option( 'remember_db_version', '2.1.1' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '2.1.1' ) );
+		}
+
+		// Update to 2.1.2 — closed status for leftover duplicate hits after a merge.
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '2.1.2', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '2.1.2' ) );
+
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-database.php';
+			$db = new Remember_Database();
+			$db->add_closed_duplicate_hit_status();
+
+			update_option( 'remember_db_version', '2.1.2' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '2.1.2' ) );
+		}
+
+		// Update to 2.1.3 — pre-merge snapshot for undo.
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '2.1.3', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '2.1.3' ) );
+
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-database.php';
+			$db = new Remember_Database();
+			$db->add_duplicate_hit_undo_snapshot();
+
+			update_option( 'remember_db_version', '2.1.3' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '2.1.3' ) );
+		}
+
 		// Always re-ensure health catalogs (idempotent). Catches sites that stalled mid-migration
 		// or activated before catalog seed rows were added.
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-seeder.php';
@@ -1371,6 +1457,7 @@ class Remember_Database_Updater {
 		$seeder->ensure_health_catalog_options();
 		$seeder->ensure_im_platforms();
 		$seeder->ensure_clothing_size_options();
+		$seeder->ensure_notification_settings();
 
 		Remember_Logger::activation_debug(
 			'update_schema: exit',

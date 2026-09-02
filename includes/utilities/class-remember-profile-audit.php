@@ -115,6 +115,107 @@ class Remember_Profile_Audit {
 	}
 
 	/**
+	 * Front-end apply URL, optionally for one event.
+	 *
+	 * @param int $event_id Event ID, or 0 for the generic apply page.
+	 * @return string
+	 */
+	public static function get_apply_url( $event_id = 0 ) {
+		$created_pages = get_option( 'remember_created_pages', array() );
+		$apply_page_id = isset( $created_pages['apply'] ) ? absint( $created_pages['apply'] ) : 0;
+		$url           = $apply_page_id > 0 ? get_permalink( $apply_page_id ) : home_url( '/apply/' );
+		if ( ! $url ) {
+			$url = home_url( '/apply/' );
+		}
+		$event_id = absint( $event_id );
+		if ( $event_id > 0 ) {
+			$url = add_query_arg( 'event_id', $event_id, $url );
+		}
+		return $url;
+	}
+
+	/**
+	 * Event ID to resume after a profile save, from GET or POST.
+	 *
+	 * @return int
+	 */
+	public static function requested_return_event_id() {
+		if ( isset( $_POST['remember_return_event'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing -- callers verify nonce.
+			return absint( wp_unslash( $_POST['remember_return_event'] ) );
+		}
+		if ( isset( $_GET['remember_return_event'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- resume flag only.
+			return absint( wp_unslash( $_GET['remember_return_event'] ) );
+		}
+		return 0;
+	}
+
+	/**
+	 * Whether the profile save should return to the generic apply page.
+	 *
+	 * @return bool
+	 */
+	public static function requested_return_apply() {
+		if ( isset( $_POST['remember_return_apply'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing -- callers verify nonce.
+			return '1' === (string) wp_unslash( $_POST['remember_return_apply'] );
+		}
+		if ( isset( $_GET['remember_return_apply'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- resume flag only.
+			return '1' === (string) wp_unslash( $_GET['remember_return_apply'] );
+		}
+		return false;
+	}
+
+	/**
+	 * Profile edit URL that resumes an event application after save.
+	 *
+	 * @param int $event_id Event ID, or 0 for the generic apply page.
+	 * @return string
+	 */
+	public static function get_profile_edit_url_for_apply( $event_id = 0 ) {
+		$url = self::get_profile_edit_url();
+		if ( '' === $url ) {
+			return '';
+		}
+		$event_id = absint( $event_id );
+		if ( $event_id > 0 ) {
+			return add_query_arg( 'remember_return_event', $event_id, $url );
+		}
+		return add_query_arg( 'remember_return_apply', '1', $url );
+	}
+
+	/**
+	 * Safe URL to resume after profile save, or empty for the normal profile view.
+	 *
+	 * @return string
+	 */
+	public static function consume_return_url() {
+		$event_id = self::requested_return_event_id();
+		if ( $event_id > 0 ) {
+			return self::get_apply_url( $event_id );
+		}
+		if ( self::requested_return_apply() ) {
+			return self::get_apply_url( 0 );
+		}
+		return '';
+	}
+
+	/**
+	 * Keep the apply-return query args on a profile-edit redirect.
+	 *
+	 * @param string $url Redirect URL.
+	 * @return string
+	 */
+	public static function with_return_args( $url ) {
+		$event_id = self::requested_return_event_id();
+		if ( $event_id > 0 ) {
+			return add_query_arg( 'remember_return_event', $event_id, $url );
+		}
+		if ( self::requested_return_apply() ) {
+			return add_query_arg( 'remember_return_apply', '1', $url );
+		}
+		return $url;
+	}
+
+	/**
 	 * Get profile updated_at MySQL datetime for a member, or empty string.
 	 *
 	 * @param int $member_id Member ID.
@@ -239,7 +340,10 @@ class Remember_Profile_Audit {
 			$input_id = 'remember_profile_currency_confirm';
 		}
 		$phrase      = self::CONFIRM_PHRASE;
-		$profile_url = self::get_profile_edit_url();
+		$event_id    = isset( $_GET['event_id'] ) ? absint( wp_unslash( $_GET['event_id'] ) ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- form context.
+		$profile_url = $event_id > 0
+			? self::get_profile_edit_url_for_apply( $event_id )
+			: self::get_profile_edit_url();
 		$member_id   = get_current_user_id();
 		$updated_at  = self::get_profile_updated_at( $member_id );
 		$is_fresh    = self::is_profile_fresh( $member_id );
@@ -255,11 +359,11 @@ class Remember_Profile_Audit {
 			</label>
 			<p class="remember-form-help remember-profile-currency-confirm__help">
 				<?php if ( $profile_url ) : ?>
-					<a href="<?php echo esc_url( $profile_url ); ?>" target="_blank" rel="noopener noreferrer">
-						<?php esc_html_e( 'Check your profile and confirm that it is current and accurate, then click save on it (required).', 'remember' ); ?>
+					<a href="<?php echo esc_url( $profile_url ); ?>">
+						<?php esc_html_e( 'Check your profile and confirm that it is current and accurate, then click save on it (required). Saving with or without changes is enough.', 'remember' ); ?>
 					</a>
 				<?php else : ?>
-					<?php esc_html_e( 'Check your profile and confirm that it is current and accurate, then click save on it (required).', 'remember' ); ?>
+					<?php esc_html_e( 'Check your profile and confirm that it is current and accurate, then click save on it (required). Saving with or without changes is enough.', 'remember' ); ?>
 				<?php endif; ?>
 				<?php
 				echo ' ';

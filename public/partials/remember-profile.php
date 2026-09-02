@@ -17,6 +17,7 @@ require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remem
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-image-uploader.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-clothing-sizes.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-fields.php';
+require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-audit.php';
 
 $user = wp_get_current_user();
 $member_model = new Remember_Member();
@@ -54,21 +55,21 @@ if ( isset( $_POST['remember_profile_action'] ) && check_admin_referer( 'remembe
 	$pq_answers   = Remember_Profile_Questions::collect_from_request();
 	$missing      = Remember_Profile_Fields::first_missing_required( $profile_data, $meta_data );
 	if ( '' !== $missing ) {
-		wp_safe_redirect( add_query_arg( array( 'edit' => '1', 'remember_profile_error' => $missing ) ) );
+		wp_safe_redirect( Remember_Profile_Audit::with_return_args( add_query_arg( array( 'edit' => '1', 'remember_profile_error' => $missing ) ) ) );
 		exit;
 	}
 	$missing_pq = Remember_Profile_Questions::first_missing_required( $pq_answers );
 	if ( null !== $missing_pq ) {
-		wp_safe_redirect( add_query_arg( array( 'edit' => '1', 'remember_profile_error' => 'custom_field' ) ) );
+		wp_safe_redirect( Remember_Profile_Audit::with_return_args( add_query_arg( array( 'edit' => '1', 'remember_profile_error' => 'custom_field' ) ) ) );
 		exit;
 	}
 	$missing_health = Remember_Profile_Fields::first_missing_required_health_catalog();
 	if ( '' !== $missing_health ) {
-		wp_safe_redirect( add_query_arg( array( 'edit' => '1', 'remember_profile_error' => $missing_health ) ) );
+		wp_safe_redirect( Remember_Profile_Audit::with_return_args( add_query_arg( array( 'edit' => '1', 'remember_profile_error' => $missing_health ) ) ) );
 		exit;
 	}
 	if ( Remember_Profile_Fields::interests_is_over_limit( $profile_data['interests'] ) ) {
-		wp_safe_redirect( add_query_arg( array( 'edit' => '1', 'remember_profile_error' => 'interests_too_long' ) ) );
+		wp_safe_redirect( Remember_Profile_Audit::with_return_args( add_query_arg( array( 'edit' => '1', 'remember_profile_error' => 'interests_too_long' ) ) ) );
 		exit;
 	}
 
@@ -91,7 +92,7 @@ if ( isset( $_POST['remember_profile_action'] ) && check_admin_referer( 'remembe
 			}
 		}
 		if ( '' !== $password_error ) {
-			wp_safe_redirect( add_query_arg( array( 'edit' => '1', 'remember_password_error' => $password_error ), remove_query_arg( array( 'remember_password_updated', 'remember_profile_error' ) ) ) );
+			wp_safe_redirect( Remember_Profile_Audit::with_return_args( add_query_arg( array( 'edit' => '1', 'remember_password_error' => $password_error ), remove_query_arg( array( 'remember_password_updated', 'remember_profile_error' ) ) ) ) );
 			exit;
 		}
 	}
@@ -193,6 +194,8 @@ if ( isset( $_POST['remember_profile_action'] ) && check_admin_referer( 'remembe
 
 	if ( $change_password ) {
 		wp_set_password( $new_password, $user->ID );
+		require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-duplicates.php';
+		Remember_Profile_Duplicates::stamp_password( $user->ID );
 		wp_set_current_user( $user->ID );
 		wp_set_auth_cookie( $user->ID, true, is_ssl() );
 	}
@@ -200,11 +203,17 @@ if ( isset( $_POST['remember_profile_action'] ) && check_admin_referer( 'remembe
 	// Redirect: stay on edit if photo failed so the member can retry.
 	if ( ! empty( $photo_error ) ) {
 		set_transient( 'remember_profile_photo_error_' . $user->ID, $photo_error, MINUTE_IN_SECONDS );
-		wp_safe_redirect( add_query_arg( 'edit', '1' ) );
+		wp_safe_redirect( Remember_Profile_Audit::with_return_args( add_query_arg( 'edit', '1' ) ) );
 		exit;
 	}
 
-	$redirect_url = remove_query_arg( array( 'edit', 'remember_photo_error', 'remember_password_error', 'remember_profile_error' ) );
+	$return_url = Remember_Profile_Audit::consume_return_url();
+	if ( '' !== $return_url ) {
+		wp_safe_redirect( $return_url );
+		exit;
+	}
+
+	$redirect_url = remove_query_arg( array( 'edit', 'remember_photo_error', 'remember_password_error', 'remember_profile_error', 'remember_return_event', 'remember_return_apply' ) );
 	if ( $change_password ) {
 		$redirect_url = add_query_arg( 'remember_password_updated', '1', $redirect_url );
 	} else {
@@ -345,6 +354,11 @@ if ( ! empty( $selected_allergy_ids ) ) {
 		?>
 		<div class="remember-profile-edit-header">
 			<h2><?php esc_html_e( 'Edit Profile', 'remember' ); ?></h2>
+			<?php if ( Remember_Profile_Audit::requested_return_event_id() > 0 || Remember_Profile_Audit::requested_return_apply() ) : ?>
+				<p class="remember-form-help" style="margin: 0.5em 0 0;">
+					<?php esc_html_e( 'Save this profile to continue your event application. You can save even if nothing changed — that still confirms it is current.', 'remember' ); ?>
+				</p>
+			<?php endif; ?>
 		</div>
 		<?php if ( $profile_error ) : ?>
 			<div class="remember-notice remember-error" role="alert">
@@ -393,6 +407,14 @@ if ( ! empty( $selected_allergy_ids ) ) {
 		<form method="post" action="" class="remember-profile-form-modern" enctype="multipart/form-data">
 			<?php wp_nonce_field( 'remember_profile_action', 'remember_profile_nonce' ); ?>
 			<input type="hidden" name="remember_profile_action" value="update">
+			<?php
+			$remember_return_event = Remember_Profile_Audit::requested_return_event_id();
+			if ( $remember_return_event > 0 ) :
+				?>
+				<input type="hidden" name="remember_return_event" value="<?php echo esc_attr( (string) $remember_return_event ); ?>">
+			<?php elseif ( Remember_Profile_Audit::requested_return_apply() ) : ?>
+				<input type="hidden" name="remember_return_apply" value="1">
+			<?php endif; ?>
 
 			<div class="remember-form-section">
 				<h3 class="remember-form-section-title"><?php esc_html_e( 'Profile Photo', 'remember' ); ?></h3>
@@ -1183,6 +1205,28 @@ if ( ! empty( $selected_allergy_ids ) ) {
 								</div>
 							<?php endif; ?>
 						</div>
+					</div>
+				<?php endif; ?>
+
+				<?php
+				require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-profile-note.php';
+				$member_profile_notes = ( new Remember_Profile_Note() )->get_for_member( (int) $user->ID, false );
+				if ( ! empty( $member_profile_notes ) ) :
+					?>
+					<div class="remember-form-section remember-profile-notes">
+						<h3 class="remember-form-section-title"><?php esc_html_e( 'Notes from staff', 'remember' ); ?></h3>
+						<ul class="remember-profile-notes-list">
+							<?php foreach ( $member_profile_notes as $p_note ) : ?>
+								<?php $p_note_author = get_user_by( 'ID', $p_note->author_id ); ?>
+								<li>
+									<div class="remember-profile-notes-meta">
+										<strong><?php echo $p_note_author ? esc_html( $p_note_author->display_name ) : esc_html__( 'Staff', 'remember' ); ?></strong>
+										<span class="remember-note-date"><?php echo esc_html( date_i18n( get_option( 'date_format' ), strtotime( $p_note->created_at ) ) ); ?></span>
+									</div>
+									<div class="remember-profile-notes-body"><?php echo wp_kses_post( nl2br( esc_html( $p_note->note_content ) ) ); ?></div>
+								</li>
+							<?php endforeach; ?>
+						</ul>
 					</div>
 				<?php endif; ?>
 			</div>

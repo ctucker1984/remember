@@ -115,6 +115,10 @@ class Remember_Notification_Setting extends Remember_Base_Model {
 			'payment_recorded'              => __( 'Payment Recorded', 'remember' ),
 			'payment_due_reminder'          => __( 'Payment Due Reminder', 'remember' ),
 			'vetting_collaborator_invited'  => __( 'Vetting Collaborator Invited', 'remember' ),
+			'duplicate_hit_admin'           => __( 'Possible Duplicate Profiles (Admin)', 'remember' ),
+			'duplicate_hit_member'          => __( 'Possible Duplicate Profile', 'remember' ),
+			'duplicate_merged_survivor'     => __( 'Profiles Merged — Keep This Login', 'remember' ),
+			'duplicate_merged_locked'       => __( 'Profile No Longer Valid', 'remember' ),
 		);
 		return isset( $labels[ $type ] ) ? $labels[ $type ] : $type;
 	}
@@ -140,6 +144,10 @@ class Remember_Notification_Setting extends Remember_Base_Model {
 			'payment_recorded'              => __( 'Sent when a payment is recorded.', 'remember' ),
 			'payment_due_reminder'          => __( 'Sent as a reminder when payment is due (also used for balance-due blasts).', 'remember' ),
 			'vetting_collaborator_invited'  => __( 'Sent when a collaborator is invited to a vetting case.', 'remember' ),
+			'duplicate_hit_admin'           => __( 'Sent to reMember System Administrators when two profiles look like duplicates.', 'remember' ),
+			'duplicate_hit_member'          => __( 'Not sent on scan. Kept for templates; members are emailed when a merge completes instead.', 'remember' ),
+			'duplicate_merged_survivor'     => __( 'Sent to the remaining profile after a merge.', 'remember' ),
+			'duplicate_merged_locked'       => __( 'Sent to the locked-out profile after a merge.', 'remember' ),
 		);
 		return isset( $descriptions[ $type ] ) ? $descriptions[ $type ] : '';
 	}
@@ -183,6 +191,10 @@ class Remember_Notification_Setting extends Remember_Base_Model {
 			'payment_recorded'              => __( 'Payment Recorded - \${amount}', 'remember' ),
 			'payment_due_reminder'          => __( 'Payment Reminder - \${amount_due} Due for {event_name}', 'remember' ),
 			'vetting_collaborator_invited'  => __( 'Invitation to Collaborate on Vetting Case', 'remember' ),
+			'duplicate_hit_admin'           => __( 'Possible duplicate profiles — review required', 'remember' ),
+			'duplicate_hit_member'          => __( 'Your profile was flagged as a possible duplicate', 'remember' ),
+			'duplicate_merged_survivor'     => __( 'Your profiles have been merged — keep using this login', 'remember' ),
+			'duplicate_merged_locked'       => __( 'This profile is no longer valid', 'remember' ),
 		);
 		return isset( $templates[ $type ] ) ? $templates[ $type ] : '';
 	}
@@ -220,6 +232,14 @@ class Remember_Notification_Setting extends Remember_Base_Model {
 			'payment_due_reminder' => __( "Hello {member_name},\n\nThis is a reminder that payment is due for your accepted application.\n\nAmount Due: \${amount_due}\nApplication ID: {application_id}\nTicket ID: {ticket_id}\nEvent: {event_name}\nDates: {event_dates}\nLocation: {event_location}\nPayment status: {payment_status}\n\nView your ticket (PAYMENT REQUIRED until paid):\n{ticket_url}\n\nPlease submit your payment at your earliest convenience.\n\nThank you,\nThe Team", 'remember' ),
 			
 			'vetting_collaborator_invited' => __( "Hello,\n\nYou have been invited to collaborate on a vetting case.\n\nMember: {member_name}\nVetting Case ID: {vetting_id}\nDate: {date}\n\nPlease review the case and provide your input.\n\nThank you,\nThe Team", 'remember' ),
+
+			'duplicate_hit_admin' => __( "Hello,\n\nTwo member profiles look like possible duplicates and need a review.\n\nMember IDs: {member_a_id} and {member_b_id}\nMatching fields: {match_fields}\nDate: {date}\n\nReview and merge, or mark them as not duplicates:\n{review_url}\n\nThis message does not include profile contents.", 'remember' ),
+
+			'duplicate_hit_member' => __( "Hello {member_name},\n\nYour profile was flagged as a possible duplicate of another account. A system administrator will review this. You do not need to do anything right now.\n\nDate: {date}\n\nIf you believe this is a mistake, you can reply to this email or contact a system administrator.\n\nThank you,\nThe Team", 'remember' ),
+
+			'duplicate_merged_survivor' => __( "Hello {member_name},\n\nTwo profiles that appeared to belong to you have been merged. Going forward, always log in with this account.\n\nDate: {date}\n\nIf anything looks wrong, contact a system administrator.\n\nThank you,\nThe Team", 'remember' ),
+
+			'duplicate_merged_locked' => __( "Hello {member_name},\n\nThis profile is no longer valid because it was merged with another account. You will not be able to log in here.\n\nIf you believe that is an error, contact a system administrator.\n\nDate: {date}\n\nThank you,\nThe Team", 'remember' ),
 		);
 		return isset( $templates[ $type ] ) ? $templates[ $type ] : '';
 	}

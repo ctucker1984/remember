@@ -317,6 +317,10 @@ class Remember_Notifications {
 			'event_dates'    => '',
 			'date'           => date_i18n( get_option( 'date_format' ) ),
 			'vetting_id'     => '',
+			'review_url'     => '',
+			'match_fields'   => '',
+			'member_a_id'    => '',
+			'member_b_id'    => '',
 		);
 		return wp_parse_args( $context, $defaults );
 	}

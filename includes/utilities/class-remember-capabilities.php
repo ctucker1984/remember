@@ -69,6 +69,7 @@ class Remember_Capabilities {
 			'remember_access_health'            => __( 'Access Health Information', 'remember' ),
 			'remember_print_confidential'       => __( 'Print Confidential Profile', 'remember' ),
 			'remember_print_event_card'         => __( 'Print Event Card', 'remember' ),
+			'remember_merge_profiles'           => __( 'Merge Duplicate Profiles', 'remember' ),
 		);
 	}
 
