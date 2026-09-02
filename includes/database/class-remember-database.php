@@ -901,7 +901,7 @@ class Remember_Database {
 			hit_id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
 			member_a_id BIGINT(20) UNSIGNED NOT NULL,
 			member_b_id BIGINT(20) UNSIGNED NOT NULL,
-			status ENUM('pending', 'dismissed', 'merged') DEFAULT 'pending',
+			status ENUM('pending', 'dismissed', 'merged', 'closed') DEFAULT 'pending',
 			match_reasons LONGTEXT DEFAULT NULL,
 			notified_at DATETIME DEFAULT NULL,
 			reviewed_by BIGINT(20) UNSIGNED DEFAULT NULL,
@@ -928,6 +928,22 @@ class Remember_Database {
 		$table_name = $this->prefix . 'members';
 		$this->wpdb->query(
 			"ALTER TABLE {$table_name} MODIFY COLUMN status ENUM('pending_vetting', 'unvetted', 'in_vetting', 'vetted', 'rejected', 'inactive', 'merged') DEFAULT 'pending_vetting'"
+		);
+	}
+
+	/**
+	 * Add closed to duplicate-hit status enum (existing installs).
+	 *
+	 * @return void
+	 */
+	public function add_closed_duplicate_hit_status() {
+		$table_name = $this->prefix . 'profile_duplicate_hits';
+		$exists     = $this->wpdb->get_var( $this->wpdb->prepare( 'SHOW TABLES LIKE %s', $table_name ) );
+		if ( $exists !== $table_name ) {
+			return;
+		}
+		$this->wpdb->query(
+			"ALTER TABLE {$table_name} MODIFY COLUMN status ENUM('pending', 'dismissed', 'merged', 'closed') DEFAULT 'pending'"
 		);
 	}
 

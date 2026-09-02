@@ -90,7 +90,7 @@ if ( ! function_exists( 'remember_dup_format_value' ) ) {
 $list_url = Remember_Profile_Duplicates::review_url();
 $hit_id   = isset( $_GET['hit'] ) ? absint( $_GET['hit'] ) : 0;
 $status   = isset( $_GET['status'] ) ? sanitize_key( wp_unslash( $_GET['status'] ) ) : 'pending';
-if ( ! in_array( $status, array( 'pending', 'dismissed', 'merged', 'all' ), true ) ) {
+if ( ! in_array( $status, array( 'pending', 'dismissed', 'merged', 'closed', 'all' ), true ) ) {
 	$status = 'pending';
 }
 
@@ -351,6 +351,8 @@ $hit = $hit_id > 0 ? Remember_Profile_Duplicates::get_hit( $hit_id ) : null;
 							(int) $hit->locked_id
 						)
 					);
+				} elseif ( 'closed' === $hit->status ) {
+					esc_html_e( 'This review was closed because one of these profiles was merged into another account.', 'remember' );
 				} else {
 					esc_html_e( 'This pair was marked as not duplicates.', 'remember' );
 				}
@@ -381,6 +383,7 @@ $hit = $hit_id > 0 ? Remember_Profile_Duplicates::get_hit( $hit_id ) : null;
 				'pending'   => __( 'Pending', 'remember' ),
 				'dismissed' => __( 'Not duplicates', 'remember' ),
 				'merged'    => __( 'Merged', 'remember' ),
+				'closed'    => __( 'Closed', 'remember' ),
 				'all'       => __( 'All', 'remember' ),
 			);
 			$i = 0;

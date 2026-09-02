@@ -1426,6 +1426,18 @@ class Remember_Database_Updater {
 			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '2.1.1' ) );
 		}
 
+		// Update to 2.1.2 — closed status for leftover duplicate hits after a merge.
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '2.1.2', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '2.1.2' ) );
+
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-database.php';
+			$db = new Remember_Database();
+			$db->add_closed_duplicate_hit_status();
+
+			update_option( 'remember_db_version', '2.1.2' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '2.1.2' ) );
+		}
+
 		// Always re-ensure health catalogs (idempotent). Catches sites that stalled mid-migration
 		// or activated before catalog seed rows were added.
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-seeder.php';

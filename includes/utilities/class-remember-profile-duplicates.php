@@ -173,7 +173,7 @@ class Remember_Profile_Duplicates {
 	/**
 	 * Hits for the admin list.
 	 *
-	 * @param string $status pending|dismissed|merged|all.
+	 * @param string $status pending|dismissed|merged|closed|all.
 	 * @return object[]
 	 */
 	public static function get_hits( $status = 'pending' ) {
@@ -871,6 +871,7 @@ class Remember_Profile_Duplicates {
 			array( '%d' )
 		);
 
+		self::close_stale_hits( $locked_id, (int) $hit->hit_id );
 		self::notify_merged( $survivor_id, $locked_id, $lock_notify_email );
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
 		Remember_Logger::info(
@@ -882,6 +883,31 @@ class Remember_Profile_Duplicates {
 			)
 		);
 		return true;
+	}
+
+	/**
+	 * Close other pending reviews that include the locked profile.
+	 *
+	 * @param int $locked_id     Locked member.
+	 * @param int $except_hit_id Hit that was just merged.
+	 * @return void
+	 */
+	private static function close_stale_hits( $locked_id, $except_hit_id ) {
+		global $wpdb;
+		$table = self::table_name();
+		$wpdb->query(
+			$wpdb->prepare(
+				"UPDATE {$table} SET status = %s, reviewed_by = %d, reviewed_at = %s
+				WHERE status = %s AND hit_id != %d AND (member_a_id = %d OR member_b_id = %d)",
+				'closed',
+				get_current_user_id(),
+				current_time( 'mysql' ),
+				'pending',
+				absint( $except_hit_id ),
+				absint( $locked_id ),
+				absint( $locked_id )
+			)
+		); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 	}
 
 	/**
