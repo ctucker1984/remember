@@ -67,7 +67,7 @@ class Remember_Report_Engine {
 			$line = array();
 			foreach ( $compiled['select_ids'] as $id ) {
 				$key          = self::alias( $id );
-				$line[ $id ]  = isset( $row[ $key ] ) ? (string) $row[ $key ] : '';
+				$line[ $id ] = self::format_list_cell( isset( $row[ $key ] ) ? $row[ $key ] : '' );
 			}
 			$out_rows[] = $line;
 		}
@@ -606,6 +606,35 @@ class Remember_Report_Engine {
 			'max'            => sprintf( __( 'Max %s', 'remember' ), $label ),
 		);
 		return isset( $map[ $fn ] ) ? $map[ $fn ] : $label;
+	}
+
+	/**
+	 * Turn a JSON list of option keys into a comma-separated cell.
+	 *
+	 * @param mixed $value Raw cell.
+	 * @return string
+	 */
+	public static function format_list_cell( $value ) {
+		$value = (string) $value;
+		$trim  = trim( $value );
+		if ( '' === $trim || '[' !== substr( $trim, 0, 1 ) ) {
+			return $value;
+		}
+		$decoded = json_decode( $trim, true );
+		if ( ! is_array( $decoded ) ) {
+			return $value;
+		}
+		if ( $decoded && array_values( $decoded ) !== $decoded ) {
+			return $value;
+		}
+		$keys = array();
+		foreach ( $decoded as $item ) {
+			if ( is_array( $item ) || is_object( $item ) ) {
+				return $value;
+			}
+			$keys[] = (string) $item;
+		}
+		return implode( ', ', $keys );
 	}
 
 	/**
