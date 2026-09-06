@@ -634,7 +634,7 @@ class Remember_Report_Engine {
 			}
 			$keys[] = (string) $item;
 		}
-		return implode( ', ', $keys );
+		return implode( ',', $keys );
 	}
 
 	/**

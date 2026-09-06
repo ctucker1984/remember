@@ -51,7 +51,7 @@ if ( ! defined( 'WPINC' ) ) {
 						</label>
 					</fieldset>
 					<div class="remember-reports-toolbar-run">
-						<button type="button" class="button button-primary" id="remember-report-run"><?php esc_html_e( 'Run report', 'remember' ); ?></button>
+						<button type="button" class="button button-primary remember-report-run" id="remember-report-run"><?php esc_html_e( 'Run report', 'remember' ); ?></button>
 					</div>
 				</div>
 
@@ -117,6 +117,7 @@ if ( ! defined( 'WPINC' ) ) {
 				</div>
 
 				<div class="remember-reports-footer">
+					<button type="button" class="button button-primary remember-report-run"><?php esc_html_e( 'Run report', 'remember' ); ?></button>
 					<button type="button" class="button" id="remember-report-save"><?php esc_html_e( 'Save', 'remember' ); ?></button>
 					<button type="button" class="button" id="remember-report-save-as"><?php esc_html_e( 'Save as', 'remember' ); ?></button>
 					<button type="button" class="button" id="remember-report-delete" disabled><?php esc_html_e( 'Delete', 'remember' ); ?></button>

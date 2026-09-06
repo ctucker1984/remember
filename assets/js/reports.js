@@ -478,7 +478,7 @@
 	function runReport(nextPage) {
 		readFiltersFromDom();
 		page = nextPage || 1;
-		var $btn = $('#remember-report-run');
+		var $btn = $('.remember-report-run');
 		$btn.prop('disabled', true).text(t('running', 'Running…'));
 		notice('');
 		post('remember_report_run', {
@@ -711,7 +711,7 @@
 			state.aggregations.splice(parseInt($(this).attr('data-index'), 10), 1);
 			renderAggs();
 		});
-		$('#remember-report-run').on('click', function () {
+		$('.remember-report-run').on('click', function () {
 			runReport(1);
 		});
 		$('#remember-report-prev').on('click', function () {
