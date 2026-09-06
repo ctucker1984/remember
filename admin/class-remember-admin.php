@@ -48,6 +48,61 @@ class Remember_Admin {
 	}
 
 	/**
+	 * Main plugin file relative to wp-content/plugins.
+	 *
+	 * @return string
+	 */
+	public static function plugin_file() {
+		return plugin_basename( REMEMBER_PLUGIN_DIR . 'remember.php' );
+	}
+
+	/**
+	 * Point Plugins → Deactivate at a backup reminder. Data is not removed here.
+	 *
+	 * @param array $actions Row actions.
+	 * @return array
+	 */
+	public function filter_plugin_action_links( $actions ) {
+		if ( isset( $actions['deactivate'] ) ) {
+			$actions['deactivate'] = sprintf(
+				'<a href="%s" aria-label="%s">%s</a>',
+				esc_url( admin_url( 'admin.php?page=remember-deactivate' ) ),
+				esc_attr__( 'Deactivate reMember', 'remember' ),
+				esc_html__( 'Deactivate', 'remember' )
+			);
+		}
+		return $actions;
+	}
+
+	/**
+	 * Catch a direct plugins.php deactivate URL so it still offers a backup.
+	 *
+	 * @return void
+	 */
+	public function intercept_plugin_deactivate() {
+		if ( ! is_admin() || is_network_admin() ) {
+			return;
+		}
+		if ( ! empty( $_GET['remember_confirmed'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			return;
+		}
+		$action = isset( $_REQUEST['action'] ) ? sanitize_key( wp_unslash( $_REQUEST['action'] ) ) : '';
+		if ( 'deactivate' !== $action ) {
+			return;
+		}
+		$plugin = isset( $_REQUEST['plugin'] ) ? wp_unslash( $_REQUEST['plugin'] ) : '';
+		if ( self::plugin_file() !== $plugin ) {
+			return;
+		}
+		if ( ! current_user_can( 'activate_plugins' ) ) {
+			return;
+		}
+		check_admin_referer( 'deactivate-plugin_' . $plugin );
+		wp_safe_redirect( admin_url( 'admin.php?page=remember-deactivate' ) );
+		exit;
+	}
+
+	/**
 	 * Register the stylesheets for the admin area.
 	 *
 	 * @since    1.0.0
@@ -536,6 +591,15 @@ class Remember_Admin {
 			array( $this, 'display_setup_wizard' )
 		);
 
+		add_submenu_page(
+			'options.php',
+			__( 'Deactivate reMember', 'remember' ),
+			'',
+			'activate_plugins',
+			'remember-deactivate',
+			array( $this, 'display_deactivate_page' )
+		);
+
 		Remember_Logger::debug( 'Admin menu registered' );
 	}
 
@@ -892,6 +956,19 @@ class Remember_Admin {
 	}
 
 	/**
+	 * Backup reminder before Plugins → Deactivate. Does not wipe data.
+	 *
+	 * @return void
+	 */
+	public function display_deactivate_page() {
+		if ( ! current_user_can( 'activate_plugins' ) ) {
+			wp_die( esc_html__( 'You do not have sufficient permissions to deactivate plugins.', 'remember' ), esc_html__( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+		}
+		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-backup.php';
+		include_once 'views/deactivate.php';
+	}
+
+	/**
 	 * Serve per-event accepted-participant CSV before admin HTML output.
 	 *
 	 * @since 1.3.0
@@ -926,7 +1003,17 @@ class Remember_Admin {
 	 * @since    1.0.0
 	 */
 	public function handle_import_export_requests() {
-		if ( ! is_admin() || ! isset( $_GET['page'] ) || 'remember-import-export' !== $_GET['page'] ) {
+		if ( ! is_admin() || ! isset( $_GET['page'] ) ) {
+			return;
+		}
+
+		$page = sanitize_key( wp_unslash( $_GET['page'] ) );
+		if ( 'remember-deactivate' === $page ) {
+			$this->handle_deactivate_backup_download();
+			return;
+		}
+
+		if ( 'remember-import-export' !== $page ) {
 			return;
 		}
 
@@ -984,6 +1071,27 @@ class Remember_Admin {
 		} else {
 			Remember_Import_Export::export_profile_questions();
 		}
+	}
+
+	/**
+	 * Full backup from the deactivate reminder screen.
+	 *
+	 * @return void
+	 */
+	private function handle_deactivate_backup_download() {
+		if ( ! isset( $_POST['remember_import_export_action'] ) ) {
+			return;
+		}
+		$action = sanitize_text_field( wp_unslash( $_POST['remember_import_export_action'] ) );
+		if ( 'export_backup' !== $action ) {
+			return;
+		}
+		if ( ! current_user_can( 'activate_plugins' ) ) {
+			return;
+		}
+		check_admin_referer( 'remember_import_export_action', 'remember_import_export_nonce' );
+		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-backup.php';
+		Remember_Backup::download();
 	}
 
 	/**

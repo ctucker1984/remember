@@ -165,6 +165,8 @@ class Remember {
 		// Import/export CSV downloads must run before admin headers are sent.
 		$this->loader->add_action( 'admin_init', $plugin_admin, 'handle_import_export_requests', 1 );
 		$this->loader->add_action( 'admin_init', $plugin_admin, 'handle_event_participant_export', 1 );
+		$this->loader->add_action( 'admin_init', $plugin_admin, 'intercept_plugin_deactivate', 0 );
+		$this->loader->add_filter( 'plugin_action_links_' . plugin_basename( REMEMBER_PLUGIN_DIR . 'remember.php' ), $plugin_admin, 'filter_plugin_action_links' );
 
 		// QuickBooks OAuth (redirect to Intuit + callback) must run before any admin HTML output.
 		$this->loader->add_action( 'admin_init', $plugin_admin, 'handle_quickbooks_oauth', 1 );

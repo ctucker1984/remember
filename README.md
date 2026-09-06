@@ -2,7 +2,7 @@
 
 WordPress membership communities: **members**, **events**, **locations**, **applications**, **vetting**, **admission tickets**, and **billing** with **QuickBooks Online** or **Xero**. Extends WordPress users with custom tables, an admin UI under **reMember**, and front-end pages via shortcodes.
 
-**Version:** 2.0.0  
+**Version:** 2.1.0  
 **Requires:** WordPress 5.0+  
 **License:** [GPL v2 or later](https://www.gnu.org/licenses/gpl-2.0.html)  
 **Source:** [github.com/ctucker1984/remember](https://github.com/ctucker1984/remember)
@@ -23,6 +23,8 @@ Members log in through WordPress (`wp-login.php` or the site’s login). reMembe
 **Updates:** From **1.3.5+**, new releases appear under **Plugins → Updates** in wp-admin (WordPress 5.8+). reMember reads [GitHub Releases](https://github.com/ctucker1984/remember/releases) and installs the packaged `remember-x.y.z.zip`. Getting to 1.3.5 itself still requires one manual upload.
 
 **Upgrade tip:** From **1.3.0+**, Upload → Replace deactivates reMember, replaces files, then reactivates. When upgrading **from ≤1.2.x**, deactivate reMember first, then upload and activate.
+
+**Deactivate vs Delete:** Deactivate pauses the plugin and keeps data. Delete (shown only after deactivate) removes plugin files and wipes reMember tables, settings, logs, photos, setup pages, and capabilities. WordPress user accounts stay. Deactivate offers a backup download first.
 
 ---
 

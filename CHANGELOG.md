@@ -12,6 +12,7 @@ All notable changes to reMember are listed here. The current plugin version is i
 - **Enhancement:** Copy a saved report into another staff member’s library. The recipient must have View Reports, the subject’s read cap, and emergency/health access if the report uses those fields. The copy is theirs; the run-time event is not copied.
 - **Enhancement:** **My Reports** lists saved reports A–Z by name.
 - **Enhancement:** Import/Export can download and restore a full JSON backup of plugin tables and settings (not WordPress users). Restore matches users by email or creates Subscribers with random passwords, so a backup can be loaded onto a fresh install. Restore is refused if this site’s plugin or database version is older than the backup. The CSV tools on that screen are condensed; column notes sit behind each card.
+- **Enhancement:** Plugins → Deactivate leaves reMember data in place and offers a JSON backup first. Plugins → Delete (only after deactivate) runs uninstall: tables, settings, logs, stored photos, setup pages, and reMember capabilities are removed; WordPress users are not.
 - **Security:** Saving a role’s capabilities immediately recalculates WordPress caps for every member who holds that role. Previously those users kept the old caps until their profile was saved.
 
 ## 2.0.0
