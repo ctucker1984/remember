@@ -455,9 +455,23 @@
 		$('#remember-report-event-hint').text(msg);
 	}
 
+	function hideCopyPanel() {
+		$('#remember-report-copy-panel').prop('hidden', true);
+		$('#remember-report-copy-user').empty();
+		$('#remember-report-copy-confirm').prop('disabled', false);
+	}
+
+	function setSavedActions() {
+		var saved = !!state.reportId;
+		$('#remember-report-delete, #remember-report-copy').prop('disabled', !saved);
+		if (!saved) {
+			hideCopyPanel();
+		}
+	}
+
 	function renderBuilder() {
 		$('#remember-report-name').val(state.name);
-		$('#remember-report-delete').prop('disabled', !state.reportId);
+		setSavedActions();
 		renderSubjectSelect();
 		renderEventSelect();
 		renderColumns();
@@ -594,7 +608,7 @@
 				return;
 			}
 			state.reportId = parseInt(res.data.report_id, 10) || 0;
-			$('#remember-report-delete').prop('disabled', !state.reportId);
+			setSavedActions();
 			notice(t('saved', 'Saved.'));
 			loadSavedList();
 		}).fail(function (xhr) {
@@ -607,6 +621,7 @@
 	}
 
 	function loadReport(id) {
+		hideCopyPanel();
 		post('remember_report_get', { report_id: id }).done(function (res) {
 			if (!res || !res.success) {
 				notice((res && res.data && res.data.message) || t('error', 'Could not run that report.'), 'error');
@@ -770,6 +785,74 @@
 		});
 		$('#remember-report-save-as').on('click', function () {
 			saveReport(true);
+		});
+		$('#remember-report-copy').on('click', function () {
+			if (!state.reportId) {
+				notice(t('copyNeedSave', 'Save this report before copying it.'), 'error');
+				return;
+			}
+			var $panel = $('#remember-report-copy-panel');
+			var $select = $('#remember-report-copy-user');
+			$panel.prop('hidden', false);
+			$select.empty().append($('<option></option>').val('').text(t('loadingRecipients', 'Loading…')));
+			$('#remember-report-copy-confirm').prop('disabled', true);
+			post('remember_report_recipients', { report_id: state.reportId }).done(function (res) {
+				$select.empty();
+				if (!res || !res.success) {
+					notice((res && res.data && res.data.message) || t('error', 'Could not run that report.'), 'error');
+					hideCopyPanel();
+					return;
+				}
+				var list = (res.data && res.data.recipients) ? res.data.recipients : [];
+				if (!list.length) {
+					notice(t('noRecipients', 'No one else can receive this report. They need View Reports plus the read access this subject uses.'), 'error');
+					hideCopyPanel();
+					return;
+				}
+				$select.append($('<option></option>').val('').text(t('copyNeedUser', 'Choose someone to copy this report to.')));
+				list.forEach(function (person) {
+					$select.append($('<option></option>').val(String(person.id)).text(person.label));
+				});
+				$('#remember-report-copy-confirm').prop('disabled', false);
+			}).fail(function (xhr) {
+				var msg = t('error', 'Could not run that report.');
+				if (xhr.responseJSON && xhr.responseJSON.data && xhr.responseJSON.data.message) {
+					msg = xhr.responseJSON.data.message;
+				}
+				notice(msg, 'error');
+				hideCopyPanel();
+			});
+		});
+		$('#remember-report-copy-cancel').on('click', function () {
+			hideCopyPanel();
+		});
+		$('#remember-report-copy-confirm').on('click', function () {
+			if (!state.reportId) {
+				notice(t('copyNeedSave', 'Save this report before copying it.'), 'error');
+				return;
+			}
+			var userId = parseInt($('#remember-report-copy-user').val(), 10) || 0;
+			if (!userId) {
+				notice(t('copyNeedUser', 'Choose someone to copy this report to.'), 'error');
+				return;
+			}
+			$('#remember-report-copy-confirm').prop('disabled', true);
+			post('remember_report_copy', { report_id: state.reportId, user_id: userId }).done(function (res) {
+				$('#remember-report-copy-confirm').prop('disabled', false);
+				if (!res || !res.success) {
+					notice((res && res.data && res.data.message) || t('error', 'Could not run that report.'), 'error');
+					return;
+				}
+				hideCopyPanel();
+				notice((res.data && res.data.message) || t('saved', 'Saved.'));
+			}).fail(function (xhr) {
+				$('#remember-report-copy-confirm').prop('disabled', false);
+				var msg = t('error', 'Could not run that report.');
+				if (xhr.responseJSON && xhr.responseJSON.data && xhr.responseJSON.data.message) {
+					msg = xhr.responseJSON.data.message;
+				}
+				notice(msg, 'error');
+			});
 		});
 		$('#remember-report-delete').on('click', function () {
 			if (!state.reportId) {

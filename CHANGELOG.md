@@ -9,6 +9,7 @@ All notable changes to reMember are listed here. The current plugin version is i
 - **Enhancement:** Report filters for select and multi-select custom fields (and other choice lists) use a dropdown of option keys instead of a free-text box.
 - **Enhancement:** Multi-select custom field answers print as comma-separated option keys in the results grid and CSV, not as JSON arrays.
 - **Enhancement:** Reports can be limited to one event at run time without saving that event on the report. Members and vetting use accepted participants; applications and payments use that event’s records.
+- **Enhancement:** Copy a saved report into another staff member’s library. The recipient must have View Reports, the subject’s read cap, and emergency/health access if the report uses those fields. The copy is theirs; the run-time event is not copied.
 
 ## 2.0.0
 

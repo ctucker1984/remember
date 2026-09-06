@@ -14,7 +14,7 @@ if ( ! defined( 'WPINC' ) ) {
 	<div class="remember-reports-pagehead">
 		<div>
 			<h1><?php esc_html_e( 'Reports', 'remember' ); ?></h1>
-			<p class="description"><?php esc_html_e( 'Build a table from members, applications, payments, vetting, or events. Saved reports are yours only. Columns you cannot read are dropped when the report runs.', 'remember' ); ?></p>
+			<p class="description"><?php esc_html_e( 'Build a table from members, applications, payments, vetting, or events. Saved reports are yours only; you can copy one into another staff member’s library if they can run it. Columns you cannot read are dropped when the report runs.', 'remember' ); ?></p>
 		</div>
 	</div>
 	<div id="remember-reports-notice"></div>
@@ -125,9 +125,18 @@ if ( ! defined( 'WPINC' ) ) {
 					<button type="button" class="button button-primary remember-report-run"><?php esc_html_e( 'Run report', 'remember' ); ?></button>
 					<button type="button" class="button" id="remember-report-save"><?php esc_html_e( 'Save', 'remember' ); ?></button>
 					<button type="button" class="button" id="remember-report-save-as"><?php esc_html_e( 'Save as', 'remember' ); ?></button>
+					<button type="button" class="button" id="remember-report-copy" disabled><?php esc_html_e( 'Copy to…', 'remember' ); ?></button>
 					<button type="button" class="button" id="remember-report-delete" disabled><?php esc_html_e( 'Delete', 'remember' ); ?></button>
 					<span class="remember-reports-footer-spacer"></span>
 					<button type="button" class="button" id="remember-report-export"><?php esc_html_e( 'Export CSV', 'remember' ); ?></button>
+				</div>
+				<div id="remember-report-copy-panel" class="remember-reports-copy" hidden>
+					<label class="remember-reports-field">
+						<span class="remember-reports-label"><?php esc_html_e( 'Copy to', 'remember' ); ?></span>
+						<select id="remember-report-copy-user"></select>
+					</label>
+					<button type="button" class="button" id="remember-report-copy-confirm"><?php esc_html_e( 'Copy', 'remember' ); ?></button>
+					<button type="button" class="button-link" id="remember-report-copy-cancel"><?php esc_html_e( 'Cancel', 'remember' ); ?></button>
 				</div>
 			</div>
 

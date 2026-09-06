@@ -21,7 +21,22 @@ class Remember_Report_Catalog {
 	 * @return array<string,string> subject => label
 	 */
 	public static function subjects_for_current_user() {
-		$all = array(
+		$out = array();
+		foreach ( self::subject_caps() as $id => $meta ) {
+			if ( self::user_can_open_subject( get_current_user_id(), $id ) ) {
+				$out[ $id ] = $meta['label'];
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * Subject ids and the read caps that unlock them.
+	 *
+	 * @return array<string,array{label:string,cap:string[]}>
+	 */
+	public static function subject_caps() {
+		return array(
 			'members'      => array(
 				'label' => __( 'Members', 'remember' ),
 				'cap'   => array( 'remember_read_members', 'remember_read_attendees' ),
@@ -43,15 +58,146 @@ class Remember_Report_Catalog {
 				'cap'   => array( 'remember_read_events' ),
 			),
 		);
-		$out = array();
-		foreach ( $all as $id => $meta ) {
-			foreach ( $meta['cap'] as $cap ) {
-				if ( current_user_can( $cap ) ) {
-					$out[ $id ] = $meta['label'];
-					break;
+	}
+
+	/**
+	 * Whether a user may open a subject.
+	 *
+	 * @param int    $user_id User.
+	 * @param string $subject Subject.
+	 * @return bool
+	 */
+	public static function user_can_open_subject( $user_id, $subject ) {
+		$all = self::subject_caps();
+		if ( ! isset( $all[ $subject ] ) ) {
+			return false;
+		}
+		foreach ( $all[ $subject ]['cap'] as $cap ) {
+			if ( user_can( $user_id, $cap ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Whether a user can receive a copy of this report as designed.
+	 *
+	 * @param int    $user_id    Recipient.
+	 * @param string $subject    Subject.
+	 * @param array  $definition Builder JSON.
+	 * @return bool
+	 */
+	public static function user_can_receive_report( $user_id, $subject, $definition ) {
+		$user_id = absint( $user_id );
+		if ( $user_id < 1 || ! user_can( $user_id, 'remember_view_reports' ) ) {
+			return false;
+		}
+		if ( ! self::user_can_open_subject( $user_id, $subject ) ) {
+			return false;
+		}
+		if ( ! is_array( $definition ) ) {
+			$definition = array();
+		}
+		$fields = self::raw_fields( $subject );
+		$needed = array();
+		foreach ( array( 'columns', 'group_by' ) as $key ) {
+			if ( empty( $definition[ $key ] ) || ! is_array( $definition[ $key ] ) ) {
+				continue;
+			}
+			foreach ( $definition[ $key ] as $id ) {
+				$needed[] = (string) $id;
+			}
+		}
+		if ( empty( $needed ) ) {
+			$needed = self::default_columns( $subject );
+		}
+		if ( ! empty( $definition['filters'] ) && is_array( $definition['filters'] ) ) {
+			foreach ( $definition['filters'] as $filter ) {
+				if ( is_array( $filter ) && ! empty( $filter['field'] ) ) {
+					$needed[] = (string) $filter['field'];
 				}
 			}
 		}
+		if ( ! empty( $definition['aggregations'] ) && is_array( $definition['aggregations'] ) ) {
+			foreach ( $definition['aggregations'] as $agg ) {
+				if ( is_array( $agg ) && ! empty( $agg['field'] ) && '*' !== $agg['field'] ) {
+					$needed[] = (string) $agg['field'];
+				}
+			}
+		}
+		if ( ! empty( $definition['sort']['field'] ) ) {
+			$needed[] = (string) $definition['sort']['field'];
+		}
+		foreach ( array_unique( $needed ) as $id ) {
+			if ( ! isset( $fields[ $id ]['sensitive'] ) ) {
+				continue;
+			}
+			if ( 'emergency' === $fields[ $id ]['sensitive'] && ! user_can( $user_id, 'remember_access_emergency_contact' ) ) {
+				return false;
+			}
+			if ( 'health' === $fields[ $id ]['sensitive'] && ! user_can( $user_id, 'remember_access_health' ) ) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * Staff who can receive a copy of this report.
+	 *
+	 * @param string $subject    Subject.
+	 * @param array  $definition Definition.
+	 * @param int    $exclude_id User to skip (usually the owner).
+	 * @return array<int,array{id:int,label:string}>
+	 */
+	public static function recipients_for_report( $subject, $definition, $exclude_id = 0 ) {
+		global $wpdb;
+		$exclude_id = absint( $exclude_id );
+		$ids        = array();
+		$member_ids = $wpdb->get_col( "SELECT DISTINCT member_id FROM {$wpdb->prefix}remember_member_roles" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		if ( is_array( $member_ids ) ) {
+			foreach ( $member_ids as $id ) {
+				$ids[] = (int) $id;
+			}
+		}
+		$admins = get_users(
+			array(
+				'role'   => 'administrator',
+				'fields' => 'ID',
+			)
+		);
+		foreach ( $admins as $id ) {
+			$ids[] = (int) $id;
+		}
+		$ids = array_values( array_unique( array_filter( $ids ) ) );
+		$out = array();
+		foreach ( $ids as $id ) {
+			if ( $id === $exclude_id ) {
+				continue;
+			}
+			if ( ! self::user_can_receive_report( $id, $subject, $definition ) ) {
+				continue;
+			}
+			$user = get_userdata( $id );
+			if ( ! $user ) {
+				continue;
+			}
+			$label = $user->display_name ? $user->display_name : $user->user_login;
+			if ( $user->user_login && $user->user_login !== $label ) {
+				$label .= ' (' . $user->user_login . ')';
+			}
+			$out[] = array(
+				'id'    => $id,
+				'label' => $label,
+			);
+		}
+		usort(
+			$out,
+			static function ( $a, $b ) {
+				return strcasecmp( $a['label'], $b['label'] );
+			}
+		);
 		return $out;
 	}
 

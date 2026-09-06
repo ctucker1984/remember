@@ -29,6 +29,8 @@ class Remember_Reports {
 		add_action( 'wp_ajax_remember_report_get', array( __CLASS__, 'ajax_get' ) );
 		add_action( 'wp_ajax_remember_report_save', array( __CLASS__, 'ajax_save' ) );
 		add_action( 'wp_ajax_remember_report_delete', array( __CLASS__, 'ajax_delete' ) );
+		add_action( 'wp_ajax_remember_report_recipients', array( __CLASS__, 'ajax_recipients' ) );
+		add_action( 'wp_ajax_remember_report_copy', array( __CLASS__, 'ajax_copy' ) );
 		add_action( 'admin_post_remember_report_export', array( __CLASS__, 'handle_export' ) );
 	}
 
@@ -156,6 +158,63 @@ class Remember_Reports {
 	}
 
 	/**
+	 * Staff who can receive a copy of the current saved report.
+	 *
+	 * @return void
+	 */
+	public static function ajax_recipients() {
+		self::require_ajax();
+		require_once plugin_dir_path( __FILE__ ) . '../models/class-saved-report.php';
+		require_once plugin_dir_path( __FILE__ ) . 'class-remember-report-catalog.php';
+		$row = self::owned_from_request();
+		if ( ! $row ) {
+			wp_send_json_error( array( 'message' => __( 'Save this report before copying it.', 'remember' ) ), 404 );
+		}
+		$definition = self::definition_from_row( $row );
+		wp_send_json_success(
+			array(
+				'recipients' => Remember_Report_Catalog::recipients_for_report( $row->subject, $definition, get_current_user_id() ),
+			)
+		);
+	}
+
+	/**
+	 * Copy a saved report into another user's library.
+	 *
+	 * @return void
+	 */
+	public static function ajax_copy() {
+		self::require_ajax();
+		require_once plugin_dir_path( __FILE__ ) . '../models/class-saved-report.php';
+		require_once plugin_dir_path( __FILE__ ) . 'class-remember-report-catalog.php';
+		$row = self::owned_from_request();
+		if ( ! $row ) {
+			wp_send_json_error( array( 'message' => __( 'Save this report before copying it.', 'remember' ) ), 404 );
+		}
+		$recipient_id = isset( $_POST['user_id'] ) ? absint( wp_unslash( $_POST['user_id'] ) ) : 0;
+		$definition   = self::definition_from_row( $row );
+		if ( ! Remember_Report_Catalog::user_can_receive_report( $recipient_id, $row->subject, $definition ) ) {
+			wp_send_json_error( array( 'message' => __( 'That person cannot run this report.', 'remember' ) ), 403 );
+		}
+		$result = Remember_Saved_Report::copy_to_owner( (int) $row->report_id, get_current_user_id(), $recipient_id );
+		if ( is_wp_error( $result ) ) {
+			wp_send_json_error( array( 'message' => $result->get_error_message() ), 400 );
+		}
+		$user  = get_userdata( $recipient_id );
+		$label = $user && $user->display_name ? $user->display_name : ( $user ? $user->user_login : (string) $recipient_id );
+		wp_send_json_success(
+			array(
+				'report_id' => (int) $result,
+				'message'   => sprintf(
+					/* translators: %s: recipient display name */
+					__( 'Copied to %s.', 'remember' ),
+					$label
+				),
+			)
+		);
+	}
+
+	/**
 	 * Stream CSV.
 	 *
 	 * @return void
@@ -220,5 +279,33 @@ class Remember_Reports {
 		}
 		unset( $decoded['event_id'] );
 		return $decoded;
+	}
+
+	/**
+	 * Owned saved report from POST.
+	 *
+	 * @return object|null
+	 */
+	private static function owned_from_request() {
+		$id = isset( $_POST['report_id'] ) ? absint( wp_unslash( $_POST['report_id'] ) ) : 0;
+		if ( $id < 1 ) {
+			return null;
+		}
+		return Remember_Saved_Report::get_owned( $id, get_current_user_id() );
+	}
+
+	/**
+	 * Definition JSON from a saved row.
+	 *
+	 * @param object $row Saved report.
+	 * @return array
+	 */
+	private static function definition_from_row( $row ) {
+		$definition = json_decode( (string) $row->definition, true );
+		if ( ! is_array( $definition ) ) {
+			$definition = array();
+		}
+		unset( $definition['event_id'] );
+		return $definition;
 	}
 }

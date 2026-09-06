@@ -130,6 +130,31 @@ class Remember_Saved_Report {
 	}
 
 	/**
+	 * Copy an owned report into another user's library.
+	 *
+	 * @param int $report_id     Source report.
+	 * @param int $from_owner_id Current owner.
+	 * @param int $to_owner_id   Recipient.
+	 * @return int|\WP_Error New report ID.
+	 */
+	public static function copy_to_owner( $report_id, $from_owner_id, $to_owner_id ) {
+		$row = self::get_owned( $report_id, $from_owner_id );
+		if ( ! $row ) {
+			return new WP_Error( 'missing', __( 'That report was not found.', 'remember' ) );
+		}
+		$to_owner_id = absint( $to_owner_id );
+		if ( $to_owner_id < 1 || $to_owner_id === absint( $from_owner_id ) ) {
+			return new WP_Error( 'recipient', __( 'Choose someone else to copy this report to.', 'remember' ) );
+		}
+		$definition = json_decode( (string) $row->definition, true );
+		if ( ! is_array( $definition ) ) {
+			$definition = array();
+		}
+		unset( $definition['event_id'] );
+		return self::save( $to_owner_id, $row->name, $row->subject, $definition, 0 );
+	}
+
+	/**
 	 * Delete owned report.
 	 *
 	 * @param int $report_id Report.
