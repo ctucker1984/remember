@@ -2,6 +2,10 @@
 
 All notable changes to reMember are listed here. The current plugin version is in `remember.php` (`REMEMBER_VERSION`) and [GitHub Releases](https://github.com/ctucker1984/remember/releases).
 
+## 2.1.0
+
+- **Enhancement:** Staff-only **Reports** in wp-admin (`View Reports`). Pick a subject (members, applications, payments, vetting, events), columns, filters, and optional grouping/totals; preview runs over AJAX; CSV export is separate. Saved reports are per user. Field catalog and query compiler enforce the same read, attendees-only, emergency-contact, and health gates as member lists and CSV. Custom profile questions appear as columns on members and applications. Database 2.2.0.
+
 ## 2.0.0
 
 - **Enhancement:** Applying for an event first shows a dialog: review and save the profile (changes optional), then return to the application. The “my profile is current” confirmation remains required. Closes [#33](https://github.com/ctucker1984/remember/issues/33).

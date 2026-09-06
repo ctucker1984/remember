@@ -88,6 +88,7 @@ class Remember_Database {
 			'notification_settings'          => 'create_notification_settings_table',
 			'profile_questions'              => 'create_profile_questions_table',
 			'profile_question_responses'     => 'create_profile_question_responses_table',
+			'saved_reports'                  => 'create_saved_reports_table',
 			'agreements'                     => 'create_agreements_table',
 			'agreement_revisions'            => 'create_agreement_revisions_table',
 			'event_agreements'               => 'create_event_agreements_table',
@@ -1033,6 +1034,31 @@ class Remember_Database {
 			PRIMARY KEY (response_id),
 			UNIQUE KEY question_member (question_id, member_id),
 			KEY member_id (member_id)
+		) $charset_collate;";
+
+		dbDelta( $sql );
+	}
+
+	/**
+	 * Per-user saved report definitions.
+	 *
+	 * @return void
+	 */
+	public function create_saved_reports_table() {
+		$table_name      = $this->prefix . 'saved_reports';
+		$charset_collate = $this->wpdb->get_charset_collate();
+
+		$sql = "CREATE TABLE $table_name (
+			report_id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+			owner_id BIGINT(20) UNSIGNED NOT NULL,
+			name VARCHAR(255) NOT NULL,
+			subject VARCHAR(50) NOT NULL,
+			definition LONGTEXT NOT NULL,
+			created_at DATETIME NOT NULL,
+			updated_at DATETIME NOT NULL,
+			PRIMARY KEY (report_id),
+			KEY owner_id (owner_id),
+			KEY owner_updated (owner_id, updated_at)
 		) $charset_collate;";
 
 		dbDelta( $sql );

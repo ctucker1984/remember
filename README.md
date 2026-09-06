@@ -43,6 +43,7 @@ Then add members via **Members → Add New**, **Convert WP User**, or the public
 |------|--------|
 | **Members** | Profiles (legal name private; public nickname / display name), photo cropper, privacy toggles, custom fields, clothing sizes, dietary / medical / allergies, profile notes (member-visible or private to wp-admin) |
 | **Duplicates** | Daily scan of possible duplicate profiles; staff with **Merge Duplicate Profiles** review side by side, pick surviving fields and roles, then merge or undo. Members are emailed only after a merge. |
+| **Reports** | Staff wp-admin builder (not raw SQL): subjects, columns, filters, grouping, AJAX preview, CSV, and per-user saved reports. `View Reports` opens the screen; each column still needs the matching read cap. |
 | **Events** | Locations, roles, add-ons, attendee directory, printable admission tickets |
 | **Applications** | Review and save profile first, then apply / accept / decline / waitlist; optional agreements with typed legal name; allow reapply after decline/cancel |
 | **Vetting** | New-member review workflow |

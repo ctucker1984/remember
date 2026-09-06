@@ -1450,6 +1450,46 @@ class Remember_Database_Updater {
 			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '2.1.3' ) );
 		}
 
+		// Update to 2.2.0 — saved reports + View Reports on Event Admin / Vetting.
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '2.2.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '2.2.0' ) );
+
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-database.php';
+			require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-capabilities.php';
+			require_once plugin_dir_path( __FILE__ ) . '../models/class-role.php';
+			$db = new Remember_Database();
+			$db->create_saved_reports_table();
+
+			$role_model = new Remember_Role();
+			$cap        = 'remember_view_reports';
+			Remember_Capabilities::setup_capabilities();
+			foreach ( array( 'Event Administrator', 'Vetting' ) as $role_name ) {
+				$role_id = (int) $wpdb->get_var(
+					$wpdb->prepare(
+						"SELECT role_id FROM {$wpdb->prefix}remember_roles WHERE role_name = %s",
+						$role_name
+					)
+				);
+				if ( $role_id > 0 ) {
+					$role_model->add_capability( $role_id, $cap );
+					$member_ids = $wpdb->get_col(
+						$wpdb->prepare(
+							"SELECT DISTINCT member_id FROM {$wpdb->prefix}remember_member_roles WHERE role_id = %d",
+							$role_id
+						)
+					);
+					if ( is_array( $member_ids ) ) {
+						foreach ( $member_ids as $member_id ) {
+							Remember_Capabilities::sync_user_capabilities_from_roles( (int) $member_id );
+						}
+					}
+				}
+			}
+
+			update_option( 'remember_db_version', '2.2.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '2.2.0' ) );
+		}
+
 		// Always re-ensure health catalogs (idempotent). Catches sites that stalled mid-migration
 		// or activated before catalog seed rows were added.
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-seeder.php';

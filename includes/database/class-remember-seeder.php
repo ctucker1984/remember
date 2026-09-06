@@ -217,6 +217,7 @@ class Remember_Seeder {
 				'remember_print_event_card',
 				// Vetting (read only)
 				'remember_read_vetting',
+				'remember_view_reports',
 			);
 			$role_model->set_capabilities( $event_admin_role_id, $event_admin_capabilities );
 		}
@@ -254,6 +255,7 @@ class Remember_Seeder {
 				// Limited PII for vetting decisions
 				'remember_access_emergency_contact',
 				'remember_access_health',
+				'remember_view_reports',
 			);
 			$role_model->set_capabilities( $vetting_role_id, $vetting_capabilities );
 		}

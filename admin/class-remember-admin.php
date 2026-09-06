@@ -128,6 +128,57 @@ class Remember_Admin {
 			if ( false !== strpos( $screen->id, 'remember-settings' ) ) {
 				wp_enqueue_media();
 			}
+			if ( false !== strpos( $screen->id, 'remember-reports' ) ) {
+				wp_enqueue_script(
+					$this->plugin_name . '-reports',
+					plugin_dir_url( __FILE__ ) . '../assets/js/reports.js',
+					array( 'jquery' ),
+					$this->version,
+					true
+				);
+				wp_localize_script(
+					$this->plugin_name . '-reports',
+					'rememberReports',
+					array(
+						'ajaxurl'    => admin_url( 'admin-ajax.php' ),
+						'nonce'      => wp_create_nonce( 'remember_reports' ),
+						'exportUrl'  => admin_url( 'admin-post.php' ),
+						'i18n'       => array(
+							'run'          => __( 'Run', 'remember' ),
+							'running'      => __( 'Running…', 'remember' ),
+							'save'         => __( 'Save', 'remember' ),
+							'saveAs'       => __( 'Save as', 'remember' ),
+							'del'          => __( 'Delete', 'remember' ),
+							'exportCsv'    => __( 'Export CSV', 'remember' ),
+							'newReport'    => __( 'New report', 'remember' ),
+							'unnamed'      => __( 'Untitled report', 'remember' ),
+							'confirmDel'   => __( 'Delete this saved report?', 'remember' ),
+							'needName'     => __( 'Name this report.', 'remember' ),
+							'noRows'       => __( 'No rows.', 'remember' ),
+							'error'        => __( 'Could not run that report.', 'remember' ),
+							'addFilter'    => __( 'Add filter', 'remember' ),
+							'addGroup'     => __( 'Add grouping', 'remember' ),
+							'addAgg'       => __( 'Add calculation', 'remember' ),
+							'detail'       => __( 'Rows', 'remember' ),
+							'summary'      => __( 'Summary', 'remember' ),
+							'page'         => __( 'Page', 'remember' ),
+							'of'           => __( 'of', 'remember' ),
+							'saved'        => __( 'Saved.', 'remember' ),
+							'deleted'      => __( 'Deleted.', 'remember' ),
+							'noSubjects'   => __( 'No report subjects are available for your role.', 'remember' ),
+							'prev'         => __( 'Previous', 'remember' ),
+							'next'         => __( 'Next', 'remember' ),
+							'remove'       => __( 'Remove', 'remember' ),
+							'up'           => __( 'Move up', 'remember' ),
+							'down'         => __( 'Move down', 'remember' ),
+							'none'         => __( 'None', 'remember' ),
+							'countStar'    => __( 'Rows', 'remember' ),
+							'rowsLabel'    => __( 'rows', 'remember' ),
+							'noneSaved'    => __( 'No saved reports yet.', 'remember' ),
+						),
+					)
+				);
+			}
 		}
 		if ( in_array( $screen->id, array( 'profile', 'user-edit' ), true ) ) {
 			wp_enqueue_script(
@@ -324,6 +375,15 @@ class Remember_Admin {
 			Remember_Profile_Duplicates::MERGE_CAP,
 			'remember-duplicates',
 			array( $this, 'display_duplicates_page' )
+		);
+
+		add_submenu_page(
+			'remember',
+			__( 'Reports', 'remember' ),
+			__( 'Reports', 'remember' ),
+			'remember_view_reports',
+			'remember-reports',
+			array( $this, 'display_reports_page' )
 		);
 
 		// Events
@@ -592,6 +652,18 @@ class Remember_Admin {
 			wp_die( __( 'You do not have sufficient permissions to access this page.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
 		}
 		include_once 'views/duplicates.php';
+	}
+
+	/**
+	 * Staff reporting builder.
+	 *
+	 * @return void
+	 */
+	public function display_reports_page() {
+		if ( ! current_user_can( 'remember_view_reports' ) ) {
+			wp_die( __( 'You do not have sufficient permissions to access this page.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+		}
+		include_once 'views/reports.php';
 	}
 
 	/**
