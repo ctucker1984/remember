@@ -16,6 +16,8 @@ WordPress membership communities: **members**, **events**, **locations**, **appl
 3. On activation the plugin creates tables, seeds default roles, and grants reMember capabilities to the WordPress **Administrator** role. It does **not** auto-create a member for the activating user.
 4. Use the **setup wizard** (or **reMember → Getting Started**) to create pages with shortcodes.
 
+**Migration:** Activate reMember on the destination site, then **reMember → Import / Export → Restore backup**. Users are matched by email (then username); missing people are created as Subscribers with random passwords until they reset. Profile photos are URLs only. Setup-wizard pages stay on the new site.
+
 Members log in through WordPress (`wp-login.php` or the site’s login). reMember uses that session; there is no separate member login form.
 
 **Updates:** From **1.3.5+**, new releases appear under **Plugins → Updates** in wp-admin (WordPress 5.8+). reMember reads [GitHub Releases](https://github.com/ctucker1984/remember/releases) and installs the packaged `remember-x.y.z.zip`. Getting to 1.3.5 itself still requires one manual upload.
@@ -48,7 +50,7 @@ Then add members via **Members → Add New**, **Convert WP User**, or the public
 | **Applications** | Review and save profile first, then apply / accept / decline / waitlist; optional agreements with typed legal name; allow reapply after decline/cancel |
 | **Vetting** | New-member review workflow |
 | **Billing** | One active provider: none, QuickBooks Online, or Xero; amounts in reMember are subtotal-oriented |
-| **Import / Export** | Members, events, locations, custom field definitions (capability-gated) |
+| **Import / Export** | CSV for members, events, locations, and custom field definitions. Full JSON backup and restore of plugin tables and settings (needs Access Settings and Import / Export Data). Restore can migrate onto a fresh install. |
 | **Agreements** | Versioned library; events pin revisions shown on apply |
 | **Notifications** | Email templates in Settings, grouped by Vetting, Applications, Billing, and General |
 

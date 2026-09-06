@@ -738,22 +738,109 @@
 }
 
 /* Import/Export page styles */
+.remember-import-export > .description {
+	max-width: 52rem;
+	margin-bottom: 16px;
+}
+
+.remember-ie-backup {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 16px;
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+	padding: 16px 20px;
+	margin: 0 0 20px;
+}
+
+.remember-ie-backup h2 {
+	margin: 0 0 6px;
+	font-size: 14px;
+}
+
+.remember-ie-backup p {
+	margin: 0;
+	max-width: 46rem;
+	color: #50575e;
+}
+
+.remember-ie-backup > form {
+	margin: 0;
+	flex: 0 0 auto;
+}
+
+.remember-ie-restore-form {
+	flex: 1 1 16rem;
+	max-width: 28rem;
+}
+
+.remember-ie-restore-form p {
+	margin: 0 0 10px;
+	max-width: none;
+	color: inherit;
+}
+
+.remember-ie-restore-form label {
+	display: block;
+}
+
 .remember-import-export-container {
 	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-	gap: 20px;
+	grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+	gap: 16px;
 }
 
-@media screen and (max-width: 1200px) {
-	.remember-import-export-container {
-		grid-template-columns: 1fr;
-	}
+.remember-ie-card {
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+	padding: 16px 18px 14px;
+	min-width: 0;
+	box-sizing: border-box;
 }
 
-@media screen and (max-width: 782px) {
-	.remember-import-export-container {
-		grid-template-columns: 1fr;
-	}
+.remember-ie-card h2 {
+	margin: 0 0 6px;
+	font-size: 14px;
+}
+
+.remember-ie-card > .description {
+	margin: 0 0 12px;
+}
+
+.remember-ie-actions,
+.remember-ie-import {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	margin: 0 0 10px;
+}
+
+.remember-ie-actions form,
+.remember-ie-import {
+	margin: 0;
+}
+
+.remember-ie-import input[type="file"] {
+	max-width: 100%;
+}
+
+.remember-ie-columns {
+	margin: 4px 0 0;
+	color: #50575e;
+}
+
+.remember-ie-columns summary {
+	cursor: pointer;
+	font-size: 13px;
+}
+
+.remember-ie-columns p {
+	margin: 8px 0 0;
 }
 
 .remember-timezone-picker {
@@ -1438,9 +1525,12 @@
 		margin: 4px 4px 4px 0;
 	}
 
-	.remember-import-export-container > div {
-		min-width: 0;
-		box-sizing: border-box;
+	.remember-import-export-container {
+		grid-template-columns: 1fr;
+	}
+
+	.remember-ie-backup {
+		flex-direction: column;
 	}
 
 	.remember-vetting-detail-grid {

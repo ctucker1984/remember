@@ -964,7 +964,7 @@ class Remember_Admin {
 		$action = sanitize_text_field( wp_unslash( $_POST['remember_import_export_action'] ) );
 		if ( ! in_array(
 			$action,
-			array( 'export_members', 'export_events', 'export_locations', 'export_profile_questions' ),
+			array( 'export_members', 'export_events', 'export_locations', 'export_profile_questions', 'export_backup' ),
 			true
 		) ) {
 			return;
@@ -978,6 +978,9 @@ class Remember_Admin {
 			Remember_Import_Export::export_events();
 		} elseif ( 'export_locations' === $action ) {
 			Remember_Import_Export::export_locations();
+		} elseif ( 'export_backup' === $action ) {
+			require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-backup.php';
+			Remember_Backup::download();
 		} else {
 			Remember_Import_Export::export_profile_questions();
 		}
