@@ -409,6 +409,17 @@ class Remember_Report_Catalog {
 		$roles_sql   = "(SELECT GROUP_CONCAT(r.role_name ORDER BY r.role_name SEPARATOR ', ') FROM {$p}remember_member_roles mr INNER JOIN {$p}remember_roles r ON r.role_id = mr.role_id WHERE mr.member_id = {MEMBER})";
 		$social_sql  = "(SELECT GROUP_CONCAT(CONCAT(smp.platform_name, ': ', msm.handle) ORDER BY smp.sort_order SEPARATOR ', ') FROM {$p}remember_member_social_media msm LEFT JOIN {$p}remember_social_media_platforms smp ON smp.platform_id = msm.platform_id WHERE msm.member_id = {MEMBER})";
 
+		$dietary_opts = self::health_option_names( 'dietary' );
+		$allergy_opts = self::health_option_names( 'allergy' );
+		$medical_opts = self::health_option_names( 'medical' );
+		$role_opts    = self::role_name_options( false );
+		$event_roles  = self::role_name_options( true );
+		$im_opts      = self::im_type_options();
+		$shirt_opts   = self::clothing_options( 'shirt' );
+		$pants_opts   = self::clothing_options( 'pants' );
+		$shoe_opts    = self::clothing_options( 'shoe' );
+		$loc_opts     = self::location_name_options();
+
 		if ( 'members' === $subject ) {
 			$mid = 'm.member_id';
 			return self::replace_member_token(
@@ -428,12 +439,12 @@ class Remember_Report_Catalog {
 					'profile.address_country'    => self::f( __( 'Country', 'remember' ), 'Location', 'string', 'p.address_country', 'profile' ),
 					'profile.cell_phone'         => self::f( __( 'Cell phone', 'remember' ), 'Profile', 'string', 'p.cell_phone', 'profile' ),
 					'profile.timezone'           => self::f( __( 'Time zone', 'remember' ), 'Profile', 'string', 'p.timezone', 'profile' ),
-					'profile.im_type'            => self::f( __( 'IM type', 'remember' ), 'Profile', 'string', 'p.im_type', 'profile' ),
+					'profile.im_type'            => self::f( __( 'IM type', 'remember' ), 'Profile', 'enum', 'p.im_type', 'profile', false, $im_opts ),
 					'profile.im_handle'          => self::f( __( 'IM handle', 'remember' ), 'Profile', 'string', 'p.im_handle', 'profile' ),
-					'profile.shirt_size'         => self::f( __( 'Shirt size', 'remember' ), 'Clothing', 'string', 'p.shirt_size', 'profile' ),
-					'profile.pants_size'         => self::f( __( 'Pants size', 'remember' ), 'Clothing', 'string', 'p.pants_size', 'profile' ),
-					'profile.shoe_size'          => self::f( __( 'Shoe size', 'remember' ), 'Clothing', 'string', 'p.shoe_size', 'profile' ),
-					'member.roles'               => self::f( __( 'Roles', 'remember' ), 'Member', 'string', $roles_sql ),
+					'profile.shirt_size'         => self::f( __( 'Shirt size', 'remember' ), 'Clothing', 'enum', 'p.shirt_size', 'profile', false, $shirt_opts ),
+					'profile.pants_size'         => self::f( __( 'Pants size', 'remember' ), 'Clothing', 'enum', 'p.pants_size', 'profile', false, $pants_opts ),
+					'profile.shoe_size'          => self::f( __( 'Shoe size', 'remember' ), 'Clothing', 'enum', 'p.shoe_size', 'profile', false, $shoe_opts ),
+					'member.roles'               => self::csv_list_field( __( 'Roles', 'remember' ), 'Member', $roles_sql, $role_opts ),
 					'member.social'              => self::f( __( 'Social handles', 'remember' ), 'Member', 'string', $social_sql ),
 					'member.created_at'          => self::f( __( 'Created', 'remember' ), 'Member', 'datetime', 'm.created_at' ),
 					'profile.updated_at'         => self::f( __( 'Profile saved', 'remember' ), 'Profile', 'datetime', 'p.updated_at', 'profile' ),
@@ -441,9 +452,9 @@ class Remember_Report_Catalog {
 					'emergency.last'             => self::f( __( 'Emergency contact last', 'remember' ), 'Emergency', 'string', 'p.emergency_contact_last', 'profile', false, array(), 'emergency' ),
 					'emergency.phone'            => self::f( __( 'Emergency contact phone', 'remember' ), 'Emergency', 'string', 'p.emergency_contact_phone', 'profile', false, array(), 'emergency' ),
 					'emergency.relationship'     => self::f( __( 'Emergency contact relationship', 'remember' ), 'Emergency', 'string', 'p.emergency_contact_relationship', 'profile', false, array(), 'emergency' ),
-					'health.dietary'             => self::f( __( 'Dietary restrictions', 'remember' ), 'Health', 'string', $dietary_sql, null, false, array(), 'health' ),
-					'health.allergies'           => self::f( __( 'Allergies', 'remember' ), 'Health', 'string', $allergy_sql, null, false, array(), 'health' ),
-					'health.medical'             => self::f( __( 'Medical accommodations', 'remember' ), 'Health', 'string', $medical_sql, null, false, array(), 'health' ),
+					'health.dietary'             => self::csv_list_field( __( 'Dietary restrictions', 'remember' ), 'Health', $dietary_sql, $dietary_opts, 'health' ),
+					'health.allergies'           => self::csv_list_field( __( 'Allergies', 'remember' ), 'Health', $allergy_sql, $allergy_opts, 'health' ),
+					'health.medical'             => self::csv_list_field( __( 'Medical accommodations', 'remember' ), 'Health', $medical_sql, $medical_opts, 'health' ),
 				),
 				$mid
 			);
@@ -458,7 +469,7 @@ class Remember_Report_Catalog {
 					'event.start_date'           => self::f( __( 'Event start', 'remember' ), 'Event', 'date', 'e.start_date', 'event' ),
 					'user.display_name'          => self::f( __( 'Member', 'remember' ), 'Member', 'string', 'u.display_name', 'user' ),
 					'user.user_email'            => self::f( __( 'Email', 'remember' ), 'Member', 'string', 'u.user_email', 'user' ),
-					'role.role_name'             => self::f( __( 'Event role', 'remember' ), 'Application', 'string', 'r.role_name', 'role' ),
+					'role.role_name'             => self::f( __( 'Event role', 'remember' ), 'Application', 'enum', 'r.role_name', 'role', false, $event_roles ),
 					'application.status'         => self::f( __( 'Status', 'remember' ), 'Application', 'enum', 'a.status', null, false, $app_status ),
 					'application.applied_at'     => self::f( __( 'Applied', 'remember' ), 'Application', 'datetime', 'a.applied_at' ),
 					'application.waitlisted_at'  => self::f( __( 'Waitlisted', 'remember' ), 'Application', 'datetime', 'a.waitlisted_at' ),
@@ -466,9 +477,9 @@ class Remember_Report_Catalog {
 					'application.ticket_voided'  => self::f( __( 'Ticket voided', 'remember' ), 'Application', 'enum', 'a.ticket_voided', null, false, array( '0', '1' ) ),
 					'application.superseded_at'  => self::f( __( 'Superseded', 'remember' ), 'Application', 'datetime', 'a.superseded_at' ),
 					'member.status'              => self::f( __( 'Member status', 'remember' ), 'Member', 'enum', 'm.status', 'member', false, $member_status ),
-					'health.dietary'             => self::f( __( 'Dietary restrictions', 'remember' ), 'Health', 'string', $dietary_sql, null, false, array(), 'health' ),
-					'health.allergies'           => self::f( __( 'Allergies', 'remember' ), 'Health', 'string', $allergy_sql, null, false, array(), 'health' ),
-					'health.medical'             => self::f( __( 'Medical accommodations', 'remember' ), 'Health', 'string', $medical_sql, null, false, array(), 'health' ),
+					'health.dietary'             => self::csv_list_field( __( 'Dietary restrictions', 'remember' ), 'Health', $dietary_sql, $dietary_opts, 'health' ),
+					'health.allergies'           => self::csv_list_field( __( 'Allergies', 'remember' ), 'Health', $allergy_sql, $allergy_opts, 'health' ),
+					'health.medical'             => self::csv_list_field( __( 'Medical accommodations', 'remember' ), 'Health', $medical_sql, $medical_opts, 'health' ),
 				),
 				$mid
 			);
@@ -517,7 +528,7 @@ class Remember_Report_Catalog {
 				'event.start_date'       => self::f( __( 'Start', 'remember' ), 'Event', 'date', 'e.start_date' ),
 				'event.end_date'         => self::f( __( 'End', 'remember' ), 'Event', 'date', 'e.end_date' ),
 				'event.is_private'       => self::f( __( 'Private', 'remember' ), 'Event', 'enum', 'e.is_private', null, false, array( '0', '1' ) ),
-				'location.location_name' => self::f( __( 'Location', 'remember' ), 'Event', 'string', 'loc.location_name', 'location' ),
+				'location.location_name' => self::f( __( 'Location', 'remember' ), 'Event', 'enum', 'loc.location_name', 'location', false, $loc_opts ),
 				'event.created_at'       => self::f( __( 'Created', 'remember' ), 'Event', 'datetime', 'e.created_at' ),
 			);
 		}
@@ -554,11 +565,11 @@ class Remember_Report_Catalog {
 			$qtype   = isset( $q->field_type ) ? (string) $q->field_type : 'text';
 			if ( 'select' === $qtype ) {
 				$type    = 'enum';
-				$options = wp_list_pluck( Remember_Profile_Questions::parse_options( $q->options_json ), 'key' );
+				$options = self::question_choice_options( $q->options_json );
 			} elseif ( 'multiselect' === $qtype ) {
 				$type    = 'multiselect';
 				$list    = true;
-				$options = wp_list_pluck( Remember_Profile_Questions::parse_options( $q->options_json ), 'key' );
+				$options = self::question_choice_options( $q->options_json );
 			}
 			$out[ $id ] = self::f(
 				(string) $q->label,
@@ -572,6 +583,138 @@ class Remember_Report_Catalog {
 			$out[ $id ]['question_id'] = $qid;
 			$out[ $id ]['member_expr'] = $member_expr;
 			$out[ $id ]['list']        = $list;
+		}
+		return $out;
+	}
+
+	/**
+	 * Custom-question choices as {id,label} for the filter UI.
+	 *
+	 * @param mixed $json Options JSON.
+	 * @return array<int,array{id:string,label:string}>
+	 */
+	private static function question_choice_options( $json ) {
+		$out = array();
+		foreach ( Remember_Profile_Questions::parse_options( $json ) as $row ) {
+			if ( empty( $row['key'] ) ) {
+				continue;
+			}
+			$out[] = array(
+				'id'    => (string) $row['key'],
+				'label' => ! empty( $row['label'] ) ? (string) $row['label'] : (string) $row['key'],
+			);
+		}
+		return $out;
+	}
+
+	/**
+	 * Multi-value field stored as comma-separated names (dietary, allergies, roles).
+	 *
+	 * @param string      $label     Label.
+	 * @param string      $group     Group.
+	 * @param string      $sql       Expression.
+	 * @param array       $options   Choice list.
+	 * @param string|null $sensitive emergency|health.
+	 * @return array<string,mixed>
+	 */
+	private static function csv_list_field( $label, $group, $sql, $options, $sensitive = null ) {
+		$field               = self::f( $label, $group, 'multiselect', $sql, null, false, $options, $sensitive );
+		$field['list']       = true;
+		$field['list_match'] = 'csv';
+		return $field;
+	}
+
+	/**
+	 * Active health-catalog names for filter dropdowns.
+	 *
+	 * @param string $kind dietary|allergy|medical.
+	 * @return string[]
+	 */
+	private static function health_option_names( $kind ) {
+		global $wpdb;
+		$map = array(
+			'dietary' => array( 'remember_dietary_restrictions', 'restriction_name' ),
+			'allergy' => array( 'remember_allergies', 'allergy_name' ),
+			'medical' => array( 'remember_medical_accommodations', 'accommodation_name' ),
+		);
+		if ( ! isset( $map[ $kind ] ) ) {
+			return array();
+		}
+		$table = $wpdb->prefix . $map[ $kind ][0];
+		$col   = $map[ $kind ][1];
+		$names = $wpdb->get_col(
+			"SELECT {$col} FROM {$table} WHERE is_active = 1 ORDER BY CASE WHEN {$col} = 'None' THEN 0 ELSE 1 END ASC, sort_order ASC, {$col} ASC"
+		); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table/column from a fixed map.
+		return is_array( $names ) ? array_values( array_filter( array_map( 'strval', $names ), 'strlen' ) ) : array();
+	}
+
+	/**
+	 * Role names for filter dropdowns.
+	 *
+	 * @param bool $event_only Event roles only.
+	 * @return string[]
+	 */
+	private static function role_name_options( $event_only ) {
+		global $wpdb;
+		$sql = $event_only
+			? "SELECT role_name FROM {$wpdb->prefix}remember_roles WHERE is_event_role = 1 ORDER BY role_name ASC"
+			: "SELECT role_name FROM {$wpdb->prefix}remember_roles ORDER BY role_name ASC";
+		$names = $wpdb->get_col( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- prefix only.
+		return is_array( $names ) ? array_values( array_filter( array_map( 'strval', $names ), 'strlen' ) ) : array();
+	}
+
+	/**
+	 * Location names for filter dropdowns.
+	 *
+	 * @return string[]
+	 */
+	private static function location_name_options() {
+		global $wpdb;
+		$names = $wpdb->get_col( "SELECT location_name FROM {$wpdb->prefix}remember_locations ORDER BY location_name ASC" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- prefix only.
+		return is_array( $names ) ? array_values( array_filter( array_map( 'strval', $names ), 'strlen' ) ) : array();
+	}
+
+	/**
+	 * IM platform keys and labels.
+	 *
+	 * @return array<int,array{id:string,label:string}>
+	 */
+	private static function im_type_options() {
+		require_once plugin_dir_path( __FILE__ ) . 'class-remember-im-platforms.php';
+		$out = array();
+		foreach ( Remember_Im_Platforms::get_active() as $row ) {
+			$key = isset( $row->platform_key ) ? (string) $row->platform_key : '';
+			if ( '' === $key ) {
+				continue;
+			}
+			$label = isset( $row->platform_name ) && $row->platform_name ? (string) $row->platform_name : $key;
+			$out[] = array(
+				'id'    => $key,
+				'label' => $label,
+			);
+		}
+		return $out;
+	}
+
+	/**
+	 * Clothing size codes with available-size labels.
+	 *
+	 * @param string $category shirt|pants|shoe.
+	 * @return array<int,array{id:string,label:string}>
+	 */
+	private static function clothing_options( $category ) {
+		require_once plugin_dir_path( __FILE__ ) . 'class-remember-clothing-sizes.php';
+		$out = array();
+		foreach ( Remember_Clothing_Sizes::options_for( $category ) as $code ) {
+			$code = (string) $code;
+			if ( '' === $code ) {
+				continue;
+			}
+			$label = Remember_Clothing_Sizes::format_pair( $category, $code );
+			$out[] = array(
+				'id'    => $code,
+				'label' => $label ? $label : $code,
+			);
 		}
 		return $out;
 	}

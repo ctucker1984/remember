@@ -6,7 +6,7 @@ All notable changes to reMember are listed here. The current plugin version is i
 
 - **Enhancement:** Staff-only **Reports** in wp-admin (`View Reports`). Pick a subject (members, applications, payments, vetting, events), columns, filters, and optional grouping/totals; preview runs over AJAX; CSV export is separate. Saved reports are per user. Field catalog and query compiler enforce the same read, attendees-only, emergency-contact, and health gates as member lists and CSV. Custom profile questions appear as columns on members and applications. Database 2.2.0.
 - **Enhancement:** Reports builder uses labeled fields, a header Run control, and less nested boxing so the screen sits closer to the rest of wp-admin without a wall of fieldsets.
-- **Enhancement:** Report filters for select and multi-select custom fields (and other choice lists) use a dropdown of option keys instead of a free-text box.
+- **Enhancement:** Report filters use the field’s choice list for custom select/multi-select questions and for catalog fields (dietary, allergies, medical, roles, clothing sizes, IM type, event role, location).
 - **Enhancement:** Multi-select custom field answers print as comma-separated option keys in the results grid and CSV, not as JSON arrays.
 - **Enhancement:** Reports can be limited to one event at run time without saving that event on the report. Members and vetting use accepted participants; applications and payments use that event’s records.
 - **Enhancement:** Copy a saved report into another staff member’s library. The recipient must have View Reports, the subject’s read cap, and emergency/health access if the report uses those fields. The copy is theirs; the run-time event is not copied.

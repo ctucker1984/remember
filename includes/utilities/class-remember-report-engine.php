@@ -535,11 +535,20 @@ class Remember_Report_Engine {
 			if ( empty( $keys ) ) {
 				return null;
 			}
+			$match  = isset( $fields[ $fid ]['list_match'] ) ? (string) $fields[ $fid ]['list_match'] : 'json';
 			$ors    = array();
 			$params = array();
-			foreach ( $keys as $key ) {
-				$ors[]    = "{$sql} LIKE %s";
-				$params[] = '%"' . $wpdb->esc_like( $key ) . '"%';
+			if ( 'csv' === $match ) {
+				$csv = "REPLACE({$sql}, ', ', ',')";
+				foreach ( $keys as $key ) {
+					$ors[]    = "FIND_IN_SET(%s, {$csv}) > 0";
+					$params[] = $key;
+				}
+			} else {
+				foreach ( $keys as $key ) {
+					$ors[]    = "{$sql} LIKE %s";
+					$params[] = '%"' . $wpdb->esc_like( $key ) . '"%';
+				}
 			}
 			return array( 'sql' => '(' . implode( ' OR ', $ors ) . ')', 'params' => $params );
 		}
@@ -596,7 +605,23 @@ class Remember_Report_Engine {
 		if ( empty( $field['options'] ) || ! is_array( $field['options'] ) ) {
 			return $list;
 		}
-		$allowed = array_map( 'strval', $field['options'] );
+		$allowed = array();
+		foreach ( $field['options'] as $opt ) {
+			if ( is_array( $opt ) ) {
+				$id = isset( $opt['id'] ) ? $opt['id'] : ( isset( $opt['key'] ) ? $opt['key'] : '' );
+			} elseif ( is_object( $opt ) ) {
+				$id = isset( $opt->id ) ? $opt->id : ( isset( $opt->key ) ? $opt->key : '' );
+			} else {
+				$id = $opt;
+			}
+			$id = (string) $id;
+			if ( '' !== $id ) {
+				$allowed[] = $id;
+			}
+		}
+		if ( empty( $allowed ) ) {
+			return $list;
+		}
 		return array_values( array_intersect( $list, $allowed ) );
 	}
 
