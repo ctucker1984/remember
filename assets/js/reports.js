@@ -151,11 +151,18 @@
 		}), selected, includeBlank);
 	}
 
+	function labeled(label, $control) {
+		var $wrap = $('<label class="remember-reports-field"/>');
+		$wrap.append($('<span class="remember-reports-label"/>').text(label));
+		$wrap.append($control);
+		return $wrap;
+	}
+
 	function renderSaved(list) {
 		var $ul = $('#remember-saved-reports');
 		$ul.empty();
 		if (!list || !list.length) {
-			$ul.append($('<li class="description"/>').text(t('noneSaved', 'No saved reports yet.')));
+		$ul.append($('<li class="remember-reports-nav-empty"/>').text(t('noneSaved', 'No saved reports yet.')));
 			return;
 		}
 		list.forEach(function (row) {
@@ -192,17 +199,19 @@
 		});
 		$groups.empty();
 		order.forEach(function (group) {
-			var $fs = $('<fieldset class="remember-reports-field-group"/>');
-			$fs.append($('<legend/>').text(group));
+			var $cluster = $('<div class="remember-reports-cluster"/>');
+			$cluster.append($('<h4/>').text(group));
+			var $grid = $('<div class="remember-reports-checks"/>');
 			grouped[group].forEach(function (f) {
 				var $lab = $('<label/>');
 				var $cb = $('<input type="checkbox" class="remember-report-col"/>');
 				$cb.val(f.id);
 				$cb.prop('checked', state.columns.indexOf(f.id) !== -1);
-				$lab.append($cb).append(' ' + f.label);
-				$fs.append($lab);
+				$lab.append($cb).append($('<span/>').text(f.label));
+				$grid.append($lab);
 			});
-			$groups.append($fs);
+			$cluster.append($grid);
+			$groups.append($cluster);
 		});
 		renderColumnOrder();
 	}
@@ -242,11 +251,11 @@
 		var $box = $('#remember-report-groups');
 		$box.empty();
 		state.group_by.forEach(function (id, index) {
-			var $row = $('<div class="remember-reports-row"/>');
+			var $row = $('<div class="remember-reports-criteria"/>');
 			var $sel = $('<select class="remember-group-field"/>').attr('data-index', index);
 			$sel.html(fieldOptions(id, false));
 			var $rm = $('<button type="button" class="button-link remember-group-remove"/>').text(t('remove', 'Remove')).attr('data-index', index);
-			$row.append($sel, $rm);
+			$row.append(labeled(t('fieldLabel', 'Field'), $sel), $rm);
 			$box.append($row);
 		});
 	}
@@ -256,7 +265,7 @@
 		$box.empty();
 		var fns = catalog.aggregations || [];
 		state.aggregations.forEach(function (agg, index) {
-			var $row = $('<div class="remember-reports-row"/>');
+			var $row = $('<div class="remember-reports-criteria"/>');
 			var $fn = $('<select class="remember-agg-fn"/>').attr('data-index', index);
 			$fn.html(optionList(fns, agg.fn, false));
 			var $field = $('<select class="remember-agg-field"/>').attr('data-index', index);
@@ -274,7 +283,11 @@
 			}
 			$field.html(optionList(fieldItems, agg.field || '*', false));
 			var $rm = $('<button type="button" class="button-link remember-agg-remove"/>').text(t('remove', 'Remove')).attr('data-index', index);
-			$row.append($fn, $field, $rm);
+			$row.append(
+				labeled(t('calcLabel', 'Calculation'), $fn),
+				labeled(t('fieldLabel', 'Field'), $field),
+				$rm
+			);
 			$box.append($row);
 		});
 	}
@@ -294,15 +307,17 @@
 			if (!filter.op) {
 				filter.op = ops[0] ? ops[0].id : 'eq';
 			}
-			var $row = $('<div class="remember-reports-row remember-filter-row"/>');
+			var $row = $('<div class="remember-reports-criteria remember-filter-row"/>');
 			var $field = $('<select class="remember-filter-field"/>').attr('data-index', index);
 			$field.html(fieldOptions(filter.field, false));
 			var $op = $('<select class="remember-filter-op"/>').attr('data-index', index);
 			$op.html(optionList(ops, filter.op, false));
-			$row.append($field, $op);
-			$row.append(valueControl(filter, field, index));
-			var $rm = $('<button type="button" class="button-link remember-filter-remove"/>').text(t('remove', 'Remove')).attr('data-index', index);
-			$row.append($rm);
+			$row.append(
+				labeled(t('fieldLabel', 'Field'), $field),
+				labeled(t('operatorLabel', 'Operator'), $op),
+				labeled(t('valueLabel', 'Value'), valueControl(filter, field, index)),
+				$('<button type="button" class="button-link remember-filter-remove"/>').text(t('remove', 'Remove')).attr('data-index', index)
+			);
 			$box.append($row);
 		});
 	}

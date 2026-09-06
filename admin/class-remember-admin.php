@@ -144,7 +144,7 @@ class Remember_Admin {
 						'nonce'      => wp_create_nonce( 'remember_reports' ),
 						'exportUrl'  => admin_url( 'admin-post.php' ),
 						'i18n'       => array(
-							'run'          => __( 'Run', 'remember' ),
+							'run'          => __( 'Run report', 'remember' ),
 							'running'      => __( 'Running…', 'remember' ),
 							'save'         => __( 'Save', 'remember' ),
 							'saveAs'       => __( 'Save as', 'remember' ),
@@ -175,6 +175,10 @@ class Remember_Admin {
 							'countStar'    => __( 'Rows', 'remember' ),
 							'rowsLabel'    => __( 'rows', 'remember' ),
 							'noneSaved'    => __( 'No saved reports yet.', 'remember' ),
+							'fieldLabel'   => __( 'Field', 'remember' ),
+							'operatorLabel'=> __( 'Operator', 'remember' ),
+							'valueLabel'   => __( 'Value', 'remember' ),
+							'calcLabel'    => __( 'Calculation', 'remember' ),
 						),
 					)
 				);

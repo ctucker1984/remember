@@ -5,6 +5,7 @@ All notable changes to reMember are listed here. The current plugin version is i
 ## 2.1.0
 
 - **Enhancement:** Staff-only **Reports** in wp-admin (`View Reports`). Pick a subject (members, applications, payments, vetting, events), columns, filters, and optional grouping/totals; preview runs over AJAX; CSV export is separate. Saved reports are per user. Field catalog and query compiler enforce the same read, attendees-only, emergency-contact, and health gates as member lists and CSV. Custom profile questions appear as columns on members and applications. Database 2.2.0.
+- **Enhancement:** Reports builder uses labeled fields, a header Run control, and less nested boxing so the screen sits closer to the rest of wp-admin without a wall of fieldsets.
 
 ## 2.0.0
 

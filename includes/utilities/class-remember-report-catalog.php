@@ -323,11 +323,7 @@ class Remember_Report_Catalog {
 			$id   = 'pq_' . $qid;
 			$join = 'pq_' . $qid;
 			$out[ $id ] = self::f(
-				sprintf(
-					/* translators: %s: custom field label */
-					__( 'Custom: %s', 'remember' ),
-					(string) $q->label
-				),
+				(string) $q->label,
 				__( 'Custom fields', 'remember' ),
 				'string',
 				$join . '.value_text',
