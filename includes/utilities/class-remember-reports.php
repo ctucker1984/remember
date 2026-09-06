@@ -65,7 +65,8 @@ class Remember_Reports {
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-report-engine.php';
 		$definition = self::definition_from_request();
 		$page       = isset( $_POST['page'] ) ? absint( wp_unslash( $_POST['page'] ) ) : 1;
-		$result     = Remember_Report_Engine::run( $definition, $page, Remember_Report_Engine::PAGE_SIZE, false );
+		$event_id = isset( $_POST['event_id'] ) ? absint( wp_unslash( $_POST['event_id'] ) ) : 0;
+		$result   = Remember_Report_Engine::run( $definition, $page, Remember_Report_Engine::PAGE_SIZE, false, $event_id );
 		if ( is_wp_error( $result ) ) {
 			wp_send_json_error( array( 'message' => $result->get_error_message() ), 400 );
 		}
@@ -170,7 +171,8 @@ class Remember_Reports {
 		if ( ! is_array( $definition ) ) {
 			$definition = array();
 		}
-		$result = Remember_Report_Engine::run( $definition, 1, Remember_Report_Engine::PAGE_SIZE, true );
+		$event_id = isset( $_POST['event_id'] ) ? absint( wp_unslash( $_POST['event_id'] ) ) : 0;
+		$result   = Remember_Report_Engine::run( $definition, 1, Remember_Report_Engine::PAGE_SIZE, true, $event_id );
 		if ( is_wp_error( $result ) ) {
 			wp_die( esc_html( $result->get_error_message() ) );
 		}
@@ -206,12 +208,17 @@ class Remember_Reports {
 	private static function definition_from_request() {
 		$raw = isset( $_POST['definition'] ) ? wp_unslash( $_POST['definition'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 		if ( is_array( $raw ) ) {
+			unset( $raw['event_id'] );
 			return $raw;
 		}
 		if ( ! is_string( $raw ) || '' === $raw ) {
 			return array();
 		}
 		$decoded = json_decode( $raw, true );
-		return is_array( $decoded ) ? $decoded : array();
+		if ( ! is_array( $decoded ) ) {
+			return array();
+		}
+		unset( $decoded['event_id'] );
+		return $decoded;
 	}
 }

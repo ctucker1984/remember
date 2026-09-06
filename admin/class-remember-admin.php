@@ -180,6 +180,12 @@ class Remember_Admin {
 							'valueLabel'   => __( 'Value', 'remember' ),
 							'selectValue'  => __( 'Select value', 'remember' ),
 							'calcLabel'    => __( 'Calculation', 'remember' ),
+							'allEvents'    => __( 'All events', 'remember' ),
+							'eventHintAll' => __( 'Saved reports stay global. Choose an event to limit this run; it is not saved with the report.', 'remember' ),
+							'eventHintMembers' => __( 'This run is limited to accepted participants of the selected event. The saved report stays global.', 'remember' ),
+							'eventHintApps' => __( 'This run is limited to applications for the selected event. The saved report stays global.', 'remember' ),
+							'eventHintPay' => __( 'This run is limited to payments for the selected event. The saved report stays global.', 'remember' ),
+							'eventHintEvents' => __( 'This run is limited to the selected event. The saved report stays global.', 'remember' ),
 						),
 					)
 				);

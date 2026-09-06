@@ -133,7 +133,85 @@ class Remember_Report_Catalog {
 			array( 'id' => 'min', 'label' => __( 'Min', 'remember' ) ),
 			array( 'id' => 'max', 'label' => __( 'Max', 'remember' ) ),
 		);
+		$out['events'] = self::events_for_picker();
 		return $out;
+	}
+
+	/**
+	 * Events the current user may use as a run-time report scope.
+	 *
+	 * @return array<int,array{id:int,label:string}>
+	 */
+	public static function events_for_picker() {
+		global $wpdb;
+		$p = $wpdb->prefix;
+		$sql = "SELECT event_id, event_name, start_date FROM {$p}remember_events";
+		$params = array();
+		if ( self::is_attendees_only() ) {
+			$sql     .= " WHERE event_id IN (SELECT DISTINCT event_id FROM {$p}remember_event_applications WHERE member_id = %d AND status = 'accepted')";
+			$params[] = get_current_user_id();
+		}
+		$sql .= ' ORDER BY start_date DESC, event_name ASC';
+		$rows = empty( $params )
+			? $wpdb->get_results( $sql ) // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			: $wpdb->get_results( $wpdb->prepare( $sql, ...$params ) );
+		if ( ! is_array( $rows ) ) {
+			return array();
+		}
+		$out = array();
+		foreach ( $rows as $row ) {
+			$id = (int) $row->event_id;
+			if ( $id < 1 ) {
+				continue;
+			}
+			$label = (string) $row->event_name;
+			if ( ! empty( $row->start_date ) ) {
+				$ts = strtotime( (string) $row->start_date );
+				if ( $ts ) {
+					$label .= ' (' . date_i18n( get_option( 'date_format' ), $ts ) . ')';
+				}
+			}
+			$out[] = array(
+				'id'    => $id,
+				'label' => $label,
+			);
+		}
+		return $out;
+	}
+
+	/**
+	 * Keep an event id only if the current user may scope to it.
+	 *
+	 * @param int $event_id Event.
+	 * @return int
+	 */
+	public static function sanitize_event_id( $event_id ) {
+		$event_id = absint( $event_id );
+		if ( $event_id < 1 ) {
+			return 0;
+		}
+		foreach ( self::events_for_picker() as $event ) {
+			if ( (int) $event['id'] === $event_id ) {
+				return $event_id;
+			}
+		}
+		return 0;
+	}
+
+	/**
+	 * Label for a picker event.
+	 *
+	 * @param int $event_id Event.
+	 * @return string
+	 */
+	public static function event_label( $event_id ) {
+		$event_id = absint( $event_id );
+		foreach ( self::events_for_picker() as $event ) {
+			if ( (int) $event['id'] === $event_id ) {
+				return (string) $event['label'];
+			}
+		}
+		return '';
 	}
 
 	/**

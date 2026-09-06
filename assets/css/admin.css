@@ -2136,8 +2136,13 @@
 	padding-bottom: 4px;
 }
 
-.remember-reports-toolbar-run {
-	margin-left: auto;
+.remember-reports-event select {
+	min-width: 220px;
+	max-width: 340px;
+}
+
+.remember-reports-event-hint {
+	margin: 8px 0 0;
 }
 
 .remember-reports-field {

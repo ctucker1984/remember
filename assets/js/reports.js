@@ -11,6 +11,7 @@
 	var page = 1;
 	var lastTotal = 0;
 	var lastPages = 1;
+	var eventId = 0;
 	var state = emptyState();
 
 	function emptyState() {
@@ -424,10 +425,41 @@
 		}), state.subject, false));
 	}
 
+	function selectedEventId() {
+		return parseInt($('#remember-report-event').val(), 10) || 0;
+	}
+
+	function renderEventSelect() {
+		var items = (catalog.events || []).map(function (event) {
+			return { id: String(event.id), label: event.label };
+		});
+		$('#remember-report-event').html(optionList(items, eventId ? String(eventId) : '', true, t('allEvents', 'All events')));
+		updateEventHint();
+	}
+
+	function updateEventHint() {
+		var id = selectedEventId();
+		var sub = state.subject;
+		var msg = t('eventHintAll', 'Saved reports stay global. Choose an event to limit this run; it is not saved with the report.');
+		if (id) {
+			if (sub === 'applications') {
+				msg = t('eventHintApps', 'This run is limited to applications for the selected event. The saved report stays global.');
+			} else if (sub === 'payments') {
+				msg = t('eventHintPay', 'This run is limited to payments for the selected event. The saved report stays global.');
+			} else if (sub === 'events') {
+				msg = t('eventHintEvents', 'This run is limited to the selected event. The saved report stays global.');
+			} else {
+				msg = t('eventHintMembers', 'This run is limited to accepted participants of the selected event. The saved report stays global.');
+			}
+		}
+		$('#remember-report-event-hint').text(msg);
+	}
+
 	function renderBuilder() {
 		$('#remember-report-name').val(state.name);
 		$('#remember-report-delete').prop('disabled', !state.reportId);
 		renderSubjectSelect();
+		renderEventSelect();
 		renderColumns();
 		renderFilters();
 		renderMode();
@@ -483,7 +515,8 @@
 		notice('');
 		post('remember_report_run', {
 			definition: JSON.stringify(definition()),
-			page: page
+			page: page,
+			event_id: selectedEventId()
 		}).done(function (res) {
 			if (!res || !res.success) {
 				notice((res && res.data && res.data.message) || t('error', 'Could not run that report.'), 'error');
@@ -525,7 +558,11 @@
 		if (!lastTotal) {
 			$('#remember-report-empty').text(t('noRows', 'No rows.')).prop('hidden', false);
 		}
-		$('#remember-report-meta').text(lastTotal + ' ' + t('rowsLabel', 'rows'));
+		var meta = lastTotal + ' ' + t('rowsLabel', 'rows');
+		if (data.event_label) {
+			meta += ' · ' + data.event_label;
+		}
+		$('#remember-report-meta').text(meta);
 		$('#remember-report-pager').prop('hidden', lastPages <= 1);
 		$('#remember-report-page-label').text(t('page', 'Page') + ' ' + page + ' ' + t('of', 'of') + ' ' + lastPages);
 		$('#remember-report-prev').prop('disabled', page <= 1);
@@ -614,6 +651,10 @@
 			applyDefaults();
 			renderBuilder();
 			clearResults();
+		});
+		$('#remember-report-event').on('change', function () {
+			eventId = selectedEventId();
+			updateEventHint();
 		});
 		$('input[name="remember_report_mode"]').on('change', function () {
 			state.mode = $(this).val() === 'summary' ? 'summary' : 'detail';
@@ -751,6 +792,7 @@
 			var $form = $('#remember-report-export-form');
 			$form.find('[name="nonce"]').val(cfg.nonce);
 			$form.find('[name="definition"]').val(JSON.stringify(definition()));
+			$form.find('[name="event_id"]').val(String(selectedEventId() || ''));
 			$form.trigger('submit');
 		});
 		$('#remember-saved-reports').on('click', '.remember-saved-report', function () {

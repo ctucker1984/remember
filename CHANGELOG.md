@@ -8,6 +8,7 @@ All notable changes to reMember are listed here. The current plugin version is i
 - **Enhancement:** Reports builder uses labeled fields, a header Run control, and less nested boxing so the screen sits closer to the rest of wp-admin without a wall of fieldsets.
 - **Enhancement:** Report filters for select and multi-select custom fields (and other choice lists) use a dropdown of option keys instead of a free-text box.
 - **Enhancement:** Multi-select custom field answers print as comma-separated option keys in the results grid and CSV, not as JSON arrays.
+- **Enhancement:** Reports can be limited to one event at run time without saving that event on the report. Members and vetting use accepted participants; applications and payments use that event’s records.
 
 ## 2.0.0
 

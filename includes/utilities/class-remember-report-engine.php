@@ -25,14 +25,16 @@ class Remember_Report_Engine {
 	 * @param int   $page       1-based page.
 	 * @param int   $per_page   Page size.
 	 * @param bool  $export     Full export (capped).
+	 * @param int   $event_id   Optional run-time event scope.
 	 * @return array|\WP_Error
 	 */
-	public static function run( $definition, $page = 1, $per_page = self::PAGE_SIZE, $export = false ) {
+	public static function run( $definition, $page = 1, $per_page = self::PAGE_SIZE, $export = false, $event_id = 0 ) {
 		global $wpdb;
 
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-report-catalog.php';
 
-		$compiled = self::compile( $definition );
+		$event_id = Remember_Report_Catalog::sanitize_event_id( $event_id );
+		$compiled = self::compile( $definition, $event_id );
 		if ( is_wp_error( $compiled ) ) {
 			return $compiled;
 		}
@@ -80,6 +82,8 @@ class Remember_Report_Engine {
 			'pages'   => $export ? 1 : (int) max( 1, ceil( $count / $per_page ) ),
 			'mode'    => $compiled['mode'],
 			'subject' => $compiled['subject'],
+			'event_id'    => $event_id,
+			'event_label' => $event_id ? Remember_Report_Catalog::event_label( $event_id ) : '',
 		);
 	}
 
@@ -87,13 +91,15 @@ class Remember_Report_Engine {
 	 * Compile definition to SQL fragments.
 	 *
 	 * @param array $definition Definition.
+	 * @param int   $event_id   Optional run-time event scope.
 	 * @return array|\WP_Error
 	 */
-	public static function compile( $definition ) {
+	public static function compile( $definition, $event_id = 0 ) {
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-report-catalog.php';
 		if ( ! is_array( $definition ) ) {
 			return new WP_Error( 'invalid', __( 'Invalid report.', 'remember' ) );
 		}
+		$event_id = absint( $event_id );
 		$subject = isset( $definition['subject'] ) ? sanitize_key( $definition['subject'] ) : '';
 		$fields  = Remember_Report_Catalog::fields_for_current_user( $subject );
 		if ( empty( $fields ) ) {
@@ -184,7 +190,7 @@ class Remember_Report_Engine {
 		$from    = self::from_sql( $subject );
 		$where   = array( '1=1' );
 		$params  = array();
-		$scope   = self::scope_sql( $subject );
+		$scope   = self::scope_sql( $subject, $event_id );
 		if ( $scope['sql'] ) {
 			$where[] = $scope['sql'];
 			$params  = array_merge( $params, $scope['params'] );
@@ -377,19 +383,29 @@ class Remember_Report_Engine {
 	}
 
 	/**
-	 * Row-scope SQL (merged exclusion, attendees-only).
+	 * Row-scope SQL (merged exclusion, attendees-only, optional event).
 	 *
-	 * @param string $subject Subject.
+	 * @param string $subject  Subject.
+	 * @param int    $event_id Event scope.
 	 * @return array{sql:string,params:array}
 	 */
-	private static function scope_sql( $subject ) {
+	private static function scope_sql( $subject, $event_id = 0 ) {
 		global $wpdb;
 		$p      = $wpdb->prefix;
 		$sql    = '';
 		$params = array();
+		$event_id = absint( $event_id );
 
 		if ( 'members' === $subject ) {
 			$sql = "(m.status IS NULL OR m.status != 'merged')";
+		}
+
+		if ( $event_id > 0 ) {
+			$event_scope = self::event_scope_sql( $subject, $event_id );
+			if ( $event_scope['sql'] ) {
+				$sql      = $sql ? $sql . ' AND ' . $event_scope['sql'] : $event_scope['sql'];
+				$params   = array_merge( $params, $event_scope['params'] );
+			}
 		}
 
 		if ( ! Remember_Report_Catalog::is_attendees_only() ) {
@@ -430,6 +446,55 @@ class Remember_Report_Engine {
 		}
 
 		return array( 'sql' => $sql, 'params' => $params );
+	}
+
+	/**
+	 * Event grain for a subject.
+	 *
+	 * Members and vetting: accepted, current applications.
+	 * Applications and payments: that event, any application status.
+	 *
+	 * @param string $subject  Subject.
+	 * @param int    $event_id Event.
+	 * @return array{sql:string,params:array}
+	 */
+	private static function event_scope_sql( $subject, $event_id ) {
+		global $wpdb;
+		$p        = $wpdb->prefix;
+		$event_id = absint( $event_id );
+		$accepted = "ea.status = 'accepted' AND (ea.superseded_at IS NULL OR ea.superseded_at = '0000-00-00 00:00:00')";
+
+		if ( 'members' === $subject ) {
+			return array(
+				'sql'    => "EXISTS (SELECT 1 FROM {$p}remember_event_applications ea WHERE ea.member_id = m.member_id AND ea.event_id = %d AND {$accepted})",
+				'params' => array( $event_id ),
+			);
+		}
+		if ( 'vetting' === $subject ) {
+			return array(
+				'sql'    => "EXISTS (SELECT 1 FROM {$p}remember_event_applications ea WHERE ea.member_id = v.member_id AND ea.event_id = %d AND {$accepted})",
+				'params' => array( $event_id ),
+			);
+		}
+		if ( 'applications' === $subject ) {
+			return array(
+				'sql'    => 'a.event_id = %d',
+				'params' => array( $event_id ),
+			);
+		}
+		if ( 'payments' === $subject ) {
+			return array(
+				'sql'    => "EXISTS (SELECT 1 FROM {$p}remember_event_applications ea WHERE ea.application_id = pay.event_application_id AND ea.event_id = %d)",
+				'params' => array( $event_id ),
+			);
+		}
+		if ( 'events' === $subject ) {
+			return array(
+				'sql'    => 'e.event_id = %d',
+				'params' => array( $event_id ),
+			);
+		}
+		return array( 'sql' => '', 'params' => array() );
 	}
 
 	/**

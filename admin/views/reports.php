@@ -39,6 +39,10 @@ if ( ! defined( 'WPINC' ) ) {
 						<span class="remember-reports-label"><?php esc_html_e( 'Subject', 'remember' ); ?></span>
 						<select id="remember-report-subject"></select>
 					</label>
+					<label class="remember-reports-field remember-reports-event">
+						<span class="remember-reports-label"><?php esc_html_e( 'Event', 'remember' ); ?></span>
+						<select id="remember-report-event"></select>
+					</label>
 					<fieldset class="remember-reports-seg">
 						<legend class="remember-reports-label"><?php esc_html_e( 'Result', 'remember' ); ?></legend>
 						<label>
@@ -54,6 +58,7 @@ if ( ! defined( 'WPINC' ) ) {
 						<button type="button" class="button button-primary remember-report-run" id="remember-report-run"><?php esc_html_e( 'Run report', 'remember' ); ?></button>
 					</div>
 				</div>
+				<p class="description remember-reports-event-hint" id="remember-report-event-hint"></p>
 
 				<div id="remember-report-columns-wrap" class="remember-reports-section">
 					<div class="remember-reports-section__head">
@@ -150,5 +155,6 @@ if ( ! defined( 'WPINC' ) ) {
 		<input type="hidden" name="action" value="remember_report_export">
 		<input type="hidden" name="nonce" value="">
 		<input type="hidden" name="definition" value="">
+		<input type="hidden" name="event_id" value="">
 	</form>
 </div>
