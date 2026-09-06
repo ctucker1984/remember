@@ -16,7 +16,7 @@ WordPress membership communities: **members**, **events**, **locations**, **appl
 3. On activation the plugin creates tables, seeds default roles, and grants reMember capabilities to the WordPress **Administrator** role. It does **not** auto-create a member for the activating user.
 4. Use the **setup wizard** (or **reMember → Getting Started**) to create pages with shortcodes.
 
-**Migration:** Activate reMember on the destination site, then **reMember → Import / Export → Restore backup**. Users are matched by email (then username); missing people are created as Subscribers with random passwords until they reset. Profile photos are URLs only. Setup-wizard pages stay on the new site.
+**Migration:** Activate reMember on the destination site (same version as the backup, or newer), then **reMember → Import / Export → Restore backup**. A newer backup will not load into an older install. Users are matched by email (then username); missing people are created as Subscribers with random passwords until they reset. Profile photos are URLs only. Setup-wizard pages stay on the new site.
 
 Members log in through WordPress (`wp-login.php` or the site’s login). reMember uses that session; there is no separate member login form.
 

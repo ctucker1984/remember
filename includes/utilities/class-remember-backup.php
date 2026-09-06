@@ -66,6 +66,11 @@ class Remember_Backup {
 			return new WP_Error( 'format', __( 'That backup format is not supported by this plugin version.', 'remember' ) );
 		}
 
+		$compat = self::restore_version_error( $data );
+		if ( is_wp_error( $compat ) ) {
+			return $compat;
+		}
+
 		$tables = isset( $data['tables'] ) && is_array( $data['tables'] ) ? $data['tables'] : array();
 		$users  = isset( $data['users'] ) && is_array( $data['users'] ) ? $data['users'] : array();
 		$options = isset( $data['options'] ) && is_array( $data['options'] ) ? $data['options'] : array();
@@ -187,6 +192,73 @@ class Remember_Backup {
 			'member_b_id',
 			'owner_id',
 		);
+	}
+
+	/**
+	 * Refuse a backup that is newer than the files or schema on this site.
+	 *
+	 * @param array $data Decoded backup.
+	 * @return \WP_Error|null
+	 */
+	private static function restore_version_error( $data ) {
+		$backup_plugin = self::normalize_version( isset( $data['plugin_version'] ) ? $data['plugin_version'] : '' );
+		$backup_db     = self::normalize_version( isset( $data['db_version'] ) ? $data['db_version'] : '' );
+		if ( '' === $backup_plugin || '' === $backup_db ) {
+			return new WP_Error( 'version', __( 'That backup does not include version information and cannot be restored.', 'remember' ) );
+		}
+
+		$installed_plugin = self::normalize_version( defined( 'REMEMBER_VERSION' ) ? REMEMBER_VERSION : '' );
+		$installed_db     = self::normalize_version( (string) get_option( 'remember_db_version', '' ) );
+		if ( '' === $installed_plugin ) {
+			return new WP_Error( 'version', __( 'This site’s plugin version could not be determined. Restore cancelled.', 'remember' ) );
+		}
+
+		if ( version_compare( $installed_plugin, $backup_plugin, '<' ) ) {
+			return new WP_Error(
+				'version',
+				sprintf(
+					/* translators: 1: installed plugin version, 2: backup plugin version */
+					__( 'This site is reMember %1$s. The backup is from %2$s. Update the plugin to %2$s or newer before restoring.', 'remember' ),
+					$installed_plugin,
+					$backup_plugin
+				)
+			);
+		}
+
+		if ( '' === $installed_db ) {
+			return new WP_Error( 'version', __( 'This site’s database version could not be determined. Restore cancelled.', 'remember' ) );
+		}
+
+		if ( version_compare( $installed_db, $backup_db, '<' ) ) {
+			return new WP_Error(
+				'version',
+				sprintf(
+					/* translators: 1: installed db version, 2: backup db version */
+					__( 'This site’s database is %1$s. The backup needs %2$s. Update reMember and load wp-admin once so the schema can catch up, then restore.', 'remember' ),
+					$installed_db,
+					$backup_db
+				)
+			);
+		}
+
+		return null;
+	}
+
+	/**
+	 * Strip a leading v and keep a comparable version string.
+	 *
+	 * @param mixed $version Raw version.
+	 * @return string
+	 */
+	private static function normalize_version( $version ) {
+		$version = strtolower( trim( (string) $version ) );
+		if ( '' === $version ) {
+			return '';
+		}
+		if ( 0 === strpos( $version, 'v' ) ) {
+			$version = substr( $version, 1 );
+		}
+		return preg_match( '/^[0-9]+(\.[0-9]+){0,3}$/', $version ) ? $version : '';
 	}
 
 	/**
