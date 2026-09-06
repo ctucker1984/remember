@@ -116,6 +116,8 @@ class Remember_Role extends Remember_Base_Model {
 				);
 			}
 		}
+
+		self::sync_assigned_members( $role_id );
 		
 		return true;
 	}
@@ -144,7 +146,7 @@ class Remember_Role extends Remember_Base_Model {
 			return true; // Already exists
 		}
 		
-		return $wpdb->insert(
+		$inserted = $wpdb->insert(
 			$table_name,
 			array(
 				'role_id'    => $role_id,
@@ -153,6 +155,10 @@ class Remember_Role extends Remember_Base_Model {
 			),
 			array( '%d', '%s', '%s' )
 		) !== false;
+		if ( $inserted ) {
+			self::sync_assigned_members( $role_id );
+		}
+		return $inserted;
 	}
 
 	/**
@@ -166,7 +172,7 @@ class Remember_Role extends Remember_Base_Model {
 		global $wpdb;
 		$table_name = $wpdb->prefix . 'remember_role_capabilities';
 		
-		return $wpdb->delete(
+		$deleted = $wpdb->delete(
 			$table_name,
 			array(
 				'role_id'    => $role_id,
@@ -174,5 +180,20 @@ class Remember_Role extends Remember_Base_Model {
 			),
 			array( '%d', '%s' )
 		) !== false;
+		if ( $deleted ) {
+			self::sync_assigned_members( $role_id );
+		}
+		return $deleted;
+	}
+
+	/**
+	 * Push this role's caps onto every assigned member's WordPress user.
+	 *
+	 * @param int $role_id Role ID.
+	 * @return void
+	 */
+	private static function sync_assigned_members( $role_id ) {
+		require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-capabilities.php';
+		Remember_Capabilities::sync_members_for_role( $role_id );
 	}
 }

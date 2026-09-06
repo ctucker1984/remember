@@ -142,6 +142,49 @@ class Remember_Capabilities {
 	}
 
 	/**
+	 * Recalculate WordPress caps for every member who holds this role.
+	 *
+	 * @param int $role_id Role ID.
+	 * @return int Members synced.
+	 */
+	public static function sync_members_for_role( $role_id ) {
+		global $wpdb;
+		$role_id = absint( $role_id );
+		if ( $role_id < 1 ) {
+			return 0;
+		}
+		$member_ids = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT DISTINCT member_id FROM {$wpdb->prefix}remember_member_roles WHERE role_id = %d",
+				$role_id
+			)
+		);
+		return self::sync_users( is_array( $member_ids ) ? $member_ids : array() );
+	}
+
+	/**
+	 * Recalculate WordPress caps for the given members.
+	 *
+	 * @param int[] $user_ids User IDs.
+	 * @return int Members synced.
+	 */
+	public static function sync_users( $user_ids ) {
+		$count = 0;
+		if ( ! is_array( $user_ids ) ) {
+			return 0;
+		}
+		foreach ( array_unique( array_map( 'absint', $user_ids ) ) as $user_id ) {
+			if ( $user_id < 1 ) {
+				continue;
+			}
+			if ( self::sync_user_capabilities_from_roles( $user_id ) ) {
+				$count++;
+			}
+		}
+		return $count;
+	}
+
+	/**
 	 * Get capability label.
 	 *
 	 * @param string $capability Capability name.

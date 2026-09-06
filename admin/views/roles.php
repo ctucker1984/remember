@@ -31,12 +31,17 @@ if ( isset( $_GET['delete'] ) && isset( $_GET['remember_role_nonce'] ) && check_
 	if ( Remember_Capabilities::is_protected_system_role( $role_to_delete ) ) {
 		echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'The System Administrator role cannot be deleted.', 'remember' ) . '</p></div>';
 	} else {
-		// Delete capabilities first
 		global $wpdb;
+		$member_ids = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT DISTINCT member_id FROM {$wpdb->prefix}remember_member_roles WHERE role_id = %d",
+				$role_id
+			)
+		);
 		$wpdb->delete( $wpdb->prefix . 'remember_role_capabilities', array( 'role_id' => $role_id ), array( '%d' ) );
-		// Delete role
 		$result = $role_model->delete( $role_id );
 		if ( $result !== false ) {
+			Remember_Capabilities::sync_users( is_array( $member_ids ) ? $member_ids : array() );
 			Remember_Logger::info( 'Role deleted', array( 'role_id' => $role_id ) );
 			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Role deleted successfully.', 'remember' ) . '</p></div>';
 		} else {
