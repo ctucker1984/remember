@@ -22,7 +22,7 @@ if ( ! defined( 'WPINC' ) ) {
 		<aside class="remember-reports-sidebar">
 			<div class="remember-reports-panel">
 				<div class="remember-reports-panel__head">
-					<h2><?php esc_html_e( 'My reports', 'remember' ); ?></h2>
+					<h2><?php esc_html_e( 'My Reports', 'remember' ); ?></h2>
 					<button type="button" class="button-link" id="remember-report-new"><?php esc_html_e( 'New report', 'remember' ); ?></button>
 				</div>
 				<ul id="remember-saved-reports" class="remember-reports-nav"></ul>

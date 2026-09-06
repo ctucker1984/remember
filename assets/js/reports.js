@@ -193,9 +193,12 @@
 		var $ul = $('#remember-saved-reports');
 		$ul.empty();
 		if (!list || !list.length) {
-		$ul.append($('<li class="remember-reports-nav-empty"/>').text(t('noneSaved', 'No saved reports yet.')));
+			$ul.append($('<li class="remember-reports-nav-empty"/>').text(t('noneSaved', 'No saved reports yet.')));
 			return;
 		}
+		list = list.slice().sort(function (a, b) {
+			return String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' });
+		});
 		list.forEach(function (row) {
 			var $li = $('<li/>');
 			var $btn = $('<button type="button" class="button-link remember-saved-report"/>');

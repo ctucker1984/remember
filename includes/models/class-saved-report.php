@@ -40,7 +40,7 @@ class Remember_Saved_Report {
 				"SELECT report_id, owner_id, name, subject, definition, created_at, updated_at
 				FROM {$table}
 				WHERE owner_id = %d
-				ORDER BY updated_at DESC, report_id DESC",
+				ORDER BY name ASC, report_id ASC",
 				$owner_id
 			)
 		); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
