@@ -2325,6 +2325,10 @@
 	border-radius: 4px;
 }
 
+.remember-filter-value select[multiple] {
+	min-height: 88px;
+}
+
 .remember-reports-criteria > .button-link {
 	margin-bottom: 6px;
 }

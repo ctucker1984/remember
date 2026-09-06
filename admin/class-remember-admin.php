@@ -178,6 +178,7 @@ class Remember_Admin {
 							'fieldLabel'   => __( 'Field', 'remember' ),
 							'operatorLabel'=> __( 'Operator', 'remember' ),
 							'valueLabel'   => __( 'Value', 'remember' ),
+							'selectValue'  => __( 'Select value', 'remember' ),
 							'calcLabel'    => __( 'Calculation', 'remember' ),
 						),
 					)

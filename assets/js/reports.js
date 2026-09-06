@@ -122,6 +122,8 @@
 		var allowed;
 		if (type === 'number' || type === 'date' || type === 'datetime') {
 			allowed = ['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'between', 'empty', 'not_empty'];
+		} else if (type === 'multiselect' || (field && field.list)) {
+			allowed = ['eq', 'in', 'empty', 'not_empty'];
 		} else if (type === 'enum') {
 			allowed = ['eq', 'neq', 'in', 'empty', 'not_empty'];
 		} else {
@@ -130,6 +132,34 @@
 		return ops.filter(function (op) {
 			return allowed.indexOf(op.id) !== -1;
 		});
+	}
+
+	function hasChoices(field) {
+		return !!(field && field.options && field.options.length && (field.type === 'enum' || field.type === 'multiselect' || field.list));
+	}
+
+	function choiceItems(field) {
+		return (field.options || []).map(function (opt) {
+			if (opt && typeof opt === 'object') {
+				return { id: String(opt.id || opt.key || ''), label: String(opt.label || opt.id || opt.key || '') };
+			}
+			return { id: String(opt), label: String(opt) };
+		}).filter(function (opt) {
+			return opt.id !== '';
+		});
+	}
+
+	function defaultOp(field) {
+		var ops = operatorsFor(field);
+		if (field && (field.type === 'multiselect' || field.list)) {
+			var i;
+			for (i = 0; i < ops.length; i++) {
+				if (ops[i].id === 'in') {
+					return 'in';
+				}
+			}
+		}
+		return ops[0] ? ops[0].id : 'eq';
 	}
 
 	function optionList(items, selected, includeBlank, blankLabel) {
@@ -304,8 +334,8 @@
 				filter.field = field.id;
 			}
 			var ops = operatorsFor(field);
-			if (!filter.op) {
-				filter.op = ops[0] ? ops[0].id : 'eq';
+			if (!filter.op || !ops.some(function (op) { return op.id === filter.op; })) {
+				filter.op = defaultOp(field);
 			}
 			var $row = $('<div class="remember-reports-criteria remember-filter-row"/>');
 			var $field = $('<select class="remember-filter-field"/>').attr('data-index', index);
@@ -344,14 +374,13 @@
 			$wrap.append($from, $('<span/>').text(' – '), $to);
 			return $wrap;
 		}
-		if (field.type === 'enum' && field.options && field.options.length) {
+		if (hasChoices(field)) {
 			var $sel = $('<select class="remember-filter-val"/>').attr('data-index', index);
 			if (op === 'in') {
 				$sel.attr('multiple', 'multiple');
+				$sel.attr('size', Math.min(8, Math.max(3, field.options.length)));
 			}
-			$sel.html(optionList(field.options.map(function (opt) {
-				return { id: String(opt), label: String(opt) };
-			}), null, op !== 'in'));
+			$sel.html(optionList(choiceItems(field), null, op !== 'in', t('selectValue', 'Select value')));
 			if (op === 'in') {
 				var selected = Array.isArray(filter.value) ? filter.value : String(filter.value || '').split(',');
 				$sel.val(selected);
@@ -632,7 +661,7 @@
 			if (!first) {
 				return;
 			}
-			state.filters.push({ field: first.id, op: 'eq', value: '', value_from: '', value_to: '' });
+			state.filters.push({ field: first.id, op: defaultOp(first), value: '', value_from: '', value_to: '' });
 			renderFilters();
 		});
 		$('#remember-report-filters').on('click', '.remember-filter-remove', function () {

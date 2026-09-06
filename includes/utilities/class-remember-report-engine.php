@@ -451,17 +451,40 @@ class Remember_Report_Engine {
 		$op  = isset( $filter['op'] ) ? sanitize_key( $filter['op'] ) : 'eq';
 		$sql = $fields[ $fid ]['sql'];
 		$val = isset( $filter['value'] ) ? $filter['value'] : '';
+		$list_field = ! empty( $fields[ $fid ]['list'] );
 
 		if ( 'empty' === $op ) {
+			if ( $list_field ) {
+				return array( 'sql' => "({$sql} IS NULL OR {$sql} = '' OR {$sql} = '[]')", 'params' => array() );
+			}
 			return array( 'sql' => "({$sql} IS NULL OR {$sql} = '')", 'params' => array() );
 		}
 		if ( 'not_empty' === $op ) {
+			if ( $list_field ) {
+				return array( 'sql' => "({$sql} IS NOT NULL AND {$sql} != '' AND {$sql} != '[]')", 'params' => array() );
+			}
 			return array( 'sql' => "({$sql} IS NOT NULL AND {$sql} != '')", 'params' => array() );
 		}
+		if ( $list_field && in_array( $op, array( 'eq', 'in' ), true ) ) {
+			$keys = self::choice_keys( $val, $fields[ $fid ] );
+			if ( empty( $keys ) ) {
+				return null;
+			}
+			$ors    = array();
+			$params = array();
+			foreach ( $keys as $key ) {
+				$ors[]    = "{$sql} LIKE %s";
+				$params[] = '%"' . $wpdb->esc_like( $key ) . '"%';
+			}
+			return array( 'sql' => '(' . implode( ' OR ', $ors ) . ')', 'params' => $params );
+		}
 		if ( 'in' === $op ) {
-			$list = is_array( $val ) ? $val : explode( ',', (string) $val );
-			$list = array_values( array_filter( array_map( 'strval', $list ), 'strlen' ) );
-			$list = array_slice( $list, 0, 50 );
+			$list = self::choice_keys( $val, $fields[ $fid ] );
+			if ( empty( $list ) ) {
+				$list = is_array( $val ) ? $val : explode( ',', (string) $val );
+				$list = array_values( array_filter( array_map( 'strval', $list ), 'strlen' ) );
+				$list = array_slice( $list, 0, 50 );
+			}
 			if ( empty( $list ) ) {
 				return null;
 			}
@@ -492,6 +515,24 @@ class Remember_Report_Engine {
 			return null;
 		}
 		return array( 'sql' => "{$sql} {$map[ $op ]} %s", 'params' => array( (string) $val ) );
+	}
+
+	/**
+	 * Keep submitted choice keys that exist on the field.
+	 *
+	 * @param mixed $val   Raw value.
+	 * @param array $field Catalog field.
+	 * @return string[]
+	 */
+	private static function choice_keys( $val, $field ) {
+		$list = is_array( $val ) ? $val : explode( ',', (string) $val );
+		$list = array_values( array_filter( array_map( 'strval', $list ), 'strlen' ) );
+		$list = array_slice( $list, 0, 50 );
+		if ( empty( $field['options'] ) || ! is_array( $field['options'] ) ) {
+			return $list;
+		}
+		$allowed = array_map( 'strval', $field['options'] );
+		return array_values( array_intersect( $list, $allowed ) );
 	}
 
 	/**

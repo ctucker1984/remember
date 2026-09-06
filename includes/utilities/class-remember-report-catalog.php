@@ -103,6 +103,7 @@ class Remember_Report_Catalog {
 					'type'    => $field['type'],
 					'options' => isset( $field['options'] ) ? $field['options'] : array(),
 					'measure' => ! empty( $field['measure'] ),
+					'list'    => ! empty( $field['list'] ),
 				);
 			}
 			$out['subjects'][] = array(
@@ -308,6 +309,7 @@ class Remember_Report_Catalog {
 	 */
 	public static function custom_question_fields( $subject ) {
 		require_once plugin_dir_path( __FILE__ ) . '../models/class-profile-question.php';
+		require_once plugin_dir_path( __FILE__ ) . 'class-remember-profile-questions.php';
 		$model = new Remember_Profile_Question();
 		$rows  = $model->get_all_ordered();
 		if ( ! is_array( $rows ) ) {
@@ -320,17 +322,32 @@ class Remember_Report_Catalog {
 			if ( $qid < 1 ) {
 				continue;
 			}
-			$id   = 'pq_' . $qid;
-			$join = 'pq_' . $qid;
+			$id      = 'pq_' . $qid;
+			$join    = 'pq_' . $qid;
+			$type    = 'string';
+			$options = array();
+			$list    = false;
+			$qtype   = isset( $q->field_type ) ? (string) $q->field_type : 'text';
+			if ( 'select' === $qtype ) {
+				$type    = 'enum';
+				$options = wp_list_pluck( Remember_Profile_Questions::parse_options( $q->options_json ), 'key' );
+			} elseif ( 'multiselect' === $qtype ) {
+				$type    = 'multiselect';
+				$list    = true;
+				$options = wp_list_pluck( Remember_Profile_Questions::parse_options( $q->options_json ), 'key' );
+			}
 			$out[ $id ] = self::f(
 				(string) $q->label,
 				__( 'Custom fields', 'remember' ),
-				'string',
+				$type,
 				$join . '.value_text',
-				$join
+				$join,
+				false,
+				$options
 			);
 			$out[ $id ]['question_id'] = $qid;
 			$out[ $id ]['member_expr'] = $member_expr;
+			$out[ $id ]['list']        = $list;
 		}
 		return $out;
 	}
