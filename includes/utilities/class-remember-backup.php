@@ -11,7 +11,9 @@ if ( ! defined( 'WPINC' ) ) {
 }
 
 /**
- * Disaster-recovery dump of reMember data.
+ * Disaster-recovery dump of reMember data. Omits billing secrets, OAuth
+ * tokens, encryption keys, and downloaded invoice ledgers. Keeps invoice and
+ * customer IDs so a restored site can reconnect and rematch.
  */
 class Remember_Backup {
 
@@ -113,7 +115,7 @@ class Remember_Backup {
 				if ( ! is_array( $row ) ) {
 					continue;
 				}
-				$prepared = self::prepare_row( $row, $columns, $map['ids'] );
+				$prepared = self::prepare_row( $row, $columns, $map['ids'], $suffix );
 				if ( empty( $prepared ) ) {
 					continue;
 				}
@@ -141,6 +143,7 @@ class Remember_Backup {
 		$wpdb->query( 'SET FOREIGN_KEY_CHECKS=1' );
 
 		self::restore_options( $options );
+		self::restore_billing_customer_ids( $users, $map['ids'] );
 
 		if ( function_exists( 'wp_cache_flush' ) ) {
 			wp_cache_flush();
@@ -328,7 +331,7 @@ class Remember_Backup {
 	/**
 	 * Login/email index for WordPress user IDs referenced by plugin data.
 	 *
-	 * @return array<int,array{id:int,login:string,email:string,display_name:string}>
+	 * @return array<int,array{id:int,login:string,email:string,display_name:string,qb_customer_id?:string,xero_contact_id?:string}>
 	 */
 	private static function user_index() {
 		$out = array();
@@ -344,12 +347,19 @@ class Remember_Backup {
 				);
 				continue;
 			}
-			$out[] = array(
+			$entry = array(
 				'id'           => $id,
 				'login'        => (string) $user->user_login,
 				'email'        => (string) $user->user_email,
 				'display_name' => (string) $user->display_name,
 			);
+			foreach ( self::billing_customer_index_keys() as $field => $meta_key ) {
+				$val = get_user_meta( $id, $meta_key, true );
+				if ( is_scalar( $val ) && '' !== trim( (string) $val ) ) {
+					$entry[ $field ] = trim( (string) $val );
+				}
+			}
+			$out[] = $entry;
 		}
 		return $out;
 	}
@@ -403,8 +413,12 @@ class Remember_Backup {
 		if ( ! is_array( $rows ) ) {
 			return $out;
 		}
+		$skip = self::skip_option_names();
 		foreach ( $rows as $row ) {
 			$name = (string) $row->option_name;
+			if ( in_array( $name, $skip, true ) ) {
+				continue;
+			}
 			$out[ $name ] = maybe_unserialize( $row->option_value );
 		}
 		return $out;
@@ -434,18 +448,19 @@ class Remember_Backup {
 			$first = false;
 			echo wp_json_encode( $suffix, $flags );
 			echo ':';
-			self::stream_table_rows( $table, $flags );
+			self::stream_table_rows( $table, $suffix, $flags );
 		}
 	}
 
 	/**
 	 * Stream rows for one table.
 	 *
-	 * @param string $table Full table name.
-	 * @param int    $flags json_encode flags.
+	 * @param string $table  Full table name.
+	 * @param string $suffix Table suffix (remember_*).
+	 * @param int    $flags  json_encode flags.
 	 * @return void
 	 */
-	private static function stream_table_rows( $table, $flags ) {
+	private static function stream_table_rows( $table, $suffix, $flags ) {
 		global $wpdb;
 		echo '[';
 		$offset = 0;
@@ -467,7 +482,7 @@ class Remember_Backup {
 					echo ',';
 				}
 				$first = false;
-				echo wp_json_encode( $row, $flags );
+				echo wp_json_encode( self::sanitize_table_row( $suffix, $row ), $flags );
 			}
 			if ( count( $rows ) < self::CHUNK ) {
 				break;
@@ -666,12 +681,14 @@ class Remember_Backup {
 	/**
 	 * Keep known columns and remap user IDs.
 	 *
-	 * @param array $row     Backup row.
-	 * @param array $columns Target columns.
-	 * @param array $map     old user id => new user id.
+	 * @param array  $row     Backup row.
+	 * @param array  $columns Target columns.
+	 * @param array  $map     old user id => new user id.
+	 * @param string $suffix  Table suffix.
 	 * @return array
 	 */
-	private static function prepare_row( $row, $columns, $map ) {
+	private static function prepare_row( $row, $columns, $map, $suffix = '' ) {
+		$row      = self::sanitize_table_row( $suffix, $row );
 		$out      = array();
 		$usercols = self::user_id_column_names();
 		$fallback = get_current_user_id();
@@ -763,7 +780,147 @@ class Remember_Backup {
 			'remember_activation_needs_rewrite_flush',
 			'remember_version',
 			'remember_db_version',
+			'remember_qb_encryption_key',
+			'remember_xero_encryption_key',
+			'remember_xero_last_oauth',
 		);
+	}
+
+	/**
+	 * User-index fields that map members onto billing-provider accounts.
+	 *
+	 * @return array<string,string> Backup field => user meta key.
+	 */
+	private static function billing_customer_index_keys() {
+		return array(
+			'qb_customer_id'  => 'remember_qb_customer_id',
+			'xero_contact_id' => 'remember_xero_contact_id',
+		);
+	}
+
+	/**
+	 * Processor settings keys that are safe to migrate (no secrets or tokens).
+	 *
+	 * @return string[]
+	 */
+	private static function processor_settings_keep_keys() {
+		return array(
+			'client_id',
+			'environment',
+			'realm_id',
+			'tenant_id',
+			'tenant_name',
+		);
+	}
+
+	/**
+	 * Strip secrets and live billing ledgers from a table row.
+	 *
+	 * Keeps invoice IDs and processor org identifiers so a restored site can
+	 * reconnect and redownload balances.
+	 *
+	 * @param string $suffix Table suffix.
+	 * @param array  $row    Associative row.
+	 * @return array
+	 */
+	private static function sanitize_table_row( $suffix, $row ) {
+		if ( ! is_array( $row ) ) {
+			return array();
+		}
+		if ( 'payment_processors' === $suffix ) {
+			if ( array_key_exists( 'settings', $row ) ) {
+				$row['settings'] = self::sanitize_processor_settings( $row['settings'] );
+			}
+			if ( array_key_exists( 'last_sync_at', $row ) ) {
+				$row['last_sync_at'] = null;
+			}
+			return $row;
+		}
+		if ( 'payments' === $suffix ) {
+			$total = isset( $row['total_amount'] ) ? $row['total_amount'] : '0.00';
+			$row['amount_paid']     = '0.00';
+			$row['amount_due']      = $total;
+			$row['payment_status']  = 'pending';
+			$row['payment_date']    = null;
+			$row['payment_method']  = null;
+			$row['transaction_id']  = null;
+			foreach ( array(
+				'quickbooks_invoice_sort_ts',
+				'quickbooks_payment_lines',
+				'quickbooks_refund_lines',
+				'xero_online_invoice_url',
+				'xero_invoice_sort_ts',
+				'xero_payment_lines',
+				'xero_refund_lines',
+			) as $col ) {
+				if ( array_key_exists( $col, $row ) ) {
+					$row[ $col ] = null;
+				}
+			}
+		}
+		return $row;
+	}
+
+	/**
+	 * Keep only reconnect identifiers from a processor settings JSON blob.
+	 *
+	 * @param mixed $raw JSON string or array.
+	 * @return string JSON object.
+	 */
+	private static function sanitize_processor_settings( $raw ) {
+		if ( is_array( $raw ) ) {
+			$decoded = $raw;
+		} elseif ( is_string( $raw ) && '' !== $raw ) {
+			$decoded = json_decode( $raw, true );
+		} else {
+			$decoded = array();
+		}
+		if ( ! is_array( $decoded ) ) {
+			$decoded = array();
+		}
+		$out = array();
+		foreach ( self::processor_settings_keep_keys() as $key ) {
+			if ( ! array_key_exists( $key, $decoded ) ) {
+				continue;
+			}
+			$val = $decoded[ $key ];
+			if ( null === $val || is_scalar( $val ) ) {
+				$out[ $key ] = $val;
+			}
+		}
+		$json = wp_json_encode( $out );
+		return is_string( $json ) ? $json : '{}';
+	}
+
+	/**
+	 * Write QuickBooks/Xero account IDs onto restored WordPress users.
+	 *
+	 * @param array $users Backup user index.
+	 * @param array $map   old user id => new user id.
+	 * @return void
+	 */
+	private static function restore_billing_customer_ids( $users, $map ) {
+		foreach ( $users as $row ) {
+			if ( ! is_array( $row ) ) {
+				continue;
+			}
+			$old_id = isset( $row['id'] ) ? absint( $row['id'] ) : 0;
+			if ( $old_id < 1 || ! isset( $map[ $old_id ] ) ) {
+				continue;
+			}
+			$new_id = (int) $map[ $old_id ];
+			if ( $new_id < 1 ) {
+				continue;
+			}
+			foreach ( self::billing_customer_index_keys() as $field => $meta_key ) {
+				$val = isset( $row[ $field ] ) ? sanitize_text_field( (string) $row[ $field ] ) : '';
+				if ( '' === $val ) {
+					delete_user_meta( $new_id, $meta_key );
+				} else {
+					update_user_meta( $new_id, $meta_key, $val );
+				}
+			}
+		}
 	}
 
 	/**

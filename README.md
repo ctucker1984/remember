@@ -16,7 +16,7 @@ WordPress membership communities: **members**, **events**, **locations**, **appl
 3. On activation the plugin creates tables, seeds default roles, and grants reMember capabilities to the WordPress **Administrator** role. It does **not** auto-create a member for the activating user.
 4. Use the **setup wizard** (or **reMember → Getting Started**) to create pages with shortcodes.
 
-**Migration:** Activate reMember on the destination site (same version as the backup, or newer), then **reMember → Import / Export → Restore backup**. A newer backup will not load into an older install. Users are matched by email (then username); missing people are created as Subscribers with random passwords until they reset. Profile photos are URLs only. Setup-wizard pages stay on the new site.
+**Migration:** Activate reMember on the destination site (same version as the backup, or newer), then **reMember → Import / Export → Restore backup**. A newer backup will not load into an older install. Users are matched by email (then username); missing people are created as Subscribers with random passwords until they reset. Profile photos are URLs only. Setup-wizard pages stay on the new site. Billing secrets and live invoice ledgers are not in the file; after restore, reconnect QuickBooks or Xero so balances redownload against stored customer and invoice IDs.
 
 Members log in through WordPress (`wp-login.php` or the site’s login). reMember uses that session; there is no separate member login form.
 
@@ -52,7 +52,7 @@ Then add members via **Members → Add New**, **Convert WP User**, or the public
 | **Applications** | Review and save profile first, then apply / accept / decline / waitlist; optional agreements with typed legal name; allow reapply after decline/cancel |
 | **Vetting** | New-member review workflow |
 | **Billing** | One active provider: none, QuickBooks Online, or Xero; amounts in reMember are subtotal-oriented |
-| **Import / Export** | CSV for members, events, locations, and custom field definitions. Full JSON backup and restore of plugin tables and settings (needs Access Settings and Import / Export Data). Restore can migrate onto a fresh install. |
+| **Import / Export** | CSV for members, events, locations, and custom field definitions. Full JSON backup and restore of plugin tables and settings (needs Access Settings and Import / Export Data). Billing secrets and live invoice ledgers are omitted; reconnect the provider after restore. Restore can migrate onto a fresh install. |
 | **Agreements** | Versioned library; events pin revisions shown on apply |
 | **Notifications** | Email templates in Settings, grouped by Vetting, Applications, Billing, and General |
 

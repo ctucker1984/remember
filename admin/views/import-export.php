@@ -193,7 +193,7 @@ $remember_ie_tools = array(
 		<div class="remember-ie-backup">
 			<div>
 				<h2><?php esc_html_e( 'Full backup', 'remember' ); ?></h2>
-				<p><?php esc_html_e( 'JSON of every reMember table and plugin setting, including billing secrets. WordPress users and passwords are not stored; a login/email index is, so restore can match or create accounts. Profile photos are URLs only. Store the file privately.', 'remember' ); ?></p>
+				<p><?php esc_html_e( 'JSON of every reMember table and plugin setting. Billing secrets, OAuth tokens, and encryption keys are omitted. Payment rows keep invoice IDs (not downloaded ledgers) and the user index keeps QuickBooks/Xero account IDs so a restored site can reconnect and redownload. WordPress users and passwords are not stored; a login/email index is, so restore can match or create accounts. Profile photos are URLs only. Store the file privately.', 'remember' ); ?></p>
 			</div>
 			<form method="post" action="">
 				<?php wp_nonce_field( 'remember_import_export_action', 'remember_import_export_nonce' ); ?>
@@ -204,7 +204,7 @@ $remember_ie_tools = array(
 		<div class="remember-ie-backup remember-ie-restore">
 			<div>
 				<h2><?php esc_html_e( 'Restore backup', 'remember' ); ?></h2>
-				<p><?php esc_html_e( 'Replaces all current reMember data with this file. Use it to bring a backup back, or to load a backup onto a fresh install (migration). This site must be the same plugin and database version as the backup, or newer — a 2.1 backup will not load into 1.4. Existing WordPress users are matched by email, then username; anyone missing is created as a Subscriber with a random password. WordPress users are never deleted. Setup-wizard pages and this site’s plugin version number are left as they are. Large files may need a higher PHP upload limit.', 'remember' ); ?></p>
+				<p><?php esc_html_e( 'Replaces all current reMember data with this file. Use it to bring a backup back, or to load a backup onto a fresh install (migration). This site must be the same plugin and database version as the backup, or newer — a 2.1 backup will not load into 1.4. Existing WordPress users are matched by email, then username; anyone missing is created as a Subscriber with a random password. WordPress users are never deleted. Setup-wizard pages and this site’s plugin version number are left as they are. After restore, enter the billing client secret and reconnect QuickBooks or Xero so invoices and payments refill from the provider. Large files may need a higher PHP upload limit.', 'remember' ); ?></p>
 			</div>
 			<form method="post" action="" enctype="multipart/form-data" class="remember-ie-restore-form">
 				<?php wp_nonce_field( 'remember_import_export_action', 'remember_import_export_nonce' ); ?>
