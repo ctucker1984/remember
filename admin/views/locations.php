@@ -49,7 +49,7 @@ if ( isset( $_POST['remember_location_action'] ) && check_admin_referer( 'rememb
 		
 		// Handle logo upload
 		if ( ! empty( $_FILES['logo_file']['name'] ) ) {
-			$upload_result = Remember_Image_Uploader::upload_square_image( $_FILES['logo_file'], $max_image_size );
+			$upload_result = Remember_Image_Uploader::upload_square_image( $_FILES['logo_file'], $max_image_size, Remember_Image_Uploader::SUBDIR_LOCATIONS );
 			if ( ! is_wp_error( $upload_result ) ) {
 				$data['logo_url'] = $upload_result['url'];
 			} else {
@@ -93,7 +93,7 @@ if ( isset( $_POST['remember_location_action'] ) && check_admin_referer( 'rememb
 				Remember_Image_Uploader::delete_image( $location->logo_url );
 			}
 			
-			$upload_result = Remember_Image_Uploader::upload_square_image( $_FILES['logo_file'], $max_image_size );
+			$upload_result = Remember_Image_Uploader::upload_square_image( $_FILES['logo_file'], $max_image_size, Remember_Image_Uploader::SUBDIR_LOCATIONS );
 			if ( ! is_wp_error( $upload_result ) ) {
 				$data['logo_url'] = $upload_result['url'];
 			} else {
