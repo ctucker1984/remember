@@ -18,8 +18,9 @@ require_once ABSPATH . 'wp-admin/includes/media.php';
 /**
  * Image uploader utility class.
  *
- * Profile photos and location logos are stored as files under uploads/remember/
- * (not Media Library attachments). Ticket logos stay in the Media Library.
+ * Profile photos are stored as files under uploads/remember/photos/ (not
+ * Media Library attachments). Location logos may be a Media Library image
+ * URL or a file under uploads/remember/locations/. Ticket logos stay in Media.
  *
  * @package    reMember
  * @subpackage reMember/includes/utilities
@@ -152,6 +153,20 @@ class Remember_Image_Uploader {
 	 * @return bool True on success, false on failure.
 	 */
 	public static function delete_image( $file_url ) {
+		$file_url = (string) $file_url;
+		$query    = strpos( $file_url, '?' );
+		if ( false !== $query ) {
+			$file_url = substr( $file_url, 0, $query );
+		}
+		if ( '' === $file_url ) {
+			return false;
+		}
+		if ( function_exists( 'attachment_url_to_postid' ) ) {
+			$attachment_id = absint( attachment_url_to_postid( $file_url ) );
+			if ( $attachment_id > 0 ) {
+				return false;
+			}
+		}
 		$upload_dir = wp_upload_dir( null, false );
 		if ( empty( $upload_dir['basedir'] ) || empty( $upload_dir['baseurl'] ) ) {
 			return false;

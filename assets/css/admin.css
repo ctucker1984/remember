@@ -11,6 +11,18 @@
 	display: none;
 }
 
+.remember-location-logo-preview {
+	margin-bottom: 8px;
+}
+
+.remember-location-logo-preview img {
+	max-width: 150px;
+	height: auto;
+	border: 1px solid #ddd;
+	padding: 5px;
+	background: #fff;
+}
+
 .remember-dashboard-stats-box {
 	background: #fff;
 	border: 1px solid #ccd0d4;
