@@ -159,7 +159,7 @@ if ( '' === $remember_reg_im_type ) {
 			<div class="remember-register-row">
 				<label for="remember_reg_timezone"><?php esc_html_e( 'Time Zone', 'remember' ); ?> <span class="required">*</span></label>
 				<?php echo Remember_Timezone::dropdown( $remember_reg_timezone, 'remember_reg_timezone', 'remember_reg_timezone', true, 'remember-register-input' ); ?>
-				<p class="remember-register-help"><?php esc_html_e( 'Choose your own time zone. Appointments and event times are shown in your local time — picking the wrong zone can cause missed appointments.', 'remember' ); ?></p>
+				<p class="remember-register-help"><?php echo esc_html( Remember_Timezone::help_text() ); ?></p>
 			</div>
 
 			<div class="remember-register-row">

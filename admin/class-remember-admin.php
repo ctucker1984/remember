@@ -1878,7 +1878,7 @@ class Remember_Admin {
 				<th><label for="timezone_string"><?php esc_html_e( 'Time Zone', 'remember' ); ?> <span class="description"><?php esc_html_e( '(required)', 'remember' ); ?></span></label></th>
 				<td>
 					<?php echo Remember_Timezone::dropdown( $selected_timezone, 'timezone_string', 'timezone_string', true ); ?>
-					<p class="description"><?php esc_html_e( 'Your timezone is used to display scheduled times in your local time.', 'remember' ); ?></p>
+					<p class="description"><?php echo esc_html( Remember_Timezone::help_text() ); ?></p>
 				</td>
 			</tr>
 		</table>

@@ -2,6 +2,10 @@
 
 All notable changes to reMember are listed here. The current plugin version is in `remember.php` (`REMEMBER_VERSION`) and [GitHub Releases](https://github.com/ctucker1984/remember/releases).
 
+## 2.1.1
+
+- **Fix:** Time zone pickers use a short city list (US first, then UK / France, then the rest of the world) instead of WordPress’s full IANA dump. Stored ids stay IANA; an already-saved zone that is not in the list still appears. Closes [#38](https://github.com/ctucker1984/remember/issues/38).
+
 ## 2.1.0
 
 - **Enhancement:** Staff-only **Reports** in wp-admin (`View Reports`). Pick a subject (members, applications, payments, vetting, events), columns, filters, and optional grouping/totals; preview runs over AJAX; CSV export is separate. Saved reports are per user. Field catalog and query compiler enforce the same read, attendees-only, emergency-contact, and health gates as member lists and CSV. Custom profile questions appear as columns on members and applications. Database 2.2.0.
