@@ -160,6 +160,66 @@
 			$(this).prop('disabled', true);
 		});
 
+		// Location logo: Media Library and/or a fresh upload.
+		var locationLogoFrame;
+		var $locationLogoWrap;
+		$('.remember-location-logo-select').on('click', function(e) {
+			e.preventDefault();
+			if (typeof wp === 'undefined' || !wp.media) {
+				return;
+			}
+			$locationLogoWrap = $(this).closest('.remember-location-logo');
+			var title = $(this).data('title') || 'Select location logo';
+			var button = $(this).data('button') || 'Use as logo';
+			if (locationLogoFrame) {
+				locationLogoFrame.open();
+				return;
+			}
+			locationLogoFrame = wp.media({
+				title: title,
+				button: { text: button },
+				library: { type: 'image' },
+				multiple: false
+			});
+			locationLogoFrame.on('select', function() {
+				if (!$locationLogoWrap || !$locationLogoWrap.length) {
+					return;
+				}
+				var attachment = locationLogoFrame.state().get('selection').first().toJSON();
+				var url = attachment.url;
+				if (attachment.sizes) {
+					if (attachment.sizes.medium) {
+						url = attachment.sizes.medium.url;
+					} else if (attachment.sizes.full) {
+						url = attachment.sizes.full.url;
+					}
+				}
+				$locationLogoWrap.find('.remember-location-logo-id').val(attachment.id);
+				$locationLogoWrap.find('.remember-location-logo-preview').empty().append(
+					$('<img>', { src: url, alt: '' })
+				);
+				$locationLogoWrap.find('.remember-location-logo-file').val('');
+				$locationLogoWrap.find('.remember-location-logo-delete').prop('checked', false);
+			});
+			locationLogoFrame.open();
+		});
+		$('.remember-location-logo-file').on('change', function() {
+			if (!this.files || !this.files.length) {
+				return;
+			}
+			$(this).closest('.remember-location-logo').find('.remember-location-logo-id').val('0');
+			$(this).closest('.remember-location-logo').find('.remember-location-logo-delete').prop('checked', false);
+		});
+		$('.remember-location-logo-delete').on('change', function() {
+			if (!this.checked) {
+				return;
+			}
+			var $wrap = $(this).closest('.remember-location-logo');
+			$wrap.find('.remember-location-logo-id').val('0');
+			$wrap.find('.remember-location-logo-preview').empty();
+			$wrap.find('.remember-location-logo-file').val('');
+		});
+
 		// Member profile print formats. Caps gate which modes appear; Ctrl/Cmd+P
 		// is coerced to an allowed mode (or denied) so a menu is not required.
 		var $printDetail = $('.remember-member-detail');

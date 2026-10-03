@@ -139,7 +139,130 @@ class Remember_Timezone {
 	}
 
 	/**
-	 * Get hierarchical timezone dropdown HTML (using WordPress function).
+	 * Curated IANA zones for the picker: one recognizable city per common offset.
+	 *
+	 * United States first (most members), then UK / France, then the rest of
+	 * the world. Legacy values stay valid and are appended if not listed.
+	 *
+	 * @return array<string, array<string, string>> Group label => [ tz => label ].
+	 */
+	public static function choices() {
+		return array(
+			__( 'United States', 'remember' ) => array(
+				'America/New_York'    => __( 'Eastern Time — New York, Toronto, Detroit', 'remember' ),
+				'America/Chicago'     => __( 'Central Time — Chicago, Dallas, Houston', 'remember' ),
+				'America/Denver'      => __( 'Mountain Time — Denver', 'remember' ),
+				'America/Phoenix'     => __( 'Arizona — Phoenix (no daylight saving)', 'remember' ),
+				'America/Los_Angeles' => __( 'Pacific Time — Los Angeles, Vancouver, Seattle', 'remember' ),
+				'America/Anchorage'   => __( 'Alaska Time — Anchorage', 'remember' ),
+				'Pacific/Honolulu'    => __( 'Hawaii Time — Honolulu', 'remember' ),
+				'America/Puerto_Rico' => __( 'Atlantic — Puerto Rico (no daylight saving)', 'remember' ),
+			),
+			__( 'Americas', 'remember' ) => array(
+				'America/Halifax'                => __( 'Atlantic Time — Halifax', 'remember' ),
+				'America/St_Johns'               => __( 'Newfoundland — St. John’s', 'remember' ),
+				'America/Mexico_City'            => __( 'Mexico — Mexico City', 'remember' ),
+				'America/Bogota'                 => __( 'Colombia / Peru — Bogotá', 'remember' ),
+				'America/Sao_Paulo'              => __( 'Brazil — São Paulo', 'remember' ),
+				'America/Argentina/Buenos_Aires' => __( 'Argentina — Buenos Aires', 'remember' ),
+				'America/Santiago'               => __( 'Chile — Santiago', 'remember' ),
+			),
+			__( 'Europe', 'remember' ) => array(
+				'Europe/London'      => __( 'United Kingdom — London', 'remember' ),
+				'Europe/Paris'       => __( 'Central Europe — Paris, Berlin, Madrid, Rome', 'remember' ),
+				'Europe/Athens'      => __( 'Eastern Europe — Athens, Bucharest', 'remember' ),
+				'Europe/Moscow'      => __( 'Moscow', 'remember' ),
+				'Atlantic/Reykjavik' => __( 'Iceland — Reykjavík', 'remember' ),
+			),
+			__( 'Africa', 'remember' ) => array(
+				'Africa/Lagos'        => __( 'West Africa — Lagos', 'remember' ),
+				'Africa/Cairo'        => __( 'Egypt — Cairo', 'remember' ),
+				'Africa/Johannesburg' => __( 'South Africa — Johannesburg', 'remember' ),
+				'Africa/Nairobi'      => __( 'East Africa — Nairobi', 'remember' ),
+			),
+			__( 'Asia', 'remember' ) => array(
+				'Asia/Jerusalem' => __( 'Israel — Jerusalem', 'remember' ),
+				'Asia/Dubai'     => __( 'Gulf — Dubai', 'remember' ),
+				'Asia/Tehran'    => __( 'Iran — Tehran', 'remember' ),
+				'Asia/Kabul'     => __( 'Afghanistan — Kabul', 'remember' ),
+				'Asia/Karachi'   => __( 'Pakistan — Karachi', 'remember' ),
+				'Asia/Kolkata'   => __( 'India — Kolkata, Mumbai, Delhi', 'remember' ),
+				'Asia/Kathmandu' => __( 'Nepal — Kathmandu', 'remember' ),
+				'Asia/Dhaka'     => __( 'Bangladesh — Dhaka', 'remember' ),
+				'Asia/Yangon'    => __( 'Myanmar — Yangon', 'remember' ),
+				'Asia/Bangkok'   => __( 'Indochina — Bangkok, Jakarta', 'remember' ),
+				'Asia/Shanghai'  => __( 'China — Beijing, Shanghai', 'remember' ),
+				'Asia/Tokyo'     => __( 'Japan / Korea — Tokyo, Seoul', 'remember' ),
+			),
+			__( 'Australia & Pacific', 'remember' ) => array(
+				'Australia/Perth'    => __( 'Western Australia — Perth', 'remember' ),
+				'Australia/Adelaide' => __( 'Central Australia — Adelaide', 'remember' ),
+				'Australia/Sydney'   => __( 'Eastern Australia — Sydney, Melbourne', 'remember' ),
+				'Pacific/Guam'       => __( 'Guam', 'remember' ),
+				'Pacific/Auckland'   => __( 'New Zealand — Auckland', 'remember' ),
+				'Pacific/Fiji'       => __( 'Fiji', 'remember' ),
+				'Pacific/Pago_Pago'  => __( 'Samoa — Pago Pago', 'remember' ),
+			),
+			__( 'Other', 'remember' ) => array(
+				'UTC' => __( 'UTC', 'remember' ),
+			),
+		);
+	}
+
+	/**
+	 * Friendly label for a stored timezone id.
+	 *
+	 * @param string $timezone IANA id.
+	 * @return string
+	 */
+	public static function label( $timezone ) {
+		$timezone = is_string( $timezone ) ? trim( $timezone ) : '';
+		if ( '' === $timezone ) {
+			return '';
+		}
+		foreach ( self::choices() as $zones ) {
+			if ( isset( $zones[ $timezone ] ) ) {
+				return $zones[ $timezone ];
+			}
+		}
+		return str_replace( array( '_', '/' ), array( ' ', ' / ' ), $timezone );
+	}
+
+	/**
+	 * Whether the id is in the curated picker list.
+	 *
+	 * @param string $timezone IANA id.
+	 * @return bool
+	 */
+	public static function is_listed( $timezone ) {
+		$timezone = is_string( $timezone ) ? trim( $timezone ) : '';
+		foreach ( self::choices() as $zones ) {
+			if ( isset( $zones[ $timezone ] ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Short help under the picker.
+	 *
+	 * @return string
+	 */
+	public static function help_text() {
+		$org = self::label( self::get_organization_timezone_name() );
+		if ( '' === $org ) {
+			$org = self::get_organization_timezone_name();
+		}
+		return sprintf(
+			/* translators: %s: organization time zone name */
+			__( 'This organization uses the %s time zone. Select your own local timezone so times correctly translate to your locality. This is important so that you do not miss appointments and scheduled meetings.', 'remember' ),
+			$org
+		);
+	}
+
+	/**
+	 * Curated timezone dropdown HTML (combobox source).
 	 *
 	 * @param string $selected Selected timezone.
 	 * @param string $name     Field name.
@@ -153,7 +276,6 @@ class Remember_Timezone {
 
 		$classes = trim( $class . ' remember-timezone-select' );
 
-		// Single combobox control (JS): type in the field to match options — no separate filter box.
 		$html  = '<div class="remember-timezone-picker">';
 		$html .= sprintf(
 			'<select name="%s" id="%s" class="%s"%s data-remember-timezone="1">',
@@ -163,7 +285,6 @@ class Remember_Timezone {
 			$required ? ' required' : ''
 		);
 
-		// Empty choice so registration is not pre-filtered to a default city.
 		if ( '' === $selected ) {
 			$html .= sprintf(
 				'<option value="" selected="selected">%s</option>',
@@ -171,8 +292,26 @@ class Remember_Timezone {
 			);
 		}
 
-		// WordPress hierarchical list (continent/region optgroups) — source data for the combobox.
-		$html .= wp_timezone_choice( $selected, get_user_locale() );
+		foreach ( self::choices() as $group => $zones ) {
+			$html .= sprintf( '<optgroup label="%s">', esc_attr( $group ) );
+			foreach ( $zones as $value => $label ) {
+				$html .= sprintf(
+					'<option value="%s"%s>%s</option>',
+					esc_attr( $value ),
+					selected( $selected, $value, false ),
+					esc_html( $label )
+				);
+			}
+			$html .= '</optgroup>';
+		}
+
+		if ( '' !== $selected && ! self::is_listed( $selected ) && self::is_valid_timezone( $selected ) ) {
+			$html .= sprintf(
+				'<option value="%s" selected="selected">%s</option>',
+				esc_attr( $selected ),
+				esc_html( self::label( $selected ) )
+			);
+		}
 
 		$html .= '</select>';
 		$html .= '</div>';

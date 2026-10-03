@@ -22,6 +22,120 @@ Remember_Logger::debug( 'Locations page loaded' );
 $location_model = new Remember_Location();
 $event_model = new Remember_Event();
 
+/**
+ * Apply a posted location logo (new upload, Media Library pick, or remove).
+ *
+ * @param string $existing_url Current logo URL.
+ * @param int    $max_image_size Max square size for new uploads.
+ * @return string|null
+ */
+function remember_apply_location_logo( $existing_url, $max_image_size ) {
+	$existing_url = is_string( $existing_url ) ? $existing_url : '';
+
+	if ( ! empty( $_FILES['logo_file']['name'] ) ) {
+		$upload_result = Remember_Image_Uploader::upload_square_image( $_FILES['logo_file'], $max_image_size, Remember_Image_Uploader::SUBDIR_LOCATIONS );
+		if ( is_wp_error( $upload_result ) ) {
+			Remember_Logger::error( 'Logo upload failed', array( 'error' => $upload_result->get_error_message() ) );
+			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html( $upload_result->get_error_message() ) . '</p></div>';
+			return '' === $existing_url ? null : $existing_url;
+		}
+		if ( $existing_url ) {
+			Remember_Image_Uploader::delete_image( $existing_url );
+		}
+		return isset( $upload_result['url'] ) ? $upload_result['url'] : $existing_url;
+	}
+
+	if ( isset( $_POST['delete_logo'] ) && $existing_url ) {
+		Remember_Image_Uploader::delete_image( $existing_url );
+		return null;
+	}
+
+	$attachment_id = isset( $_POST['logo_attachment_id'] ) ? absint( wp_unslash( $_POST['logo_attachment_id'] ) ) : 0;
+	if ( $attachment_id > 0 && function_exists( 'wp_attachment_is_image' ) && wp_attachment_is_image( $attachment_id ) ) {
+		$url = wp_get_attachment_url( $attachment_id );
+		if ( $url ) {
+			if ( $existing_url && $existing_url !== $url ) {
+				Remember_Image_Uploader::delete_image( $existing_url );
+			}
+			return $url;
+		}
+	}
+
+	return '' === $existing_url ? null : $existing_url;
+}
+
+/**
+ * Logo field: Media Library picker and/or a new file upload.
+ *
+ * @param string $current_url    Current logo URL.
+ * @param int    $max_image_size Max square size for new uploads.
+ * @return void
+ */
+function remember_render_location_logo_field( $current_url, $max_image_size ) {
+	$current_url   = is_string( $current_url ) ? $current_url : '';
+	$attachment_id = 0;
+	if ( $current_url && function_exists( 'attachment_url_to_postid' ) ) {
+		$attachment_id = absint( attachment_url_to_postid( $current_url ) );
+	}
+	$can_media = current_user_can( 'upload_files' );
+	?>
+	<tr>
+		<th><label for="logo_file"><?php esc_html_e( 'Logo', 'remember' ); ?></label></th>
+		<td>
+			<div class="remember-location-logo">
+				<input type="hidden" name="logo_attachment_id" class="remember-location-logo-id" value="<?php echo esc_attr( (string) $attachment_id ); ?>">
+				<div class="remember-location-logo-preview">
+					<?php if ( $current_url ) : ?>
+						<img src="<?php echo esc_url( $current_url ); ?>" alt="">
+					<?php endif; ?>
+				</div>
+				<?php if ( $can_media ) : ?>
+					<p>
+						<button type="button" class="button remember-location-logo-select"
+							data-title="<?php echo esc_attr( __( 'Select location logo', 'remember' ) ); ?>"
+							data-button="<?php echo esc_attr( __( 'Use as logo', 'remember' ) ); ?>">
+							<?php esc_html_e( 'Select from Media Library', 'remember' ); ?>
+						</button>
+					</p>
+				<?php endif; ?>
+				<p>
+					<input type="file" id="logo_file" name="logo_file" class="remember-location-logo-file" accept="image/jpeg,image/png,image/gif">
+				</p>
+				<?php if ( $current_url ) : ?>
+					<p>
+						<label>
+							<input type="checkbox" name="delete_logo" value="1" class="remember-location-logo-delete">
+							<?php esc_html_e( 'Remove current logo', 'remember' ); ?>
+						</label>
+					</p>
+				<?php endif; ?>
+				<p class="description">
+					<?php
+					if ( $can_media ) {
+						echo esc_html(
+							sprintf(
+								/* translators: %d: max dimension in pixels */
+								__( 'Pick an existing image or upload a new square file (max %dpx). New uploads are not added to the Media Library.', 'remember' ),
+								(int) $max_image_size
+							)
+						);
+					} else {
+						echo esc_html(
+							sprintf(
+								/* translators: %d: max dimension in pixels */
+								__( 'Square image, max %dpx. WordPress will resize if needed.', 'remember' ),
+								(int) $max_image_size
+							)
+						);
+					}
+					?>
+				</p>
+			</div>
+		</td>
+	</tr>
+	<?php
+}
+
 // Get max image dimensions from settings
 $options = get_option( 'remember_options', array() );
 $max_image_size = isset( $options['photo_max_dimensions'] ) ? absint( $options['photo_max_dimensions'] ) : 800;
@@ -47,15 +161,9 @@ if ( isset( $_POST['remember_location_action'] ) && check_admin_referer( 'rememb
 			'is_active'      => isset( $_POST['is_active'] ) ? 1 : 0,
 		);
 		
-		// Handle logo upload
-		if ( ! empty( $_FILES['logo_file']['name'] ) ) {
-			$upload_result = Remember_Image_Uploader::upload_square_image( $_FILES['logo_file'], $max_image_size );
-			if ( ! is_wp_error( $upload_result ) ) {
-				$data['logo_url'] = $upload_result['url'];
-			} else {
-				Remember_Logger::error( 'Logo upload failed', array( 'error' => $upload_result->get_error_message() ) );
-				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html( $upload_result->get_error_message() ) . '</p></div>';
-			}
+		$logo_url = remember_apply_location_logo( '', $max_image_size );
+		if ( $logo_url ) {
+			$data['logo_url'] = $logo_url;
 		}
 		
 		$location_id = $location_model->create( $data );
@@ -86,26 +194,11 @@ if ( isset( $_POST['remember_location_action'] ) && check_admin_referer( 'rememb
 			'is_active'      => isset( $_POST['is_active'] ) ? 1 : 0,
 		);
 		
-		// Handle logo upload
-		if ( ! empty( $_FILES['logo_file']['name'] ) ) {
-			// Delete old logo if exists
-			if ( $location && $location->logo_url ) {
-				Remember_Image_Uploader::delete_image( $location->logo_url );
-			}
-			
-			$upload_result = Remember_Image_Uploader::upload_square_image( $_FILES['logo_file'], $max_image_size );
-			if ( ! is_wp_error( $upload_result ) ) {
-				$data['logo_url'] = $upload_result['url'];
-			} else {
-				Remember_Logger::error( 'Logo upload failed', array( 'error' => $upload_result->get_error_message() ) );
-				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html( $upload_result->get_error_message() ) . '</p></div>';
-			}
-		}
-		
-		// Handle logo deletion
-		if ( isset( $_POST['delete_logo'] ) && $location && $location->logo_url ) {
-			Remember_Image_Uploader::delete_image( $location->logo_url );
+		$logo_url = remember_apply_location_logo( $location ? $location->logo_url : '', $max_image_size );
+		if ( null === $logo_url ) {
 			$data['logo_url'] = null;
+		} elseif ( $logo_url ) {
+			$data['logo_url'] = $logo_url;
 		}
 		
 		$result = $location_model->update( $location_id, $data );
@@ -238,20 +331,7 @@ function remember_format_address( $location ) {
 						<th><label for="location_name"><?php esc_html_e( 'Location Name', 'remember' ); ?> <span class="description">(required)</span></label></th>
 						<td><input type="text" id="location_name" name="location_name" class="regular-text" value="<?php echo esc_attr( $editing_location->location_name ); ?>" required></td>
 					</tr>
-					<tr>
-						<th><label for="logo_file"><?php esc_html_e( 'Logo', 'remember' ); ?></label></th>
-						<td>
-							<?php if ( ! empty( $editing_location->logo_url ) ) : ?>
-								<p>
-									<img src="<?php echo esc_url( $editing_location->logo_url ); ?>" alt="<?php echo esc_attr( $editing_location->location_name ); ?>" style="max-width: 150px; height: auto; border: 1px solid #ddd; padding: 5px;">
-								</p>
-								<label><input type="checkbox" name="delete_logo" value="1"> <?php esc_html_e( 'Delete current logo', 'remember' ); ?></label>
-								<p class="description"><?php esc_html_e( 'Upload a new logo to replace the current one.', 'remember' ); ?></p>
-							<?php endif; ?>
-							<input type="file" id="logo_file" name="logo_file" accept="image/*">
-							<p class="description"><?php echo esc_html( sprintf( __( 'Square image, max %dpx. WordPress will resize if needed.', 'remember' ), $max_image_size ) ); ?></p>
-						</td>
-					</tr>
+					<?php remember_render_location_logo_field( $editing_location->logo_url, $max_image_size ); ?>
 					<tr>
 						<th><label for="address_street"><?php esc_html_e( 'Street Address', 'remember' ); ?></label></th>
 						<td><input type="text" id="address_street" name="address_street" class="regular-text" value="<?php echo esc_attr( $editing_location->address_street ); ?>"></td>
@@ -346,13 +426,7 @@ function remember_format_address( $location ) {
 						<th><label for="location_name"><?php esc_html_e( 'Location Name', 'remember' ); ?> <span class="description">(required)</span></label></th>
 						<td><input type="text" id="location_name" name="location_name" class="regular-text" required></td>
 					</tr>
-					<tr>
-						<th><label for="logo_file"><?php esc_html_e( 'Logo', 'remember' ); ?></label></th>
-						<td>
-							<input type="file" id="logo_file" name="logo_file" accept="image/*">
-							<p class="description"><?php echo esc_html( sprintf( __( 'Square image, max %dpx. WordPress will resize if needed.', 'remember' ), $max_image_size ) ); ?></p>
-						</td>
-					</tr>
+					<?php remember_render_location_logo_field( '', $max_image_size ); ?>
 					<tr>
 						<th><label for="address_street"><?php esc_html_e( 'Street Address', 'remember' ); ?></label></th>
 						<td><input type="text" id="address_street" name="address_street" class="regular-text"></td>

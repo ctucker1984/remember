@@ -318,9 +318,10 @@ require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remem
 						<th><?php esc_html_e( 'Time Zone', 'remember' ); ?></th>
 						<td>
 							<?php
+							require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-timezone.php';
 							$view_timezone = $view_user ? get_user_meta( $view_user->ID, 'timezone_string', true ) : '';
 							echo ! empty( $view_timezone )
-								? esc_html( $view_timezone )
+								? esc_html( Remember_Timezone::label( $view_timezone ) )
 								: '<span class="description">' . esc_html__( 'Not provided', 'remember' ) . '</span>';
 							?>
 						</td>

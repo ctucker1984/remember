@@ -2,6 +2,26 @@
 
 All notable changes to reMember are listed here. The current plugin version is in `remember.php` (`REMEMBER_VERSION`) and [GitHub Releases](https://github.com/ctucker1984/remember/releases).
 
+## 2.1.1
+
+- **Fix:** Time zone pickers use a short city list (US first, then UK / France, then the rest of the world) instead of WordPress’s full IANA dump. Stored ids stay IANA; an already-saved zone that is not in the list still appears. Help text names the organization’s WordPress time zone and why picking your own matters. Closes [#38](https://github.com/ctucker1984/remember/issues/38).
+
+## 2.1.0
+
+- **Enhancement:** Staff-only **Reports** in wp-admin (`View Reports`). Pick a subject (members, applications, payments, vetting, events), columns, filters, and optional grouping/totals; preview runs over AJAX; CSV export is separate. Saved reports are per user. Field catalog and query compiler enforce the same read, attendees-only, emergency-contact, and health gates as member lists and CSV. Custom profile questions appear as columns on members and applications. Database 2.2.0.
+- **Enhancement:** Reports builder uses labeled fields, a header Run control, and less nested boxing so the screen sits closer to the rest of wp-admin without a wall of fieldsets.
+- **Enhancement:** Report filters use the field’s choice list for custom select/multi-select questions and for catalog fields (dietary, allergies, medical, roles, clothing sizes, IM type, event role, location).
+- **Enhancement:** Multi-select custom field answers print as comma-separated option keys in the results grid and CSV, not as JSON arrays.
+- **Enhancement:** Reports can be limited to one event at run time without saving that event on the report. Members and vetting use accepted participants; applications and payments use that event’s records.
+- **Enhancement:** Copy a saved report into another staff member’s library. The recipient must have View Reports, the subject’s read cap, and emergency/health access if the report uses those fields. The copy is theirs; the run-time event is not copied.
+- **Enhancement:** **My Reports** lists saved reports A–Z by name.
+- **Enhancement:** Import/Export can download and restore a full JSON backup of plugin tables and settings (not WordPress users). Restore matches users by email or creates Subscribers with random passwords, so a backup can be loaded onto a fresh install. Restore is refused if this site’s plugin or database version is older than the backup. The CSV tools on that screen are condensed; column notes sit behind each card.
+- **Security:** The JSON backup omits billing client secrets, OAuth tokens, and encryption keys. Payment rows keep invoice IDs rather than downloaded payment/refund lines; QuickBooks customer and Xero contact IDs travel in the user index so a restored site can reconnect and rematch.
+- **Enhancement:** New profile photos and location logos are stored under `uploads/remember/photos/` and `uploads/remember/locations/` (still not Media Library attachments). Existing files stay where they are until replaced. Ticket logos stay in Media.
+- **Enhancement:** Location logos can be chosen from the Media Library or uploaded as a new file. Clearing a library-picked logo does not delete the Media file.
+- **Enhancement:** Plugins → Deactivate leaves reMember data in place and offers a JSON backup first. Plugins → Delete (only after deactivate) runs uninstall: tables, settings, logs, stored photos, setup pages, and reMember capabilities are removed; WordPress users are not.
+- **Security:** Saving a role’s capabilities immediately recalculates WordPress caps for every member who holds that role. Previously those users kept the old caps until their profile was saved.
+
 ## 2.0.0
 
 - **Enhancement:** Applying for an event first shows a dialog: review and save the profile (changes optional), then return to the application. The “my profile is current” confirmation remains required. Closes [#33](https://github.com/ctucker1984/remember/issues/33).

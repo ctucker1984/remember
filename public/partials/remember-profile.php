@@ -603,7 +603,7 @@ if ( ! empty( $selected_allergy_ids ) ) {
 							<span class="remember-required">*</span>
 						</label>
 						<?php echo Remember_Timezone::dropdown( $selected_timezone, 'timezone_string', 'timezone_string', true ); ?>
-						<p class="remember-form-help"><?php esc_html_e( 'Choose your own time zone. Appointments and event times are shown in your local time — picking the wrong zone can cause missed appointments.', 'remember' ); ?></p>
+						<p class="remember-form-help"><?php echo esc_html( Remember_Timezone::help_text() ); ?></p>
 					</div>
 				</div>
 			</div>
@@ -966,7 +966,7 @@ if ( ! empty( $selected_allergy_ids ) ) {
 						?>
 							<div class="remember-profile-view-item">
 								<strong class="remember-profile-view-label"><?php esc_html_e( 'Time Zone', 'remember' ); ?></strong>
-								<span class="remember-profile-view-value"><?php echo esc_html( $selected_timezone ); ?></span>
+								<span class="remember-profile-view-value"><?php echo esc_html( Remember_Timezone::label( $selected_timezone ) ); ?></span>
 							</div>
 						<?php endif; ?>
 					</div>

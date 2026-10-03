@@ -48,6 +48,61 @@ class Remember_Admin {
 	}
 
 	/**
+	 * Main plugin file relative to wp-content/plugins.
+	 *
+	 * @return string
+	 */
+	public static function plugin_file() {
+		return plugin_basename( REMEMBER_PLUGIN_DIR . 'remember.php' );
+	}
+
+	/**
+	 * Point Plugins → Deactivate at a backup reminder. Data is not removed here.
+	 *
+	 * @param array $actions Row actions.
+	 * @return array
+	 */
+	public function filter_plugin_action_links( $actions ) {
+		if ( isset( $actions['deactivate'] ) ) {
+			$actions['deactivate'] = sprintf(
+				'<a href="%s" aria-label="%s">%s</a>',
+				esc_url( admin_url( 'admin.php?page=remember-deactivate' ) ),
+				esc_attr__( 'Deactivate reMember', 'remember' ),
+				esc_html__( 'Deactivate', 'remember' )
+			);
+		}
+		return $actions;
+	}
+
+	/**
+	 * Catch a direct plugins.php deactivate URL so it still offers a backup.
+	 *
+	 * @return void
+	 */
+	public function intercept_plugin_deactivate() {
+		if ( ! is_admin() || is_network_admin() ) {
+			return;
+		}
+		if ( ! empty( $_GET['remember_confirmed'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			return;
+		}
+		$action = isset( $_REQUEST['action'] ) ? sanitize_key( wp_unslash( $_REQUEST['action'] ) ) : '';
+		if ( 'deactivate' !== $action ) {
+			return;
+		}
+		$plugin = isset( $_REQUEST['plugin'] ) ? wp_unslash( $_REQUEST['plugin'] ) : '';
+		if ( self::plugin_file() !== $plugin ) {
+			return;
+		}
+		if ( ! current_user_can( 'activate_plugins' ) ) {
+			return;
+		}
+		check_admin_referer( 'deactivate-plugin_' . $plugin );
+		wp_safe_redirect( admin_url( 'admin.php?page=remember-deactivate' ) );
+		exit;
+	}
+
+	/**
 	 * Register the stylesheets for the admin area.
 	 *
 	 * @since    1.0.0
@@ -125,8 +180,77 @@ class Remember_Admin {
 					true
 				);
 			}
-			if ( false !== strpos( $screen->id, 'remember-settings' ) ) {
+			if ( false !== strpos( $screen->id, 'remember-settings' ) || false !== strpos( $screen->id, 'remember-locations' ) ) {
 				wp_enqueue_media();
+			}
+			if ( false !== strpos( $screen->id, 'remember-reports' ) ) {
+				wp_enqueue_script(
+					$this->plugin_name . '-reports',
+					plugin_dir_url( __FILE__ ) . '../assets/js/reports.js',
+					array( 'jquery' ),
+					$this->version,
+					true
+				);
+				wp_localize_script(
+					$this->plugin_name . '-reports',
+					'rememberReports',
+					array(
+						'ajaxurl'    => admin_url( 'admin-ajax.php' ),
+						'nonce'      => wp_create_nonce( 'remember_reports' ),
+						'exportUrl'  => admin_url( 'admin-post.php' ),
+						'i18n'       => array(
+							'run'          => __( 'Run report', 'remember' ),
+							'running'      => __( 'Running…', 'remember' ),
+							'save'         => __( 'Save', 'remember' ),
+							'saveAs'       => __( 'Save as', 'remember' ),
+							'del'          => __( 'Delete', 'remember' ),
+							'exportCsv'    => __( 'Export CSV', 'remember' ),
+							'newReport'    => __( 'New report', 'remember' ),
+							'unnamed'      => __( 'Untitled report', 'remember' ),
+							'confirmDel'   => __( 'Delete this saved report?', 'remember' ),
+							'needName'     => __( 'Name this report.', 'remember' ),
+							'noRows'       => __( 'No rows.', 'remember' ),
+							'error'        => __( 'Could not run that report.', 'remember' ),
+							'addFilter'    => __( 'Add filter', 'remember' ),
+							'addGroup'     => __( 'Add grouping', 'remember' ),
+							'addAgg'       => __( 'Add calculation', 'remember' ),
+							'detail'       => __( 'Rows', 'remember' ),
+							'summary'      => __( 'Summary', 'remember' ),
+							'page'         => __( 'Page', 'remember' ),
+							'of'           => __( 'of', 'remember' ),
+							'saved'        => __( 'Saved.', 'remember' ),
+							'deleted'      => __( 'Deleted.', 'remember' ),
+							'copyTo'       => __( 'Copy to…', 'remember' ),
+							'copy'         => __( 'Copy', 'remember' ),
+							'copyCancel'   => __( 'Cancel', 'remember' ),
+							'copyNeedSave' => __( 'Save this report before copying it.', 'remember' ),
+							'copyNeedUser' => __( 'Choose someone to copy this report to.', 'remember' ),
+							'noRecipients' => __( 'No one else can receive this report. They need View Reports plus the read access this subject uses.', 'remember' ),
+							'loadingRecipients' => __( 'Loading…', 'remember' ),
+							'noSubjects'   => __( 'No report subjects are available for your role.', 'remember' ),
+							'prev'         => __( 'Previous', 'remember' ),
+							'next'         => __( 'Next', 'remember' ),
+							'remove'       => __( 'Remove', 'remember' ),
+							'up'           => __( 'Move up', 'remember' ),
+							'down'         => __( 'Move down', 'remember' ),
+							'none'         => __( 'None', 'remember' ),
+							'countStar'    => __( 'Rows', 'remember' ),
+							'rowsLabel'    => __( 'rows', 'remember' ),
+							'noneSaved'    => __( 'No saved reports yet.', 'remember' ),
+							'fieldLabel'   => __( 'Field', 'remember' ),
+							'operatorLabel'=> __( 'Operator', 'remember' ),
+							'valueLabel'   => __( 'Value', 'remember' ),
+							'selectValue'  => __( 'Select value', 'remember' ),
+							'calcLabel'    => __( 'Calculation', 'remember' ),
+							'allEvents'    => __( 'All events', 'remember' ),
+							'eventHintAll' => __( 'Saved reports stay global. Choose an event to limit this run; it is not saved with the report.', 'remember' ),
+							'eventHintMembers' => __( 'This run is limited to accepted participants of the selected event. The saved report stays global.', 'remember' ),
+							'eventHintApps' => __( 'This run is limited to applications for the selected event. The saved report stays global.', 'remember' ),
+							'eventHintPay' => __( 'This run is limited to payments for the selected event. The saved report stays global.', 'remember' ),
+							'eventHintEvents' => __( 'This run is limited to the selected event. The saved report stays global.', 'remember' ),
+						),
+					)
+				);
 			}
 		}
 		if ( in_array( $screen->id, array( 'profile', 'user-edit' ), true ) ) {
@@ -326,6 +450,15 @@ class Remember_Admin {
 			array( $this, 'display_duplicates_page' )
 		);
 
+		add_submenu_page(
+			'remember',
+			__( 'Reports', 'remember' ),
+			__( 'Reports', 'remember' ),
+			'remember_view_reports',
+			'remember-reports',
+			array( $this, 'display_reports_page' )
+		);
+
 		// Events
 		add_submenu_page(
 			'remember',
@@ -456,6 +589,15 @@ class Remember_Admin {
 			'remember_access_settings',
 			'remember-setup',
 			array( $this, 'display_setup_wizard' )
+		);
+
+		add_submenu_page(
+			'options.php',
+			__( 'Deactivate reMember', 'remember' ),
+			'',
+			'activate_plugins',
+			'remember-deactivate',
+			array( $this, 'display_deactivate_page' )
 		);
 
 		Remember_Logger::debug( 'Admin menu registered' );
@@ -592,6 +734,18 @@ class Remember_Admin {
 			wp_die( __( 'You do not have sufficient permissions to access this page.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
 		}
 		include_once 'views/duplicates.php';
+	}
+
+	/**
+	 * Staff reporting builder.
+	 *
+	 * @return void
+	 */
+	public function display_reports_page() {
+		if ( ! current_user_can( 'remember_view_reports' ) ) {
+			wp_die( __( 'You do not have sufficient permissions to access this page.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+		}
+		include_once 'views/reports.php';
 	}
 
 	/**
@@ -802,6 +956,19 @@ class Remember_Admin {
 	}
 
 	/**
+	 * Backup reminder before Plugins → Deactivate. Does not wipe data.
+	 *
+	 * @return void
+	 */
+	public function display_deactivate_page() {
+		if ( ! current_user_can( 'activate_plugins' ) ) {
+			wp_die( esc_html__( 'You do not have sufficient permissions to deactivate plugins.', 'remember' ), esc_html__( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+		}
+		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-backup.php';
+		include_once 'views/deactivate.php';
+	}
+
+	/**
 	 * Serve per-event accepted-participant CSV before admin HTML output.
 	 *
 	 * @since 1.3.0
@@ -836,7 +1003,17 @@ class Remember_Admin {
 	 * @since    1.0.0
 	 */
 	public function handle_import_export_requests() {
-		if ( ! is_admin() || ! isset( $_GET['page'] ) || 'remember-import-export' !== $_GET['page'] ) {
+		if ( ! is_admin() || ! isset( $_GET['page'] ) ) {
+			return;
+		}
+
+		$page = sanitize_key( wp_unslash( $_GET['page'] ) );
+		if ( 'remember-deactivate' === $page ) {
+			$this->handle_deactivate_backup_download();
+			return;
+		}
+
+		if ( 'remember-import-export' !== $page ) {
 			return;
 		}
 
@@ -874,7 +1051,7 @@ class Remember_Admin {
 		$action = sanitize_text_field( wp_unslash( $_POST['remember_import_export_action'] ) );
 		if ( ! in_array(
 			$action,
-			array( 'export_members', 'export_events', 'export_locations', 'export_profile_questions' ),
+			array( 'export_members', 'export_events', 'export_locations', 'export_profile_questions', 'export_backup' ),
 			true
 		) ) {
 			return;
@@ -888,9 +1065,33 @@ class Remember_Admin {
 			Remember_Import_Export::export_events();
 		} elseif ( 'export_locations' === $action ) {
 			Remember_Import_Export::export_locations();
+		} elseif ( 'export_backup' === $action ) {
+			require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-backup.php';
+			Remember_Backup::download();
 		} else {
 			Remember_Import_Export::export_profile_questions();
 		}
+	}
+
+	/**
+	 * Full backup from the deactivate reminder screen.
+	 *
+	 * @return void
+	 */
+	private function handle_deactivate_backup_download() {
+		if ( ! isset( $_POST['remember_import_export_action'] ) ) {
+			return;
+		}
+		$action = sanitize_text_field( wp_unslash( $_POST['remember_import_export_action'] ) );
+		if ( 'export_backup' !== $action ) {
+			return;
+		}
+		if ( ! current_user_can( 'activate_plugins' ) ) {
+			return;
+		}
+		check_admin_referer( 'remember_import_export_action', 'remember_import_export_nonce' );
+		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-backup.php';
+		Remember_Backup::download();
 	}
 
 	/**
@@ -1677,7 +1878,7 @@ class Remember_Admin {
 				<th><label for="timezone_string"><?php esc_html_e( 'Time Zone', 'remember' ); ?> <span class="description"><?php esc_html_e( '(required)', 'remember' ); ?></span></label></th>
 				<td>
 					<?php echo Remember_Timezone::dropdown( $selected_timezone, 'timezone_string', 'timezone_string', true ); ?>
-					<p class="description"><?php esc_html_e( 'Your timezone is used to display scheduled times in your local time.', 'remember' ); ?></p>
+					<p class="description"><?php echo esc_html( Remember_Timezone::help_text() ); ?></p>
 				</td>
 			</tr>
 		</table>

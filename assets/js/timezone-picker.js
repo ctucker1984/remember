@@ -67,7 +67,7 @@
 			$input.attr('required', 'required');
 		}
 		$input.attr('id', $select.attr('id') + '_combo');
-		$input.attr('placeholder', 'Type a city or region…');
+		$input.attr('placeholder', 'Eastern, London, Paris…');
 		$input.val(selectedLabel($select));
 		if (!$select.val()) {
 			$input.val('');
@@ -96,7 +96,7 @@
 		function filtered(query) {
 			var q = $.trim(query).toLowerCase();
 			if (!q) {
-				return entries.slice(0, 80);
+				return entries;
 			}
 			return entries.filter(function(e) {
 				return (
@@ -104,7 +104,7 @@
 					e.value.toLowerCase().indexOf(q) !== -1 ||
 					(e.group && e.group.toLowerCase().indexOf(q) !== -1)
 				);
-			}).slice(0, 80);
+			});
 		}
 
 		function renderList(query) {
@@ -158,7 +158,6 @@
 		}
 
 		$input.on('focus', function() {
-			// Browse the full WP list on open; only filter after the member types.
 			renderList('');
 			$input.select();
 		});
