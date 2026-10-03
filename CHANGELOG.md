@@ -4,7 +4,7 @@ All notable changes to reMember are listed here. The current plugin version is i
 
 ## 2.1.1
 
-- **Fix:** Time zone pickers use a short city list (US first, then UK / France, then the rest of the world) instead of WordPress’s full IANA dump. Stored ids stay IANA; an already-saved zone that is not in the list still appears. Closes [#38](https://github.com/ctucker1984/remember/issues/38).
+- **Fix:** Time zone pickers use a short city list (US first, then UK / France, then the rest of the world) instead of WordPress’s full IANA dump. Stored ids stay IANA; an already-saved zone that is not in the list still appears. Help text names the organization’s WordPress time zone and why picking your own matters. Closes [#38](https://github.com/ctucker1984/remember/issues/38).
 
 ## 2.1.0
 

@@ -250,7 +250,15 @@ class Remember_Timezone {
 	 * @return string
 	 */
 	public static function help_text() {
-		return __( 'Pick the city that uses your clocks. US: Eastern, Central, Mountain, or Pacific. UK: London. France and most of Europe: Paris.', 'remember' );
+		$org = self::label( self::get_organization_timezone_name() );
+		if ( '' === $org ) {
+			$org = self::get_organization_timezone_name();
+		}
+		return sprintf(
+			/* translators: %s: organization time zone name */
+			__( 'This organization uses the %s time zone. Select your own local timezone so times correctly translate to your locality. This is important so that you do not miss appointments and scheduled meetings.', 'remember' ),
+			$org
+		);
 	}
 
 	/**
