@@ -6,6 +6,7 @@ All notable changes to reMember are listed here. The current plugin version is i
 
 - **Fix:** Completing a vetting case now emails the member the result. Accepted uses **Member Vetted**; rejected uses a new **Member Rejected** template. Those templates existed but were never sent.
 - **Enhancement:** reMember System Administrators are emailed on every new member (public registration, Add Member, and convert WordPress user). Settings → Notifications → General.
+- **Fix:** Dashboard **Check again** drops the GitHub release cache so it talks to GitHub immediately. New GitHub releases are also overlaid on WordPress’s 12-hour plugin list (GitHub snapshot kept 15 minutes) so an update appears without waiting.
 
 ## 2.1.1
 
