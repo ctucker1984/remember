@@ -54,9 +54,10 @@ class Remember_Notifications {
 
 		$context = self::normalize_context( $context );
 		$subject = self::replace_placeholders( $subject, $context );
-		$body    = self::replace_placeholders( $body, $context );
+		$body    = self::replace_placeholders( $body, self::html_context( $context ) );
+		$body    = self::to_html_email( $body );
 
-		$headers = array( 'Content-Type: text/plain; charset=UTF-8' );
+		$headers = array( 'Content-Type: text/html; charset=UTF-8' );
 		$sent    = wp_mail( $to, $subject, $body, $headers );
 
 		if ( ! $sent ) {
@@ -64,6 +65,43 @@ class Remember_Notifications {
 		}
 
 		return true;
+	}
+
+	/**
+	 * Escape placeholder values for HTML bodies. URL keys stay usable in href.
+	 *
+	 * @param array $context Placeholder map.
+	 * @return array
+	 */
+	private static function html_context( $context ) {
+		$url_keys = array( 'ticket_url', 'profile_url', 'review_url', 'vetting_url' );
+		$safe     = array();
+		foreach ( (array) $context as $key => $value ) {
+			$value = (string) $value;
+			if ( in_array( $key, $url_keys, true ) ) {
+				$safe[ $key ] = esc_url( $value );
+			} else {
+				$safe[ $key ] = esc_html( $value );
+			}
+		}
+		return $safe;
+	}
+
+	/**
+	 * Wrap a template body as an HTML email. Plain-text templates become paragraphs.
+	 *
+	 * @param string $body Body after placeholder replacement.
+	 * @return string
+	 */
+	private static function to_html_email( $body ) {
+		$body = (string) $body;
+		if ( false === strpos( $body, '<' ) ) {
+			$body = wpautop( $body );
+		}
+		$body = make_clickable( $body );
+		$body = wp_kses_post( $body );
+
+		return '<!DOCTYPE html><html><body style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Helvetica,Arial,sans-serif;font-size:16px;line-height:1.5;color:#1d2327;">' . $body . '</body></html>';
 	}
 
 	/**

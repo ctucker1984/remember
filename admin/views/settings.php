@@ -345,8 +345,8 @@ if ( isset( $_POST['remember_settings_action'] ) && check_admin_referer( 'rememb
 			foreach ( $_POST['notification_settings'] as $notification_type => $settings ) {
 				$data = array(
 					'is_enabled' => isset( $settings['enabled'] ) ? 1 : 0,
-					'subject_template' => isset( $settings['subject'] ) ? sanitize_text_field( $settings['subject'] ) : '',
-					'body_template' => isset( $settings['body'] ) ? wp_kses_post( $settings['body'] ) : '',
+					'subject_template' => isset( $settings['subject'] ) ? sanitize_text_field( wp_unslash( $settings['subject'] ) ) : '',
+					'body_template'    => isset( $settings['body'] ) ? wp_kses_post( wp_unslash( $settings['body'] ) ) : '',
 				);
 				$notification_model->update_by_type( $notification_type, $data );
 			}
@@ -1975,13 +1975,13 @@ $im_platforms = Remember_Im_Platforms::get_all();
 
 		<!-- Notification Settings -->
 		<div id="notifications" class="remember-settings-tab" style="display: none;">
-			<form method="post" action="">
+			<form method="post" action="" id="remember-notification-settings-form">
 				<?php wp_nonce_field( 'remember_settings_action', 'remember_settings_nonce' ); ?>
 				<input type="hidden" name="remember_settings_action" value="update_notifications">
 				<input type="hidden" name="notification_category" id="remember-notification-category" value="vetting">
 
 				<p class="description" style="margin-bottom: 12px;">
-					<?php esc_html_e( 'Configure email notifications and templates. Enable or disable specific notification types and customize the email subject and body templates.', 'remember' ); ?>
+					<?php esc_html_e( 'Configure email notifications and templates. Enable or disable specific notification types and customize the subject and rich-text body. Links in {ticket_url}, {profile_url}, {review_url}, and {vetting_url} become clickable in the sent message.', 'remember' ); ?>
 				</p>
 
 				<?php
@@ -2029,9 +2029,11 @@ $im_platforms = Remember_Im_Platforms::get_all();
 							$subject_template = ! empty( $notification->subject_template )
 								? $notification->subject_template
 								: Remember_Notification_Setting::get_default_subject( $notification->notification_type );
-							$body_template = ! empty( $notification->body_template )
-								? $notification->body_template
-								: Remember_Notification_Setting::get_default_body( $notification->notification_type );
+							$body_template = Remember_Notification_Setting::body_for_editor(
+								isset( $notification->body_template ) ? $notification->body_template : '',
+								$notification->notification_type
+							);
+							$editor_id = 'notif_body_' . preg_replace( '/[^a-z0-9_]/', '_', strtolower( $notification->notification_type ) );
 							?>
 							<div class="remember-notification-card">
 								<div style="display: flex; align-items: center; margin-bottom: 10px;">
@@ -2071,16 +2073,24 @@ $im_platforms = Remember_Im_Platforms::get_all();
 										</tr>
 										<tr>
 											<th scope="row" style="width: 120px; padding: 10px 0; vertical-align: top;">
-												<label for="<?php echo esc_attr( $type_id ); ?>_body"><?php esc_html_e( 'Body', 'remember' ); ?></label>
+												<label for="<?php echo esc_attr( $editor_id ); ?>"><?php esc_html_e( 'Body', 'remember' ); ?></label>
 											</th>
 											<td style="padding: 10px 0;">
-												<textarea id="<?php echo esc_attr( $type_id ); ?>_body"
-												          name="notification_settings[<?php echo esc_attr( $notification->notification_type ); ?>][body]"
-												          class="large-text"
-												          rows="6"
-												          placeholder="<?php esc_attr_e( 'Email body template', 'remember' ); ?>"><?php echo esc_textarea( $body_template ); ?></textarea>
+												<?php
+												wp_editor(
+													$body_template,
+													$editor_id,
+													array(
+														'textarea_name' => 'notification_settings[' . esc_attr( $notification->notification_type ) . '][body]',
+														'textarea_rows' => 8,
+														'media_buttons' => false,
+														'teeny'         => true,
+														'quicktags'     => false,
+													)
+												);
+												?>
 												<p class="description" style="margin-top: 5px; font-size: 12px;">
-													<?php esc_html_e( 'HTML is allowed. Use the same variables as in the subject line.', 'remember' ); ?>
+													<?php esc_html_e( 'Available variables: {member_name}, {event_name}, {application_id}, {vetting_id}, {amount}, {date}, {ticket_url}, {profile_url}', 'remember' ); ?>
 												</p>
 											</td>
 										</tr>

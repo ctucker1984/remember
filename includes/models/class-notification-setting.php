@@ -227,6 +227,21 @@ class Remember_Notification_Setting extends Remember_Base_Model {
 	}
 
 	/**
+	 * Body HTML for the notification editor (stored template or default).
+	 *
+	 * @param string $stored Stored body_template (may be empty).
+	 * @param string $type   Notification type.
+	 * @return string
+	 */
+	public static function body_for_editor( $stored, $type ) {
+		$body = ( is_string( $stored ) && '' !== trim( $stored ) ) ? $stored : self::get_default_body( $type );
+		if ( false === strpos( $body, '<' ) ) {
+			return wpautop( $body );
+		}
+		return $body;
+	}
+
+	/**
 	 * Get default body template for notification type.
 	 *
 	 * @param string $type Notification type.

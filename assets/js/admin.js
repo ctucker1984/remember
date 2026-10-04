@@ -34,7 +34,28 @@
 			$('.remember-notification-panel').hide();
 			$('#notification-panel-' + activeCategory).show();
 			$('#remember-notification-category').val(activeCategory);
+			refreshNotificationEditors();
 			return activeCategory ? '#notifications-' + activeCategory : '#notifications';
+		}
+
+		function refreshNotificationEditors() {
+			window.setTimeout(function() {
+				if (typeof window.tinymce === 'undefined' || !tinymce.editors) {
+					return;
+				}
+				var i, ed, len;
+				len = tinymce.editors.length;
+				for (i = 0; i < len; i++) {
+					ed = tinymce.editors[i];
+					if (!ed || !ed.id || ed.id.indexOf('notif_body_') !== 0) {
+						continue;
+					}
+					ed.hidden = false;
+					if (typeof ed.fire === 'function') {
+						ed.fire('ResizeEditor');
+					}
+				}
+			}, 50);
 		}
 
 		function activateSettingsTab(target) {
@@ -78,6 +99,12 @@
 		$(document).on('click', '.remember-notification-subtab-link', function(e) {
 			e.preventDefault();
 			activateSettingsTab($(this).attr('href'));
+		});
+
+		$(document).on('submit', '#remember-notification-settings-form', function() {
+			if (window.tinymce && typeof tinymce.triggerSave === 'function') {
+				tinymce.triggerSave();
+			}
 		});
 
 		// Handle URL hash on page load

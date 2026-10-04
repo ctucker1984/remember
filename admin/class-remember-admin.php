@@ -180,6 +180,9 @@ class Remember_Admin {
 					true
 				);
 			}
+			if ( false !== strpos( $screen->id, 'remember-settings' ) ) {
+				wp_enqueue_editor();
+			}
 			if ( false !== strpos( $screen->id, 'remember-settings' ) || false !== strpos( $screen->id, 'remember-locations' ) ) {
 				wp_enqueue_media();
 			}

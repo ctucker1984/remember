@@ -5,6 +5,7 @@ All notable changes to reMember are listed here. The current plugin version is i
 ## 2.1.3
 
 - **Fix:** Interests keeps rich text but strips Word/Office junk (mso styles, `o:p`, comments) on paste and save so the POST is normal HTML.
+- **Enhancement:** Notification emails send as HTML. Settings → Notifications uses a visual editor for each body; existing plain-text templates become paragraphs and URLs are clickable.
 
 ## 2.1.2
 

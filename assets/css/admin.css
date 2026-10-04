@@ -7,8 +7,13 @@
 .remember-agreements .wp-editor-tabs,
 .remember-events .wp-editor-tabs,
 .remember-locations .wp-editor-tabs,
-.remember-member-edit-form .wp-editor-tabs {
+.remember-member-edit-form .wp-editor-tabs,
+.remember-notification-card .wp-editor-tabs {
 	display: none;
+}
+
+.remember-notification-card .wp-editor-wrap {
+	max-width: 720px;
 }
 
 .remember-location-logo-preview {
