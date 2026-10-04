@@ -2,6 +2,12 @@
 
 All notable changes to reMember are listed here. The current plugin version is in `remember.php` (`REMEMBER_VERSION`) and [GitHub Releases](https://github.com/ctucker1984/remember/releases).
 
+## 2.1.4
+
+- **Fix:** The profile-photo framing circle on iPhone (and other WebKit) now shows the full photo at the chosen zoom, not a sliver in the corner. Save was already using the correct crop; the preview was clipped because the image was positioned with CSS `transform` inside a round `overflow: hidden` box.
+- **Enhancement:** The Members list shows each member’s roles as badges (event roles in blue, system roles in amber), matching the profile.
+- **Fix:** Narrow Members cards use both sides of the row: display name and legal name, then role badges, then phone and email, then status and “Joined:” with the date and View Profile on the right. The desktop table column order is unchanged.
+
 ## 2.1.3
 
 - **Fix:** Interests keeps rich text but strips Word/Office junk (mso styles, `o:p`, comments) on paste and save so the POST is normal HTML.
