@@ -432,13 +432,41 @@ class Remember_Profile_Fields {
 	}
 
 	/**
+	 * Allowed tags for Interests (rich text without Word/Office attributes).
+	 *
+	 * @return array
+	 */
+	public static function interests_allowed_html() {
+		return array(
+			'p'          => array(),
+			'br'         => array(),
+			'strong'     => array(),
+			'b'          => array(),
+			'em'         => array(),
+			'i'          => array(),
+			'ul'         => array(),
+			'ol'         => array(),
+			'li'         => array(),
+			'blockquote' => array(),
+			'a'          => array(
+				'href' => true,
+			),
+		);
+	}
+
+	/**
 	 * Sanitize Interests HTML (does not truncate).
 	 *
 	 * @param string $html Raw HTML.
 	 * @return string
 	 */
 	public static function sanitize_interests( $html ) {
-		return wp_kses_post( (string) $html );
+		$html = (string) $html;
+		$html = preg_replace( '/<!--[\s\S]*?-->/', '', $html );
+		if ( ! is_string( $html ) ) {
+			$html = '';
+		}
+		return wp_kses( $html, self::interests_allowed_html() );
 	}
 
 	/**
