@@ -7,6 +7,11 @@
  * then runs the `update_plugins_github.com` filter (WordPress 5.8+) so a plugin can
  * answer for its own hostname. This class is that answer.
  *
+ * WordPress itself only rebuilds the plugin update list about every 12 hours.
+ * Check again deletes that list; we also drop our GitHub snapshot then, and we
+ * overlay the latest GitHub release whenever the list is read so a new version
+ * shows up without waiting for the next core check.
+ *
  * Only the release asset built by bin/build-plugin-zip.sh is offered as the package.
  * GitHub's generated "Source code" zip unpacks to remember-<tag>/ and would install
  * beside the active copy instead of replacing it.
@@ -29,7 +34,7 @@ class Remember_GitHub_Updater {
 	const UPDATE_URI      = 'https://github.com/ctucker1984/remember';
 	const API_URL         = 'https://api.github.com/repos/ctucker1984/remember/releases/latest';
 	const TRANSIENT_KEY   = 'remember_github_latest_release';
-	const CACHE_LIFETIME  = 6 * HOUR_IN_SECONDS;
+	const CACHE_LIFETIME  = 15 * MINUTE_IN_SECONDS;
 
 	/**
 	 * Register hooks (call from main plugin bootstrap).
@@ -39,7 +44,10 @@ class Remember_GitHub_Updater {
 	public static function init() {
 		add_filter( 'update_plugins_github.com', array( __CLASS__, 'check_for_update' ), 10, 3 );
 		add_filter( 'plugins_api', array( __CLASS__, 'plugin_details' ), 10, 3 );
-		add_action( 'upgrader_process_complete', array( __CLASS__, 'flush_cache' ), 10, 2 );
+		add_filter( 'site_transient_update_plugins', array( __CLASS__, 'inject_update' ) );
+		add_action( 'upgrader_process_complete', array( __CLASS__, 'flush_after_upgrade' ), 10, 2 );
+		add_action( 'delete_site_transient_update_plugins', array( __CLASS__, 'clear_release_cache' ) );
+		add_action( 'load-update-core.php', array( __CLASS__, 'maybe_flush_on_force_check' ) );
 	}
 
 	/**
@@ -61,22 +69,66 @@ class Remember_GitHub_Updater {
 			return $update;
 		}
 
-		$release = self::get_latest_release();
-		if ( empty( $release['version'] ) || empty( $release['package'] ) ) {
+		$payload = self::update_payload();
+		if ( empty( $payload ) ) {
 			return $update;
 		}
 
-		if ( ! version_compare( $release['version'], self::installed_version(), '>' ) ) {
+		if ( ! version_compare( $payload['version'], self::installed_version(), '>' ) ) {
 			return $update;
 		}
 
-		return array(
-			'id'      => self::UPDATE_URI,
-			'slug'    => 'remember',
-			'version' => $release['version'],
-			'url'     => $release['url'],
-			'package' => $release['package'],
+		return $payload;
+	}
+
+	/**
+	 * Overlay GitHub's latest release onto WordPress's cached plugin update list.
+	 *
+	 * Core only writes that list about twice a day. Without this, a release shipped
+	 * an hour ago stays invisible until the next write or a Check again click.
+	 *
+	 * @param mixed $transient Site transient value (object, false, or unexpected).
+	 * @return mixed
+	 */
+	public static function inject_update( $transient ) {
+		if ( ! is_object( $transient ) ) {
+			return $transient;
+		}
+
+		$payload = self::update_payload();
+		if ( empty( $payload ) ) {
+			return $transient;
+		}
+
+		$item = (object) array(
+			'id'          => $payload['id'],
+			'slug'        => $payload['slug'],
+			'plugin'      => self::PLUGIN_BASENAME,
+			'version'     => $payload['version'],
+			'new_version' => $payload['version'],
+			'url'         => $payload['url'],
+			'package'     => $payload['package'],
 		);
+
+		if ( version_compare( $payload['version'], self::installed_version(), '>' ) ) {
+			if ( ! isset( $transient->response ) || ! is_array( $transient->response ) ) {
+				$transient->response = array();
+			}
+			$transient->response[ self::PLUGIN_BASENAME ] = $item;
+			if ( isset( $transient->no_update ) && is_array( $transient->no_update ) ) {
+				unset( $transient->no_update[ self::PLUGIN_BASENAME ] );
+			}
+		} else {
+			if ( ! isset( $transient->no_update ) || ! is_array( $transient->no_update ) ) {
+				$transient->no_update = array();
+			}
+			$transient->no_update[ self::PLUGIN_BASENAME ] = $item;
+			if ( isset( $transient->response ) && is_array( $transient->response ) ) {
+				unset( $transient->response[ self::PLUGIN_BASENAME ] );
+			}
+		}
+
+		return $transient;
 	}
 
 	/**
@@ -117,19 +169,40 @@ class Remember_GitHub_Updater {
 	}
 
 	/**
+	 * Dashboard → Updates → Check again. Core deletes update_plugins; this is extra
+	 * in case a host load-order skips that action.
+	 *
+	 * @return void
+	 */
+	public static function maybe_flush_on_force_check() {
+		if ( isset( $_GET['force-check'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			self::clear_release_cache();
+		}
+	}
+
+	/**
+	 * Drop the cached GitHub release.
+	 *
+	 * @return void
+	 */
+	public static function clear_release_cache() {
+		delete_transient( self::TRANSIENT_KEY );
+	}
+
+	/**
 	 * Drop the cached release after any plugin update so the next check is fresh.
 	 *
 	 * @param WP_Upgrader $upgrader   Upgrader instance.
 	 * @param array       $hook_extra Update context.
 	 * @return void
 	 */
-	public static function flush_cache( $upgrader, $hook_extra ) {
+	public static function flush_after_upgrade( $upgrader, $hook_extra ) {
 		unset( $upgrader );
 
 		if ( empty( $hook_extra['type'] ) || 'plugin' !== $hook_extra['type'] ) {
 			return;
 		}
-		delete_transient( self::TRANSIENT_KEY );
+		self::clear_release_cache();
 	}
 
 	/**
@@ -142,14 +215,41 @@ class Remember_GitHub_Updater {
 	}
 
 	/**
+	 * Array payload for update_plugins_github.com (empty when GitHub has nothing usable).
+	 *
+	 * @return array{id:string,slug:string,version:string,url:string,package:string}|array{}
+	 */
+	private static function update_payload() {
+		$release = self::get_latest_release();
+		if ( empty( $release['version'] ) || empty( $release['package'] ) ) {
+			return array();
+		}
+
+		return array(
+			'id'      => self::UPDATE_URI,
+			'slug'    => 'remember',
+			'version' => $release['version'],
+			'url'     => $release['url'],
+			'package' => $release['package'],
+		);
+	}
+
+	/**
 	 * Latest published release, cached to stay well inside GitHub's unauthenticated rate limit.
+	 *
+	 * Dashboard Check again (`force-check`) skips the snapshot and talks to GitHub now.
 	 *
 	 * @return array{version:string,package:string,url:string,notes:string}|array{}
 	 */
 	private static function get_latest_release() {
-		$cached = get_transient( self::TRANSIENT_KEY );
-		if ( is_array( $cached ) ) {
-			return $cached;
+		$force = isset( $_GET['force-check'] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( $force ) {
+			self::clear_release_cache();
+		} else {
+			$cached = get_transient( self::TRANSIENT_KEY );
+			if ( is_array( $cached ) ) {
+				return $cached;
+			}
 		}
 
 		$response = wp_remote_get(
