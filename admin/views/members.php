@@ -1303,6 +1303,33 @@ if ( $view_member_id > 0 ) {
 
 	<!-- Members List -->
 	<?php if ( ! empty( $members ) ) : ?>
+		<?php
+		$list_roles = array();
+		$list_member_ids = array();
+		foreach ( $members as $list_member ) {
+			$list_member_ids[] = (int) $list_member->member_id;
+		}
+		$list_member_ids = array_values( array_unique( array_filter( $list_member_ids ) ) );
+		if ( $list_member_ids ) {
+			global $wpdb;
+			$placeholders = implode( ',', array_fill( 0, count( $list_member_ids ), '%d' ) );
+			$role_rows    = $wpdb->get_results(
+				$wpdb->prepare(
+					"SELECT mr.member_id, r.role_name, r.is_event_role
+					FROM {$wpdb->prefix}remember_member_roles mr
+					INNER JOIN {$wpdb->prefix}remember_roles r ON r.role_id = mr.role_id
+					WHERE mr.member_id IN ($placeholders)
+					ORDER BY r.is_event_role DESC, r.role_name ASC",
+					$list_member_ids
+				)
+			);
+			if ( is_array( $role_rows ) ) {
+				foreach ( $role_rows as $role_row ) {
+					$list_roles[ (int) $role_row->member_id ][] = $role_row;
+				}
+			}
+		}
+		?>
 		<div class="remember-table-scroll">
 		<table class="wp-list-table widefat striped remember-responsive-table">
 			<thead>
@@ -1310,6 +1337,7 @@ if ( $view_member_id > 0 ) {
 					<th class="column-name"><?php esc_html_e( 'Name', 'remember' ); ?></th>
 					<th class="column-email"><?php esc_html_e( 'Contact', 'remember' ); ?></th>
 					<th class="column-status"><?php esc_html_e( 'Status', 'remember' ); ?></th>
+					<th class="column-roles"><?php esc_html_e( 'Roles', 'remember' ); ?></th>
 					<th class="column-joined"><?php esc_html_e( 'Joined', 'remember' ); ?></th>
 					<th class="column-actions"><?php esc_html_e( 'Actions', 'remember' ); ?></th>
 				</tr>
@@ -1354,6 +1382,22 @@ if ( $view_member_id > 0 ) {
 								<?php echo esc_html( $status_labels[ $member->status ] ); ?>
 								</span>
 							</td>
+						<td class="column-roles">
+							<?php
+							$member_list_roles = isset( $list_roles[ (int) $member->member_id ] ) ? $list_roles[ (int) $member->member_id ] : array();
+							if ( $member_list_roles ) :
+								?>
+								<div class="remember-member-list-roles">
+									<?php foreach ( $member_list_roles as $member_role ) : ?>
+										<span class="remember-member-detail-role <?php echo $member_role->is_event_role ? 'is-event' : 'is-system'; ?>" title="<?php echo $member_role->is_event_role ? esc_attr__( 'Event role', 'remember' ) : esc_attr__( 'System role', 'remember' ); ?>">
+											<?php echo esc_html( $member_role->role_name ); ?>
+										</span>
+									<?php endforeach; ?>
+								</div>
+							<?php else : ?>
+								<span class="description">—</span>
+							<?php endif; ?>
+						</td>
 						<td class="column-joined" data-label="<?php echo esc_attr__( 'Joined', 'remember' ); ?>">
 							<?php echo esc_html( date_i18n( get_option( 'date_format' ), strtotime( $member->created_at ) ) ); ?>
 						</td>

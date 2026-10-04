@@ -1133,6 +1133,23 @@
 	font-size: 11px;
 }
 
+.remember-members .column-roles {
+	white-space: normal;
+	min-width: 8rem;
+	max-width: 16rem;
+}
+
+.remember-member-list-roles {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+}
+
+.remember-member-list-roles .remember-member-detail-role {
+	padding: 1px 8px;
+	line-height: 1.5;
+}
+
 .remember-member-detail-header__actions {
 	display: flex;
 	flex-wrap: wrap;
@@ -1684,6 +1701,11 @@
 	.remember-member-detail .remember-responsive-table td:nth-child(3) {
 		min-width: 0;
 		max-width: none;
+	}
+
+	/* Role badges stay on the desktop table. The narrow card layout is unchanged. */
+	.remember-members .remember-responsive-table .column-roles {
+		display: none !important;
 	}
 }
 

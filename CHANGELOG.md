@@ -5,6 +5,7 @@ All notable changes to reMember are listed here. The current plugin version is i
 ## 2.1.4
 
 - **Fix:** The profile-photo framing circle on iPhone (and other WebKit) now shows the full photo at the chosen zoom, not a sliver in the corner. Save was already using the correct crop; the preview was clipped because the image was positioned with CSS `transform` inside a round `overflow: hidden` box.
+- **Enhancement:** The desktop Members list shows each member’s roles as badges (event roles in blue, system roles in amber), matching the profile. The narrow card layout is unchanged.
 
 ## 2.1.3
 
