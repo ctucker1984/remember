@@ -67,6 +67,183 @@ class Remember_Notifications {
 	}
 
 	/**
+	 * Emails for reMember System Administrators (not WordPress administrators).
+	 *
+	 * Falls back to WordPress Administrator users when no System Administrator
+	 * member has a valid email, so a new registration is not silently dropped.
+	 *
+	 * @return string[]
+	 */
+	public static function admin_emails() {
+		global $wpdb;
+		$ids = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT DISTINCT mr.member_id
+				FROM {$wpdb->prefix}remember_member_roles mr
+				INNER JOIN {$wpdb->prefix}remember_roles r ON r.role_id = mr.role_id
+				WHERE r.role_name = %s",
+				'System Administrator'
+			)
+		);
+		$emails = array();
+		if ( is_array( $ids ) ) {
+			foreach ( $ids as $id ) {
+				$user = get_userdata( (int) $id );
+				if ( $user && is_email( $user->user_email ) ) {
+					$emails[] = $user->user_email;
+				}
+			}
+		}
+		if ( empty( $emails ) ) {
+			$wp_admins = get_users(
+				array(
+					'role'   => 'administrator',
+					'fields' => array( 'ID', 'user_email' ),
+					'number' => 50,
+				)
+			);
+			foreach ( (array) $wp_admins as $user ) {
+				if ( ! empty( $user->user_email ) && is_email( $user->user_email ) ) {
+					$emails[] = $user->user_email;
+				}
+			}
+		}
+		return array_values( array_unique( $emails ) );
+	}
+
+	/**
+	 * Placeholder context for a member (registration and vetting result mail).
+	 *
+	 * @param int   $member_id Member / WordPress user ID.
+	 * @param array $extra     Extra placeholders (vetting_id, decision, etc.).
+	 * @return array
+	 */
+	public static function context_for_member( $member_id, $extra = array() ) {
+		$member_id = absint( $member_id );
+		$user      = get_user_by( 'ID', $member_id );
+		$status    = '';
+
+		require_once plugin_dir_path( __FILE__ ) . '../models/class-member.php';
+		$member = ( new Remember_Member() )->get( $member_id );
+		if ( $member && isset( $member->status ) ) {
+			$status = (string) $member->status;
+		}
+
+		$vetting_id  = isset( $extra['vetting_id'] ) ? absint( $extra['vetting_id'] ) : 0;
+		if ( $vetting_id < 1 && $member_id > 0 ) {
+			require_once plugin_dir_path( __FILE__ ) . '../models/class-vetting.php';
+			$latest = ( new Remember_Vetting() )->get_by_member( $member_id );
+			if ( $latest && ! empty( $latest->vetting_id ) ) {
+				$vetting_id = absint( $latest->vetting_id );
+			}
+		}
+		$vetting_url = admin_url( 'admin.php?page=remember-vetting' );
+		if ( $vetting_id > 0 ) {
+			$vetting_url = admin_url( 'admin.php?page=remember-vetting&view=' . $vetting_id );
+		}
+
+		$base = array(
+			'member_name'  => $user ? $user->display_name : '',
+			'member_email' => ( $user && is_email( $user->user_email ) ) ? $user->user_email : '',
+			'username'     => $user ? $user->user_login : '',
+			'member_id'    => (string) $member_id,
+			'status'       => $status,
+			'date'         => date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ) ),
+			'profile_url'  => admin_url( 'admin.php?page=remember-members&view=' . $member_id ),
+			'vetting_id'   => $vetting_id > 0 ? (string) $vetting_id : '',
+			'vetting_url'  => $vetting_url,
+			'decision'     => '',
+		);
+
+		return wp_parse_args( $extra, $base );
+	}
+
+	/**
+	 * Email System Administrators that a new member registered.
+	 *
+	 * @param int $member_id Member / WordPress user ID.
+	 * @return void
+	 */
+	public static function notify_member_registered( $member_id ) {
+		$member_id = absint( $member_id );
+		if ( $member_id < 1 ) {
+			return;
+		}
+
+		$emails = self::admin_emails();
+		if ( empty( $emails ) ) {
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
+			Remember_Logger::warning(
+				'New member registered but no admin email recipients',
+				array( 'member_id' => $member_id )
+			);
+			return;
+		}
+
+		$context = self::context_for_member( $member_id );
+		foreach ( $emails as $email ) {
+			$result = self::send( 'member_registered', $context, $email );
+			if ( is_wp_error( $result ) ) {
+				require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
+				Remember_Logger::warning(
+					'Member registration admin email failed',
+					array(
+						'member_id' => $member_id,
+						'to'        => $email,
+						'error'     => $result->get_error_message(),
+					)
+				);
+			}
+		}
+	}
+
+	/**
+	 * Email the member the vetting decision (accepted or rejected).
+	 *
+	 * @param int    $member_id  Member / WordPress user ID.
+	 * @param string $decision   accepted or rejected.
+	 * @param int    $vetting_id Vetting case ID.
+	 * @return bool|WP_Error True on success, false if disabled, WP_Error on failure.
+	 */
+	public static function send_vetting_result( $member_id, $decision, $vetting_id = 0 ) {
+		$member_id = absint( $member_id );
+		$decision  = sanitize_key( $decision );
+		if ( $member_id < 1 || ! in_array( $decision, array( 'accepted', 'rejected' ), true ) ) {
+			return false;
+		}
+
+		$user = get_user_by( 'ID', $member_id );
+		if ( ! $user || ! is_email( $user->user_email ) ) {
+			return new WP_Error( 'remember_notify_no_email', __( 'Member has no valid email.', 'remember' ) );
+		}
+
+		$type = ( 'accepted' === $decision ) ? 'member_vetted' : 'member_rejected';
+		$context = self::context_for_member(
+			$member_id,
+			array(
+				'vetting_id' => absint( $vetting_id ),
+				'decision'   => $decision,
+			)
+		);
+
+		$result = self::send( $type, $context, $user->user_email );
+		if ( is_wp_error( $result ) ) {
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
+			Remember_Logger::warning(
+				'Vetting result email failed',
+				array(
+					'member_id'  => $member_id,
+					'vetting_id' => absint( $vetting_id ),
+					'decision'   => $decision,
+					'error'      => $result->get_error_message(),
+				)
+			);
+		}
+
+		return $result;
+	}
+
+	/**
 	 * Email ticket-ready / accepted notice after accept.
 	 *
 	 * @param int $application_id Application ID.
@@ -321,6 +498,13 @@ class Remember_Notifications {
 			'match_fields'   => '',
 			'member_a_id'    => '',
 			'member_b_id'    => '',
+			'member_email'   => '',
+			'username'       => '',
+			'member_id'      => '',
+			'status'         => '',
+			'profile_url'    => '',
+			'vetting_url'    => '',
+			'decision'       => '',
 		);
 		return wp_parse_args( $context, $defaults );
 	}

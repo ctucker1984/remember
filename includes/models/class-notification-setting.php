@@ -107,6 +107,8 @@ class Remember_Notification_Setting extends Remember_Base_Model {
 			'vetting_scheduled'             => __( 'Vetting Scheduled', 'remember' ),
 			'vetting_completed'             => __( 'Vetting Completed', 'remember' ),
 			'member_vetted'                 => __( 'Member Vetted', 'remember' ),
+			'member_rejected'               => __( 'Member Rejected', 'remember' ),
+			'member_registered'             => __( 'New Member Registration (Admin)', 'remember' ),
 			'event_application_submitted'   => __( 'Event Application Submitted', 'remember' ),
 			'event_application_accepted'     => __( 'Event Application Accepted', 'remember' ),
 			'event_application_declined'    => __( 'Event Application Declined', 'remember' ),
@@ -135,7 +137,9 @@ class Remember_Notification_Setting extends Remember_Base_Model {
 			'vetting_assigned'              => __( 'Sent when a vetter is assigned to a vetting case.', 'remember' ),
 			'vetting_scheduled'             => __( 'Sent when a vetting case is scheduled.', 'remember' ),
 			'vetting_completed'             => __( 'Sent when a vetting case is completed.', 'remember' ),
-			'member_vetted'                 => __( 'Sent when a member is vetted (accepted).', 'remember' ),
+			'member_vetted'                 => __( 'Sent to the member when their vetting case is accepted.', 'remember' ),
+			'member_rejected'               => __( 'Sent to the member when their vetting case is rejected.', 'remember' ),
+			'member_registered'             => __( 'Sent to reMember System Administrators when a new member registers or is added.', 'remember' ),
 			'event_application_submitted'   => __( 'Sent to member when they submit an event application.', 'remember' ),
 			'event_application_accepted'     => __( 'Sent to member when their event application is accepted (includes ticket link).', 'remember' ),
 			'event_application_declined'    => __( 'Sent to member when their event application is declined.', 'remember' ),
@@ -159,15 +163,36 @@ class Remember_Notification_Setting extends Remember_Base_Model {
 	 * @return string
 	 */
 	public static function get_type_category( $type ) {
-		if ( strpos( $type, 'vetting' ) !== false ) {
+		$vetting = array(
+			'vetting_assigned',
+			'vetting_scheduled',
+			'vetting_completed',
+			'vetting_collaborator_invited',
+			'member_vetted',
+			'member_rejected',
+		);
+		$applications = array(
+			'application_received',
+			'event_application_submitted',
+			'event_application_accepted',
+			'event_application_declined',
+			'event_application_waitlisted',
+			'event_ticket_paid',
+		);
+		$billing = array(
+			'payment_recorded',
+			'payment_due_reminder',
+		);
+		if ( in_array( $type, $vetting, true ) ) {
 			return 'vetting';
-		} elseif ( strpos( $type, 'application' ) !== false || strpos( $type, 'event' ) !== false ) {
-			return 'applications';
-		} elseif ( strpos( $type, 'payment' ) !== false ) {
-			return 'billing';
-		} else {
-			return 'general';
 		}
+		if ( in_array( $type, $applications, true ) ) {
+			return 'applications';
+		}
+		if ( in_array( $type, $billing, true ) ) {
+			return 'billing';
+		}
+		return 'general';
 	}
 
 	/**
@@ -183,6 +208,8 @@ class Remember_Notification_Setting extends Remember_Base_Model {
 			'vetting_scheduled'             => __( 'Vetting Case Scheduled - {member_name}', 'remember' ),
 			'vetting_completed'             => __( 'Vetting Case Completed - {member_name}', 'remember' ),
 			'member_vetted'                 => __( 'Welcome! You\'ve Been Vetted - {member_name}', 'remember' ),
+			'member_rejected'               => __( 'Vetting update for {member_name}', 'remember' ),
+			'member_registered'             => __( 'New member registration - {member_name}', 'remember' ),
 			'event_application_submitted'   => __( 'Application Submitted for {event_name}', 'remember' ),
 			'event_application_accepted'     => __( 'Application Accepted for {event_name}', 'remember' ),
 			'event_application_declined'    => __( 'Application Update for {event_name}', 'remember' ),
@@ -216,6 +243,10 @@ class Remember_Notification_Setting extends Remember_Base_Model {
 			'vetting_completed' => __( "Hello,\n\nThe vetting case for {member_name} has been completed.\n\nVetting Case ID: {vetting_id}\nCompletion Date: {date}\n\nPlease review the decision in the admin panel.", 'remember' ),
 			
 			'member_vetted' => __( "Hello {member_name},\n\nCongratulations! Your vetting process has been completed and you have been accepted as a member.\n\nYou can now apply for events and participate in our community.\n\nWelcome aboard!\n\nThe Team", 'remember' ),
+
+			'member_rejected' => __( "Hello {member_name},\n\nThank you for your interest. Your vetting process has been completed, and we are unable to accept your membership at this time.\n\nIf you have questions, please contact us.\n\nThe Team", 'remember' ),
+
+			'member_registered' => __( "Hello,\n\nA new member has registered.\n\nName: {member_name}\nEmail: {member_email}\nUsername: {username}\nStatus: {status}\nDate: {date}\n\nView profile:\n{profile_url}\n\nVetting queue:\n{vetting_url}", 'remember' ),
 			
 			'event_application_submitted' => __( "Hello {member_name},\n\nThank you for submitting your application for {event_name}.\n\nApplication ID: {application_id}\nDate: {date}\n\nWe have received your application and will review it shortly. You will be notified once a decision has been made.\n\nThank you,\nThe Team", 'remember' ),
 			

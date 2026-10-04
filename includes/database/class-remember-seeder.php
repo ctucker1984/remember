@@ -619,6 +619,8 @@ class Remember_Seeder {
 			'vetting_scheduled',
 			'vetting_completed',
 			'member_vetted',
+			'member_rejected',
+			'member_registered',
 			'event_application_submitted',
 			'event_application_accepted',
 			'event_application_declined',
