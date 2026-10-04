@@ -1367,15 +1367,20 @@ if ( $view_member_id > 0 ) {
 							<?php endif; ?>
 						</td>
 						<td class="column-email" data-label="<?php echo esc_attr__( 'Contact', 'remember' ); ?>">
-							<?php if ( ! empty( $user->user_email ) ) : ?>
-								<span class="dashicons dashicons-email-alt" style="font-size: 14px; vertical-align: middle; color: #666; margin-right: 4px;"></span>
-								<a href="mailto:<?php echo esc_attr( $user->user_email ); ?>" style="text-decoration: none;"><?php echo esc_html( $user->user_email ); ?></a>
-							<?php endif; ?>
-							<?php if ( $profile && $profile->cell_phone ) : ?>
-								<br>
-								<span class="dashicons dashicons-phone" style="font-size: 14px; vertical-align: middle; color: #666; margin-right: 4px;"></span>
-								<a href="tel:<?php echo esc_attr( preg_replace( '/[^0-9+]/', '', $profile->cell_phone ) ); ?>" style="text-decoration: none;"><?php echo esc_html( $profile->cell_phone ); ?></a>
-							<?php endif; ?>
+							<div class="remember-member-list-lines">
+								<?php if ( ! empty( $user->user_email ) ) : ?>
+									<span class="remember-member-list-line remember-member-list-line--email">
+										<span class="dashicons dashicons-email-alt" aria-hidden="true"></span>
+										<a href="mailto:<?php echo esc_attr( $user->user_email ); ?>"><?php echo esc_html( $user->user_email ); ?></a>
+									</span>
+								<?php endif; ?>
+								<?php if ( $profile && $profile->cell_phone ) : ?>
+									<span class="remember-member-list-line remember-member-list-line--phone">
+										<span class="dashicons dashicons-phone" aria-hidden="true"></span>
+										<a href="tel:<?php echo esc_attr( preg_replace( '/[^0-9+]/', '', $profile->cell_phone ) ); ?>"><?php echo esc_html( $profile->cell_phone ); ?></a>
+									</span>
+								<?php endif; ?>
+							</div>
 						</td>
 						<td class="column-status" data-label="<?php echo esc_attr__( 'Status', 'remember' ); ?>">
 							<span style="color: <?php echo esc_attr( $status_colors[ $member->status ] ); ?>; font-weight: bold;">
@@ -1399,6 +1404,7 @@ if ( $view_member_id > 0 ) {
 							<?php endif; ?>
 						</td>
 						<td class="column-joined" data-label="<?php echo esc_attr__( 'Joined', 'remember' ); ?>">
+							<span class="remember-member-list-joined-label"><?php esc_html_e( 'Joined:', 'remember' ); ?></span>
 							<?php echo esc_html( date_i18n( get_option( 'date_format' ), strtotime( $member->created_at ) ) ); ?>
 						</td>
 						<td class="column-actions" data-label="<?php echo esc_attr__( 'Actions', 'remember' ); ?>">

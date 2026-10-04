@@ -1150,6 +1150,37 @@
 	line-height: 1.5;
 }
 
+.remember-member-list-lines {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 2px;
+}
+
+.remember-member-list-line {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	max-width: 100%;
+}
+
+.remember-member-list-line .dashicons {
+	width: 16px;
+	height: 16px;
+	font-size: 16px;
+	line-height: 1;
+	flex: 0 0 16px;
+	color: #646970;
+}
+
+.remember-member-list-line a {
+	text-decoration: none;
+}
+
+.remember-member-list-joined-label {
+	display: none;
+}
+
 .remember-member-detail-header__actions {
 	display: flex;
 	flex-wrap: wrap;
@@ -1703,9 +1734,115 @@
 		max-width: none;
 	}
 
-	/* Role badges stay on the desktop table. The narrow card layout is unchanged. */
-	.remember-members .remember-responsive-table .column-roles {
-		display: none !important;
+	/* Members cards use both sides of each row. Desktop column order is unchanged. */
+	.remember-members .remember-responsive-table tbody tr {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		column-gap: 12px;
+		row-gap: 6px;
+		padding: 10px 12px;
+		margin-bottom: 8px;
+	}
+
+	.remember-members .remember-responsive-table tbody td {
+		display: block;
+		width: auto;
+		max-width: none;
+		padding: 0;
+	}
+
+	.remember-members .remember-responsive-table tbody td::before {
+		content: none;
+	}
+
+	.remember-members .remember-responsive-table td.column-name {
+		order: 1;
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: space-between;
+		align-items: baseline;
+		gap: 8px 16px;
+		width: 100%;
+	}
+
+	.remember-members .remember-responsive-table td.column-name br {
+		display: none;
+	}
+
+	.remember-members .remember-responsive-table td.column-name .description {
+		margin-left: auto;
+		text-align: right;
+		color: #1d2327;
+	}
+
+	.remember-members .remember-responsive-table td.column-roles {
+		order: 2;
+		display: block !important;
+		width: 100%;
+		padding: 2px 0;
+	}
+
+	.remember-members .remember-responsive-table td.column-email {
+		order: 3;
+		width: 100%;
+	}
+
+	.remember-members .remember-member-list-lines {
+		flex-direction: row;
+		justify-content: space-between;
+		align-items: center;
+		width: 100%;
+		gap: 12px;
+	}
+
+	.remember-members .remember-member-list-line--phone {
+		order: 1;
+		justify-content: flex-start;
+	}
+
+	.remember-members .remember-member-list-line--email {
+		order: 2;
+		margin-left: auto;
+		justify-content: flex-end;
+		text-align: right;
+		min-width: 0;
+	}
+
+	.remember-members .remember-member-list-line--email a {
+		overflow-wrap: anywhere;
+	}
+
+	.remember-members .remember-responsive-table td.column-status,
+	.remember-members .remember-responsive-table td.column-joined,
+	.remember-members .remember-responsive-table td.column-actions {
+		flex: 0 0 auto;
+		width: auto;
+	}
+
+	.remember-members .remember-responsive-table td.column-status {
+		order: 4;
+	}
+
+	.remember-members .remember-responsive-table td.column-joined {
+		order: 5;
+	}
+
+	.remember-members .remember-member-list-joined-label {
+		display: inline;
+		font-weight: 600;
+		margin-right: 0.25em;
+		color: #1d2327;
+	}
+
+	.remember-members .remember-responsive-table td.column-actions {
+		order: 6;
+		margin-left: auto;
+		text-align: right;
+	}
+
+	.remember-members .remember-member-list-line {
+		white-space: normal;
 	}
 }
 
