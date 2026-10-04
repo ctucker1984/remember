@@ -2,6 +2,10 @@
 
 All notable changes to reMember are listed here. The current plugin version is in `remember.php` (`REMEMBER_VERSION`) and [GitHub Releases](https://github.com/ctucker1984/remember/releases).
 
+## 2.1.3
+
+- **Fix:** Interests keeps rich text but strips Word/Office junk (mso styles, `o:p`, comments) on paste and save so the POST is normal HTML.
+
 ## 2.1.2
 
 - **Fix:** Completing a vetting case now emails the member the result. Accepted uses **Member Vetted**; rejected uses a new **Member Rejected** template. Those templates existed but were never sent.

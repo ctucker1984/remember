@@ -676,6 +676,96 @@
 	}
 
 	/**
+	 * Keep real HTML (paragraphs, bold, lists, links) and drop Word/Office junk
+	 * (mso styles, xmlns, comments, o:p, class/style soup) before the POST.
+	 *
+	 * @param {string} html Clipboard or editor HTML.
+	 * @return {string}
+	 */
+	function rememberStripOfficeHtml(html) {
+		if (!html) {
+			return '';
+		}
+		html = String(html);
+		html = html.replace(/<!--[\s\S]*?-->/g, '');
+		html = html.replace(/<style[\s\S]*?<\/style>/gi, '');
+		html = html.replace(/<xml[\s\S]*?<\/xml>/gi, '');
+		html = html.replace(/<\/?(meta|link)[^>]*>/gi, '');
+
+		var wrap = document.createElement('div');
+		wrap.innerHTML = html;
+
+		var allowed = {
+			P: true,
+			BR: true,
+			STRONG: true,
+			B: true,
+			EM: true,
+			I: true,
+			UL: true,
+			OL: true,
+			LI: true,
+			A: true,
+			BLOCKQUOTE: true
+		};
+
+		function walk(node) {
+			var kids = [];
+			var child = node.firstChild;
+			while (child) {
+				kids.push(child);
+				child = child.nextSibling;
+			}
+			var i;
+			for (i = 0; i < kids.length; i++) {
+				child = kids[i];
+				if (child.nodeType === 8) {
+					node.removeChild(child);
+					continue;
+				}
+				if (child.nodeType === 3) {
+					if (child.nodeValue) {
+						child.nodeValue = child.nodeValue.replace(/\u00a0/g, ' ');
+					}
+					continue;
+				}
+				if (child.nodeType !== 1) {
+					node.removeChild(child);
+					continue;
+				}
+				walk(child);
+				var tag = child.tagName;
+				if (tag.indexOf(':') !== -1 || !allowed[tag]) {
+					while (child.firstChild) {
+						node.insertBefore(child.firstChild, child);
+					}
+					node.removeChild(child);
+					continue;
+				}
+				var attrs = [];
+				var a;
+				for (a = 0; a < child.attributes.length; a++) {
+					attrs.push(child.attributes[a].name);
+				}
+				for (a = 0; a < attrs.length; a++) {
+					var name = attrs[a];
+					if ('A' === tag && 'href' === name.toLowerCase()) {
+						var href = child.getAttribute(name) || '';
+						if (!/^(https?:|mailto:|#\/?)/i.test(href)) {
+							child.removeAttribute(name);
+						}
+						continue;
+					}
+					child.removeAttribute(name);
+				}
+			}
+		}
+
+		walk(wrap);
+		return wrap.innerHTML;
+	}
+
+	/**
 	 * Live character limit for Interests TinyMCE editors.
 	 *
 	 * @param {object} editor TinyMCE editor instance.
@@ -746,18 +836,42 @@
 		editor.on('NodeChange', updateCounter);
 		editor.on('SetContent', updateCounter);
 
+		function stripOfficeFromEditor() {
+			var html = editor.getContent({ format: 'html' }) || '';
+			var cleaned = rememberStripOfficeHtml(html);
+			if (cleaned !== html) {
+				editor.setContent(cleaned);
+			}
+			editor.save();
+		}
+
 		editor.on('paste', function() {
 			window.setTimeout(function() {
-				if (plainLen() <= max) {
+				if (plainLen() > max) {
+					if (editor.undoManager) {
+						editor.undoManager.undo();
+					}
 					updateCounter();
 					return;
 				}
-				if (editor.undoManager) {
-					editor.undoManager.undo();
-				}
+				stripOfficeFromEditor();
 				updateCounter();
 			}, 0);
 		});
+
+		editor.on('PastePreProcess', function(e) {
+			if (e && e.content) {
+				e.content = rememberStripOfficeHtml(e.content);
+			}
+		});
+
+		var $form = $(editor.getElement()).closest('form');
+		if ($form.length && !$form.data('rememberInterestsOfficeStrip')) {
+			$form.data('rememberInterestsOfficeStrip', true);
+			$form.on('submit', function() {
+				stripOfficeFromEditor();
+			});
+		}
 
 		editor.on('init', updateCounter);
 		updateCounter();
