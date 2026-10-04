@@ -121,11 +121,16 @@
 			var height = naturalH * scale;
 			var left = (v / 2) - (width / 2) + tx;
 			var top = (v / 2) - (height / 2) + ty;
-			$img.css({
-				width: width + 'px',
-				height: height + 'px',
-				transform: 'translate(' + left + 'px, ' + top + 'px)'
-			});
+			var el = $img[0];
+			// left/top — not transform. iOS Safari clips transform children
+			// incorrectly when the parent has overflow:hidden and border-radius.
+			el.style.setProperty('width', width + 'px', 'important');
+			el.style.setProperty('height', height + 'px', 'important');
+			el.style.setProperty('max-width', 'none', 'important');
+			el.style.setProperty('max-height', 'none', 'important');
+			el.style.setProperty('left', left + 'px', 'important');
+			el.style.setProperty('top', top + 'px', 'important');
+			el.style.setProperty('transform', 'none', 'important');
 		}
 
 		function setZoom(next) {
@@ -145,6 +150,7 @@
 			ready = false;
 			revokeObjectUrl();
 			$img.attr('src', '');
+			$img.removeAttr('style');
 			$cropper.prop('hidden', true);
 			if ($current.length && $current.children().length) {
 				$current.prop('hidden', false);
@@ -165,17 +171,42 @@
 			ty = 0;
 			$zoomRange.val('1');
 
-			$img.off('load.rememberPhoto').one('load.rememberPhoto', function() {
-				naturalW = this.naturalWidth;
-				naturalH = this.naturalHeight;
+			function layoutPreview() {
+				if (!naturalW || !naturalH) {
+					return;
+				}
 				ready = true;
 				if ($current.length) {
 					$current.prop('hidden', true);
 				}
 				$cropper.prop('hidden', false);
-				applyTransform();
-			});
-			$img.attr('src', objectUrl);
+				window.requestAnimationFrame(function() {
+					window.requestAnimationFrame(applyTransform);
+				});
+			}
+
+			function onDecoded(img) {
+				naturalW = img.naturalWidth || img.width;
+				naturalH = img.naturalHeight || img.height;
+				if (!naturalW || !naturalH) {
+					hideCropper();
+					return;
+				}
+				$img.off('load.rememberPhoto').one('load.rememberPhoto', layoutPreview);
+				$img.attr('src', objectUrl);
+				if ($img[0].complete) {
+					layoutPreview();
+				}
+			}
+
+			var probe = new Image();
+			probe.onload = function() {
+				onDecoded(probe);
+			};
+			probe.onerror = function() {
+				hideCropper();
+			};
+			probe.src = objectUrl;
 		}
 
 		function clearSelectedFile() {
@@ -292,6 +323,12 @@
 		$viewport.on('pointerup pointercancel', function() {
 			dragging = false;
 			$viewport.removeClass('is-dragging');
+		});
+
+		$(window).on('resize.rememberPhotoCrop orientationchange.rememberPhotoCrop', function() {
+			if (ready && !$cropper.prop('hidden')) {
+				applyTransform();
+			}
 		});
 
 		$form.on('submit', function(e) {

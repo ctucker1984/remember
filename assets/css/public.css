@@ -832,6 +832,9 @@
 	cursor: grab;
 	touch-action: none;
 	user-select: none;
+	isolation: isolate;
+	-webkit-mask-image: radial-gradient(closest-side, #000 99.5%, transparent 100%);
+	mask-image: radial-gradient(closest-side, #000 99.5%, transparent 100%);
 }
 
 .remember-profile-photo-cropper-viewport.is-dragging {
@@ -842,10 +845,13 @@
 	position: absolute;
 	left: 0;
 	top: 0;
-	max-width: none;
+	max-width: none !important;
+	max-height: none !important;
+	transform: none;
 	transform-origin: top left;
 	pointer-events: none;
 	user-select: none;
+	-webkit-user-drag: none;
 }
 
 .remember-profile-photo-cropper-controls {
