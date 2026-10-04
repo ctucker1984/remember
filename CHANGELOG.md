@@ -2,6 +2,11 @@
 
 All notable changes to reMember are listed here. The current plugin version is in `remember.php` (`REMEMBER_VERSION`) and [GitHub Releases](https://github.com/ctucker1984/remember/releases).
 
+## 2.1.2
+
+- **Fix:** Completing a vetting case now emails the member the result. Accepted uses **Member Vetted**; rejected uses a new **Member Rejected** template. Those templates existed but were never sent.
+- **Enhancement:** reMember System Administrators are emailed on every new member (public registration, Add Member, and convert WordPress user). Settings → Notifications → General.
+
 ## 2.1.1
 
 - **Fix:** Time zone pickers use a short city list (US first, then UK / France, then the rest of the world) instead of WordPress’s full IANA dump. Stored ids stay IANA; an already-saved zone that is not in the list still appears. Help text names the organization’s WordPress time zone and why picking your own matters. Closes [#38](https://github.com/ctucker1984/remember/issues/38).

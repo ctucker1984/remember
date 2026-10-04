@@ -46,26 +46,8 @@ class Remember_Profile_Duplicates {
 	 * @return string[]
 	 */
 	public static function admin_emails() {
-		global $wpdb;
-		$ids = $wpdb->get_col(
-			$wpdb->prepare(
-				"SELECT DISTINCT mr.member_id
-				FROM {$wpdb->prefix}remember_member_roles mr
-				INNER JOIN {$wpdb->prefix}remember_roles r ON r.role_id = mr.role_id
-				WHERE r.role_name = %s",
-				'System Administrator'
-			)
-		);
-		$emails = array();
-		if ( is_array( $ids ) ) {
-			foreach ( $ids as $id ) {
-				$user = get_userdata( (int) $id );
-				if ( $user && is_email( $user->user_email ) ) {
-					$emails[] = $user->user_email;
-				}
-			}
-		}
-		return array_values( array_unique( $emails ) );
+		require_once plugin_dir_path( __FILE__ ) . 'class-remember-notifications.php';
+		return Remember_Notifications::admin_emails();
 	}
 
 	/**

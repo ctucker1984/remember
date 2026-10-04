@@ -140,6 +140,8 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 						}
 						
 						Remember_Logger::info( 'Member created', array( 'member_id' => $user_id, 'status' => $status ) );
+						require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-notifications.php';
+						Remember_Notifications::notify_member_registered( $user_id );
 						echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Member created successfully.', 'remember' ) . '</p></div>';
 					} else {
 						// Get database error immediately after failed insert
@@ -222,6 +224,8 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 						'by_user_id' => get_current_user_id(),
 					)
 				);
+				require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-notifications.php';
+				Remember_Notifications::notify_member_registered( $wp_user_id );
 				echo '<div class="notice notice-success is-dismissible"><p>' . esc_html(
 					sprintf(
 						/* translators: 1: display name or login, 2: status label */

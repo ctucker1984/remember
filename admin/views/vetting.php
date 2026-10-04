@@ -133,6 +133,11 @@ if ( isset( $_POST['remember_vetting_action'] ) && check_admin_referer( 'remembe
 							} elseif ( 'rejected' === $latest_decision ) {
 								$member_model->update_status( $vetting->member_id, 'rejected' );
 							}
+
+							if ( (int) $completed_cases[0]->vetting_id === (int) $vetting_id ) {
+								require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-notifications.php';
+								Remember_Notifications::send_vetting_result( $vetting->member_id, $latest_decision, $vetting_id );
+							}
 						}
 					}
 					

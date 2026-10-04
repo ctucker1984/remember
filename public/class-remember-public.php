@@ -353,6 +353,9 @@ class Remember_Public {
 
 		Remember_Logger::info( 'Public member registration completed', array( 'user_id' => $user_id ) );
 
+		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-notifications.php';
+		Remember_Notifications::notify_member_registered( $user_id );
+
 		$this->redirect_member_registration( null, true );
 	}
 
