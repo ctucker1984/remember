@@ -197,6 +197,12 @@ foreach ( $member_payments as $mp ) {
 $created_pages = get_option( 'remember_created_pages', array() );
 $profile_page_id = isset( $created_pages['profile'] ) ? $created_pages['profile'] : 0;
 $profile_page_url = $profile_page_id ? get_permalink( $profile_page_id ) : '';
+$events_page_id  = isset( $created_pages['events'] ) ? absint( $created_pages['events'] ) : 0;
+if ( ! $events_page_id ) {
+	$events_page = get_page_by_path( 'events' );
+	$events_page_id = $events_page ? (int) $events_page->ID : 0;
+}
+$events_page_url = $events_page_id ? get_permalink( $events_page_id ) : home_url( '/events/' );
 
 // Status labels
 $status_labels = array(
@@ -496,7 +502,7 @@ foreach ( $selected_application_addons as $selected_addon_row ) {
 				<p class="remember-description"><?php esc_html_e( 'No applications yet.', 'remember' ); ?></p>
 			<?php endif; ?>
 			<p style="margin-top: 0.75em;">
-				<a href="<?php echo esc_url( get_permalink() . '?view=events' ); ?>" class="remember-button remember-button-secondary">
+				<a href="<?php echo esc_url( $events_page_url ); ?>" class="remember-button remember-button-secondary">
 					<?php esc_html_e( 'Browse Events', 'remember' ); ?>
 				</a>
 			</p>
