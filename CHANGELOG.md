@@ -6,7 +6,8 @@ All notable changes to reMember are listed here. The current plugin version is i
 
 - **Enhancement:** Report filters on multi-select fields include **is not** and **is not one of**. That covers dietary restrictions, allergies, roles, and custom multi-select questions. A row matches when its list does not include the chosen value or values, including rows whose list is empty.
 - **Fix:** Member dashboard **Browse Events** opens the Events page instead of reloading the dashboard.
-- **Enhancement:** Settings can auto-apply a member’s open Xero credit notes to each new invoice before it is emailed. Oldest note first, up to the invoice total. The member dashboard and the billing register show credit that is still unallocated. If allocation fails, the invoice stays in Xero and is not emailed.
+- **Enhancement:** Settings can auto-apply a member’s open Xero credit notes to each new invoice before it is emailed. Oldest note first, up to the invoice total. If allocation fails, the invoice stays in Xero and is not emailed.
+- **Enhancement:** Each open Xero credit note is a row on the member billing register and the admin billing register, including when the member has no invoice yet. Current Balance subtracts only the still-unallocated remainder. After the note is applied, that amount stays on the invoice and the open row drops off, so it is not counted twice.
 - **Fix:** On the event application, “Check your profile…” opens in a new tab so the form stays put. Return to Dashboard and Cancel go to the member dashboard.
 - **Fix:** Voiding a Xero invoice shows Xero’s validation reason. Credit already allocated to that invoice is removed first, so the credit note stays available and the invoice can be voided. An invoice with a payment is left alone, with a message to remove the payment or choose Refund.
 

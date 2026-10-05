@@ -225,6 +225,7 @@ class Remember_Billing_Template {
 			'member_model'         => null,
 			'payment_event_names'  => array(),
 			'table_class'          => '',
+			'open_credits'         => array(),
 		);
 		$args = wp_parse_args( $args, $defaults );
 
@@ -239,7 +240,7 @@ class Remember_Billing_Template {
 
 		// Front end: many themes set table { display: block } — use a div + CSS Grid instead of <table>.
 		if ( 'member' === $context ) {
-			self::render_member_billing_sheet( $payments, $payment_event_names, $status_labels, $status_colors );
+			self::render_member_billing_sheet( $payments, $payment_event_names, $status_labels, $status_colors, $args['open_credits'] );
 			return;
 		}
 
@@ -329,8 +330,9 @@ class Remember_Billing_Template {
 	 * @param array<int, string>      $payment_event_names payment_id => event name.
 	 * @param array<string, string>   $status_labels       Status labels.
 	 * @param array<string, string>   $status_colors       Status hex colors.
+	 * @param array<int, array>      $open_credits        Unallocated credit notes.
 	 */
-	private static function render_member_billing_sheet( $payments, $payment_event_names, $status_labels, $status_colors ) {
+	private static function render_member_billing_sheet( $payments, $payment_event_names, $status_labels, $status_colors, $open_credits = array() ) {
 		static $member_billing_css_printed = false;
 		if ( ! $member_billing_css_printed ) {
 			$member_billing_css_printed = true;
@@ -352,6 +354,36 @@ class Remember_Billing_Template {
 				</tr>
 			</thead>
 			<tbody>
+				<?php
+				// Each row is Xero RemainingCredit only. After the note is allocated, that
+				// remainder drops and the invoice row carries the applied amount instead.
+				foreach ( (array) $open_credits as $credit_note ) :
+					?>
+					<?php
+					$credit_number = isset( $credit_note['number'] ) ? (string) $credit_note['number'] : '';
+					if ( '' === $credit_number ) {
+						$credit_number = __( 'Credit note', 'remember' );
+					}
+					$credit_remaining = isset( $credit_note['remaining'] ) ? (float) $credit_note['remaining'] : 0.0;
+					$credit_date      = isset( $credit_note['date'] ) ? (string) $credit_note['date'] : '';
+					?>
+					<tr>
+						<td><?php esc_html_e( 'Open credit', 'remember' ); ?></td>
+						<td><?php echo esc_html( $credit_number ); ?></td>
+						<td class="remember-billing-mt-num"><span class="remember-billing-mt-muted">&mdash;</span></td>
+						<td class="remember-billing-mt-num">$<?php echo esc_html( number_format( $credit_remaining, 2 ) ); ?></td>
+						<td class="remember-billing-mt-num"><span class="remember-billing-mt-muted">&mdash;</span></td>
+						<td><strong style="color: #46b450;"><?php esc_html_e( 'Available', 'remember' ); ?></strong></td>
+						<td><?php esc_html_e( 'Credit note', 'remember' ); ?></td>
+						<td>
+							<?php if ( '' !== $credit_date ) : ?>
+								<?php echo esc_html( date_i18n( get_option( 'date_format' ), strtotime( $credit_date ) ) ); ?>
+							<?php else : ?>
+								<span class="remember-billing-mt-muted">&mdash;</span>
+							<?php endif; ?>
+						</td>
+					</tr>
+				<?php endforeach; ?>
 				<?php foreach ( $payments as $payment ) : ?>
 					<?php
 					$ename = isset( $payment_event_names[ $payment->payment_id ] ) ? $payment_event_names[ $payment->payment_id ] : '—';

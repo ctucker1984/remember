@@ -608,29 +608,9 @@ foreach ( $selected_application_addons as $selected_addon_row ) {
 		<?php
 		require_once plugin_dir_path( __FILE__ ) . '../../includes/integrations/class-remember-xero-sync.php';
 		$remember_open_credit = Remember_Xero_Sync::member_open_credit( get_current_user_id() );
-		if ( is_array( $remember_open_credit ) ) :
-			?>
-			<p class="remember-description">
-				<?php
-				$remember_credit_amount = number_format_i18n( $remember_open_credit['total'], 2 );
-				if ( Remember_Billing_Provider::should_auto_apply_xero_credit() ) {
-					$remember_credit_text = sprintf(
-						/* translators: %s: unallocated credit amount */
-						__( 'Available credit: %s. This is applied to your next invoice.', 'remember' ),
-						$remember_credit_amount
-					);
-				} else {
-					$remember_credit_text = sprintf(
-						/* translators: %s: unallocated credit amount */
-						__( 'Available credit: %s.', 'remember' ),
-						$remember_credit_amount
-					);
-				}
-				echo esc_html( $remember_credit_text );
-				?>
-			</p>
-		<?php endif; ?>
-		<?php if ( ! empty( $member_payments ) ) : ?>
+		$remember_open_notes  = ( is_array( $remember_open_credit ) && ! empty( $remember_open_credit['notes'] ) ) ? $remember_open_credit['notes'] : array();
+		?>
+		<?php if ( ! empty( $member_payments ) || ! empty( $remember_open_notes ) ) : ?>
 			<div id="remember-member-billing" class="remember-billing-table-wrap remember-billing-table-frame">
 				<?php
 				Remember_Billing_Template::render_payments_table(
@@ -638,17 +618,24 @@ foreach ( $selected_application_addons as $selected_addon_row ) {
 						'payments'            => $member_payments,
 						'context'             => 'member',
 						'payment_event_names' => $payment_event_names,
+						'open_credits'        => $remember_open_notes,
 					)
 				);
 				?>
 			</div>
+			<?php if ( ! empty( $remember_open_notes ) && Remember_Billing_Provider::should_auto_apply_xero_credit() ) : ?>
+				<p class="remember-description" style="margin-top: 0.75em;">
+					<?php esc_html_e( 'Open credit is applied to your next invoice.', 'remember' ); ?>
+				</p>
+			<?php endif; ?>
 			<p class="remember-description" style="margin-top: 0.75em;">
 				<?php
+				$remember_billing_row_count = count( $member_payments ) + count( $remember_open_notes );
 				echo esc_html(
 					sprintf(
-						/* translators: %d: number of payment rows */
-						_n( '%d payment record', '%d payment records', count( $member_payments ), 'remember' ),
-						count( $member_payments )
+						/* translators: %d: number of billing rows */
+						_n( '%d billing record', '%d billing records', $remember_billing_row_count, 'remember' ),
+						$remember_billing_row_count
 					)
 				);
 				?>

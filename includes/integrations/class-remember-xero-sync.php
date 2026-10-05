@@ -560,7 +560,7 @@ class Remember_Xero_Sync {
 	 * Unallocated authorised credit still sitting on a member's Xero contact.
 	 *
 	 * @param int $member_id WordPress user ID.
-	 * @return array{total:float,count:int}|null Null when Xero is not in use or the contact has no open credit.
+	 * @return array{total:float,count:int,notes:array<int,array{id:string,number:string,remaining:float,sort_ts:int,date:string}>}|null Null when Xero is not in use or the contact has no open credit.
 	 */
 	public static function member_open_credit( $member_id ) {
 		$member_id = absint( $member_id );
@@ -591,6 +591,7 @@ class Remember_Xero_Sync {
 		return array(
 			'total' => $total,
 			'count' => count( $notes ),
+			'notes' => $notes,
 		);
 	}
 

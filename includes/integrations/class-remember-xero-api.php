@@ -950,7 +950,7 @@ class Remember_Xero_API {
 	 * Oldest first, so the next invoice consumes credit in the order it was issued.
 	 *
 	 * @param string $contact_id Xero ContactID.
-	 * @return array<int,array{id:string,number:string,remaining:float,sort_ts:int}>|WP_Error
+	 * @return array<int,array{id:string,number:string,remaining:float,sort_ts:int,date:string}>|WP_Error
 	 */
 	public static function get_open_credit_notes( $contact_id ) {
 		$contact_id = trim( (string) $contact_id );
@@ -990,6 +990,7 @@ class Remember_Xero_API {
 				'number'    => isset( $note['CreditNoteNumber'] ) ? sanitize_text_field( (string) $note['CreditNoteNumber'] ) : '',
 				'remaining' => round( $remaining, 2 ),
 				'sort_ts'   => self::xero_entity_sort_timestamp( $note ),
+				'date'      => ! empty( $note['Date'] ) ? self::normalize_xero_date( $note['Date'] ) : '',
 			);
 		}
 

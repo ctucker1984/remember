@@ -662,6 +662,8 @@ require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remem
 										<span style="color: #d63638;"><?php esc_html_e( 'Invoice', 'remember' ); ?></span>
 									<?php elseif ( 'refund' === $entry['type'] ) : ?>
 										<span style="color: #b32d2e;"><?php esc_html_e( 'Refund', 'remember' ); ?></span>
+									<?php elseif ( 'credit' === $entry['type'] ) : ?>
+										<span style="color: #00a32a;"><?php esc_html_e( 'Credit', 'remember' ); ?></span>
 									<?php else : ?>
 										<span style="color: #00a32a;"><?php esc_html_e( 'Payment', 'remember' ); ?></span>
 									<?php endif; ?>
@@ -719,6 +721,7 @@ require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remem
 										'paid' => __( 'Paid', 'remember' ),
 										'refunded' => __( 'Refunded', 'remember' ),
 										'cancelled' => __( 'Voided', 'remember' ),
+										'available' => __( 'Available', 'remember' ),
 									);
 									$status_colors_billing = array(
 										'pending' => '#f0b849',
@@ -726,6 +729,7 @@ require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remem
 										'paid' => '#46b450',
 										'refunded' => '#72777c',
 										'cancelled' => '#dc3232',
+										'available' => '#46b450',
 									);
 									$status_label = isset( $status_labels_billing[ $entry['status'] ] ) ? $status_labels_billing[ $entry['status'] ] : $entry['status'];
 									$status_color = isset( $status_colors_billing[ $entry['status'] ] ) ? $status_colors_billing[ $entry['status'] ] : '#666';
