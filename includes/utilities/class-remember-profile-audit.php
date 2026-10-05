@@ -115,6 +115,33 @@ class Remember_Profile_Audit {
 	}
 
 	/**
+	 * Front-end member dashboard URL.
+	 *
+	 * @return string
+	 */
+	public static function get_dashboard_url() {
+		$created_pages     = get_option( 'remember_created_pages', array() );
+		$dashboard_page_id = isset( $created_pages['member_dashboard'] ) ? absint( $created_pages['member_dashboard'] ) : 0;
+		if ( $dashboard_page_id < 1 && isset( $created_pages['dashboard'] ) ) {
+			$dashboard_page_id = absint( $created_pages['dashboard'] );
+		}
+		if ( $dashboard_page_id > 0 ) {
+			$url = get_permalink( $dashboard_page_id );
+			if ( $url ) {
+				return $url;
+			}
+		}
+		$page = get_page_by_path( 'member-dashboard' );
+		if ( $page ) {
+			$url = get_permalink( $page );
+			if ( $url ) {
+				return $url;
+			}
+		}
+		return home_url( '/member-dashboard/' );
+	}
+
+	/**
 	 * Front-end apply URL, optionally for one event.
 	 *
 	 * @param int $event_id Event ID, or 0 for the generic apply page.
@@ -359,7 +386,7 @@ class Remember_Profile_Audit {
 			</label>
 			<p class="remember-form-help remember-profile-currency-confirm__help">
 				<?php if ( $profile_url ) : ?>
-					<a href="<?php echo esc_url( $profile_url ); ?>">
+					<a href="<?php echo esc_url( $profile_url ); ?>" target="_blank" rel="noopener noreferrer">
 						<?php esc_html_e( 'Check your profile and confirm that it is current and accurate, then click save on it (required). Saving with or without changes is enough.', 'remember' ); ?>
 					</a>
 				<?php else : ?>
