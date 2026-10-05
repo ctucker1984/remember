@@ -189,7 +189,8 @@ if ( isset( $_POST['remember_application_action'] ) && check_admin_referer( 'rem
 							echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html__( 'Application accepted, but Xero invoice creation failed: ', 'remember' ) . esc_html( $invoice_result->get_error_message() ) . '</p></div>';
 						} else {
 							echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Application accepted and Xero invoice created successfully.', 'remember' ) . '</p></div>';
-							$email_invoice = Remember_Billing_Provider::email_invoice_for_application( $application_id );
+							echo Remember_Xero_Sync::credit_apply_admin_notices(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- notices are escaped in the helper.
+							$email_invoice = Remember_Xero_Sync::invoice_email_held() ? null : Remember_Billing_Provider::email_invoice_for_application( $application_id );
 							if ( is_wp_error( $email_invoice ) ) {
 								Remember_Logger::warning(
 									'Xero invoice email failed after accept',
@@ -437,7 +438,8 @@ if ( isset( $_POST['remember_application_action'] ) && check_admin_referer( 'rem
 							echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html__( 'Billing reprocess failed: ', 'remember' ) . esc_html( $invoice_result->get_error_message() ) . '</p></div>';
 						} else {
 							echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Billing reprocess succeeded. Xero invoice created.', 'remember' ) . '</p></div>';
-							$email_invoice = Remember_Billing_Provider::email_invoice_for_application( $application_id );
+							echo Remember_Xero_Sync::credit_apply_admin_notices(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- notices are escaped in the helper.
+							$email_invoice = Remember_Xero_Sync::invoice_email_held() ? null : Remember_Billing_Provider::email_invoice_for_application( $application_id );
 							if ( is_wp_error( $email_invoice ) ) {
 								echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html__( 'Invoice created, but Xero could not email it: ', 'remember' ) . esc_html( $email_invoice->get_error_message() ) . '</p></div>';
 							} elseif ( true === $email_invoice ) {

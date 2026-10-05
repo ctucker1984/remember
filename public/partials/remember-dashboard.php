@@ -197,6 +197,12 @@ foreach ( $member_payments as $mp ) {
 $created_pages = get_option( 'remember_created_pages', array() );
 $profile_page_id = isset( $created_pages['profile'] ) ? $created_pages['profile'] : 0;
 $profile_page_url = $profile_page_id ? get_permalink( $profile_page_id ) : '';
+$events_page_id  = isset( $created_pages['events'] ) ? absint( $created_pages['events'] ) : 0;
+if ( ! $events_page_id ) {
+	$events_page = get_page_by_path( 'events' );
+	$events_page_id = $events_page ? (int) $events_page->ID : 0;
+}
+$events_page_url = $events_page_id ? get_permalink( $events_page_id ) : home_url( '/events/' );
 
 // Status labels
 $status_labels = array(
@@ -496,7 +502,7 @@ foreach ( $selected_application_addons as $selected_addon_row ) {
 				<p class="remember-description"><?php esc_html_e( 'No applications yet.', 'remember' ); ?></p>
 			<?php endif; ?>
 			<p style="margin-top: 0.75em;">
-				<a href="<?php echo esc_url( get_permalink() . '?view=events' ); ?>" class="remember-button remember-button-secondary">
+				<a href="<?php echo esc_url( $events_page_url ); ?>" class="remember-button remember-button-secondary">
 					<?php esc_html_e( 'Browse Events', 'remember' ); ?>
 				</a>
 			</p>
@@ -599,7 +605,12 @@ foreach ( $selected_application_addons as $selected_addon_row ) {
 	<div class="remember-dashboard-billing remember-dashboard-card-compact">
 		<h3><?php esc_html_e( 'Billing', 'remember' ); ?></h3>
 		<p class="remember-description remember-billing-note"><?php echo esc_html( $billing_subtotal_note ); ?></p>
-		<?php if ( ! empty( $member_payments ) ) : ?>
+		<?php
+		require_once plugin_dir_path( __FILE__ ) . '../../includes/integrations/class-remember-xero-sync.php';
+		$remember_open_credit = Remember_Xero_Sync::member_open_credit( get_current_user_id() );
+		$remember_open_notes  = ( is_array( $remember_open_credit ) && ! empty( $remember_open_credit['notes'] ) ) ? $remember_open_credit['notes'] : array();
+		?>
+		<?php if ( ! empty( $member_payments ) || ! empty( $remember_open_notes ) ) : ?>
 			<div id="remember-member-billing" class="remember-billing-table-wrap remember-billing-table-frame">
 				<?php
 				Remember_Billing_Template::render_payments_table(
@@ -607,17 +618,24 @@ foreach ( $selected_application_addons as $selected_addon_row ) {
 						'payments'            => $member_payments,
 						'context'             => 'member',
 						'payment_event_names' => $payment_event_names,
+						'open_credits'        => $remember_open_notes,
 					)
 				);
 				?>
 			</div>
+			<?php if ( ! empty( $remember_open_notes ) && Remember_Billing_Provider::should_auto_apply_xero_credit() ) : ?>
+				<p class="remember-description" style="margin-top: 0.75em;">
+					<?php esc_html_e( 'Open credit is applied to your next invoice.', 'remember' ); ?>
+				</p>
+			<?php endif; ?>
 			<p class="remember-description" style="margin-top: 0.75em;">
 				<?php
+				$remember_billing_row_count = count( $member_payments ) + count( $remember_open_notes );
 				echo esc_html(
 					sprintf(
-						/* translators: %d: number of payment rows */
-						_n( '%d payment record', '%d payment records', count( $member_payments ), 'remember' ),
-						count( $member_payments )
+						/* translators: %d: number of billing rows */
+						_n( '%d billing record', '%d billing records', $remember_billing_row_count, 'remember' ),
+						$remember_billing_row_count
 					)
 				);
 				?>

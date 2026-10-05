@@ -29,6 +29,13 @@ require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-logger.p
 class Remember_Xero_Sync {
 
 	/**
+	 * Result of the credit allocation attempted during the latest invoice create.
+	 *
+	 * @var array{applied:float,numbers:string[],error:string,hold_email:bool}|null
+	 */
+	private static $credit_apply = null;
+
+	/**
 	 * Sync a member to a Xero Contact.
 	 *
 	 * @param int $member_id Member ID (WordPress user ID).
@@ -305,6 +312,7 @@ class Remember_Xero_Sync {
 	 * @return array|WP_Error Invoice data or error.
 	 */
 	public static function create_invoice_for_application( $application_id ) {
+		self::$credit_apply = null;
 		$application_model = new Remember_Application();
 		$application       = $application_model->get( $application_id );
 
@@ -522,7 +530,205 @@ class Remember_Xero_Sync {
 			)
 		);
 
+		$amount_due = isset( $invoice_result['AmountDue'] ) ? floatval( $invoice_result['AmountDue'] ) : 0.0;
+		if ( $amount_due <= 0.001 && isset( $invoice_result['Total'] ) ) {
+			$amount_due = floatval( $invoice_result['Total'] );
+		}
+		if ( $amount_due <= 0.001 ) {
+			$amount_due = $total_amount;
+		}
+		self::apply_open_credit_to_invoice( $xero_invoice_id, $xero_contact_id, $amount_due );
+
+		$payment_row = $payment_model->get_by_application( $application_id );
+		if ( $payment_row && ! empty( $payment_row->xero_invoice_id ) ) {
+			$synced = self::sync_payment_status( $payment_row->payment_id );
+			if ( is_wp_error( $synced ) ) {
+				Remember_Logger::warning(
+					'Xero invoice created but payment sync after credit allocation failed',
+					array(
+						'application_id' => $application_id,
+						'error'          => $synced->get_error_message(),
+					)
+				);
+			}
+		}
+
 		return $invoice_result;
+	}
+
+	/**
+	 * Unallocated authorised credit still sitting on a member's Xero contact.
+	 *
+	 * @param int $member_id WordPress user ID.
+	 * @return array{total:float,count:int,notes:array<int,array{id:string,number:string,remaining:float,sort_ts:int,date:string}>}|null Null when Xero is not in use or the contact has no open credit.
+	 */
+	public static function member_open_credit( $member_id ) {
+		$member_id = absint( $member_id );
+		if ( $member_id <= 0 ) {
+			return null;
+		}
+		require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-billing-provider.php';
+		require_once plugin_dir_path( __FILE__ ) . 'class-remember-xero-oauth.php';
+		if ( ! Remember_Billing_Provider::is_xero() || ! Remember_Xero_OAuth::is_connected() ) {
+			return null;
+		}
+		$contact_id = get_user_meta( $member_id, 'remember_xero_contact_id', true );
+		if ( ! $contact_id ) {
+			return null;
+		}
+		$notes = Remember_Xero_API::get_open_credit_notes( $contact_id );
+		if ( is_wp_error( $notes ) || empty( $notes ) ) {
+			return null;
+		}
+		$total = 0.0;
+		foreach ( $notes as $note ) {
+			$total += floatval( $note['remaining'] );
+		}
+		$total = round( $total, 2 );
+		if ( $total <= 0 ) {
+			return null;
+		}
+		return array(
+			'total' => $total,
+			'count' => count( $notes ),
+			'notes' => $notes,
+		);
+	}
+
+	/**
+	 * Admin notices for the credit allocation that ran with the latest invoice create.
+	 *
+	 * @return string HTML, or empty.
+	 */
+	public static function credit_apply_admin_notices() {
+		if ( ! is_array( self::$credit_apply ) ) {
+			return '';
+		}
+		$html = '';
+		if ( self::$credit_apply['applied'] > 0 ) {
+			$html .= '<div class="notice notice-success is-dismissible"><p>' . esc_html(
+				sprintf(
+					/* translators: %s: currency amount */
+					__( 'Applied %s of open Xero credit to the invoice before emailing.', 'remember' ),
+					number_format_i18n( self::$credit_apply['applied'], 2 )
+				)
+			) . '</p></div>';
+		}
+		if ( '' !== self::$credit_apply['error'] ) {
+			$html .= '<div class="notice notice-warning is-dismissible"><p>' . esc_html(
+				sprintf(
+					/* translators: %s: error message */
+					__( 'Open Xero credit could not be fully applied, so the invoice was not emailed: %s', 'remember' ),
+					self::$credit_apply['error']
+				)
+			) . '</p></div>';
+		}
+		return $html;
+	}
+
+	/**
+	 * Whether the invoice email should be skipped because credit allocation failed.
+	 *
+	 * @return bool
+	 */
+	public static function invoice_email_held() {
+		return is_array( self::$credit_apply ) && ! empty( self::$credit_apply['hold_email'] );
+	}
+
+	/**
+	 * Allocate unallocated credit notes onto a new invoice, oldest note first.
+	 *
+	 * No-op when the setting is off. On an allocation error, holds the invoice email.
+	 *
+	 * @param string $invoice_id InvoiceID.
+	 * @param string $contact_id ContactID.
+	 * @param float  $amount_due Amount still due on the invoice.
+	 * @return void
+	 */
+	private static function apply_open_credit_to_invoice( $invoice_id, $contact_id, $amount_due ) {
+		self::$credit_apply = null;
+		require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-billing-provider.php';
+		if ( ! Remember_Billing_Provider::should_auto_apply_xero_credit() ) {
+			return;
+		}
+
+		$left = round( floatval( $amount_due ), 2 );
+		if ( '' === trim( (string) $invoice_id ) || $left <= 0.001 ) {
+			self::$credit_apply = array(
+				'applied'    => 0.0,
+				'numbers'    => array(),
+				'error'      => '',
+				'hold_email' => false,
+			);
+			return;
+		}
+
+		$notes = Remember_Xero_API::get_open_credit_notes( $contact_id );
+		if ( is_wp_error( $notes ) ) {
+			self::$credit_apply = array(
+				'applied'    => 0.0,
+				'numbers'    => array(),
+				'error'      => $notes->get_error_message(),
+				'hold_email' => true,
+			);
+			Remember_Logger::warning(
+				'Could not load open Xero credit notes for a new invoice',
+				array(
+					'invoice_id' => $invoice_id,
+					'error'      => $notes->get_error_message(),
+				)
+			);
+			return;
+		}
+
+		$applied = 0.0;
+		$numbers = array();
+		$error   = '';
+		foreach ( $notes as $note ) {
+			if ( $left <= 0.001 ) {
+				break;
+			}
+			$take = round( min( $left, floatval( $note['remaining'] ) ), 2 );
+			if ( $take <= 0 ) {
+				continue;
+			}
+			$result = Remember_Xero_API::allocate_credit_note_to_invoice( $note['id'], $invoice_id, $take );
+			if ( is_wp_error( $result ) ) {
+				$error = $result->get_error_message();
+				Remember_Logger::warning(
+					'Failed to allocate a Xero credit note onto a new invoice',
+					array(
+						'invoice_id'     => $invoice_id,
+						'credit_note_id' => $note['id'],
+						'amount'         => $take,
+						'error'          => $error,
+					)
+				);
+				break;
+			}
+			$applied += $take;
+			$left    -= $take;
+			if ( '' !== $note['number'] ) {
+				$numbers[] = $note['number'];
+			}
+		}
+
+		self::$credit_apply = array(
+			'applied'    => round( $applied, 2 ),
+			'numbers'    => $numbers,
+			'error'      => $error,
+			'hold_email' => '' !== $error,
+		);
+		if ( $applied > 0 ) {
+			Remember_Logger::info(
+				'Applied open Xero credit to a new invoice',
+				array(
+					'invoice_id' => $invoice_id,
+					'applied'    => round( $applied, 2 ),
+					'notes'      => $numbers,
+				)
+			);
+		}
 	}
 
 	/**

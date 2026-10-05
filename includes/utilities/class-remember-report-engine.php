@@ -530,7 +530,7 @@ class Remember_Report_Engine {
 			}
 			return array( 'sql' => "({$sql} IS NOT NULL AND {$sql} != '')", 'params' => array() );
 		}
-		if ( $list_field && in_array( $op, array( 'eq', 'in' ), true ) ) {
+		if ( $list_field && in_array( $op, array( 'eq', 'neq', 'in', 'not_in' ), true ) ) {
 			$keys = self::choice_keys( $val, $fields[ $fid ] );
 			if ( empty( $keys ) ) {
 				return null;
@@ -550,7 +550,14 @@ class Remember_Report_Engine {
 					$params[] = '%"' . $wpdb->esc_like( $key ) . '"%';
 				}
 			}
-			return array( 'sql' => '(' . implode( ' OR ', $ors ) . ')', 'params' => $params );
+			$clause = '(' . implode( ' OR ', $ors ) . ')';
+			if ( in_array( $op, array( 'neq', 'not_in' ), true ) ) {
+				$blank = 'csv' === $match
+					? "({$sql} IS NULL OR {$sql} = '')"
+					: "({$sql} IS NULL OR {$sql} = '' OR {$sql} = '[]')";
+				$clause = "(NOT {$clause} OR {$blank})";
+			}
+			return array( 'sql' => $clause, 'params' => $params );
 		}
 		if ( 'in' === $op ) {
 			$list = self::choice_keys( $val, $fields[ $fid ] );

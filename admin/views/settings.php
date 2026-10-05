@@ -310,6 +310,9 @@ if ( isset( $_POST['remember_settings_action'] ) && check_admin_referer( 'rememb
 		// Email provider invoice to customer when an application is accepted (default on).
 		$options['email_invoice_on_accept'] = ! empty( $_POST['email_invoice_on_accept'] ) ? 1 : 0;
 
+		// Allocate unallocated Xero credit notes onto a new invoice before it is emailed.
+		$options['xero_auto_apply_credit'] = ! empty( $_POST['xero_auto_apply_credit'] ) ? 1 : 0;
+
 		// Update subtotal disclaimer message.
 		if ( isset( $_POST['subtotal_disclaimer_text'] ) ) {
 			$options['subtotal_disclaimer_text'] = sanitize_textarea_field( wp_unslash( $_POST['subtotal_disclaimer_text'] ) );
@@ -720,6 +723,20 @@ $im_platforms = Remember_Im_Platforms::get_all();
 						</label>
 						<p class="description">
 							<?php esc_html_e( 'Uses the contact/customer email on file in the billing provider. Accept still succeeds if the email step fails. Ticket emails are separate.', 'remember' ); ?>
+						</p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row">
+						<?php esc_html_e( 'Auto-apply open Xero credit', 'remember' ); ?>
+					</th>
+					<td>
+						<label for="xero_auto_apply_credit">
+							<input type="checkbox" id="xero_auto_apply_credit" name="xero_auto_apply_credit" value="1" <?php checked( ! empty( $options['xero_auto_apply_credit'] ) ); ?>>
+							<?php esc_html_e( 'When Xero is the billing provider, apply the contact’s unallocated credit notes to each new invoice before it is emailed', 'remember' ); ?>
+						</label>
+						<p class="description">
+							<?php esc_html_e( 'Oldest authorised credit note first, up to the invoice total. Later invoices in the same run only receive credit that is still unallocated. If allocation fails, the invoice is left in Xero and is not emailed.', 'remember' ); ?>
 						</p>
 					</td>
 				</tr>

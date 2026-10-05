@@ -264,6 +264,7 @@ class Remember_Report_Catalog {
 			array( 'id' => 'neq', 'label' => __( 'is not', 'remember' ) ),
 			array( 'id' => 'contains', 'label' => __( 'contains', 'remember' ) ),
 			array( 'id' => 'in', 'label' => __( 'is one of', 'remember' ) ),
+			array( 'id' => 'not_in', 'label' => __( 'is not one of', 'remember' ) ),
 			array( 'id' => 'empty', 'label' => __( 'is empty', 'remember' ) ),
 			array( 'id' => 'not_empty', 'label' => __( 'is not empty', 'remember' ) ),
 			array( 'id' => 'gt', 'label' => __( 'greater than', 'remember' ) ),

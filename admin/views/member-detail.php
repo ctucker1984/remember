@@ -621,6 +621,23 @@ require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remem
 		<div class="remember-member-detail-section remember-member-detail-section--full remember-no-print">
 			<h3><?php esc_html_e( 'Billing Register', 'remember' ); ?></h3>
 			<p class="description"><?php esc_html_e( 'Chronological accounting register of invoices, payments, and refunds.', 'remember' ); ?></p>
+			<?php
+			require_once plugin_dir_path( __FILE__ ) . '../../includes/integrations/class-remember-xero-sync.php';
+			$remember_open_credit = Remember_Xero_Sync::member_open_credit( isset( $view_member->member_id ) ? (int) $view_member->member_id : 0 );
+			if ( is_array( $remember_open_credit ) ) :
+				?>
+				<p class="description">
+					<?php
+					echo esc_html(
+						sprintf(
+							/* translators: %s: unallocated credit amount */
+							__( 'Unallocated Xero credit: %s. With auto-apply on, this is used on the next invoice before it is emailed.', 'remember' ),
+							number_format_i18n( $remember_open_credit['total'], 2 )
+						)
+					);
+					?>
+				</p>
+			<?php endif; ?>
 			
 			<?php if ( ! empty( $billing_register ) ) : ?>
 				<div class="remember-table-scroll">
@@ -645,6 +662,8 @@ require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remem
 										<span style="color: #d63638;"><?php esc_html_e( 'Invoice', 'remember' ); ?></span>
 									<?php elseif ( 'refund' === $entry['type'] ) : ?>
 										<span style="color: #b32d2e;"><?php esc_html_e( 'Refund', 'remember' ); ?></span>
+									<?php elseif ( 'credit' === $entry['type'] ) : ?>
+										<span style="color: #00a32a;"><?php esc_html_e( 'Credit', 'remember' ); ?></span>
 									<?php else : ?>
 										<span style="color: #00a32a;"><?php esc_html_e( 'Payment', 'remember' ); ?></span>
 									<?php endif; ?>
@@ -702,6 +721,7 @@ require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remem
 										'paid' => __( 'Paid', 'remember' ),
 										'refunded' => __( 'Refunded', 'remember' ),
 										'cancelled' => __( 'Voided', 'remember' ),
+										'available' => __( 'Available', 'remember' ),
 									);
 									$status_colors_billing = array(
 										'pending' => '#f0b849',
@@ -709,6 +729,7 @@ require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remem
 										'paid' => '#46b450',
 										'refunded' => '#72777c',
 										'cancelled' => '#dc3232',
+										'available' => '#46b450',
 									);
 									$status_label = isset( $status_labels_billing[ $entry['status'] ] ) ? $status_labels_billing[ $entry['status'] ] : $entry['status'];
 									$status_color = isset( $status_colors_billing[ $entry['status'] ] ) ? $status_colors_billing[ $entry['status'] ] : '#666';

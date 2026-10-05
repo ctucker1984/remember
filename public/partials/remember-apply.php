@@ -155,7 +155,7 @@ if ( ! $selected_event ) {
 	<div class="remember-notice remember-success">
 		<p><?php esc_html_e( 'Application submitted successfully! You will be notified when your application is reviewed.', 'remember' ); ?></p>
 		<p><?php echo esc_html( $subtotal_disclaimer ); ?></p>
-		<p><a href="<?php echo esc_url( get_permalink() . '?view=dashboard' ); ?>" class="remember-button remember-button-primary">
+		<p><a href="<?php echo esc_url( Remember_Profile_Audit::get_dashboard_url() ); ?>" class="remember-button remember-button-primary">
 			<?php esc_html_e( 'Return to Dashboard', 'remember' ); ?>
 		</a></p>
 	</div>
@@ -256,7 +256,7 @@ if ( ! $selected_event ) {
 				<button type="submit" class="remember-button remember-button-primary" disabled>
 					<?php esc_html_e( 'Submit Application', 'remember' ); ?>
 				</button>
-				<a href="<?php echo esc_url( get_permalink() . '?view=dashboard' ); ?>" class="remember-button remember-button-secondary">
+				<a href="<?php echo esc_url( Remember_Profile_Audit::get_dashboard_url() ); ?>" class="remember-button remember-button-secondary">
 					<?php esc_html_e( 'Cancel', 'remember' ); ?>
 				</a>
 			</div>

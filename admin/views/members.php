@@ -1041,6 +1041,42 @@ if ( $view_member_id > 0 ) {
 			}
 		}
 	}
+
+	// Unallocated credit notes exist on the contact before any invoice, so they belong on the register too.
+	if ( $billing_use_xero && isset( $view_member_id ) ) {
+		require_once plugin_dir_path( __FILE__ ) . '../../includes/integrations/class-remember-xero-sync.php';
+		$remember_open_credit = Remember_Xero_Sync::member_open_credit( (int) $view_member_id );
+		if ( is_array( $remember_open_credit ) && ! empty( $remember_open_credit['notes'] ) ) {
+			foreach ( $remember_open_credit['notes'] as $open_note ) {
+				$open_ts = ! empty( $open_note['sort_ts'] ) ? (int) $open_note['sort_ts'] : 0;
+				if ( $open_ts <= 0 && ! empty( $open_note['date'] ) ) {
+					$open_ts = strtotime( $open_note['date'] . ' 12:00:00' );
+				}
+				if ( $open_ts <= 0 ) {
+					$open_ts = time();
+				}
+				$open_number = ! empty( $open_note['number'] ) ? (string) $open_note['number'] : __( 'Credit note', 'remember' );
+				// RemainingCredit only. The allocated part is already on the invoice
+				// (refund line and AmountDue), so this row must not enter that math.
+				$billing_register[] = array(
+					'date'            => date( 'Y-m-d H:i:s', $open_ts ),
+					'sort_ts'         => $open_ts,
+					'type'            => 'credit',
+					'description'     => sprintf(
+						/* translators: %s: credit note number */
+						__( 'Open credit note %s', 'remember' ),
+						$open_number
+					),
+					'debit'           => 0,
+					'credit'          => isset( $open_note['remaining'] ) ? floatval( $open_note['remaining'] ) : 0,
+					'balance'         => 0,
+					'status'          => 'available',
+					'credit_note_id'  => isset( $open_note['id'] ) ? (string) $open_note['id'] : '',
+					'affects_balance' => false,
+				);
+			}
+		}
+	}
 	
 	// Sort by QuickBooks timestamps (invoice before payment if tied).
 	usort(
@@ -1052,7 +1088,8 @@ if ( $view_member_id > 0 ) {
 				$order = array(
 					'invoice' => 0,
 					'payment' => 1,
-					'refund'  => 2,
+					'credit'  => 2,
+					'refund'  => 3,
 				);
 				$oa = isset( $order[ $a['type'] ] ) ? $order[ $a['type'] ] : 3;
 				$ob = isset( $order[ $b['type'] ] ) ? $order[ $b['type'] ] : 3;
@@ -1072,9 +1109,13 @@ if ( $view_member_id > 0 ) {
 	);
 	
 	// Running balance: invoices debit, payments credit, Xero credit notes / QBO credit memos credit.
-	// Cancelled (voided/deleted) invoices and QBO refund-receipt audit rows do not change balance due.
+	// Cancelled invoices, QBO refund-receipt audit rows, and still-unallocated credit notes do not change this walk.
+	// Unallocated credit is applied once, below, from RemainingCredit. After Xero allocates a note, RemainingCredit
+	// drops and the same amount is already inside AmountDue, so it is not subtracted again.
 	foreach ( $billing_register as &$entry ) {
-		if ( 'cancelled' === ( $entry['status'] ?? '' ) || ( 'refund' === ( $entry['type'] ?? '' ) && empty( $entry['affects_balance'] ) ) ) {
+		$balance_memo = ( 'cancelled' === ( $entry['status'] ?? '' ) )
+			|| ( in_array( ( $entry['type'] ?? '' ), array( 'refund', 'credit' ), true ) && empty( $entry['affects_balance'] ) );
+		if ( $balance_memo ) {
 			$entry['balance'] = $running_balance;
 			continue;
 		}
@@ -1090,7 +1131,11 @@ if ( $view_member_id > 0 ) {
 		}
 		$provider_balance += isset( $p->amount_due ) ? floatval( $p->amount_due ) : 0.0;
 	}
-	$running_balance = $provider_balance;
+	$unallocated_credit = ( isset( $remember_open_credit ) && is_array( $remember_open_credit ) )
+		? floatval( $remember_open_credit['total'] )
+		: 0.0;
+	// Amount due already excludes credit allocated to invoices. Subtract only what is still open.
+	$running_balance = round( $provider_balance - $unallocated_credit, 2 );
 
 	require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-provider.php';
 	require_once plugin_dir_path( __FILE__ ) . '../../includes/integrations/class-remember-quickbooks-oauth.php';
