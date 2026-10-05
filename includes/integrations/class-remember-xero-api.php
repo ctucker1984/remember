@@ -127,21 +127,21 @@ class Remember_Xero_API {
 
 		if ( $status < 200 || $status >= 300 ) {
 			$message = __( 'Xero API request failed.', 'remember' );
-			if ( is_array( $decoded ) ) {
-				if ( ! empty( $decoded['Message'] ) ) {
-					$message = $decoded['Message'];
-				} elseif ( ! empty( $decoded['Detail'] ) ) {
-					$message = $decoded['Detail'];
-				} elseif ( ! empty( $decoded['Elements'][0]['ValidationErrors'][0]['Message'] ) ) {
-					$message = $decoded['Elements'][0]['ValidationErrors'][0]['Message'];
-				}
+			$details = self::xero_error_details( $decoded );
+			if ( $details ) {
+				$message = implode( ' ', $details );
+			} elseif ( is_array( $decoded ) && ! empty( $decoded['Message'] ) ) {
+				$message = (string) $decoded['Message'];
+			} elseif ( is_array( $decoded ) && ! empty( $decoded['Detail'] ) ) {
+				$message = (string) $decoded['Detail'];
 			}
 			Remember_Logger::error(
 				'Xero API error',
 				array(
-					'status' => $status,
-					'path'   => $path,
-					'body'   => $decoded ? $decoded : $raw_body,
+					'status'  => $status,
+					'path'    => $path,
+					'message' => $message,
+					'body'    => $decoded ? $decoded : $raw_body,
 				)
 			);
 			return new WP_Error( 'xero_api_error', $message, array( 'status' => $status, 'body' => $decoded ) );
@@ -556,14 +556,58 @@ class Remember_Xero_API {
 			return new WP_Error( 'invalid_invoice_id', __( 'Invalid Xero invoice ID.', 'remember' ) );
 		}
 
+		$invoice = self::get_invoice( $invoice_id );
+		if ( is_wp_error( $invoice ) ) {
+			return $invoice;
+		}
+
+		$status = isset( $invoice['Status'] ) ? strtoupper( (string) $invoice['Status'] ) : '';
+		if ( in_array( $status, array( 'VOIDED', 'DELETED' ), true ) ) {
+			return $invoice;
+		}
+		if ( in_array( $status, array( 'DRAFT', 'SUBMITTED' ), true ) ) {
+			return self::set_invoice_status( $invoice_id, 'DELETED' );
+		}
+
+		if ( ! empty( $invoice['CreditNotes'] ) && is_array( $invoice['CreditNotes'] ) ) {
+			foreach ( $invoice['CreditNotes'] as $note ) {
+				if ( ! is_array( $note ) || empty( $note['CreditNoteID'] ) ) {
+					continue;
+				}
+				$removed = self::remove_credit_allocations_for_invoice( (string) $note['CreditNoteID'], $invoice_id );
+				if ( is_wp_error( $removed ) ) {
+					return $removed;
+				}
+			}
+		}
+
+		$amount_paid = isset( $invoice['AmountPaid'] ) ? floatval( $invoice['AmountPaid'] ) : 0.0;
+		if ( $amount_paid > 0.001 || ! empty( $invoice['Payments'] ) ) {
+			return new WP_Error(
+				'xero_invoice_has_payment',
+				__( 'Xero will not void this invoice because a payment is applied. Remove that payment in Xero, or choose Refund instead of Void.', 'remember' )
+			);
+		}
+
+		return self::set_invoice_status( $invoice_id, 'VOIDED' );
+	}
+
+	/**
+	 * Update an invoice status without resending its line items.
+	 *
+	 * @param string $invoice_id InvoiceID.
+	 * @param string $status     VOIDED or DELETED.
+	 * @return array|WP_Error Updated invoice or error.
+	 */
+	private static function set_invoice_status( $invoice_id, $status ) {
 		$result = self::request(
 			'POST',
-			'Invoices/' . rawurlencode( $invoice_id ),
+			'Invoices',
 			array(
 				'Invoices' => array(
 					array(
 						'InvoiceID' => $invoice_id,
-						'Status'    => 'VOIDED',
+						'Status'    => $status,
 					),
 				),
 			)
@@ -575,6 +619,66 @@ class Remember_Xero_API {
 			return $result['Invoices'][0];
 		}
 		return new WP_Error( 'xero_invoice_void_failed', __( 'Xero did not confirm the invoice void.', 'remember' ), $result );
+	}
+
+	/**
+	 * Drop allocations from one credit note onto one invoice. The credit note stays authorised.
+	 *
+	 * @param string $credit_note_id CreditNoteID.
+	 * @param string $invoice_id     InvoiceID.
+	 * @return true|WP_Error
+	 */
+	private static function remove_credit_allocations_for_invoice( $credit_note_id, $invoice_id ) {
+		$result = self::request( 'GET', 'CreditNotes/' . rawurlencode( $credit_note_id ) );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		$note = ! empty( $result['CreditNotes'][0] ) && is_array( $result['CreditNotes'][0] ) ? $result['CreditNotes'][0] : array();
+		if ( empty( $note['Allocations'] ) || ! is_array( $note['Allocations'] ) ) {
+			return true;
+		}
+		foreach ( $note['Allocations'] as $alloc ) {
+			if ( ! is_array( $alloc ) || empty( $alloc['AllocationID'] ) ) {
+				continue;
+			}
+			$alloc_invoice = isset( $alloc['Invoice']['InvoiceID'] ) ? (string) $alloc['Invoice']['InvoiceID'] : '';
+			if ( $alloc_invoice !== $invoice_id ) {
+				continue;
+			}
+			$deleted = self::request(
+				'DELETE',
+				'CreditNotes/' . rawurlencode( $credit_note_id ) . '/Allocations/' . rawurlencode( (string) $alloc['AllocationID'] )
+			);
+			if ( is_wp_error( $deleted ) ) {
+				return $deleted;
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * Specific Xero validation lines. The top-level message is only "A validation exception occurred".
+	 *
+	 * @param mixed $decoded Decoded error body.
+	 * @return string[]
+	 */
+	private static function xero_error_details( $decoded ) {
+		if ( ! is_array( $decoded ) ) {
+			return array();
+		}
+		$messages = array();
+		$elements = isset( $decoded['Elements'] ) && is_array( $decoded['Elements'] ) ? $decoded['Elements'] : array();
+		foreach ( $elements as $element ) {
+			if ( ! is_array( $element ) || empty( $element['ValidationErrors'] ) || ! is_array( $element['ValidationErrors'] ) ) {
+				continue;
+			}
+			foreach ( $element['ValidationErrors'] as $error ) {
+				if ( is_array( $error ) && ! empty( $error['Message'] ) ) {
+					$messages[] = (string) $error['Message'];
+				}
+			}
+		}
+		return array_values( array_unique( $messages ) );
 	}
 
 	/**
