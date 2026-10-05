@@ -124,7 +124,7 @@
 		if (type === 'number' || type === 'date' || type === 'datetime') {
 			allowed = ['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'between', 'empty', 'not_empty'];
 		} else if (type === 'multiselect' || (field && field.list)) {
-			allowed = ['eq', 'in', 'empty', 'not_empty'];
+			allowed = ['eq', 'neq', 'in', 'not_in', 'empty', 'not_empty'];
 		} else if (type === 'enum') {
 			allowed = ['eq', 'neq', 'in', 'empty', 'not_empty'];
 		} else {
@@ -380,12 +380,12 @@
 		}
 		if (hasChoices(field)) {
 			var $sel = $('<select class="remember-filter-val"/>').attr('data-index', index);
-			if (op === 'in') {
+			if (op === 'in' || op === 'not_in') {
 				$sel.attr('multiple', 'multiple');
 				$sel.attr('size', Math.min(8, Math.max(3, field.options.length)));
 			}
-			$sel.html(optionList(choiceItems(field), null, op !== 'in', t('selectValue', 'Select value')));
-			if (op === 'in') {
+			$sel.html(optionList(choiceItems(field), null, op !== 'in' && op !== 'not_in', t('selectValue', 'Select value')));
+			if (op === 'in' || op === 'not_in') {
 				var selected = Array.isArray(filter.value) ? filter.value : String(filter.value || '').split(',');
 				$sel.val(selected);
 			} else {
