@@ -14,6 +14,7 @@ if ( ! defined( 'WPINC' ) ) {
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-event.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-application.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-member.php';
+require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-fields.php';
 
 $event_id = isset( $atts['event_id'] ) ? absint( $atts['event_id'] ) : 0;
 
@@ -190,7 +191,7 @@ foreach ( $event_roles as $event_role ) {
 						<?php if ( ! empty( $profile->share_interests_with_events ) && ! empty( $profile->interests ) ) : ?>
 							<p>
 								<strong><?php esc_html_e( 'Interests:', 'remember' ); ?></strong><br>
-								<?php echo wp_kses_post( wpautop( $profile->interests ) ); ?>
+								<?php echo Remember_Profile_Fields::interests_html( $profile->interests ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- interests_html() keeps only b, em, u, ul, ol, li, p, and br. ?>
 							</p>
 						<?php endif; ?>
 					<?php endif; ?>

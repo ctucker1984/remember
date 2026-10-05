@@ -713,93 +713,449 @@
 	}
 
 	/**
-	 * Keep real HTML (paragraphs, bold, lists, links) and drop Word/Office junk
-	 * (mso styles, xmlns, comments, o:p, class/style soup) before the POST.
+	 * Interests keep only b, em, u, ul, ol, li, p, and br, with no attributes.
+	 * Paste is reduced to that set, then posted as HTML in the same block
+	 * layout TinyMCE uses when the text was typed in the editor.
+	 *
+	 * @param {string} mode html.
+	 * @param {string} tag  b, em, u, ul, ol, li, p, or br.
+	 * @return {string}
+	 */
+	function rememberOpenTag(mode, tag) {
+		return tag === 'br' ? '<br />' : '<' + tag + '>';
+	}
+
+	/**
+	 * @param {string} mode html or markers.
+	 * @param {string} tag  Tag name.
+	 * @return {string}
+	 */
+	function rememberCloseTag(mode, tag) {
+		if (tag === 'br') {
+			return '';
+		}
+		return '</' + tag + '>';
+	}
+
+	/**
+	 * @param {string} mode  html or markers.
+	 * @param {string} tag   Tag name.
+	 * @param {string} inner Inner markup.
+	 * @return {string}
+	 */
+	function rememberWrapTag(mode, tag, inner) {
+		if (tag === 'br') {
+			return rememberOpenTag(mode, 'br');
+		}
+		if (!String(inner || '').replace(/\s+/g, '')) {
+			return '';
+		}
+		return rememberOpenTag(mode, tag) + inner + rememberCloseTag(mode, tag);
+	}
+
+	/**
+	 * @param {string} text Visible text.
+	 * @param {string} mode html or markers.
+	 * @return {string}
+	 */
+	function rememberTextToken(text, mode) {
+		text = String(text || '');
+		text = text.replace(/\u00a0/g, ' ');
+		text = text.replace(/[\u200B-\u200D\u2060\uFEFF\u200E\u200F]/g, '');
+		text = text.replace(/\u0000/g, '');
+		return text
+			.replace(/&/g, '&amp;')
+			.replace(/</g, '&lt;')
+			.replace(/>/g, '&gt;');
+	}
+
+	/**
+	 * @param {string} text Plain text with newlines.
+	 * @param {string} mode html or markers.
+	 * @return {string}
+	 */
+	function rememberPlainBlocks(text, mode) {
+		text = String(text || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+		text = text.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n');
+		text = text.replace(/^\s+|\s+$/g, '');
+		if (!text) {
+			return '';
+		}
+		var parts = text.split(/\n{2,}/);
+		var out = [];
+		var i;
+		for (i = 0; i < parts.length; i++) {
+			var part = parts[i].replace(/^\s+|\s+$/g, '');
+			if (!part) {
+				continue;
+			}
+			var lines = part.split('\n');
+			var inner = '';
+			var j;
+			for (j = 0; j < lines.length; j++) {
+				if (j) {
+					inner += rememberOpenTag(mode, 'br');
+				}
+				inner += rememberTextToken(lines[j], mode);
+			}
+			out.push(rememberWrapTag(mode, 'p', inner));
+		}
+		return out.join('');
+	}
+
+	/**
+	 * Drop Office/Docs/Pages clipboard chrome before the HTML parser runs.
+	 * Unclosed style/xml blocks must not swallow the paragraph text.
+	 *
+	 * @param {string} html
+	 * @return {string}
+	 */
+	function rememberStripClipboardWrappers(html) {
+		html = String(html || '');
+		html = html.replace(/\u0000/g, '');
+		html = html.replace(/<!--[\s\S]*?-->/g, '');
+		html = html.replace(/<!\[if[\s\S]*?<!\[endif\]>/gi, '');
+		html = html.replace(/<!\[if[^\]]*\]>/gi, '');
+		html = html.replace(/<!\[endif\]>/gi, '');
+		html = html.replace(/<\?[\s\S]*?\?>/g, '');
+		html = html.replace(/<!DOCTYPE[^>]*>/gi, '');
+		html = html.replace(/<\/?o:p\b[^>]*>/gi, '');
+		html = html.replace(/<(script|style|xml|noscript)\b[^>]*>[\s\S]*?<\/\1>/gi, '');
+		html = html.replace(/<(script|style|xml|noscript)\b[^>]*>[\s\S]*?(?=<\/head\b|<body\b|<p\b|<div\b|$)/gi, '');
+		html = html.replace(/<\/?(meta|link|title|base|head)\b[^>]*>/gi, '');
+		return html;
+	}
+
+	/**
+	 * @param {string} mode html or markers.
+	 * @param {string} markup Fragment.
+	 * @return {boolean}
+	 */
+	function rememberHasBlock(mode, markup) {
+		return /<(p|ul|ol)\b/i.test(markup);
+	}
+
+	/**
+	 * Word and some web editors fake lists with paragraphs instead of ul/ol.
+	 *
+	 * @param {Element} node Element.
+	 * @return {boolean}
+	 */
+	function rememberIsWordList(node) {
+		if (!node || node.nodeType !== 1) {
+			return false;
+		}
+		var style = node.getAttribute('style') || '';
+		var cls = node.getAttribute('class') || '';
+		return /mso-list\s*:/i.test(style) || /MsoListParagraph/i.test(cls);
+	}
+
+	/**
+	 * @param {Element} node Element.
+	 * @return {string[]} b, em, and/or u from inline CSS.
+	 */
+	function rememberStyleTags(node) {
+		var style = ((node.getAttribute && node.getAttribute('style')) || '').toLowerCase();
+		var tags = [];
+		if (/font-weight\s*:\s*(bold|[6-9]00)\b/.test(style)) {
+			tags.push('b');
+		}
+		if (/font-style\s*:\s*italic\b/.test(style)) {
+			tags.push('em');
+		}
+		if (/text-decoration\s*:[^;]*underline/.test(style)) {
+			tags.push('u');
+		}
+		return tags;
+	}
+
+	/**
+	 * @param {string} href Link target.
+	 * @return {string}
+	 */
+	function rememberSafeHref(href) {
+		href = String(href || '');
+		var googleQ = href.match(/[?&]q=([^&]+)/i);
+		if (googleQ && /google\.[^/]+\/url/i.test(href)) {
+			try {
+				href = decodeURIComponent(googleQ[1]);
+			} catch (err) {
+				href = googleQ[1];
+			}
+		}
+		if (/^(https?:|mailto:)/i.test(href)) {
+			return href;
+		}
+		return '';
+	}
+
+	/**
+	 * @param {Node} node Node.
+	 * @param {string} mode html or markers.
+	 * @return {string}
+	 */
+	function rememberSerializeInterests(node, mode) {
+		if (!node) {
+			return '';
+		}
+		if (node.nodeType === 3) {
+			return rememberTextToken(node.nodeValue || '', mode);
+		}
+		if (node.nodeType !== 1) {
+			return '';
+		}
+		var tag = node.tagName;
+		if (tag === 'IMG') {
+			return rememberTextToken(node.getAttribute('alt') || '', mode);
+		}
+		if (
+			tag === 'SCRIPT' ||
+			tag === 'STYLE' ||
+			tag === 'IFRAME' ||
+			tag === 'OBJECT' ||
+			tag === 'EMBED' ||
+			tag === 'SVG' ||
+			tag === 'MATH' ||
+			tag === 'NOSCRIPT' ||
+			tag === 'FORM' ||
+			tag === 'TEXTAREA' ||
+			tag === 'INPUT' ||
+			tag === 'BUTTON' ||
+			tag === 'SELECT' ||
+			tag === 'HEAD' ||
+			tag === 'META' ||
+			tag === 'LINK' ||
+			tag === 'TITLE' ||
+			tag === 'VIDEO' ||
+			tag === 'AUDIO' ||
+			tag === 'SOURCE' ||
+			tag === 'CANVAS' ||
+			tag === 'TEMPLATE' ||
+			tag === 'FRAME' ||
+			tag === 'FRAMESET' ||
+			tag === 'APPLET' ||
+			tag === 'BASE' ||
+			tag.indexOf(':') !== -1
+		) {
+			return '';
+		}
+		if (tag === 'BR') {
+			var brClass = node.getAttribute('class') || '';
+			if (brClass.indexOf('Apple-interchange-newline') !== -1) {
+				return '';
+			}
+			return rememberOpenTag(mode, 'br');
+		}
+		if (tag === 'UL' || tag === 'OL') {
+			return rememberSerializeList(node, mode, tag.toLowerCase());
+		}
+		var inner = rememberSerializeChildren(node, mode);
+		if (tag === 'A') {
+			var href = rememberSafeHref(node.getAttribute('href') || '');
+			if (href && inner.indexOf(href) === -1) {
+				inner = inner.replace(/\s+$/, '') + rememberTextToken(' (' + href + ')', mode);
+			}
+		}
+		if (tag === 'TD' || tag === 'TH') {
+			return inner.replace(/\s+$/, '') + rememberTextToken(' ', mode);
+		}
+		var inlineMap = { STRONG: 'b', B: 'b', EM: 'em', I: 'em', U: 'u' };
+		if (inlineMap[tag]) {
+			var inlineStyle = (node.getAttribute('style') || '').toLowerCase();
+			var neutralBold = (tag === 'B' || tag === 'STRONG') && /font-weight\s*:\s*(normal|400)\b/.test(inlineStyle);
+			var neutralItalic = (tag === 'I' || tag === 'EM') && /font-style\s*:\s*normal\b/.test(inlineStyle);
+			if ((neutralBold || neutralItalic) && rememberHasBlock(mode, inner)) {
+				return inner;
+			}
+			if (neutralBold || neutralItalic) {
+				var skipped = {};
+				skipped[inlineMap[tag]] = true;
+				return rememberApplyStyleTags(node, mode, inner, skipped);
+			}
+			var alreadyInline = {};
+			alreadyInline[inlineMap[tag]] = true;
+			return rememberApplyStyleTags(node, mode, rememberWrapTag(mode, inlineMap[tag], inner), alreadyInline);
+		}
+		if (tag === 'LI') {
+			return rememberWrapTag(mode, 'li', inner);
+		}
+		if (
+			tag === 'P' ||
+			tag === 'DIV' ||
+			tag === 'H1' ||
+			tag === 'H2' ||
+			tag === 'H3' ||
+			tag === 'H4' ||
+			tag === 'H5' ||
+			tag === 'H6' ||
+			tag === 'BLOCKQUOTE' ||
+			tag === 'PRE' ||
+			tag === 'SECTION' ||
+			tag === 'ARTICLE' ||
+			tag === 'HEADER' ||
+			tag === 'FOOTER' ||
+			tag === 'TR' ||
+			tag === 'SPAN' ||
+			tag === 'FONT'
+		) {
+			inner = rememberApplyStyleTags(node, mode, inner, {});
+			if (tag === 'SPAN' || tag === 'FONT') {
+				return inner;
+			}
+			if (rememberHasBlock(mode, inner)) {
+				return inner;
+			}
+			return rememberWrapTag(mode, 'p', inner);
+		}
+		return rememberApplyStyleTags(node, mode, inner, {});
+	}
+
+	/**
+	 * @param {Element} node Element.
+	 * @param {string} mode html or markers.
+	 * @param {string} inner Already serialized children.
+	 * @param {Object<string, boolean>} already Tags already opened by the element itself.
+	 * @return {string}
+	 */
+	function rememberApplyStyleTags(node, mode, inner, already) {
+		var tags = rememberStyleTags(node);
+		var i;
+		for (i = tags.length - 1; i >= 0; i--) {
+			if (already && already[tags[i]]) {
+				continue;
+			}
+			inner = rememberWrapTag(mode, tags[i], inner);
+		}
+		return inner;
+	}
+
+	/**
+	 * @param {Element} node List element.
+	 * @param {string} mode html or markers.
+	 * @param {string} listTag ul or ol.
+	 * @return {string}
+	 */
+	function rememberSerializeList(node, mode, listTag) {
+		var items = [];
+		var child = node.firstChild;
+		while (child) {
+			if (child.nodeType === 1 && child.tagName === 'LI') {
+				var liInner = rememberSerializeChildren(child, mode);
+				if (String(liInner).replace(/\s+/g, '')) {
+					items.push(rememberWrapTag(mode, 'li', liInner));
+				}
+			} else {
+				var extra = rememberSerializeInterests(child, mode);
+				if (String(extra).replace(/\s+/g, '')) {
+					items.push(rememberWrapTag(mode, 'li', extra));
+				}
+			}
+			child = child.nextSibling;
+		}
+		if (!items.length) {
+			return '';
+		}
+		return rememberOpenTag(mode, listTag) + items.join('') + rememberCloseTag(mode, listTag);
+	}
+
+	/**
+	 * @param {Node} node Parent.
+	 * @param {string} mode html or markers.
+	 * @return {string}
+	 */
+	function rememberSerializeChildren(node, mode) {
+		var parts = [];
+		var list = [];
+		function flushList() {
+			if (!list.length) {
+				return;
+			}
+			parts.push(rememberOpenTag(mode, 'ul') + list.join('') + rememberCloseTag(mode, 'ul'));
+			list = [];
+		}
+		var child = node.firstChild;
+		while (child) {
+			if (rememberIsWordList(child)) {
+				var item = rememberSerializeChildren(child, mode);
+				if (String(item).replace(/\s+/g, '')) {
+					list.push(rememberWrapTag(mode, 'li', item));
+				}
+				child = child.nextSibling;
+				continue;
+			}
+			flushList();
+			parts.push(rememberSerializeInterests(child, mode));
+			child = child.nextSibling;
+		}
+		flushList();
+		return parts.join('');
+	}
+
+	/**
+	 * @param {string} markup Fragment.
+	 * @param {string} mode html or markers.
+	 * @return {string}
+	 */
+	function rememberFinalizeInterests(markup, mode) {
+		var allowed = { p: 1, br: 1, b: 1, em: 1, u: 1, ul: 1, ol: 1, li: 1 };
+		var prev;
+		markup = String(markup || '').replace(/<\/?([a-z0-9]+)(?:\s[^>]*)?\s*\/?>/gi, function(match, name) {
+			name = name.toLowerCase();
+			if (!allowed[name]) {
+				return '';
+			}
+			if (name === 'br') {
+				return '<br />';
+			}
+			if (match.charAt(1) === '/') {
+				return '</' + name + '>';
+			}
+			return '<' + name + '>';
+		});
+		do {
+			prev = markup;
+			markup = markup.replace(/<(b|em|u|p|li|ul|ol)>\s*<\/\1>/gi, '');
+		} while (markup !== prev);
+		markup = markup.replace(/<\/(p|ul|ol|li)>/gi, '</$1>\n');
+		markup = markup.replace(/<(ul|ol|li)>/gi, '\n<$1>');
+		markup = markup.replace(/\n{2,}/g, '\n');
+		return markup.replace(/^\s+|\s+$/g, '');
+	}
+
+	/**
+	 * @param {string} html Clipboard or editor HTML.
+	 * @param {string} mode html or markers.
+	 * @return {string}
+	 */
+	function rememberInterestsMarkup(html, mode) {
+		html = rememberStripClipboardWrappers(html);
+		mode = 'html';
+		if (!/<\/?\s*[a-z]/i.test(html)) {
+			return rememberPlainBlocks(html, mode);
+		}
+		var wrap = document.createElement('div');
+		wrap.innerHTML = html;
+		return rememberFinalizeInterests(rememberSerializeChildren(wrap, mode), mode);
+	}
+
+	/**
+	 * Allowlist HTML for the editor (b, em, u, ul, ol, li, p, br only).
 	 *
 	 * @param {string} html Clipboard or editor HTML.
 	 * @return {string}
 	 */
-	function rememberStripOfficeHtml(html) {
-		if (!html) {
-			return '';
-		}
-		html = String(html);
-		html = html.replace(/<!--[\s\S]*?-->/g, '');
-		html = html.replace(/<style[\s\S]*?<\/style>/gi, '');
-		html = html.replace(/<xml[\s\S]*?<\/xml>/gi, '');
-		html = html.replace(/<\/?(meta|link)[^>]*>/gi, '');
+	function rememberCleanInterestsHtml(html) {
+		return rememberInterestsMarkup(html, 'html');
+	}
 
-		var wrap = document.createElement('div');
-		wrap.innerHTML = html;
-
-		var allowed = {
-			P: true,
-			BR: true,
-			STRONG: true,
-			B: true,
-			EM: true,
-			I: true,
-			UL: true,
-			OL: true,
-			LI: true,
-			A: true,
-			BLOCKQUOTE: true
-		};
-
-		function walk(node) {
-			var kids = [];
-			var child = node.firstChild;
-			while (child) {
-				kids.push(child);
-				child = child.nextSibling;
-			}
-			var i;
-			for (i = 0; i < kids.length; i++) {
-				child = kids[i];
-				if (child.nodeType === 8) {
-					node.removeChild(child);
-					continue;
-				}
-				if (child.nodeType === 3) {
-					if (child.nodeValue) {
-						child.nodeValue = child.nodeValue.replace(/\u00a0/g, ' ');
-					}
-					continue;
-				}
-				if (child.nodeType !== 1) {
-					node.removeChild(child);
-					continue;
-				}
-				walk(child);
-				var tag = child.tagName;
-				if (tag.indexOf(':') !== -1 || !allowed[tag]) {
-					while (child.firstChild) {
-						node.insertBefore(child.firstChild, child);
-					}
-					node.removeChild(child);
-					continue;
-				}
-				var attrs = [];
-				var a;
-				for (a = 0; a < child.attributes.length; a++) {
-					attrs.push(child.attributes[a].name);
-				}
-				for (a = 0; a < attrs.length; a++) {
-					var name = attrs[a];
-					if ('A' === tag && 'href' === name.toLowerCase()) {
-						var href = child.getAttribute(name) || '';
-						if (!/^(https?:|mailto:|#\/?)/i.test(href)) {
-							child.removeAttribute(name);
-						}
-						continue;
-					}
-					child.removeAttribute(name);
-				}
-			}
-		}
-
-		walk(wrap);
-		return wrap.innerHTML;
+	/**
+	 * Allowlist HTML for the POST, in TinyMCE's block layout.
+	 *
+	 * @param {string} html Clipboard or editor HTML.
+	 * @return {string}
+	 */
+	function rememberInterestsForPost(html) {
+		return rememberCleanInterestsHtml(html);
 	}
 
 	/**
@@ -873,9 +1229,50 @@
 		editor.on('NodeChange', updateCounter);
 		editor.on('SetContent', updateCounter);
 
-		function stripOfficeFromEditor() {
+		var postingPlain = false;
+		editor.on('GetContent', function(e) {
+			if (!postingPlain || !e) {
+				return;
+			}
+			if (e.format && e.format !== 'html' && e.format !== 'raw') {
+				return;
+			}
+			if (e.rememberInterestsPlain) {
+				return;
+			}
+			e.rememberInterestsPlain = true;
+			e.content = rememberInterestsForPost(e.content || '');
+		});
+
+		// TinyMCE writes editor.getElement().value from this event inside save().
+		// WordPress calls save() on submit before the browser encodes the POST.
+		editor.on('SaveContent', function(e) {
+			if (!e) {
+				return;
+			}
+			e.content = rememberInterestsForPost(e.content || '');
+			var field = editor.getElement();
+			if (field) {
+				field.value = e.content;
+			}
+		});
+
+		if (typeof editor.save === 'function' && !editor.rememberInterestsSavePatched) {
+			editor.rememberInterestsSavePatched = true;
+			var originalSave = editor.save.bind(editor);
+			editor.save = function() {
+				postingPlain = true;
+				try {
+					return originalSave();
+				} finally {
+					postingPlain = false;
+				}
+			};
+		}
+
+		function flattenInterestsEditor() {
 			var html = editor.getContent({ format: 'html' }) || '';
-			var cleaned = rememberStripOfficeHtml(html);
+			var cleaned = rememberCleanInterestsHtml(html);
 			if (cleaned !== html) {
 				editor.setContent(cleaned);
 			}
@@ -891,23 +1288,23 @@
 					updateCounter();
 					return;
 				}
-				stripOfficeFromEditor();
+				flattenInterestsEditor();
 				updateCounter();
 			}, 0);
 		});
 
 		editor.on('PastePreProcess', function(e) {
 			if (e && e.content) {
-				e.content = rememberStripOfficeHtml(e.content);
+				e.content = rememberCleanInterestsHtml(e.content);
 			}
 		});
 
-		var $form = $(editor.getElement()).closest('form');
-		if ($form.length && !$form.data('rememberInterestsOfficeStrip')) {
-			$form.data('rememberInterestsOfficeStrip', true);
-			$form.on('submit', function() {
-				stripOfficeFromEditor();
-			});
+		var formEl = editor.getElement() && editor.getElement().form;
+		if (formEl && !formEl.rememberInterestsPlainSubmit) {
+			formEl.rememberInterestsPlainSubmit = true;
+			formEl.addEventListener('submit', function() {
+				editor.save();
+			}, true);
 		}
 
 		editor.on('init', updateCounter);
@@ -986,6 +1383,12 @@
 
 			$area.on('input change', function() {
 				sync(true);
+			});
+			$area.closest('form').on('submit', function() {
+				if (window.tinymce && typeof tinymce.get === 'function' && tinymce.get(id)) {
+					return;
+				}
+				$area.val(rememberInterestsForPost($area.val() || ''));
 			});
 			sync(false);
 		});
