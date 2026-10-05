@@ -621,6 +621,23 @@ require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remem
 		<div class="remember-member-detail-section remember-member-detail-section--full remember-no-print">
 			<h3><?php esc_html_e( 'Billing Register', 'remember' ); ?></h3>
 			<p class="description"><?php esc_html_e( 'Chronological accounting register of invoices, payments, and refunds.', 'remember' ); ?></p>
+			<?php
+			require_once plugin_dir_path( __FILE__ ) . '../../includes/integrations/class-remember-xero-sync.php';
+			$remember_open_credit = Remember_Xero_Sync::member_open_credit( isset( $view_member->member_id ) ? (int) $view_member->member_id : 0 );
+			if ( is_array( $remember_open_credit ) ) :
+				?>
+				<p class="description">
+					<?php
+					echo esc_html(
+						sprintf(
+							/* translators: %s: unallocated credit amount */
+							__( 'Unallocated Xero credit: %s. With auto-apply on, this is used on the next invoice before it is emailed.', 'remember' ),
+							number_format_i18n( $remember_open_credit['total'], 2 )
+						)
+					);
+					?>
+				</p>
+			<?php endif; ?>
 			
 			<?php if ( ! empty( $billing_register ) ) : ?>
 				<div class="remember-table-scroll">

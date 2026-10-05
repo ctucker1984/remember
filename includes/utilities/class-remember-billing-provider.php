@@ -178,6 +178,18 @@ class Remember_Billing_Provider {
 	}
 
 	/**
+	 * Whether new Xero invoices should consume unallocated credit notes before email.
+	 *
+	 * Default off. QuickBooks ignores this setting.
+	 *
+	 * @return bool
+	 */
+	public static function should_auto_apply_xero_credit() {
+		$options = get_option( 'remember_options', array() );
+		return ! empty( $options['xero_auto_apply_credit'] );
+	}
+
+	/**
 	 * Email the active-provider invoice for an application (soft-fail friendly).
 	 *
 	 * Call after a successful create_invoice_for_application. Uses stored payment row IDs.

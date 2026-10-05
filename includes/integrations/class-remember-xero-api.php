@@ -841,6 +841,102 @@ class Remember_Xero_API {
 	}
 
 	/**
+	 * Authorised sales credit notes for a contact that still have an unallocated balance.
+	 *
+	 * Oldest first, so the next invoice consumes credit in the order it was issued.
+	 *
+	 * @param string $contact_id Xero ContactID.
+	 * @return array<int,array{id:string,number:string,remaining:float,sort_ts:int}>|WP_Error
+	 */
+	public static function get_open_credit_notes( $contact_id ) {
+		$contact_id = trim( (string) $contact_id );
+		if ( ! preg_match( '/^[a-f0-9-]{36}$/i', $contact_id ) ) {
+			return new WP_Error( 'xero_cn_no_contact', __( 'Invalid Xero contact for credit notes.', 'remember' ) );
+		}
+
+		$query = array(
+			'where' => 'Contact.ContactID=Guid("' . $contact_id . '")&&Type=="ACCRECCREDIT"&&Status=="AUTHORISED"',
+		);
+		$notes = array();
+		$page  = 1;
+		do {
+			$query['page'] = $page;
+			$result        = self::request( 'GET', 'CreditNotes', null, $query );
+			if ( is_wp_error( $result ) ) {
+				return $result;
+			}
+			$batch = ( ! empty( $result['CreditNotes'] ) && is_array( $result['CreditNotes'] ) ) ? $result['CreditNotes'] : array();
+			foreach ( $batch as $note ) {
+				$notes[] = $note;
+			}
+			++$page;
+		} while ( count( $batch ) >= 100 && $page <= 10 );
+
+		$out = array();
+		foreach ( $notes as $note ) {
+			if ( ! is_array( $note ) || empty( $note['CreditNoteID'] ) ) {
+				continue;
+			}
+			$remaining = isset( $note['RemainingCredit'] ) ? floatval( $note['RemainingCredit'] ) : 0.0;
+			if ( $remaining <= 0.001 ) {
+				continue;
+			}
+			$out[] = array(
+				'id'        => (string) $note['CreditNoteID'],
+				'number'    => isset( $note['CreditNoteNumber'] ) ? sanitize_text_field( (string) $note['CreditNoteNumber'] ) : '',
+				'remaining' => round( $remaining, 2 ),
+				'sort_ts'   => self::xero_entity_sort_timestamp( $note ),
+			);
+		}
+
+		usort(
+			$out,
+			function ( $a, $b ) {
+				if ( $a['sort_ts'] === $b['sort_ts'] ) {
+					return strcmp( $a['number'], $b['number'] );
+				}
+				return $a['sort_ts'] <=> $b['sort_ts'];
+			}
+		);
+
+		return $out;
+	}
+
+	/**
+	 * Allocate part of an authorised credit note onto an authorised invoice.
+	 *
+	 * @param string $credit_note_id CreditNoteID.
+	 * @param string $invoice_id     InvoiceID.
+	 * @param float  $amount         Amount to allocate.
+	 * @return array|WP_Error
+	 */
+	public static function allocate_credit_note_to_invoice( $credit_note_id, $invoice_id, $amount ) {
+		$credit_note_id = trim( (string) $credit_note_id );
+		$invoice_id     = trim( (string) $invoice_id );
+		$amount         = round( floatval( $amount ), 2 );
+		if ( ! preg_match( '/^[a-f0-9-]{36}$/i', $credit_note_id ) || ! preg_match( '/^[a-f0-9-]{36}$/i', $invoice_id ) ) {
+			return new WP_Error( 'xero_cn_alloc_ids', __( 'Invalid Xero credit note or invoice ID.', 'remember' ) );
+		}
+		if ( $amount <= 0 ) {
+			return new WP_Error( 'xero_cn_alloc_amount', __( 'Credit allocation amount must be greater than zero.', 'remember' ) );
+		}
+
+		return self::request(
+			'PUT',
+			'CreditNotes/' . rawurlencode( $credit_note_id ) . '/Allocations',
+			array(
+				'Allocations' => array(
+					array(
+						'Invoice' => array( 'InvoiceID' => $invoice_id ),
+						'Amount'  => $amount,
+						'Date'    => gmdate( 'Y-m-d' ),
+					),
+				),
+			)
+		);
+	}
+
+	/**
 	 * Sort timestamp for a Xero entity (document Date first for ledger chronology).
 	 *
 	 * @param array $entity Xero entity.

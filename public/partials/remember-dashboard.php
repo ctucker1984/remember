@@ -605,6 +605,31 @@ foreach ( $selected_application_addons as $selected_addon_row ) {
 	<div class="remember-dashboard-billing remember-dashboard-card-compact">
 		<h3><?php esc_html_e( 'Billing', 'remember' ); ?></h3>
 		<p class="remember-description remember-billing-note"><?php echo esc_html( $billing_subtotal_note ); ?></p>
+		<?php
+		require_once plugin_dir_path( __FILE__ ) . '../../includes/integrations/class-remember-xero-sync.php';
+		$remember_open_credit = Remember_Xero_Sync::member_open_credit( get_current_user_id() );
+		if ( is_array( $remember_open_credit ) ) :
+			?>
+			<p class="remember-description">
+				<?php
+				$remember_credit_amount = number_format_i18n( $remember_open_credit['total'], 2 );
+				if ( Remember_Billing_Provider::should_auto_apply_xero_credit() ) {
+					$remember_credit_text = sprintf(
+						/* translators: %s: unallocated credit amount */
+						__( 'Available credit: %s. This is applied to your next invoice.', 'remember' ),
+						$remember_credit_amount
+					);
+				} else {
+					$remember_credit_text = sprintf(
+						/* translators: %s: unallocated credit amount */
+						__( 'Available credit: %s.', 'remember' ),
+						$remember_credit_amount
+					);
+				}
+				echo esc_html( $remember_credit_text );
+				?>
+			</p>
+		<?php endif; ?>
 		<?php if ( ! empty( $member_payments ) ) : ?>
 			<div id="remember-member-billing" class="remember-billing-table-wrap remember-billing-table-frame">
 				<?php
