@@ -432,41 +432,357 @@ class Remember_Profile_Fields {
 	}
 
 	/**
-	 * Allowed tags for Interests (rich text without Word/Office attributes).
+	 * Tags Interests may store and display. No attributes.
 	 *
 	 * @return array
 	 */
 	public static function interests_allowed_html() {
 		return array(
-			'p'          => array(),
-			'br'         => array(),
-			'strong'     => array(),
-			'b'          => array(),
-			'em'         => array(),
-			'i'          => array(),
-			'ul'         => array(),
-			'ol'         => array(),
-			'li'         => array(),
-			'blockquote' => array(),
-			'a'          => array(
-				'href' => true,
-			),
+			'p'  => array(),
+			'br' => array(),
+			'b'  => array(),
+			'em' => array(),
+			'u'  => array(),
+			'ul' => array(),
+			'ol' => array(),
+			'li' => array(),
 		);
 	}
 
 	/**
-	 * Sanitize Interests HTML (does not truncate).
+	 * Interests HTML using only b, em, u, ul, ol, li, p, and br.
 	 *
-	 * @param string $html Raw HTML.
+	 * Accepts that HTML from the browser, an older marker payload, legacy HTML, or plain text.
+	 *
+	 * @param string $input Raw post, stored value, or clipboard HTML.
+	 * @return string
+	 */
+	public static function interests_to_html( $input ) {
+		$input = (string) $input;
+		if ( false !== strpos( $input, '%%rmb:' ) && ! preg_match( '/<[a-z]/i', $input ) ) {
+			return self::interests_kses( self::markers_to_tags( $input ) );
+		}
+		$input = self::strip_interests_clipboard_wrappers( $input );
+		if ( ! preg_match( '/<\/?\s*[a-z]/i', $input ) ) {
+			return self::interests_kses( self::plain_blocks_html( $input ) );
+		}
+		$html = class_exists( 'DOMDocument' ) ? self::interests_dom_to_html( $input ) : self::plain_blocks_html( wp_strip_all_tags( $input ) );
+		return self::interests_kses( $html );
+	}
+
+	/**
+	 * @param string $html HTML fragment.
+	 * @return string
+	 */
+	private static function interests_kses( $html ) {
+		$html = wp_kses( (string) $html, self::interests_allowed_html() );
+		$previous = '';
+		while ( $html !== $previous ) {
+			$previous = $html;
+			$html     = preg_replace( '/<(b|em|u|p|li|ul|ol)>\s*<\/\1>/i', '', $html );
+		}
+		return trim( (string) $html );
+	}
+
+	/**
+	 * Turn the browser's marker payload into allowlisted tags.
+	 *
+	 * @param string $text Marker text.
+	 * @return string
+	 */
+	private static function markers_to_tags( $text ) {
+		$replace = array(
+			'%%rmb:br%%'  => '<br>',
+			'%%rmb:b%%'   => '<b>',
+			'%%rmb:/b%%'  => '</b>',
+			'%%rmb:em%%'  => '<em>',
+			'%%rmb:/em%%' => '</em>',
+			'%%rmb:u%%'   => '<u>',
+			'%%rmb:/u%%'  => '</u>',
+			'%%rmb:ul%%'  => '<ul>',
+			'%%rmb:/ul%%' => '</ul>',
+			'%%rmb:ol%%'  => '<ol>',
+			'%%rmb:/ol%%' => '</ol>',
+			'%%rmb:li%%'  => '<li>',
+			'%%rmb:/li%%' => '</li>',
+			'%%rmb:p%%'   => '<p>',
+			'%%rmb:/p%%'  => '</p>',
+		);
+		$html = str_replace( array_keys( $replace ), array_values( $replace ), (string) $text );
+		$html = str_replace(
+			array( '%%rmb:lt%%', '%%rmb:gt%%', '%%rmb:amp%%', '%%rmb:esc%%' ),
+			array( '&lt;', '&gt;', '&amp;', '%%' ),
+			$html
+		);
+		return $html;
+	}
+
+	/**
+	 * @param string $text Plain text.
+	 * @return string
+	 */
+	private static function plain_blocks_html( $text ) {
+		$text = str_replace( array( "\0", "\r\n", "\r" ), array( '', "\n", "\n" ), (string) $text );
+		$text = preg_replace( "/[ \t]+\n/", "\n", $text );
+		$text = preg_replace( "/\n{3,}/", "\n\n", (string) $text );
+		$text = trim( (string) $text );
+		if ( '' === $text ) {
+			return '';
+		}
+		$parts = preg_split( "/\n{2,}/", $text );
+		$out   = '';
+		foreach ( $parts as $part ) {
+			$part = trim( (string) $part );
+			if ( '' === $part ) {
+				continue;
+			}
+			$lines = explode( "\n", $part );
+			$inner = '';
+			foreach ( $lines as $index => $line ) {
+				if ( $index > 0 ) {
+					$inner .= '<br>';
+				}
+				$inner .= esc_html( $line );
+			}
+			$out .= '<p>' . $inner . '</p>';
+		}
+		return $out;
+	}
+
+	/**
+	 * Remove clipboard chrome before HTML is parsed. Mirrors the browser stripper.
+	 *
+	 * @param string $html Raw clipboard or editor HTML.
+	 * @return string
+	 */
+	private static function strip_interests_clipboard_wrappers( $html ) {
+		$html = str_replace( "\0", '', (string) $html );
+		$html = preg_replace( '/<!--[\s\S]*?-->/', '', $html );
+		$html = preg_replace( '/<!\[if[\s\S]*?<!\[endif\]>/i', '', (string) $html );
+		$html = preg_replace( '/<!\[if[^\]]*\]>/i', '', (string) $html );
+		$html = preg_replace( '/<!\[endif\]>/i', '', (string) $html );
+		$html = preg_replace( '/<\?[\s\S]*?\?>/', '', (string) $html );
+		$html = preg_replace( '/<!DOCTYPE[^>]*>/i', '', (string) $html );
+		$html = preg_replace( '/<\/?o:p\b[^>]*>/i', '', (string) $html );
+		$html = preg_replace( '/<(script|style|xml|noscript)\b[^>]*>[\s\S]*?<\/\1>/i', '', (string) $html );
+		$html = preg_replace( '/<(script|style|xml|noscript)\b[^>]*>[\s\S]*?(?=<\/head\b|<body\b|<p\b|<div\b|$)/i', '', (string) $html );
+		$html = preg_replace( '/<\/?(meta|link|title|base|head)\b[^>]*>/i', '', (string) $html );
+		return is_string( $html ) ? $html : '';
+	}
+
+	/**
+	 * Safe HTML for display and for loading the Interests editor.
+	 *
+	 * @param string $stored Plain text or legacy HTML.
+	 * @return string
+	 */
+	public static function interests_html( $stored ) {
+		return self::interests_to_html( $stored );
+	}
+
+	/**
+	 * DOM conversion of Interests HTML to the allowlisted tags.
+	 *
+	 * @param string $html HTML fragment.
+	 * @return string
+	 */
+	private static function interests_dom_to_html( $html ) {
+		$doc  = new DOMDocument();
+		$prev = libxml_use_internal_errors( true );
+		$loaded = $doc->loadHTML( '<?xml encoding="utf-8" ?>' . $html );
+		libxml_clear_errors();
+		libxml_use_internal_errors( $prev );
+		if ( ! $loaded ) {
+			return self::plain_blocks_html( wp_strip_all_tags( $html ) );
+		}
+		$body = $doc->getElementsByTagName( 'body' )->item( 0 );
+		if ( ! $body ) {
+			return self::plain_blocks_html( wp_strip_all_tags( $html ) );
+		}
+		return self::interests_children_html( $body );
+	}
+
+	/**
+	 * @param DOMNode $node Parent.
+	 * @return string
+	 */
+	private static function interests_children_html( $node ) {
+		$parts = '';
+		$list  = '';
+		foreach ( $node->childNodes as $child ) {
+			if ( XML_ELEMENT_NODE === $child->nodeType && self::interests_is_word_list( $child ) ) {
+				$item = self::interests_children_html( $child );
+				if ( '' !== trim( wp_strip_all_tags( $item ) ) ) {
+					$list .= '<li>' . $item . '</li>';
+				}
+				continue;
+			}
+			if ( '' !== $list ) {
+				$parts .= '<ul>' . $list . '</ul>';
+				$list   = '';
+			}
+			$parts .= self::interests_node_html( $child );
+		}
+		if ( '' !== $list ) {
+			$parts .= '<ul>' . $list . '</ul>';
+		}
+		return $parts;
+	}
+
+	/**
+	 * @param DOMNode $node Node.
+	 * @return bool
+	 */
+	private static function interests_is_word_list( $node ) {
+		if ( XML_ELEMENT_NODE !== $node->nodeType ) {
+			return false;
+		}
+		$style = $node->getAttribute( 'style' );
+		$class = $node->getAttribute( 'class' );
+		return (bool) preg_match( '/mso-list\s*:/i', $style ) || false !== stripos( $class, 'MsoListParagraph' );
+	}
+
+	/**
+	 * @param DOMElement $node Element.
+	 * @return string[]
+	 */
+	private static function interests_style_tags( $node ) {
+		$style = strtolower( $node->getAttribute( 'style' ) );
+		$tags  = array();
+		if ( preg_match( '/font-weight\s*:\s*(bold|[6-9]00)\b/', $style ) ) {
+			$tags[] = 'b';
+		}
+		if ( preg_match( '/font-style\s*:\s*italic\b/', $style ) ) {
+			$tags[] = 'em';
+		}
+		if ( preg_match( '/text-decoration\s*:[^;]*underline/', $style ) ) {
+			$tags[] = 'u';
+		}
+		return $tags;
+	}
+
+	/**
+	 * @param string $inner Markup.
+	 * @param string[] $tags Tags to wrap, outer last.
+	 * @param string[] $skip Tags already applied.
+	 * @return string
+	 */
+	private static function interests_wrap_styles( $inner, $tags, $skip ) {
+		foreach ( array_reverse( $tags ) as $tag ) {
+			if ( in_array( $tag, $skip, true ) ) {
+				continue;
+			}
+			if ( '' === trim( wp_strip_all_tags( $inner ) ) ) {
+				continue;
+			}
+			$inner = '<' . $tag . '>' . $inner . '</' . $tag . '>';
+		}
+		return $inner;
+	}
+
+	/**
+	 * @param DOMNode $node Node.
+	 * @return string
+	 */
+	private static function interests_node_html( $node ) {
+		if ( XML_TEXT_NODE === $node->nodeType ) {
+			$text = str_replace( "\xc2\xa0", ' ', (string) $node->nodeValue );
+			$text = preg_replace( '/[\x{200B}-\x{200D}\x{2060}\x{FEFF}\x{200E}\x{200F}]/u', '', $text );
+			return esc_html( (string) $text );
+		}
+		if ( XML_ELEMENT_NODE !== $node->nodeType ) {
+			return '';
+		}
+		$tag = strtolower( $node->nodeName );
+		if ( false !== strpos( $tag, ':' ) ) {
+			return '';
+		}
+		if ( 'img' === $tag ) {
+			return esc_html( $node->getAttribute( 'alt' ) );
+		}
+		$drop = array( 'script', 'style', 'iframe', 'object', 'embed', 'svg', 'math', 'noscript', 'form', 'head', 'meta', 'link', 'title', 'textarea', 'input', 'button', 'select', 'video', 'audio', 'source', 'canvas', 'template', 'frame', 'frameset', 'applet', 'base' );
+		if ( in_array( $tag, $drop, true ) ) {
+			return '';
+		}
+		if ( 'br' === $tag ) {
+			if ( false !== strpos( $node->getAttribute( 'class' ), 'Apple-interchange-newline' ) ) {
+				return '';
+			}
+			return '<br>';
+		}
+		if ( 'ul' === $tag || 'ol' === $tag ) {
+			$items = '';
+			foreach ( $node->childNodes as $child ) {
+				if ( XML_ELEMENT_NODE === $child->nodeType && 'li' === strtolower( $child->nodeName ) ) {
+					$li = self::interests_children_html( $child );
+				} else {
+					$li = self::interests_node_html( $child );
+				}
+				if ( '' !== trim( wp_strip_all_tags( $li ) ) ) {
+					$items .= '<li>' . $li . '</li>';
+				}
+			}
+			return '' === $items ? '' : '<' . $tag . '>' . $items . '</' . $tag . '>';
+		}
+		$inner = self::interests_children_html( $node );
+		if ( 'a' === $tag ) {
+			$href = $node->getAttribute( 'href' );
+			if ( preg_match( '/[?&]q=([^&]+)/i', $href, $google_q ) && preg_match( '#google\.[^/]+/url#i', $href ) ) {
+				$href = rawurldecode( $google_q[1] );
+			}
+			if ( preg_match( '#^(https?:|mailto:)#i', $href ) && false === strpos( $inner, $href ) ) {
+				$inner .= esc_html( ' (' . $href . ')' );
+			}
+		}
+		if ( 'td' === $tag || 'th' === $tag ) {
+			return rtrim( $inner ) . ' ';
+		}
+		$inline = array(
+			'strong' => 'b',
+			'b'      => 'b',
+			'em'     => 'em',
+			'i'      => 'em',
+			'u'      => 'u',
+		);
+		if ( isset( $inline[ $tag ] ) ) {
+			$style_attr     = strtolower( $node->getAttribute( 'style' ) );
+			$neutral_bold   = ( 'b' === $tag || 'strong' === $tag ) && preg_match( '/font-weight\s*:\s*(normal|400)\b/', $style_attr );
+			$neutral_italic = ( 'i' === $tag || 'em' === $tag ) && preg_match( '/font-style\s*:\s*normal\b/', $style_attr );
+			if ( ( $neutral_bold || $neutral_italic ) && preg_match( '/<(p|ul|ol)\b/i', $inner ) ) {
+				return $inner;
+			}
+			if ( $neutral_bold || $neutral_italic ) {
+				return self::interests_wrap_styles( $inner, self::interests_style_tags( $node ), array( $inline[ $tag ] ) );
+			}
+			$inner = '<' . $inline[ $tag ] . '>' . $inner . '</' . $inline[ $tag ] . '>';
+			return self::interests_wrap_styles( $inner, self::interests_style_tags( $node ), array( $inline[ $tag ] ) );
+		}
+		if ( 'li' === $tag ) {
+			return '' === trim( wp_strip_all_tags( $inner ) ) ? '' : '<li>' . $inner . '</li>';
+		}
+		$blocks = array( 'p', 'div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'pre', 'section', 'article', 'header', 'footer', 'tr', 'span', 'font' );
+		if ( in_array( $tag, $blocks, true ) ) {
+			$inner = self::interests_wrap_styles( $inner, self::interests_style_tags( $node ), array() );
+			if ( 'span' === $tag || 'font' === $tag ) {
+				return $inner;
+			}
+			if ( preg_match( '/<(p|ul|ol)\b/i', $inner ) ) {
+				return $inner;
+			}
+			return '' === trim( wp_strip_all_tags( $inner ) ) ? '' : '<p>' . $inner . '</p>';
+		}
+		return self::interests_wrap_styles( $inner, self::interests_style_tags( $node ), array() );
+	}
+
+
+	/**
+	 * Sanitize Interests to the allowlisted tags (does not truncate).
+	 *
+	 * @param string $html Marker payload, HTML, or plain text.
 	 * @return string
 	 */
 	public static function sanitize_interests( $html ) {
-		$html = (string) $html;
-		$html = preg_replace( '/<!--[\s\S]*?-->/', '', $html );
-		if ( ! is_string( $html ) ) {
-			$html = '';
-		}
-		return wp_kses( $html, self::interests_allowed_html() );
+		return self::interests_to_html( $html );
 	}
 
 	/**
@@ -483,7 +799,7 @@ class Remember_Profile_Fields {
 		}
 		$text = self::interests_plain_text( $html );
 		$cut  = function_exists( 'mb_substr' ) ? mb_substr( $text, 0, $max, 'UTF-8' ) : substr( $text, 0, $max );
-		return wp_kses_post( wpautop( $cut ) );
+		return $cut;
 	}
 
 	/**
@@ -531,17 +847,23 @@ class Remember_Profile_Fields {
 			'textarea_name' => $textarea_name,
 			'textarea_rows' => 6,
 			'media_buttons' => false,
-			'teeny'         => true,
+			'teeny'         => false,
 			'quicktags'     => false,
+			'tinymce'       => array(
+				'toolbar1'      => 'bold,italic,underline,bullist,numlist,undo,redo',
+				'toolbar2'      => '',
+				'block_formats' => 'Paragraph=p',
+			),
 		);
 		if ( '' !== $editor_class ) {
 			$settings['editor_class'] = $editor_class;
 		}
 
-		wp_editor( $content, $editor_id, $settings );
+		$html  = self::interests_to_html( $content );
+		wp_editor( $html, $editor_id, $settings );
 
 		$max   = self::interests_max_length();
-		$count = self::interests_char_count( $content );
+		$count = self::interests_char_count( $html );
 		/* translators: 1: current character count, 2: maximum */
 		$count_template = __( '%1$s / %2$s characters', 'remember' );
 		printf(

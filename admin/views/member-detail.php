@@ -37,6 +37,7 @@ $remember_can_print_any          = $remember_can_print_confidential || $remember
 $remember_default_print_mode = $remember_can_print_confidential
 	? 'confidential'
 	: ( $remember_can_print_event ? 'event' : 'denied' );
+require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-fields.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-questions.php';
 ?>
 <div
@@ -464,7 +465,7 @@ require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remem
 				<h3><?php esc_html_e( 'Interests', 'remember' ); ?></h3>
 				<?php
 				if ( $remember_has_interests ) {
-					echo '<div class="remember-richtext">' . wp_kses_post( wpautop( $view_profile->interests ) ) . '</div>';
+					echo '<div class="remember-richtext">' . Remember_Profile_Fields::interests_html( $view_profile->interests ) . '</div>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- interests_html() keeps only b, em, u, ul, ol, li, p, and br.
 				} else {
 					echo '<p class="remember-member-detail-none">' . esc_html__( 'Not provided', 'remember' ) . '</p>';
 				}

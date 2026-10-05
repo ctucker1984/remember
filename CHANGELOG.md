@@ -2,6 +2,10 @@
 
 All notable changes to reMember are listed here. The current plugin version is in `remember.php` (`REMEMBER_VERSION`) and [GitHub Releases](https://github.com/ctucker1984/remember/releases).
 
+## 2.1.5
+
+- **Fix:** Interests keep bold, italic, underline, lists, and paragraphs. Paste from ChatGPT, Word, Google Docs, LibreOffice, Pages, and other editors is reduced to `b`, `em`, `u`, `ul`, `ol`, `li`, `p`, and `br` with no attributes, in the same block layout TinyMCE posts when that text is typed in the editor. The browser sends that HTML.
+
 ## 2.1.4
 
 - **Fix:** The profile-photo framing circle on iPhone (and other WebKit) now shows the full photo at the chosen zoom, not a sliver in the corner. Save was already using the correct crop; the preview was clipped because the image was positioned with CSS `transform` inside a round `overflow: hidden` box.
