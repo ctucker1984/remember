@@ -2,6 +2,14 @@
 
 All notable changes to reMember are listed here. The current plugin version is in `remember.php` (`REMEMBER_VERSION`) and [GitHub Releases](https://github.com/ctucker1984/remember/releases).
 
+## 2.1.6
+
+- **Enhancement:** Report filters on multi-select fields include **is not** and **is not one of**. That covers dietary restrictions, allergies, roles, and custom multi-select questions. A row matches when its list does not include the chosen value or values, including rows whose list is empty.
+- **Fix:** Member dashboard **Browse Events** opens the Events page instead of reloading the dashboard.
+- **Enhancement:** Settings can auto-apply a member’s open Xero credit notes to each new invoice before it is emailed. Oldest note first, up to the invoice total. The member dashboard and the billing register show credit that is still unallocated. If allocation fails, the invoice stays in Xero and is not emailed.
+- **Fix:** On the event application, “Check your profile…” opens in a new tab so the form stays put. Return to Dashboard and Cancel go to the member dashboard.
+- **Fix:** Voiding a Xero invoice shows Xero’s validation reason. Credit already allocated to that invoice is removed first, so the credit note stays available and the invoice can be voided. An invoice with a payment is left alone, with a message to remove the payment or choose Refund.
+
 ## 2.1.5
 
 - **Fix:** Interests keep bold, italic, underline, lists, and paragraphs. Paste from ChatGPT, Word, Google Docs, LibreOffice, Pages, and other editors is reduced to `b`, `em`, `u`, `ul`, `ol`, `li`, `p`, and `br` with no attributes, in the same block layout TinyMCE posts when that text is typed in the editor. The browser sends that HTML.
