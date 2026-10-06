@@ -441,6 +441,7 @@ class Remember_Profile_Fields {
 			'p'  => array(),
 			'br' => array(),
 			'b'  => array(),
+			'i'  => array(),
 			'em' => array(),
 			'u'  => array(),
 			'ul' => array(),
@@ -450,7 +451,7 @@ class Remember_Profile_Fields {
 	}
 
 	/**
-	 * Interests HTML using only b, em, u, ul, ol, li, p, and br.
+	 * Interests HTML using only b, i, em, u, ul, ol, li, p, and br.
 	 *
 	 * Accepts that HTML from the browser, an older marker payload, legacy HTML, or plain text.
 	 *
@@ -479,7 +480,7 @@ class Remember_Profile_Fields {
 		$previous = '';
 		while ( $html !== $previous ) {
 			$previous = $html;
-			$html     = preg_replace( '/<(b|em|u|p|li|ul|ol)>\s*<\/\1>/i', '', $html );
+			$html     = preg_replace( '/<(b|i|em|u|p|li|ul|ol)>\s*<\/\1>/i', '', $html );
 		}
 		return trim( (string) $html );
 	}
@@ -655,9 +656,6 @@ class Remember_Profile_Fields {
 		if ( preg_match( '/font-style\s*:\s*italic\b/', $style ) ) {
 			$tags[] = 'em';
 		}
-		if ( preg_match( '/text-decoration\s*:[^;]*underline/', $style ) ) {
-			$tags[] = 'u';
-		}
 		return $tags;
 	}
 
@@ -741,7 +739,7 @@ class Remember_Profile_Fields {
 			'strong' => 'b',
 			'b'      => 'b',
 			'em'     => 'em',
-			'i'      => 'em',
+			'i'      => 'i',
 			'u'      => 'u',
 		);
 		if ( isset( $inline[ $tag ] ) ) {
@@ -822,6 +820,19 @@ class Remember_Profile_Fields {
 			$init['setup'] = 'function(editor){' . $call . '}';
 		}
 
+		// TinyMCE drops every other element as the content is parsed, before Save.
+		// b/strong keeps the Bold button, which inserts strong, as <b>.
+		$init['valid_elements']               = 'p,br,b/strong,i,em,u,ul,ol,li';
+		$init['extended_valid_elements']      = '';
+		$init['invalid_elements']             = 'span,font,div,h1,h2,h3,h4,h5,h6,a,img,table,style,script';
+		$init['verify_html']                  = true;
+		$init['paste_remove_styles']          = true;
+		$init['paste_remove_spans']           = true;
+		$init['paste_strip_class_attributes'] = 'all';
+		$init['paste_webkit_styles']          = 'none';
+		$init['paste_retain_style_properties'] = '';
+		$init['paste_data_images']            = false;
+
 		return $init;
 	}
 
@@ -840,7 +851,7 @@ class Remember_Profile_Fields {
 		}
 
 		if ( ! has_filter( 'tiny_mce_before_init', array( __CLASS__, 'tinymce_interests_setup' ) ) ) {
-			add_filter( 'tiny_mce_before_init', array( __CLASS__, 'tinymce_interests_setup' ), 20, 2 );
+			add_filter( 'tiny_mce_before_init', array( __CLASS__, 'tinymce_interests_setup' ), 99, 2 );
 		}
 
 		$settings = array(

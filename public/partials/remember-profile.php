@@ -1141,7 +1141,7 @@ if ( ! empty( $selected_allergy_ids ) ) {
 					<div class="remember-form-section">
 						<h3 class="remember-form-section-title"><?php esc_html_e( 'Interests', 'remember' ); ?></h3>
 						<div class="remember-profile-view-item remember-profile-view-item-full">
-							<span class="remember-profile-view-value remember-richtext"><?php echo Remember_Profile_Fields::interests_html( $profile->interests ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- interests_html() keeps only b, em, u, ul, ol, li, p, and br. ?></span>
+							<span class="remember-profile-view-value remember-richtext"><?php echo Remember_Profile_Fields::interests_html( $profile->interests ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- interests_html() keeps only b, i, em, u, ul, ol, li, p, and br. ?></span>
 						</div>
 					</div>
 				<?php endif; ?>

@@ -191,7 +191,7 @@ foreach ( $event_roles as $event_role ) {
 						<?php if ( ! empty( $profile->share_interests_with_events ) && ! empty( $profile->interests ) ) : ?>
 							<p>
 								<strong><?php esc_html_e( 'Interests:', 'remember' ); ?></strong><br>
-								<?php echo Remember_Profile_Fields::interests_html( $profile->interests ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- interests_html() keeps only b, em, u, ul, ol, li, p, and br. ?>
+								<?php echo Remember_Profile_Fields::interests_html( $profile->interests ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- interests_html() keeps only b, i, em, u, ul, ol, li, p, and br. ?>
 							</p>
 						<?php endif; ?>
 					<?php endif; ?>
