@@ -713,500 +713,76 @@
 	}
 
 	/**
-	 * Interests keep only b, i, em, u, ul, ol, li, p, and br, with no attributes.
-	 * Paste is reduced to that set, then posted as HTML in the same block
-	 * layout TinyMCE uses when the text was typed in the editor.
+	 * Text inside a marker payload must not contain raw <, >, or %%.
 	 *
-	 * @param {string} mode html.
-	 * @param {string} tag  b, i, em, u, ul, ol, li, p, or br.
+	 * @param {string} text
 	 * @return {string}
 	 */
-	function rememberOpenTag(mode, tag) {
-		return tag === 'br' ? '<br />' : '<' + tag + '>';
+	function rememberEscapeMarkerText(text) {
+		return String(text || '')
+			.replace(/%%/g, '%%rmb:esc%%')
+			.replace(/&/g, '%%rmb:amp%%')
+			.replace(/</g, '%%rmb:lt%%')
+			.replace(/>/g, '%%rmb:gt%%');
 	}
 
 	/**
-	 * @param {string} mode html or markers.
-	 * @param {string} tag  Tag name.
-	 * @return {string}
-	 */
-	function rememberCloseTag(mode, tag) {
-		if (tag === 'br') {
-			return '';
-		}
-		return '</' + tag + '>';
-	}
-
-	/**
-	 * @param {string} mode  html or markers.
-	 * @param {string} tag   Tag name.
-	 * @param {string} inner Inner markup.
-	 * @return {string}
-	 */
-	function rememberWrapTag(mode, tag, inner) {
-		if (tag === 'br') {
-			return rememberOpenTag(mode, 'br');
-		}
-		if (!String(inner || '').replace(/\s+/g, '')) {
-			return '';
-		}
-		return rememberOpenTag(mode, tag) + inner + rememberCloseTag(mode, tag);
-	}
-
-	/**
-	 * @param {string} text Visible text.
-	 * @param {string} mode html or markers.
-	 * @return {string}
-	 */
-	function rememberTextToken(text, mode) {
-		text = String(text || '');
-		text = text.replace(/\u00a0/g, ' ');
-		text = text.replace(/[\u200B-\u200D\u2060\uFEFF\u200E\u200F]/g, '');
-		text = text.replace(/\u0000/g, '');
-		return text
-			.replace(/&/g, '&amp;')
-			.replace(/</g, '&lt;')
-			.replace(/>/g, '&gt;');
-	}
-
-	/**
-	 * @param {string} text Plain text with newlines.
-	 * @param {string} mode html or markers.
-	 * @return {string}
-	 */
-	function rememberPlainBlocks(text, mode) {
-		text = String(text || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-		text = text.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n');
-		text = text.replace(/^\s+|\s+$/g, '');
-		if (!text) {
-			return '';
-		}
-		var parts = text.split(/\n{2,}/);
-		var out = [];
-		var i;
-		for (i = 0; i < parts.length; i++) {
-			var part = parts[i].replace(/^\s+|\s+$/g, '');
-			if (!part) {
-				continue;
-			}
-			var lines = part.split('\n');
-			var inner = '';
-			var j;
-			for (j = 0; j < lines.length; j++) {
-				if (j) {
-					inner += rememberOpenTag(mode, 'br');
-				}
-				inner += rememberTextToken(lines[j], mode);
-			}
-			out.push(rememberWrapTag(mode, 'p', inner));
-		}
-		return out.join('');
-	}
-
-	/**
-	 * Drop Office/Docs/Pages clipboard chrome before the HTML parser runs.
-	 * Unclosed style/xml blocks must not swallow the paragraph text.
+	 * Turn editor HTML into %%rmb:%% markers so the POST has no angle brackets.
+	 * PHP turns the markers back into p, br, b, em, u, ul, ol, and li.
 	 *
 	 * @param {string} html
 	 * @return {string}
 	 */
-	function rememberStripClipboardWrappers(html) {
-		html = String(html || '');
-		html = html.replace(/\u0000/g, '');
-		html = html.replace(/<!--[\s\S]*?-->/g, '');
-		html = html.replace(/<!\[if[\s\S]*?<!\[endif\]>/gi, '');
-		html = html.replace(/<!\[if[^\]]*\]>/gi, '');
-		html = html.replace(/<!\[endif\]>/gi, '');
-		html = html.replace(/<\?[\s\S]*?\?>/g, '');
-		html = html.replace(/<!DOCTYPE[^>]*>/gi, '');
-		html = html.replace(/<\/?o:p\b[^>]*>/gi, '');
-		html = html.replace(/<(script|style|xml|noscript)\b[^>]*>[\s\S]*?<\/\1>/gi, '');
-		html = html.replace(/<(script|style|xml|noscript)\b[^>]*>[\s\S]*?(?=<\/head\b|<body\b|<p\b|<div\b|$)/gi, '');
-		html = html.replace(/<\/?(meta|link|title|base|head)\b[^>]*>/gi, '');
-		return html;
-	}
-
-	/**
-	 * @param {string} mode html or markers.
-	 * @param {string} markup Fragment.
-	 * @return {boolean}
-	 */
-	function rememberHasBlock(mode, markup) {
-		return /<(p|ul|ol)\b/i.test(markup);
-	}
-
-	/**
-	 * Word and some web editors fake lists with paragraphs instead of ul/ol.
-	 *
-	 * @param {Element} node Element.
-	 * @return {boolean}
-	 */
-	function rememberIsWordList(node) {
-		if (!node || node.nodeType !== 1) {
-			return false;
-		}
-		var style = node.getAttribute('style') || '';
-		var cls = node.getAttribute('class') || '';
-		return /mso-list\s*:/i.test(style) || /MsoListParagraph/i.test(cls);
-	}
-
-	/**
-	 * @param {Element} node Element.
-	 * @return {string[]} b, em, and/or u from inline CSS.
-	 */
-	function rememberStyleTags(node) {
-		var style = ((node.getAttribute && node.getAttribute('style')) || '').toLowerCase();
-		var tags = [];
-		if (/font-weight\s*:\s*(bold|[6-9]00)\b/.test(style)) {
-			tags.push('b');
-		}
-		if (/font-style\s*:\s*italic\b/.test(style)) {
-			tags.push('em');
-		}
-		if (/text-decoration\s*:[^;]*underline/.test(style)) {
-			tags.push('u');
-		}
-		return tags;
-	}
-
-	/**
-	 * @param {string} href Link target.
-	 * @return {string}
-	 */
-	function rememberSafeHref(href) {
-		href = String(href || '');
-		var googleQ = href.match(/[?&]q=([^&]+)/i);
-		if (googleQ && /google\.[^/]+\/url/i.test(href)) {
-			try {
-				href = decodeURIComponent(googleQ[1]);
-			} catch (err) {
-				href = googleQ[1];
-			}
-		}
-		if (/^(https?:|mailto:)/i.test(href)) {
-			return href;
-		}
-		return '';
-	}
-
-	/**
-	 * @param {Node} node Node.
-	 * @param {string} mode html or markers.
-	 * @return {string}
-	 */
-	function rememberSerializeInterests(node, mode) {
-		if (!node) {
-			return '';
-		}
-		if (node.nodeType === 3) {
-			return rememberTextToken(node.nodeValue || '', mode);
-		}
-		if (node.nodeType !== 1) {
-			return '';
-		}
-		var tag = node.tagName;
-		if (tag === 'IMG') {
-			return rememberTextToken(node.getAttribute('alt') || '', mode);
-		}
-		if (
-			tag === 'SCRIPT' ||
-			tag === 'STYLE' ||
-			tag === 'IFRAME' ||
-			tag === 'OBJECT' ||
-			tag === 'EMBED' ||
-			tag === 'SVG' ||
-			tag === 'MATH' ||
-			tag === 'NOSCRIPT' ||
-			tag === 'FORM' ||
-			tag === 'TEXTAREA' ||
-			tag === 'INPUT' ||
-			tag === 'BUTTON' ||
-			tag === 'SELECT' ||
-			tag === 'HEAD' ||
-			tag === 'META' ||
-			tag === 'LINK' ||
-			tag === 'TITLE' ||
-			tag === 'VIDEO' ||
-			tag === 'AUDIO' ||
-			tag === 'SOURCE' ||
-			tag === 'CANVAS' ||
-			tag === 'TEMPLATE' ||
-			tag === 'FRAME' ||
-			tag === 'FRAMESET' ||
-			tag === 'APPLET' ||
-			tag === 'BASE' ||
-			tag.indexOf(':') !== -1
-		) {
-			return '';
-		}
-		if (tag === 'BR') {
-			var brClass = node.getAttribute('class') || '';
-			if (brClass.indexOf('Apple-interchange-newline') !== -1) {
-				return '';
-			}
-			return rememberOpenTag(mode, 'br');
-		}
-		if (tag === 'UL' || tag === 'OL') {
-			return rememberSerializeList(node, mode, tag.toLowerCase());
-		}
-		var inner = rememberSerializeChildren(node, mode);
-		if (tag === 'A') {
-			var href = rememberSafeHref(node.getAttribute('href') || '');
-			if (href && inner.indexOf(href) === -1) {
-				inner = inner.replace(/\s+$/, '') + rememberTextToken(' (' + href + ')', mode);
-			}
-		}
-		if (tag === 'TD' || tag === 'TH') {
-			return inner.replace(/\s+$/, '') + rememberTextToken(' ', mode);
-		}
-		var inlineMap = { STRONG: 'b', B: 'b', EM: 'em', I: 'em', U: 'u' };
-		if (inlineMap[tag]) {
-			var inlineStyle = (node.getAttribute('style') || '').toLowerCase();
-			var neutralBold = (tag === 'B' || tag === 'STRONG') && /font-weight\s*:\s*(normal|400)\b/.test(inlineStyle);
-			var neutralItalic = (tag === 'I' || tag === 'EM') && /font-style\s*:\s*normal\b/.test(inlineStyle);
-			if ((neutralBold || neutralItalic) && rememberHasBlock(mode, inner)) {
-				return inner;
-			}
-			if (neutralBold || neutralItalic) {
-				var skipped = {};
-				skipped[inlineMap[tag]] = true;
-				return rememberApplyStyleTags(node, mode, inner, skipped);
-			}
-			var alreadyInline = {};
-			alreadyInline[inlineMap[tag]] = true;
-			return rememberApplyStyleTags(node, mode, rememberWrapTag(mode, inlineMap[tag], inner), alreadyInline);
-		}
-		if (tag === 'LI') {
-			return rememberWrapTag(mode, 'li', inner);
-		}
-		if (
-			tag === 'P' ||
-			tag === 'DIV' ||
-			tag === 'H1' ||
-			tag === 'H2' ||
-			tag === 'H3' ||
-			tag === 'H4' ||
-			tag === 'H5' ||
-			tag === 'H6' ||
-			tag === 'BLOCKQUOTE' ||
-			tag === 'PRE' ||
-			tag === 'SECTION' ||
-			tag === 'ARTICLE' ||
-			tag === 'HEADER' ||
-			tag === 'FOOTER' ||
-			tag === 'TR' ||
-			tag === 'SPAN' ||
-			tag === 'FONT'
-		) {
-			inner = rememberApplyStyleTags(node, mode, inner, {});
-			if (tag === 'SPAN' || tag === 'FONT') {
-				return inner;
-			}
-			if (rememberHasBlock(mode, inner)) {
-				return inner;
-			}
-			return rememberWrapTag(mode, 'p', inner);
-		}
-		return rememberApplyStyleTags(node, mode, inner, {});
-	}
-
-	/**
-	 * @param {Element} node Element.
-	 * @param {string} mode html or markers.
-	 * @param {string} inner Already serialized children.
-	 * @param {Object<string, boolean>} already Tags already opened by the element itself.
-	 * @return {string}
-	 */
-	function rememberApplyStyleTags(node, mode, inner, already) {
-		var tags = rememberStyleTags(node);
-		var i;
-		for (i = tags.length - 1; i >= 0; i--) {
-			if (already && already[tags[i]]) {
-				continue;
-			}
-			inner = rememberWrapTag(mode, tags[i], inner);
-		}
-		return inner;
-	}
-
-	/**
-	 * @param {Element} node List element.
-	 * @param {string} mode html or markers.
-	 * @param {string} listTag ul or ol.
-	 * @return {string}
-	 */
-	function rememberSerializeList(node, mode, listTag) {
-		var items = [];
-		var child = node.firstChild;
-		while (child) {
-			if (child.nodeType === 1 && child.tagName === 'LI') {
-				var liInner = rememberSerializeChildren(child, mode);
-				if (String(liInner).replace(/\s+/g, '')) {
-					items.push(rememberWrapTag(mode, 'li', liInner));
-				}
-			} else {
-				var extra = rememberSerializeInterests(child, mode);
-				if (String(extra).replace(/\s+/g, '')) {
-					items.push(rememberWrapTag(mode, 'li', extra));
-				}
-			}
-			child = child.nextSibling;
-		}
-		if (!items.length) {
-			return '';
-		}
-		return rememberOpenTag(mode, listTag) + items.join('') + rememberCloseTag(mode, listTag);
-	}
-
-	/**
-	 * @param {Node} node Parent.
-	 * @param {string} mode html or markers.
-	 * @return {string}
-	 */
-	function rememberSerializeChildren(node, mode) {
-		var parts = [];
-		var list = [];
-		function flushList() {
-			if (!list.length) {
-				return;
-			}
-			parts.push(rememberOpenTag(mode, 'ul') + list.join('') + rememberCloseTag(mode, 'ul'));
-			list = [];
-		}
-		var child = node.firstChild;
-		while (child) {
-			if (rememberIsWordList(child)) {
-				var item = rememberSerializeChildren(child, mode);
-				if (String(item).replace(/\s+/g, '')) {
-					list.push(rememberWrapTag(mode, 'li', item));
-				}
-				child = child.nextSibling;
-				continue;
-			}
-			flushList();
-			parts.push(rememberSerializeInterests(child, mode));
-			child = child.nextSibling;
-		}
-		flushList();
-		return parts.join('');
-	}
-
-	/**
-	 * @param {string} markup Fragment.
-	 * @param {string} mode html or markers.
-	 * @return {string}
-	 */
-	function rememberFinalizeInterests(markup, mode) {
-		var allowed = { p: 1, br: 1, b: 1, em: 1, u: 1, ul: 1, ol: 1, li: 1 };
-		var prev;
-		markup = String(markup || '').replace(/<\/?([a-z0-9]+)(?:\s[^>]*)?\s*\/?>/gi, function(match, name) {
-			name = name.toLowerCase();
-			if (!allowed[name]) {
-				return '';
-			}
-			if (name === 'br') {
-				return '<br />';
-			}
-			if (match.charAt(1) === '/') {
-				return '</' + name + '>';
-			}
-			return '<' + name + '>';
-		});
-		do {
-			prev = markup;
-			markup = markup.replace(/<(b|em|u|p|li|ul|ol)>\s*<\/\1>/gi, '');
-		} while (markup !== prev);
-		markup = markup.replace(/<\/(p|ul|ol|li)>/gi, '</$1>\n');
-		markup = markup.replace(/<(ul|ol|li)>/gi, '\n<$1>');
-		markup = markup.replace(/\n{2,}/g, '\n');
-		return markup.replace(/^\s+|\s+$/g, '');
-	}
-
-	/**
-	 * @param {string} html Clipboard or editor HTML.
-	 * @param {string} mode html or markers.
-	 * @return {string}
-	 */
-	function rememberInterestsMarkup(html, mode) {
-		html = rememberStripClipboardWrappers(html);
-		mode = 'html';
-		if (!/<\/?\s*[a-z]/i.test(html)) {
-			return rememberPlainBlocks(html, mode);
-		}
+	function rememberInterestsToMarkers(html) {
+		var skip = { SCRIPT: 1, STYLE: 1, IFRAME: 1, OBJECT: 1, NOSCRIPT: 1, TEXTAREA: 1, INPUT: 1, BUTTON: 1, SELECT: 1, SVG: 1 };
+		var map = { P: 'p', B: 'b', STRONG: 'b', I: 'em', EM: 'em', U: 'u', UL: 'ul', OL: 'ol', LI: 'li' };
 		var wrap = document.createElement('div');
-		wrap.innerHTML = html;
-		return rememberFinalizeInterests(rememberSerializeChildren(wrap, mode), mode);
-	}
-
-	/**
-	 * Drop every tag except b, i, em, u, br, p, ul, ol, and li, and drop every attribute.
-	 * Other elements are unwrapped so the text stays and the markup does not.
-	 *
-	 * @param {string} html Clipboard or editor HTML.
-	 * @return {string}
-	 */
-	function rememberCleanInterestsHtml(html) {
-		var allowed = { P: 1, BR: 1, B: 1, I: 1, EM: 1, U: 1, UL: 1, OL: 1, LI: 1 };
-		var wrap = document.createElement('div');
-		wrap.innerHTML = rememberStripClipboardWrappers(html || '');
-
-		var blocks = { DIV: 1, H1: 1, H2: 1, H3: 1, H4: 1, H5: 1, H6: 1, BLOCKQUOTE: 1, PRE: 1, SECTION: 1, ARTICLE: 1 };
-
-		function stripAttrs(el) {
-			while (el.attributes && el.attributes.length) {
-				el.removeAttribute(el.attributes[0].name);
-			}
-		}
+		wrap.innerHTML = String(html || '');
 
 		function walk(node) {
-			var children = Array.prototype.slice.call(node.childNodes);
-			var index;
-			for (index = 0; index < children.length; index++) {
-				var child = children[index];
-				if (child.nodeType !== 1) {
-					if (child.nodeType !== 3) {
-						node.removeChild(child);
-					}
-					continue;
-				}
-				walk(child);
-				if (child.tagName === 'STRONG') {
-					var bold = document.createElement('b');
-					while (child.firstChild) {
-						bold.appendChild(child.firstChild);
-					}
-					node.replaceChild(bold, child);
-					stripAttrs(bold);
-				} else if (blocks[child.tagName] && !child.querySelector('p,ul,ol')) {
-					var para = document.createElement('p');
-					while (child.firstChild) {
-						para.appendChild(child.firstChild);
-					}
-					node.replaceChild(para, child);
-					stripAttrs(para);
-				} else if (!allowed[child.tagName]) {
-					while (child.firstChild) {
-						node.insertBefore(child.firstChild, child);
-					}
-					node.removeChild(child);
-				} else {
-					stripAttrs(child);
-				}
+			var out = '';
+			var child = node.firstChild;
+			while (child) {
+				out += serialize(child);
+				child = child.nextSibling;
 			}
+			return out;
 		}
 
-		walk(wrap);
-		return wrap.innerHTML;
-	}
+		function serialize(node) {
+			if (!node) {
+				return '';
+			}
+			if (node.nodeType === 3) {
+				return rememberEscapeMarkerText(node.nodeValue || '');
+			}
+			if (node.nodeType !== 1) {
+				return '';
+			}
+			var tag = node.tagName;
+			if (skip[tag] || tag.indexOf(':') !== -1) {
+				return '';
+			}
+			if (tag === 'BR') {
+				var brClass = node.getAttribute('class') || '';
+				var bogus = node.getAttribute('data-mce-bogus');
+				if (brClass.indexOf('Apple-interchange-newline') !== -1 || bogus) {
+					return '';
+				}
+				return '%%rmb:br%%';
+			}
+			var inner = walk(node);
+			var name = map[tag];
+			if (!name) {
+				return inner;
+			}
+			if (!String(inner).replace(/%%rmb:br%%/g, '').replace(/\s+/g, '')) {
+				return '';
+			}
+			return '%%rmb:' + name + '%%' + inner + '%%rmb:/' + name + '%%';
+		}
 
-	/**
-	 * Allowlist HTML for the POST, in TinyMCE's block layout.
-	 *
-	 * @param {string} html Clipboard or editor HTML.
-	 * @return {string}
-	 */
-	function rememberInterestsForPost(html) {
-		return rememberCleanInterestsHtml(html);
+		return walk(wrap);
 	}
 
 	/**
@@ -1290,86 +866,34 @@
 		editor.on('NodeChange', updateCounter);
 		editor.on('SetContent', updateCounter);
 
-		var postingPlain = false;
-		editor.on('GetContent', function(e) {
-			if (!postingPlain || !e) {
-				return;
-			}
-			if (e.format && e.format !== 'html' && e.format !== 'raw') {
-				return;
-			}
-			if (e.rememberInterestsPlain) {
-				return;
-			}
-			e.rememberInterestsPlain = true;
-			e.content = rememberInterestsForPost(e.content || '');
-		});
-
-		// TinyMCE writes editor.getElement().value from this event inside save().
-		// WordPress calls save() on submit before the browser encodes the POST.
+		// WordPress calls save() on submit, and save() writes this event into the textarea.
 		editor.on('SaveContent', function(e) {
 			if (!e) {
 				return;
 			}
-			e.content = rememberInterestsForPost(e.content || '');
+			e.content = rememberInterestsToMarkers(e.content || '');
 			var field = editor.getElement();
 			if (field) {
 				field.value = e.content;
 			}
 		});
 
-		if (typeof editor.save === 'function' && !editor.rememberInterestsSavePatched) {
-			editor.rememberInterestsSavePatched = true;
-			var originalSave = editor.save.bind(editor);
-			editor.save = function() {
-				postingPlain = true;
-				try {
-					return originalSave();
-				} finally {
-					postingPlain = false;
-				}
-			};
-		}
-
-		function flattenInterestsEditor() {
-			var html = editor.getContent({ format: 'html' }) || '';
-			var cleaned = rememberCleanInterestsHtml(html);
-			if (cleaned !== html) {
-				editor.setContent(cleaned);
-			}
-			editor.save();
-		}
-
-		// Leave the field already stripped, before Save is pressed.
-		editor.on('blur', flattenInterestsEditor);
-
-		editor.on('paste', function() {
-			window.setTimeout(function() {
-				if (plainLen() > max) {
-					if (editor.undoManager) {
-						editor.undoManager.undo();
-					}
-					updateCounter();
-					return;
-				}
-				flattenInterestsEditor();
-				updateCounter();
-			}, 0);
-		});
-
-		editor.on('PastePreProcess', function(e) {
-			if (e && e.content) {
-				e.content = rememberCleanInterestsHtml(e.content);
-			}
-		});
-
 		var formEl = editor.getElement() && editor.getElement().form;
-		if (formEl && !formEl.rememberInterestsPlainSubmit) {
-			formEl.rememberInterestsPlainSubmit = true;
+		if (formEl && !formEl.rememberInterestsMarkerSubmit) {
+			formEl.rememberInterestsMarkerSubmit = true;
 			formEl.addEventListener('submit', function() {
 				editor.save();
 			}, true);
 		}
+
+		editor.on('paste', function() {
+			window.setTimeout(function() {
+				if (plainLen() > max && editor.undoManager) {
+					editor.undoManager.undo();
+				}
+				updateCounter();
+			}, 0);
+		});
 
 		editor.on('init', updateCounter);
 		updateCounter();
@@ -1452,7 +976,7 @@
 				if (window.tinymce && typeof tinymce.get === 'function' && tinymce.get(id)) {
 					return;
 				}
-				$area.val(rememberInterestsForPost($area.val() || ''));
+				$area.val(rememberInterestsToMarkers($area.val() || ''));
 			});
 			sync(false);
 		});

@@ -453,7 +453,8 @@ class Remember_Profile_Fields {
 	/**
 	 * Interests HTML using only b, i, em, u, ul, ol, li, p, and br.
 	 *
-	 * Accepts that HTML from the browser, an older marker payload, legacy HTML, or plain text.
+	 * The browser posts %%rmb:%% markers with no angle brackets. PHP turns those back into tags.
+	 * Also accepts legacy HTML or plain text.
 	 *
 	 * @param string $input Raw post, stored value, or clipboard HTML.
 	 * @return string
@@ -510,12 +511,13 @@ class Remember_Profile_Fields {
 			'%%rmb:/p%%'  => '</p>',
 		);
 		$html = str_replace( array_keys( $replace ), array_values( $replace ), (string) $text );
+		$html = str_replace( '%%rmb:esc%%', "\0", $html );
 		$html = str_replace(
-			array( '%%rmb:lt%%', '%%rmb:gt%%', '%%rmb:amp%%', '%%rmb:esc%%' ),
-			array( '&lt;', '&gt;', '&amp;', '%%' ),
+			array( '%%rmb:lt%%', '%%rmb:gt%%', '%%rmb:amp%%' ),
+			array( '&lt;', '&gt;', '&amp;' ),
 			$html
 		);
-		return $html;
+		return str_replace( "\0", '%%', $html );
 	}
 
 	/**
@@ -776,6 +778,8 @@ class Remember_Profile_Fields {
 	/**
 	 * Sanitize Interests to the allowlisted tags (does not truncate).
 	 *
+	 * Marker payloads from the browser are converted here, after the request has reached PHP.
+	 *
 	 * @param string $html Marker payload, HTML, or plain text.
 	 * @return string
 	 */
@@ -820,18 +824,9 @@ class Remember_Profile_Fields {
 			$init['setup'] = 'function(editor){' . $call . '}';
 		}
 
-		// TinyMCE drops every other element as the content is parsed, before Save.
-		// b/strong keeps the Bold button, which inserts strong, as <b>.
-		$init['valid_elements']               = 'p,br,b/strong,i,em,u,ul,ol,li';
-		$init['extended_valid_elements']      = '';
-		$init['invalid_elements']             = 'span,font,div,h1,h2,h3,h4,h5,h6,a,img,table,style,script';
-		$init['verify_html']                  = true;
-		$init['paste_remove_styles']          = true;
-		$init['paste_remove_spans']           = true;
-		$init['paste_strip_class_attributes'] = 'all';
-		$init['paste_webkit_styles']          = 'none';
-		$init['paste_retain_style_properties'] = '';
-		$init['paste_data_images']            = false;
+		// b/strong and i/em keep the Bold and Italic buttons, which insert strong and em.
+		$init['valid_elements']          = 'p,br,b/strong,i/em,u,ul,ol,li';
+		$init['extended_valid_elements'] = '';
 
 		return $init;
 	}
