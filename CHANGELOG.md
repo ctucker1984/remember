@@ -2,6 +2,10 @@
 
 All notable changes to reMember are listed here. The current plugin version is in `remember.php` (`REMEMBER_VERSION`) and [GitHub Releases](https://github.com/ctucker1984/remember/releases).
 
+## 2.1.7
+
+- **Fix:** Email links for `{profile_url}`, `{vetting_url}`, `{review_url}`, and `{ticket_url}` stay a single absolute URL. A rich-text link saved as `http://{profile_url}` no longer becomes `http://https//…`.
+
 ## 2.1.6
 
 - **Enhancement:** Report filters on multi-select fields include **is not** and **is not one of**. That covers dietary restrictions, allergies, roles, and custom multi-select questions. A row matches when its list does not include the chosen value or values, including rows whose list is empty.
