@@ -295,6 +295,55 @@ function remember_render_addon_role_limits( $index, $event_roles, $limits_by_rol
 	<?php
 }
 
+/**
+ * Optional registration window from the event form.
+ *
+ * @return array|WP_Error
+ */
+function remember_event_registration_fields() {
+	$opens  = isset( $_POST['registration_opens_at'] ) ? sanitize_text_field( wp_unslash( $_POST['registration_opens_at'] ) ) : '';
+	$closes = isset( $_POST['registration_closes_at'] ) ? sanitize_text_field( wp_unslash( $_POST['registration_closes_at'] ) ) : '';
+	return Remember_Event::registration_bounds_from_input( $opens, $closes );
+}
+
+/**
+ * Registration open and close inputs. Blank means that side is unlimited.
+ *
+ * @param object|null $event Event being edited.
+ * @return void
+ */
+function remember_render_registration_window_fields( $event = null ) {
+	$opens  = $event ? Remember_Event::registration_datetime_input_value( isset( $event->registration_opens_at ) ? $event->registration_opens_at : '' ) : '';
+	$closes = $event ? Remember_Event::registration_datetime_input_value( isset( $event->registration_closes_at ) ? $event->registration_closes_at : '' ) : '';
+	$tz     = wp_timezone_string();
+	?>
+	<tr>
+		<th><label for="registration_opens_at"><?php esc_html_e( 'Registration Opens', 'remember' ); ?></label></th>
+		<td>
+			<input type="datetime-local" id="registration_opens_at" name="registration_opens_at" class="regular-text" value="<?php echo esc_attr( $opens ); ?>">
+			<p class="description">
+				<?php
+				echo esc_html(
+					sprintf(
+						/* translators: %s: site timezone */
+						__( 'Optional. Leave blank to open as soon as the event status is Open. Times use the site timezone (%s).', 'remember' ),
+						$tz ? $tz : __( 'site settings', 'remember' )
+					)
+				);
+				?>
+			</p>
+		</td>
+	</tr>
+	<tr>
+		<th><label for="registration_closes_at"><?php esc_html_e( 'Registration Closes', 'remember' ); ?></label></th>
+		<td>
+			<input type="datetime-local" id="registration_closes_at" name="registration_closes_at" class="regular-text" value="<?php echo esc_attr( $closes ); ?>">
+			<p class="description"><?php esc_html_e( 'Optional. Leave blank to keep registration open until the event status changes.', 'remember' ); ?></p>
+		</td>
+	</tr>
+	<?php
+}
+
 // Handle form submissions
 if ( isset( $_POST['remember_event_action'] ) && check_admin_referer( 'remember_event_action', 'remember_event_nonce' ) ) {
 	$action = sanitize_text_field( $_POST['remember_event_action'] );
@@ -304,6 +353,7 @@ if ( isset( $_POST['remember_event_action'] ) && check_admin_referer( 'remember_
 		if ( ! current_user_can( 'remember_create_events' ) ) {
 			wp_die( __( 'You do not have sufficient permissions to perform this action.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
 		}
+		$registration_fields = remember_event_registration_fields();
 		$data = array(
 			'event_name'        => sanitize_text_field( wp_unslash( $_POST['event_name'] ) ),
 			'event_description' => isset( $_POST['event_description'] ) ? wp_kses_post( wp_unslash( $_POST['event_description'] ) ) : '',
@@ -315,8 +365,16 @@ if ( isset( $_POST['remember_event_action'] ) && check_admin_referer( 'remember_
 			'status'            => sanitize_text_field( wp_unslash( $_POST['status'] ) ),
 			'created_by'        => get_current_user_id(),
 		);
-		$event_id = $event_model->create( $data );
-		if ( $event_id ) {
+		$event_id = 0;
+		if ( is_wp_error( $registration_fields ) ) {
+			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html( $registration_fields->get_error_message() ) . '</p></div>';
+		} else {
+			$data     = array_merge( $data, $registration_fields );
+			$event_id = $event_model->create( $data );
+		}
+		if ( is_wp_error( $registration_fields ) ) {
+			// The validation notice above is the failure. Do not also report a database error.
+		} elseif ( $event_id ) {
 			$role_configs = remember_build_role_configs_from_post();
 			$event_model->sync_event_role_configs( $event_id, $role_configs );
 
@@ -337,6 +395,7 @@ if ( isset( $_POST['remember_event_action'] ) && check_admin_referer( 'remember_
 		}
 		
 		$event_id = absint( $_POST['event_id'] );
+		$registration_fields = remember_event_registration_fields();
 		$data = array(
 			'event_name'        => sanitize_text_field( wp_unslash( $_POST['event_name'] ) ),
 			'event_description' => isset( $_POST['event_description'] ) ? wp_kses_post( wp_unslash( $_POST['event_description'] ) ) : '',
@@ -347,8 +406,16 @@ if ( isset( $_POST['remember_event_action'] ) && check_admin_referer( 'remember_
 			'is_private'        => isset( $_POST['is_private'] ) ? 1 : 0,
 			'status'            => sanitize_text_field( wp_unslash( $_POST['status'] ) ),
 		);
-		$result = $event_model->update( $event_id, $data );
-		if ( $result !== false ) {
+		$result = false;
+		if ( is_wp_error( $registration_fields ) ) {
+			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html( $registration_fields->get_error_message() ) . '</p></div>';
+		} else {
+			$data   = array_merge( $data, $registration_fields );
+			$result = $event_model->update( $event_id, $data );
+		}
+		if ( is_wp_error( $registration_fields ) ) {
+			// The validation notice above is the failure. Do not also report a database error.
+		} elseif ( $result !== false ) {
 			$role_configs = remember_build_role_configs_from_post();
 			$event_model->sync_event_role_configs( $event_id, $role_configs );
 
@@ -524,6 +591,7 @@ if ( isset( $_GET['view'] ) ) {
 						<th><label for="end_date"><?php esc_html_e( 'End Date', 'remember' ); ?> <span class="description">(required)</span></label></th>
 						<td><input type="date" id="end_date" name="end_date" class="regular-text" value="<?php echo esc_attr( $editing_event->end_date ); ?>" required></td>
 					</tr>
+					<?php remember_render_registration_window_fields( $editing_event ); ?>
 					<tr>
 						<th><label for="is_private"><?php esc_html_e( 'Private Event', 'remember' ); ?></label></th>
 						<td><label><input type="checkbox" id="is_private" name="is_private" value="1" <?php checked( $editing_event->is_private, 1 ); ?>> <?php esc_html_e( 'This is a private event (invite only)', 'remember' ); ?></label></td>
@@ -711,6 +779,7 @@ if ( isset( $_GET['view'] ) ) {
 						<th><label for="end_date"><?php esc_html_e( 'End Date', 'remember' ); ?> <span class="description">(required)</span></label></th>
 						<td><input type="date" id="end_date" name="end_date" class="regular-text" required></td>
 					</tr>
+					<?php remember_render_registration_window_fields(); ?>
 					<tr>
 						<th><label for="is_private"><?php esc_html_e( 'Private Event', 'remember' ); ?></label></th>
 						<td><label><input type="checkbox" id="is_private" name="is_private" value="1"> <?php esc_html_e( 'This is a private event (invite only)', 'remember' ); ?></label></td>
@@ -824,6 +893,10 @@ if ( isset( $_GET['view'] ) ) {
 							<?php echo esc_html( date_i18n( get_option( 'date_format' ), strtotime( $event->start_date ) ) ); ?>
 							<?php if ( $event->start_date !== $event->end_date ) : ?>
 								<br><span class="description"><?php echo esc_html( date_i18n( get_option( 'date_format' ), strtotime( $event->end_date ) ) ); ?></span>
+							<?php endif; ?>
+							<?php $registration_summary = Remember_Event::registration_window_summary( $event ); ?>
+							<?php if ( $registration_summary ) : ?>
+								<br><span class="description"><?php echo esc_html( $registration_summary ); ?></span>
 							<?php endif; ?>
 						</td>
 						<td class="column-status">

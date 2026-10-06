@@ -44,6 +44,11 @@ if ( isset( $_POST['remember_apply_action'] ) && check_admin_referer( 'remember_
 	$event_role_id = isset( $_POST['event_role_id'] ) ? absint( $_POST['event_role_id'] ) : 0;
 
 	if ( $event_id > 0 && $event_role_id > 0 ) {
+		$apply_event = $event_model->get( $event_id );
+		$registration_block = $apply_event ? Remember_Event::registration_block_reason( $apply_event ) : __( 'Please select an event and role.', 'remember' );
+		if ( $registration_block ) {
+			$submission_error = $registration_block;
+		} else {
 		// Check if application already exists
 		$existing = $application_model->get_existing_application( $event_id, $member_id, $event_role_id );
 		if ( $existing ) {
@@ -132,6 +137,7 @@ if ( isset( $_POST['remember_apply_action'] ) && check_admin_referer( 'remember_
 				}
 			}
 		}
+		}
 	} else {
 		$submission_error = __( 'Please select an event and role.', 'remember' );
 	}
@@ -144,11 +150,16 @@ if ( $event_id > 0 ) {
 	$selected_event = $event_model->get( $event_id );
 }
 
-// Get open events if no event is pre-selected
+// Get open events if no event is pre-selected. Hide events outside their registration window.
 $open_events = array();
 if ( ! $selected_event ) {
-	$open_events = $event_model->get_by_status( 'open' );
+	foreach ( $event_model->get_by_status( 'open' ) as $open_event ) {
+		if ( '' === Remember_Event::registration_block_reason( $open_event ) ) {
+			$open_events[] = $open_event;
+		}
+	}
 }
+$registration_block = $selected_event ? Remember_Event::registration_block_reason( $selected_event ) : '';
 ?>
 
 <?php if ( $submission_success ) : ?>
@@ -166,6 +177,10 @@ if ( ! $selected_event ) {
 <?php elseif ( ! Remember_Member::is_vetted_member( $member_row ) ) : ?>
 	<div class="remember-notice remember-warning">
 		<p><?php esc_html_e( 'Member is not yet vetted.', 'remember' ); ?></p>
+	</div>
+<?php elseif ( $registration_block ) : ?>
+	<div class="remember-notice remember-warning">
+		<p><?php echo esc_html( $registration_block ); ?></p>
 	</div>
 <?php else : ?>
 	<div class="remember-apply-form">
