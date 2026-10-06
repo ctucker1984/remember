@@ -50,13 +50,11 @@ class Remember_Vetting extends Remember_Base_Model {
 			'decision'          => 'pending',
 			'created_at'        => current_time( 'mysql' ),
 			'updated_at'        => current_time( 'mysql' ),
+			// NULL when nobody is assigned. Omitting the column fails on tables
+			// where primary_vetter_id is still NOT NULL without a default.
+			'primary_vetter_id' => $primary_vetter_id > 0 ? (int) $primary_vetter_id : null,
 		);
-		
-		// Only add primary_vetter_id if provided
-		if ( $primary_vetter_id > 0 ) {
-			$data['primary_vetter_id'] = $primary_vetter_id;
-		}
-		
+
 		return $this->insert( $data );
 	}
 

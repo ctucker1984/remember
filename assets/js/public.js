@@ -713,12 +713,12 @@
 	}
 
 	/**
-	 * Interests keep only b, em, u, ul, ol, li, p, and br, with no attributes.
+	 * Interests keep only b, i, em, u, ul, ol, li, p, and br, with no attributes.
 	 * Paste is reduced to that set, then posted as HTML in the same block
 	 * layout TinyMCE uses when the text was typed in the editor.
 	 *
 	 * @param {string} mode html.
-	 * @param {string} tag  b, em, u, ul, ol, li, p, or br.
+	 * @param {string} tag  b, i, em, u, ul, ol, li, p, or br.
 	 * @return {string}
 	 */
 	function rememberOpenTag(mode, tag) {
@@ -1139,13 +1139,64 @@
 	}
 
 	/**
-	 * Allowlist HTML for the editor (b, em, u, ul, ol, li, p, br only).
+	 * Drop every tag except b, i, em, u, br, p, ul, ol, and li, and drop every attribute.
+	 * Other elements are unwrapped so the text stays and the markup does not.
 	 *
 	 * @param {string} html Clipboard or editor HTML.
 	 * @return {string}
 	 */
 	function rememberCleanInterestsHtml(html) {
-		return rememberInterestsMarkup(html, 'html');
+		var allowed = { P: 1, BR: 1, B: 1, I: 1, EM: 1, U: 1, UL: 1, OL: 1, LI: 1 };
+		var wrap = document.createElement('div');
+		wrap.innerHTML = rememberStripClipboardWrappers(html || '');
+
+		var blocks = { DIV: 1, H1: 1, H2: 1, H3: 1, H4: 1, H5: 1, H6: 1, BLOCKQUOTE: 1, PRE: 1, SECTION: 1, ARTICLE: 1 };
+
+		function stripAttrs(el) {
+			while (el.attributes && el.attributes.length) {
+				el.removeAttribute(el.attributes[0].name);
+			}
+		}
+
+		function walk(node) {
+			var children = Array.prototype.slice.call(node.childNodes);
+			var index;
+			for (index = 0; index < children.length; index++) {
+				var child = children[index];
+				if (child.nodeType !== 1) {
+					if (child.nodeType !== 3) {
+						node.removeChild(child);
+					}
+					continue;
+				}
+				walk(child);
+				if (child.tagName === 'STRONG') {
+					var bold = document.createElement('b');
+					while (child.firstChild) {
+						bold.appendChild(child.firstChild);
+					}
+					node.replaceChild(bold, child);
+					stripAttrs(bold);
+				} else if (blocks[child.tagName] && !child.querySelector('p,ul,ol')) {
+					var para = document.createElement('p');
+					while (child.firstChild) {
+						para.appendChild(child.firstChild);
+					}
+					node.replaceChild(para, child);
+					stripAttrs(para);
+				} else if (!allowed[child.tagName]) {
+					while (child.firstChild) {
+						node.insertBefore(child.firstChild, child);
+					}
+					node.removeChild(child);
+				} else {
+					stripAttrs(child);
+				}
+			}
+		}
+
+		walk(wrap);
+		return wrap.innerHTML;
 	}
 
 	/**
@@ -1175,6 +1226,16 @@
 			return;
 		}
 		editor.rememberInterestsLimited = true;
+
+		function useUnderlineTag() {
+			if (editor.formatter) {
+				editor.formatter.register('underline', { inline: 'u', exact: true });
+			}
+		}
+		editor.on('init', useUnderlineTag);
+		if (editor.initialized) {
+			useUnderlineTag();
+		}
 
 		var $counter = $('.remember-interests-count[data-remember-interests-editor="' + editor.id + '"]');
 		var max = parseInt($counter.attr('data-remember-interests-max'), 10) || 2000;
@@ -1278,6 +1339,9 @@
 			}
 			editor.save();
 		}
+
+		// Leave the field already stripped, before Save is pressed.
+		editor.on('blur', flattenInterestsEditor);
 
 		editor.on('paste', function() {
 			window.setTimeout(function() {

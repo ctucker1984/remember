@@ -512,6 +512,8 @@ class Remember_Database {
 			location_id BIGINT(20) UNSIGNED DEFAULT NULL,
 			start_date DATE NOT NULL,
 			end_date DATE NOT NULL,
+			registration_opens_at DATETIME DEFAULT NULL,
+			registration_closes_at DATETIME DEFAULT NULL,
 			is_private BOOLEAN DEFAULT 0,
 			status ENUM('draft', 'open', 'closed', 'completed', 'cancelled') DEFAULT 'draft',
 			created_by BIGINT(20) UNSIGNED NOT NULL,

@@ -54,7 +54,9 @@ class Remember_Notifications {
 
 		$context = self::normalize_context( $context );
 		$subject = self::replace_placeholders( $subject, $context );
+		$body    = self::unwrap_prefixed_url_placeholders( $body );
 		$body    = self::replace_placeholders( $body, self::html_context( $context ) );
+		$body    = self::repair_doubled_url_schemes( $body );
 		$body    = self::to_html_email( $body );
 
 		$headers = array( 'Content-Type: text/html; charset=UTF-8' );
@@ -68,13 +70,50 @@ class Remember_Notifications {
 	}
 
 	/**
+	 * Placeholder keys whose values are absolute URLs.
+	 *
+	 * @return string[]
+	 */
+	private static function url_placeholder_keys() {
+		return array( 'ticket_url', 'profile_url', 'review_url', 'vetting_url' );
+	}
+
+	/**
+	 * Remove a scheme an editor glued onto a URL placeholder.
+	 *
+	 * The rich-text link tool stores href="http://{profile_url}". After the
+	 * placeholder is replaced that becomes http://https://…, which mail clients
+	 * follow as http://https//… .
+	 *
+	 * @param string $text Template body before placeholder replacement.
+	 * @return string
+	 */
+	private static function unwrap_prefixed_url_placeholders( $text ) {
+		$keys = implode( '|', self::url_placeholder_keys() );
+		return preg_replace( '#https?://(\{(?:' . $keys . ')\})#i', '$1', (string) $text );
+	}
+
+	/**
+	 * Collapse a scheme that was prefixed onto an absolute URL.
+	 *
+	 * Covers both http://https://host and the colon-dropped http://https//host.
+	 *
+	 * @param string $text Body after placeholder replacement.
+	 * @return string
+	 */
+	private static function repair_doubled_url_schemes( $text ) {
+		$text = preg_replace( '#https?://(https?://)#i', '$1', (string) $text );
+		return preg_replace( '#https?://(https?)//#i', '$1://', $text );
+	}
+
+	/**
 	 * Escape placeholder values for HTML bodies. URL keys stay usable in href.
 	 *
 	 * @param array $context Placeholder map.
 	 * @return array
 	 */
 	private static function html_context( $context ) {
-		$url_keys = array( 'ticket_url', 'profile_url', 'review_url', 'vetting_url' );
+		$url_keys = self::url_placeholder_keys();
 		$safe     = array();
 		foreach ( (array) $context as $key => $value ) {
 			$value = (string) $value;

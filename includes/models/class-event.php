@@ -261,4 +261,181 @@ class Remember_Event extends Remember_Base_Model {
 
 		return true;
 	}
+
+	/**
+	 * Whether a stored registration datetime is unset.
+	 *
+	 * @param mixed $value Datetime string.
+	 * @return bool
+	 */
+	public static function is_blank_registration_datetime( $value ) {
+		$value = is_string( $value ) ? trim( $value ) : '';
+		return '' === $value || '0000-00-00 00:00:00' === $value;
+	}
+
+	/**
+	 * Parse an optional registration datetime from the event form.
+	 *
+	 * Blank is unlimited. A value is a site-timezone wall clock, stored as
+	 * Y-m-d H:i:s so it compares with current_time( 'mysql' ).
+	 *
+	 * @param string $raw Posted value.
+	 * @return string|null|false Mysql datetime, null when blank, false when invalid.
+	 */
+	public static function parse_registration_datetime( $raw ) {
+		$raw = trim( (string) $raw );
+		if ( '' === $raw ) {
+			return null;
+		}
+
+		$raw = str_replace( 'T', ' ', $raw );
+		if ( preg_match( '/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/', $raw ) ) {
+			$raw .= ':00';
+		}
+		if ( ! preg_match( '/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', $raw ) ) {
+			return false;
+		}
+
+		$dt = date_create_immutable( $raw, wp_timezone() );
+		if ( ! $dt || $dt->format( 'Y-m-d H:i:s' ) !== $raw ) {
+			return false;
+		}
+
+		return $dt->format( 'Y-m-d H:i:s' );
+	}
+
+	/**
+	 * Validate the optional registration window from the event form.
+	 *
+	 * @param string $opens_raw  Open field.
+	 * @param string $closes_raw Close field.
+	 * @return array|WP_Error Keys registration_opens_at and registration_closes_at.
+	 */
+	public static function registration_bounds_from_input( $opens_raw, $closes_raw ) {
+		$opens  = self::parse_registration_datetime( $opens_raw );
+		$closes = self::parse_registration_datetime( $closes_raw );
+		if ( false === $opens || false === $closes ) {
+			return new WP_Error(
+				'remember_registration_datetime',
+				__( 'Registration open and close must be valid dates and times, or left blank.', 'remember' )
+			);
+		}
+		if ( null !== $opens && null !== $closes && $closes <= $opens ) {
+			return new WP_Error(
+				'remember_registration_order',
+				__( 'Registration close must be after registration open.', 'remember' )
+			);
+		}
+
+		return array(
+			'registration_opens_at'  => $opens,
+			'registration_closes_at' => $closes,
+		);
+	}
+
+	/**
+	 * Value for a datetime-local input.
+	 *
+	 * @param mixed $value Stored datetime.
+	 * @return string
+	 */
+	public static function registration_datetime_input_value( $value ) {
+		if ( self::is_blank_registration_datetime( $value ) ) {
+			return '';
+		}
+		$dt = date_create_immutable( $value, wp_timezone() );
+		if ( ! $dt ) {
+			return '';
+		}
+		return $dt->format( 'Y-m-d\TH:i' );
+	}
+
+	/**
+	 * Site-timezone label for a stored registration datetime.
+	 *
+	 * @param mixed $value Stored datetime.
+	 * @return string
+	 */
+	public static function format_registration_datetime( $value ) {
+		if ( self::is_blank_registration_datetime( $value ) ) {
+			return '';
+		}
+		$dt = date_create_immutable( $value, wp_timezone() );
+		if ( ! $dt ) {
+			return '';
+		}
+		return wp_date(
+			get_option( 'date_format' ) . ' ' . get_option( 'time_format' ),
+			$dt->getTimestamp()
+		);
+	}
+
+	/**
+	 * Member-facing sentence for the optional window. Empty when unset.
+	 *
+	 * @param object $event Event row.
+	 * @return string
+	 */
+	public static function registration_window_summary( $event ) {
+		$opens  = self::format_registration_datetime( isset( $event->registration_opens_at ) ? $event->registration_opens_at : '' );
+		$closes = self::format_registration_datetime( isset( $event->registration_closes_at ) ? $event->registration_closes_at : '' );
+		if ( $opens && $closes ) {
+			return sprintf(
+				/* translators: 1: registration open datetime, 2: registration close datetime */
+				__( 'Registration: %1$s – %2$s', 'remember' ),
+				$opens,
+				$closes
+			);
+		}
+		if ( $opens ) {
+			return sprintf(
+				/* translators: %s: registration open datetime */
+				__( 'Registration opens %s.', 'remember' ),
+				$opens
+			);
+		}
+		if ( $closes ) {
+			return sprintf(
+				/* translators: %s: registration close datetime */
+				__( 'Registration closes %s.', 'remember' ),
+				$closes
+			);
+		}
+		return '';
+	}
+
+	/**
+	 * Why a member cannot apply right now. Empty when the window allows it.
+	 *
+	 * Blank open or close means that side is unlimited. Existing events stay open.
+	 *
+	 * @param object $event Event row.
+	 * @return string
+	 */
+	public static function registration_block_reason( $event ) {
+		if ( ! is_object( $event ) ) {
+			return '';
+		}
+
+		$now    = current_time( 'mysql' );
+		$opens  = isset( $event->registration_opens_at ) ? $event->registration_opens_at : '';
+		$closes = isset( $event->registration_closes_at ) ? $event->registration_closes_at : '';
+
+		if ( ! self::is_blank_registration_datetime( $opens ) && $now < $opens ) {
+			return sprintf(
+				/* translators: %s: registration open datetime */
+				__( 'Registration opens %s.', 'remember' ),
+				self::format_registration_datetime( $opens )
+			);
+		}
+		if ( ! self::is_blank_registration_datetime( $closes ) && $now > $closes ) {
+			return sprintf(
+				/* translators: %s: registration close datetime */
+				__( 'Registration closed %s.', 'remember' ),
+				self::format_registration_datetime( $closes )
+			);
+		}
+
+		return '';
+	}
 }

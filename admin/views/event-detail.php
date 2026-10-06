@@ -76,6 +76,10 @@ $is_multi_day = $viewing_event->start_date !== $viewing_event->end_date;
 							<?php echo esc_html( $start_date ); ?>
 						<?php endif; ?>
 					</p>
+					<?php $registration_summary = Remember_Event::registration_window_summary( $viewing_event ); ?>
+					<?php if ( $registration_summary ) : ?>
+						<p style="margin: 5px 0;"><?php echo esc_html( $registration_summary ); ?></p>
+					<?php endif; ?>
 					<?php if ( ! empty( $viewing_location ) ) : ?>
 						<p style="margin: 5px 0;">
 							<strong><?php esc_html_e( 'Location:', 'remember' ); ?></strong>

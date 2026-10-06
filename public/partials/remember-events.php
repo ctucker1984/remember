@@ -100,6 +100,13 @@ $status_colors = array(
 							<?php endif; ?>
 						</p>
 
+						<?php $registration_summary = Remember_Event::registration_window_summary( $event ); ?>
+						<?php if ( $registration_summary ) : ?>
+							<p class="remember-event-registration">
+								<?php echo esc_html( $registration_summary ); ?>
+							</p>
+						<?php endif; ?>
+
 						<?php if ( $location ) : ?>
 							<p class="remember-event-location">
 								<strong><?php esc_html_e( 'Location:', 'remember' ); ?></strong>
@@ -155,6 +162,8 @@ $status_colors = array(
 								<span class="remember-status-badge" style="background-color: <?php echo esc_attr( $status_color ); ?>; padding: 8px 16px; border-radius: 3px; display: inline-block;">
 									<strong><?php esc_html_e( 'Application Status:', 'remember' ); ?></strong> <?php echo esc_html( $status_label ); ?>
 								</span>
+							<?php elseif ( 'open' === $event->status && Remember_Member::is_vetted_member( $current_member ) && Remember_Event::registration_block_reason( $event ) ) : ?>
+								<p class="remember-notice remember-warning" style="margin:0;display:inline-block;"><?php echo esc_html( Remember_Event::registration_block_reason( $event ) ); ?></p>
 							<?php elseif ( 'open' === $event->status && Remember_Member::is_vetted_member( $current_member ) ) : ?>
 								<?php
 								require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-audit.php';
