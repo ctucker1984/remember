@@ -746,10 +746,16 @@ $im_platforms = Remember_Im_Platforms::get_all();
 					</th>
 					<td>
 						<select id="vetting_workflow" name="vetting_workflow" class="regular-text">
-							<option value="on_join" <?php selected( isset( $options['vetting_workflow'] ) ? $options['vetting_workflow'] : 'on_join', 'on_join' ); ?>>
+							<?php
+							$vetting_workflow = isset( $options['vetting_workflow'] ) ? $options['vetting_workflow'] : 'on_join';
+							if ( 'first_application' !== $vetting_workflow ) {
+								$vetting_workflow = 'on_join';
+							}
+							?>
+							<option value="on_join" <?php selected( $vetting_workflow, 'on_join' ); ?>>
 								<?php esc_html_e( 'On Member Join (Default)', 'remember' ); ?>
 							</option>
-							<option value="first_application" <?php selected( isset( $options['vetting_workflow'] ) ? $options['vetting_workflow'] : 'on_join', 'first_application' ); ?>>
+							<option value="first_application" <?php selected( $vetting_workflow, 'first_application' ); ?>>
 								<?php esc_html_e( 'On First Event Application', 'remember' ); ?>
 							</option>
 						</select>

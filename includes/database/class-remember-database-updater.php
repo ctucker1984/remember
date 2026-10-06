@@ -1490,6 +1490,50 @@ class Remember_Database_Updater {
 			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '2.2.0' ) );
 		}
 
+		// Update to 2.2.1 (retry nullable primary vetter and non-unique member_id).
+		// 1.1.0 and 1.3.0 advanced remember_db_version even when those ALTERs failed.
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '2.2.1', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '2.2.1' ) );
+
+			$vetting_table = $wpdb->prefix . 'remember_vetting';
+			$schema_ok     = true;
+			$vetting_column = $wpdb->get_row( "SHOW COLUMNS FROM {$vetting_table} WHERE Field = 'primary_vetter_id'" );
+
+			if ( $vetting_column && isset( $vetting_column->Null ) && false === strpos( $vetting_column->Null, 'YES' ) ) {
+				$result = $wpdb->query( "ALTER TABLE {$vetting_table} MODIFY COLUMN primary_vetter_id BIGINT(20) UNSIGNED DEFAULT NULL" );
+				if ( false === $result ) {
+					$schema_ok = false;
+					Remember_Logger::error( 'Failed to allow an unassigned primary vetter', array( 'error' => $wpdb->last_error ) );
+				} else {
+					Remember_Logger::info( 'Vetting table updated to allow an unassigned primary vetter' );
+				}
+			} elseif ( ! $vetting_column ) {
+				$schema_ok = false;
+				Remember_Logger::error( 'Vetting table is missing primary_vetter_id' );
+			}
+
+			$unique_member = $wpdb->get_results( "SHOW INDEX FROM {$vetting_table} WHERE Key_name = 'member_id' AND Non_unique = 0" );
+			if ( ! empty( $unique_member ) ) {
+				$dropped = $wpdb->query( "ALTER TABLE {$vetting_table} DROP INDEX member_id" );
+				if ( false === $dropped ) {
+					$schema_ok = false;
+					Remember_Logger::error( 'Failed to drop unique key on vetting.member_id', array( 'error' => $wpdb->last_error ) );
+				} else {
+					$added = $wpdb->query( "ALTER TABLE {$vetting_table} ADD INDEX member_id (member_id)" );
+					if ( false === $added ) {
+						Remember_Logger::error( 'Failed to add regular index on vetting.member_id', array( 'error' => $wpdb->last_error ) );
+					} else {
+						Remember_Logger::info( 'Removed unique constraint on vetting.member_id' );
+					}
+				}
+			}
+
+			if ( $schema_ok ) {
+				update_option( 'remember_db_version', '2.2.1' );
+				Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '2.2.1' ) );
+			}
+		}
+
 		// Always re-ensure health catalogs (idempotent). Catches sites that stalled mid-migration
 		// or activated before catalog seed rows were added.
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-seeder.php';

@@ -5,6 +5,7 @@ All notable changes to reMember are listed here. The current plugin version is i
 ## 2.1.7
 
 - **Fix:** Email links for `{profile_url}`, `{vetting_url}`, `{review_url}`, and `{ticket_url}` stay a single absolute URL. A rich-text link saved as `http://{profile_url}` no longer becomes `http://https//…`.
+- **Fix:** “On Member Join” opens a vetting case when someone registers. A blank workflow setting no longer skips the case, and an older vetting table that still requires a vetter is updated so the case can be saved with nobody assigned.
 
 ## 2.1.6
 
