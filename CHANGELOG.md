@@ -2,6 +2,10 @@
 
 All notable changes to reMember are listed here. The current plugin version is in `remember.php` (`REMEMBER_VERSION`) and [GitHub Releases](https://github.com/ctucker1984/remember/releases).
 
+## 2.1.8
+
+- **Fix:** Interests is posted as marker text with no angle brackets, then turned back into bold, italic, underline, lists, paragraphs, and line breaks in PHP. A host firewall that blocks HTML in the form body no longer rejects the profile save.
+
 ## 2.1.7
 
 - **Fix:** Email links for `{profile_url}`, `{vetting_url}`, `{review_url}`, and `{ticket_url}` stay a single absolute URL. A rich-text link saved as `http://{profile_url}` no longer becomes `http://https//…`.
