@@ -400,6 +400,20 @@
 		});
 	}
 
+	function initRegistrationSuccessSplash() {
+		var splash = document.querySelector('[data-remember-register-splash]');
+		if (!splash) {
+			return;
+		}
+		var url = splash.getAttribute('data-dashboard-url');
+		if (!url) {
+			return;
+		}
+		window.setTimeout(function() {
+			window.location.assign(url);
+		}, 3000);
+	}
+
 	/**
 	 * Require at least one checkbox in dietary / medical / allergy groups.
 	 * Selecting "None" clears other options in the same group (and vice versa).
@@ -696,6 +710,7 @@
 		initProfilePhotoCropper();
 		initRequireOneCheckboxGroups();
 		initAllergyReactionFields();
+		initRegistrationSuccessSplash();
 		initConditionalProfileQuestions();
 		initProfileCurrencyConfirm();
 		initApplyGate();

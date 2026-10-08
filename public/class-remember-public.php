@@ -359,6 +359,13 @@ class Remember_Public {
 		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-notifications.php';
 		Remember_Notifications::notify_member_registered( $user_id );
 
+		$registered_user = get_user_by( 'id', $user_id );
+		if ( $registered_user instanceof WP_User ) {
+			wp_set_current_user( $user_id );
+			wp_set_auth_cookie( $user_id, true, is_ssl() );
+			do_action( 'wp_login', $registered_user->user_login, $registered_user );
+		}
+
 		$this->redirect_member_registration( null, true );
 	}
 
@@ -372,7 +379,8 @@ class Remember_Public {
 	private function redirect_member_registration( $error_code, $success = false ) {
 		$redirect = wp_get_referer();
 		if ( ! $redirect ) {
-			$redirect = home_url( '/' );
+			// The form posts to itself, so WordPress reports no referer. Stay on this page.
+			$redirect = remove_query_arg( array( 'remember_registered', 'remember_reg_error' ) );
 		}
 		$redirect = wp_validate_redirect( $redirect, home_url( '/' ) );
 
@@ -425,6 +433,21 @@ class Remember_Public {
 	 * @return string
 	 */
 	public function shortcode_register( $atts ) {
+		$remember_register_success = isset( $_GET['remember_registered'] ) && '1' === (string) wp_unslash( $_GET['remember_registered'] );
+		if ( $remember_register_success ) {
+			require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-profile-audit.php';
+			$dashboard_url = Remember_Profile_Audit::get_dashboard_url();
+			ob_start();
+			?>
+			<div class="remember-register-splash" data-remember-register-splash="1" data-dashboard-url="<?php echo esc_url( $dashboard_url ); ?>" role="status">
+				<h2><?php esc_html_e( 'Your profile was successfully received.', 'remember' ); ?></h2>
+				<p><?php esc_html_e( 'Taking you to your dashboard.', 'remember' ); ?></p>
+				<p><a href="<?php echo esc_url( $dashboard_url ); ?>"><?php esc_html_e( 'Continue to your dashboard', 'remember' ); ?></a></p>
+			</div>
+			<?php
+			return ob_get_clean();
+		}
+
 		if ( is_user_logged_in() ) {
 			$created_pages     = get_option( 'remember_created_pages', array() );
 			$dashboard_page_id = isset( $created_pages['member_dashboard'] ) ? absint( $created_pages['member_dashboard'] ) : ( isset( $created_pages['dashboard'] ) ? absint( $created_pages['dashboard'] ) : 0 );

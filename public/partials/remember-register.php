@@ -73,21 +73,7 @@ if ( '' === $remember_reg_im_type ) {
 
 ?>
 <div class="remember-register remember-register-form">
-	<?php if ( $remember_register_success ) : ?>
-		<div class="remember-notice remember-success" role="status">
-			<p>
-				<?php
-				echo wp_kses_post(
-					sprintf(
-						/* translators: %s: Log in link */
-						__( 'Your member account was created. %s', 'remember' ),
-						'<a href="' . esc_url( wp_login_url( get_permalink() ) ) . '">' . esc_html__( 'Log in', 'remember' ) . '</a>'
-					)
-				);
-				?>
-			</p>
-		</div>
-	<?php else : ?>
+	<?php if ( ! $remember_register_success ) : ?>
 		<?php if ( $remember_register_error_message ) : ?>
 			<div class="remember-notice remember-error" role="alert">
 				<p><?php echo esc_html( $remember_register_error_message ); ?></p>
