@@ -144,6 +144,7 @@ class Remember_Import_Export {
 				array(
 					'Dietary Restrictions',
 					'Allergies',
+					'Allergy Reaction',
 					'Medical Accommodations',
 				)
 			);
@@ -248,6 +249,7 @@ class Remember_Import_Export {
 			if ( current_user_can( 'remember_access_health' ) ) {
 				$row[] = self::member_list_labels( (int) $member->member_id, 'dietary' );
 				$row[] = self::member_list_labels( (int) $member->member_id, 'allergies' );
+				$row[] = $profile->allergy_reaction ?? '';
 				$row[] = self::member_list_labels( (int) $member->member_id, 'medical' );
 			}
 			foreach ( $field_keys as $fkey ) {
@@ -767,6 +769,11 @@ class Remember_Import_Export {
 				)
 			);
 
+			if ( current_user_can( 'remember_access_health' ) && array_key_exists( 'Allergy Reaction', $row_data ) ) {
+				Remember_Profile_Fields::ensure_allergy_reaction_column();
+				$profile_data['allergy_reaction'] = sanitize_textarea_field( (string) $row_data['Allergy Reaction'] );
+			}
+
 			if ( current_user_can( 'remember_access_emergency_contact' ) ) {
 				$profile_data['emergency_contact_first']        = $row_data['Emergency Contact First'] ?? '';
 				$profile_data['emergency_contact_last']         = $row_data['Emergency Contact Last'] ?? '';
@@ -1255,6 +1262,7 @@ class Remember_Import_Export {
 				array(
 					'Dietary Restrictions',
 					'Allergies',
+					'Allergy Reaction',
 					'Medical Accommodations',
 				)
 			);
@@ -1371,6 +1379,7 @@ class Remember_Import_Export {
 			if ( current_user_can( 'remember_access_health' ) ) {
 				$row[] = self::member_list_labels( (int) $app->member_id, 'dietary' );
 				$row[] = self::member_list_labels( (int) $app->member_id, 'allergies' );
+				$row[] = $profile->allergy_reaction ?? '';
 				$row[] = self::member_list_labels( (int) $app->member_id, 'medical' );
 			}
 

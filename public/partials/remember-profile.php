@@ -68,6 +68,10 @@ if ( isset( $_POST['remember_profile_action'] ) && check_admin_referer( 'remembe
 		wp_safe_redirect( Remember_Profile_Audit::with_return_args( add_query_arg( array( 'edit' => '1', 'remember_profile_error' => $missing_health ) ) ) );
 		exit;
 	}
+	if ( Remember_Profile_Fields::allergy_reaction_is_missing() ) {
+		wp_safe_redirect( Remember_Profile_Audit::with_return_args( add_query_arg( array( 'edit' => '1', 'remember_profile_error' => 'allergy_reaction' ) ) ) );
+		exit;
+	}
 	if ( Remember_Profile_Fields::interests_is_over_limit( $profile_data['interests'] ) ) {
 		wp_safe_redirect( Remember_Profile_Audit::with_return_args( add_query_arg( array( 'edit' => '1', 'remember_profile_error' => 'interests_too_long' ) ) ) );
 		exit;
@@ -720,7 +724,17 @@ if ( ! empty( $selected_allergy_ids ) ) {
 			<?php endif; ?>
 
 			<?php if ( ! empty( $allergies ) ) : ?>
-				<div class="remember-form-section">
+				<?php
+				$remember_reaction_needed = false;
+				foreach ( $allergies as $allergy ) {
+					if ( 'None' !== $allergy->allergy_name && in_array( (string) $allergy->allergy_id, array_map( 'strval', (array) $selected_allergy_ids ), true ) ) {
+						$remember_reaction_needed = true;
+						break;
+					}
+				}
+				$remember_reaction_text = ( $profile && isset( $profile->allergy_reaction ) ) ? (string) $profile->allergy_reaction : '';
+				?>
+				<div class="remember-form-section" data-remember-allergy-group="1">
 					<h3 class="remember-form-section-title"><?php esc_html_e( 'Known Allergies', 'remember' ); ?> <span class="remember-required">*</span></h3>
 					<p class="remember-form-help"><?php esc_html_e( 'Required. Select at least one — choose None if none apply. Used by event organizers — not shown to other participants.', 'remember' ); ?></p>
 					<div class="remember-checkbox-grid" data-remember-require-one="1">
@@ -730,6 +744,14 @@ if ( ! empty( $selected_allergy_ids ) ) {
 								<span><?php echo esc_html( $allergy->allergy_name ); ?></span>
 							</label>
 						<?php endforeach; ?>
+					</div>
+					<div class="remember-allergy-reaction" data-remember-allergy-reaction="1"<?php echo $remember_reaction_needed ? '' : ' hidden'; ?>>
+						<div class="remember-form-row">
+							<div class="remember-form-col remember-form-col-full">
+								<label for="remember_allergy_reaction" class="remember-form-label"><?php echo esc_html( Remember_Profile_Fields::allergy_reaction_prompt() ); ?> <span class="remember-required">*</span></label>
+								<textarea name="allergy_reaction" id="remember_allergy_reaction" rows="5" class="remember-form-control"<?php echo $remember_reaction_needed ? ' required' : ''; ?>><?php echo esc_textarea( $remember_reaction_text ); ?></textarea>
+							</div>
+						</div>
 					</div>
 				</div>
 			<?php endif; ?>
@@ -1087,6 +1109,12 @@ if ( ! empty( $selected_allergy_ids ) ) {
 					<div class="remember-profile-view-item remember-profile-view-item-full">
 						<span class="remember-profile-view-value"><?php echo esc_html( ! empty( $selected_allergy_names ) ? implode( ', ', $selected_allergy_names ) : __( 'None Selected', 'remember' ) ); ?></span>
 					</div>
+					<?php if ( $profile && ! empty( $profile->allergy_reaction ) ) : ?>
+						<div class="remember-profile-view-item remember-profile-view-item-full">
+							<strong class="remember-profile-view-label"><?php echo esc_html( Remember_Profile_Fields::allergy_reaction_prompt() ); ?></strong>
+							<span class="remember-profile-view-value"><?php echo nl2br( esc_html( (string) $profile->allergy_reaction ) ); ?></span>
+						</div>
+					<?php endif; ?>
 				</div>
 
 				<?php

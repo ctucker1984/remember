@@ -455,6 +455,7 @@ class Remember_Report_Catalog {
 					'emergency.relationship'     => self::f( __( 'Emergency contact relationship', 'remember' ), 'Emergency', 'string', 'p.emergency_contact_relationship', 'profile', false, array(), 'emergency' ),
 					'health.dietary'             => self::csv_list_field( __( 'Dietary restrictions', 'remember' ), 'Health', $dietary_sql, $dietary_opts, 'health' ),
 					'health.allergies'           => self::csv_list_field( __( 'Allergies', 'remember' ), 'Health', $allergy_sql, $allergy_opts, 'health' ),
+					'health.allergy_reaction'    => self::f( __( 'Allergy reaction', 'remember' ), 'Health', 'string', 'p.allergy_reaction', 'profile', false, array(), 'health' ),
 					'health.medical'             => self::csv_list_field( __( 'Medical accommodations', 'remember' ), 'Health', $medical_sql, $medical_opts, 'health' ),
 				),
 				$mid
@@ -480,6 +481,7 @@ class Remember_Report_Catalog {
 					'member.status'              => self::f( __( 'Member status', 'remember' ), 'Member', 'enum', 'm.status', 'member', false, $member_status ),
 					'health.dietary'             => self::csv_list_field( __( 'Dietary restrictions', 'remember' ), 'Health', $dietary_sql, $dietary_opts, 'health' ),
 					'health.allergies'           => self::csv_list_field( __( 'Allergies', 'remember' ), 'Health', $allergy_sql, $allergy_opts, 'health' ),
+					'health.allergy_reaction'    => self::f( __( 'Allergy reaction', 'remember' ), 'Health', 'string', 'p.allergy_reaction', 'profile', false, array(), 'health' ),
 					'health.medical'             => self::csv_list_field( __( 'Medical accommodations', 'remember' ), 'Health', $medical_sql, $medical_opts, 'health' ),
 				),
 				$mid

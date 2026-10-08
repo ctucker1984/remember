@@ -370,6 +370,37 @@
 	}
 
 	/**
+	 * Show the allergy reaction field only when an allergy other than None is checked.
+	 */
+	function initAllergyReactionFields() {
+		$('[data-remember-allergy-group]').each(function() {
+			var $group = $(this);
+			var $reaction = $group.find('[data-remember-allergy-reaction]');
+			var $field = $reaction.find('textarea');
+			var $boxes = $group.find('input[type="checkbox"][name="allergies[]"]');
+			if (!$reaction.length || !$boxes.length) {
+				return;
+			}
+
+			function sync() {
+				var needs = $boxes.filter(':checked').filter(function() {
+					return !this.hasAttribute('data-remember-none');
+				}).length > 0;
+				if (needs) {
+					$reaction.removeAttr('hidden');
+					$field.prop('required', true);
+				} else {
+					$reaction.attr('hidden', 'hidden');
+					$field.prop('required', false);
+				}
+			}
+
+			$boxes.on('change.rememberAllergyReaction', sync);
+			sync();
+		});
+	}
+
+	/**
 	 * Require at least one checkbox in dietary / medical / allergy groups.
 	 * Selecting "None" clears other options in the same group (and vice versa).
 	 */
@@ -664,6 +695,7 @@
 		initDisplayNameNicknameSync();
 		initProfilePhotoCropper();
 		initRequireOneCheckboxGroups();
+		initAllergyReactionFields();
 		initConditionalProfileQuestions();
 		initProfileCurrencyConfirm();
 		initApplyGate();

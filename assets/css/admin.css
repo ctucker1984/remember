@@ -2693,3 +2693,7 @@
 		margin-left: 0;
 	}
 }
+
+.remember-allergy-reaction[hidden] {
+	display: none !important;
+}

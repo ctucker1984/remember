@@ -399,6 +399,23 @@
 	margin: 0;
 }
 
+.remember-allergy-reaction {
+	margin-top: 1em;
+}
+
+.remember-allergy-reaction[hidden] {
+	display: none !important;
+}
+
+.remember-allergy-reaction textarea.remember-form-control,
+.remember-register-form .remember-allergy-reaction textarea.remember-register-input {
+	height: auto;
+	min-height: 8rem;
+	max-width: 100%;
+	width: 100%;
+	resize: vertical;
+}
+
 .remember-notice.remember-success {
 	border-color: #46b450;
 	background-color: #ecf7ed;

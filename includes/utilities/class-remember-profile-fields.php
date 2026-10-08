@@ -79,6 +79,7 @@ class Remember_Profile_Fields {
 			'dietary_restrictions'           => __( 'Dietary Restrictions', 'remember' ),
 			'medical_accommodations'         => __( 'Medical Accommodations', 'remember' ),
 			'allergies'                      => __( 'Known Allergies', 'remember' ),
+			'allergy_reaction'               => __( 'Allergy reaction', 'remember' ),
 		);
 	}
 
@@ -153,6 +154,7 @@ class Remember_Profile_Fields {
 	 * @return array<string,mixed>
 	 */
 	public static function collect_profile_data_from_request() {
+		self::ensure_allergy_reaction_column();
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-clothing-sizes.php';
 
 		$im_type = self::post_text( array( 'im_type', 'remember_reg_im_type' ) );
@@ -183,6 +185,7 @@ class Remember_Profile_Fields {
 			'im_handle'                      => self::post_text( array( 'im_handle', 'remember_reg_im_handle' ) ),
 			'im_type'                        => $im_type,
 			'interests'                      => $interests,
+			'allergy_reaction'               => self::allergy_reaction_for_storage(),
 			'shirt_size'                     => Remember_Clothing_Sizes::sanitize( 'shirt', self::post_text( array( 'shirt_size', 'remember_reg_shirt_size' ) ) ),
 			'pants_size'                     => Remember_Clothing_Sizes::sanitize( 'pants', self::post_text( array( 'pants_size', 'remember_reg_pants_size' ) ) ),
 			'shoe_size'                      => Remember_Clothing_Sizes::sanitize( 'shoe', self::post_text( array( 'shoe_size', 'remember_reg_shoe_size' ) ) ),
@@ -281,6 +284,115 @@ class Remember_Profile_Fields {
 		}
 
 		return '';
+	}
+
+	/**
+	 * Add allergy_reaction when an existing profile table does not have it yet.
+	 *
+	 * Schema 2.2.3 does the same alter. This also covers a save that happens
+	 * before an administrator has loaded wp-admin.
+	 *
+	 * @return bool
+	 */
+	public static function ensure_allergy_reaction_column() {
+		static $ready = false;
+		if ( $ready ) {
+			return true;
+		}
+
+		global $wpdb;
+		$table  = $wpdb->prefix . 'remember_member_profiles';
+		$column = $wpdb->get_var( "SHOW COLUMNS FROM {$table} LIKE 'allergy_reaction'" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from prefix.
+		if ( 'allergy_reaction' === $column ) {
+			$ready = true;
+			return true;
+		}
+
+		$added = $wpdb->query( "ALTER TABLE {$table} ADD COLUMN allergy_reaction TEXT NULL DEFAULT NULL AFTER interests" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		if ( false === $added ) {
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
+			Remember_Logger::error(
+				'Failed to add allergy_reaction column',
+				array( 'error' => $wpdb->last_error )
+			);
+			return false;
+		}
+
+		$ready = true;
+		return true;
+	}
+
+	/**
+	 * True when the posted allergy list includes something other than None.
+	 *
+	 * @return bool
+	 */
+	public static function request_has_non_none_allergy() {
+		global $wpdb;
+
+		if ( ! isset( $_POST['allergies'] ) || ! is_array( $_POST['allergies'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing -- caller verifies.
+			return false;
+		}
+
+		$none_id = (int) $wpdb->get_var(
+			"SELECT allergy_id FROM {$wpdb->prefix}remember_allergies WHERE allergy_name = 'None' LIMIT 1"
+		);
+
+		foreach ( $_POST['allergies'] as $raw_id ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+			$id = absint( $raw_id );
+			if ( $id > 0 && $id !== $none_id ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Posted explanation of an allergic reaction.
+	 *
+	 * @return string
+	 */
+	public static function allergy_reaction_from_request() {
+		foreach ( array( 'allergy_reaction', 'remember_reg_allergy_reaction' ) as $name ) {
+			if ( isset( $_POST[ $name ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing -- caller verifies.
+				return sanitize_textarea_field( wp_unslash( $_POST[ $name ] ) );
+			}
+		}
+		return '';
+	}
+
+	/**
+	 * Value to store. Cleared when every selected allergy is None.
+	 *
+	 * @return string
+	 */
+	public static function allergy_reaction_for_storage() {
+		if ( ! self::request_has_non_none_allergy() ) {
+			return '';
+		}
+		return self::allergy_reaction_from_request();
+	}
+
+	/**
+	 * True when a non-None allergy is selected and the explanation is blank.
+	 *
+	 * @return bool
+	 */
+	public static function allergy_reaction_is_missing() {
+		if ( ! self::request_has_non_none_allergy() ) {
+			return false;
+		}
+		return '' === trim( self::allergy_reaction_from_request() );
+	}
+
+	/**
+	 * Prompt shown beside the allergy reaction field.
+	 *
+	 * @return string
+	 */
+	public static function allergy_reaction_prompt() {
+		return __( 'Explain the nature and severity of your reaction to any allergen you selected.', 'remember' );
 	}
 
 	/**

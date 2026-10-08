@@ -2,6 +2,10 @@
 
 All notable changes to reMember are listed here. The current plugin version is in `remember.php` (`REMEMBER_VERSION`) and [GitHub Releases](https://github.com/ctucker1984/remember/releases).
 
+## Unreleased
+
+- **Enhancement:** When Allergies is anything other than None, a required explanation of the reaction appears immediately after that field. None hides it and does not require it.
+
 ## 2.1.8
 
 - **Fix:** Interests is posted as marker text with no angle brackets, then turned back into bold, italic, underline, lists, paragraphs, and line breaks in PHP. A host firewall that blocks HTML in the form body no longer rejects the profile save.

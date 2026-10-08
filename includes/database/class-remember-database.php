@@ -157,6 +157,7 @@ class Remember_Database {
 			im_handle VARCHAR(100) DEFAULT NULL,
 			im_type VARCHAR(50) DEFAULT 'telegram',
 			interests TEXT DEFAULT NULL,
+			allergy_reaction TEXT DEFAULT NULL,
 			shirt_size VARCHAR(20) DEFAULT NULL,
 			pants_size VARCHAR(20) DEFAULT NULL,
 			shoe_size VARCHAR(20) DEFAULT NULL,

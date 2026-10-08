@@ -292,6 +292,8 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 					$label
 				)
 			) . '</p></div>';
+		} elseif ( current_user_can( 'remember_access_health' ) && Remember_Profile_Fields::allergy_reaction_is_missing() ) {
+			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html( Remember_Profile_Fields::allergy_reaction_prompt() ) . '</p></div>';
 		} elseif ( Remember_Profile_Fields::interests_is_over_limit( $profile_check['interests'] ) ) {
 			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html( Remember_Profile_Fields::interests_too_long_message() ) . '</p></div>';
 		} elseif ( '' !== $member_number_error ) {
@@ -395,6 +397,11 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 		);
 
 		// Emergency contact stays unchanged unless the editor is allowed to see it.
+		if ( current_user_can( 'remember_access_health' ) ) {
+			Remember_Profile_Fields::ensure_allergy_reaction_column();
+			$profile_data['allergy_reaction'] = Remember_Profile_Fields::allergy_reaction_for_storage();
+		}
+
 		if ( current_user_can( 'remember_access_emergency_contact' ) ) {
 			$profile_data['emergency_contact_first']        = isset( $_POST['emergency_contact_first'] ) ? sanitize_text_field( wp_unslash( $_POST['emergency_contact_first'] ) ) : '';
 			$profile_data['emergency_contact_last']         = isset( $_POST['emergency_contact_last'] ) ? sanitize_text_field( wp_unslash( $_POST['emergency_contact_last'] ) ) : '';

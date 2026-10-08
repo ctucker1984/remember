@@ -428,6 +428,9 @@ require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remem
 					<?php else : ?>
 						<p class="remember-member-detail-none"><?php esc_html_e( 'None', 'remember' ); ?></p>
 					<?php endif; ?>
+					<?php if ( $view_profile && ! empty( $view_profile->allergy_reaction ) ) : ?>
+						<p><?php echo nl2br( esc_html( (string) $view_profile->allergy_reaction ) ); ?></p>
+					<?php endif; ?>
 				</div>
 				<div class="remember-member-detail-section remember-member-detail-health-card">
 					<h3><?php esc_html_e( 'Medical Accommodations', 'remember' ); ?></h3>

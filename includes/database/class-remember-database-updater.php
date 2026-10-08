@@ -1577,6 +1577,16 @@ class Remember_Database_Updater {
 			}
 		}
 
+		// Update to 2.2.3 (allergy reaction text on the member profile).
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '2.2.3', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '2.2.3' ) );
+			require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-profile-fields.php';
+			if ( Remember_Profile_Fields::ensure_allergy_reaction_column() ) {
+				update_option( 'remember_db_version', '2.2.3' );
+				Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '2.2.3' ) );
+			}
+		}
+
 		// Always re-ensure health catalogs (idempotent). Catches sites that stalled mid-migration
 		// or activated before catalog seed rows were added.
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-seeder.php';

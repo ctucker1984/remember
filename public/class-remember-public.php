@@ -208,6 +208,9 @@ class Remember_Public {
 		if ( '' !== Remember_Profile_Fields::first_missing_required_health_catalog() ) {
 			$this->redirect_member_registration( 'missing_fields' );
 		}
+		if ( Remember_Profile_Fields::allergy_reaction_is_missing() ) {
+			$this->redirect_member_registration( 'allergy_reaction' );
+		}
 		if ( Remember_Profile_Fields::interests_is_over_limit( $profile_data['interests'] ) ) {
 			$this->redirect_member_registration( 'interests_too_long' );
 		}
@@ -409,6 +412,7 @@ class Remember_Public {
 			'photo_too_large'  => __( 'That photo is too large. Please choose a smaller image and try again.', 'remember' ),
 			'photo_failed'     => __( 'That photo could not be uploaded. Please try a different JPEG, PNG, or GIF.', 'remember' ),
 			'interests_too_long' => Remember_Profile_Fields::interests_too_long_message(),
+			'allergy_reaction' => __( 'Explain the nature and severity of your reaction to any allergen you selected.', 'remember' ),
 		);
 
 		return isset( $messages[ $code ] ) ? $messages[ $code ] : __( 'Registration could not be completed.', 'remember' );
