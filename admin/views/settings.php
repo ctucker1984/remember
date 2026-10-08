@@ -327,6 +327,11 @@ if ( isset( $_POST['remember_settings_action'] ) && check_admin_referer( 'rememb
 		if ( isset( $_POST['vetting_workflow'] ) ) {
 			$options['vetting_workflow'] = sanitize_text_field( $_POST['vetting_workflow'] );
 		}
+
+		if ( isset( $_POST['vetting_notify_targets'] ) ) {
+			$targets = sanitize_text_field( wp_unslash( $_POST['vetting_notify_targets'] ) );
+			$options['vetting_notify_targets'] = ( 'assigned' === $targets ) ? 'assigned' : 'team';
+		}
 		
 		// Update log level
 		if ( isset( $_POST['log_level'] ) ) {
@@ -761,6 +766,30 @@ $im_platforms = Remember_Im_Platforms::get_all();
 						</select>
 						<p class="description">
 							<?php esc_html_e( 'When should vetting be triggered? "On Member Join" creates a vetting case immediately when a member is created. "On First Event Application" delays vetting until the member applies for their first event.', 'remember' ); ?>
+						</p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row">
+						<label for="vetting_notify_targets"><?php esc_html_e( 'Vetting email recipients', 'remember' ); ?></label>
+					</th>
+					<td>
+						<select id="vetting_notify_targets" name="vetting_notify_targets" class="regular-text">
+							<?php
+							$vetting_notify_targets = isset( $options['vetting_notify_targets'] ) ? $options['vetting_notify_targets'] : 'team';
+							if ( 'assigned' !== $vetting_notify_targets ) {
+								$vetting_notify_targets = 'team';
+							}
+							?>
+							<option value="team" <?php selected( $vetting_notify_targets, 'team' ); ?>>
+								<?php esc_html_e( 'Entire vetting team', 'remember' ); ?>
+							</option>
+							<option value="assigned" <?php selected( $vetting_notify_targets, 'assigned' ); ?>>
+								<?php esc_html_e( 'Assigned vetters only', 'remember' ); ?>
+							</option>
+						</select>
+						<p class="description">
+							<?php esc_html_e( 'Who is emailed when a vetter is assigned, a case is scheduled, a case is completed, or a collaborator is invited. The entire team is everyone with the Vetting role. Assigned vetters are the primary vetter and collaborators on that case. The member’s own accepted or rejected email is unchanged.', 'remember' ); ?>
 						</p>
 					</td>
 				</tr>

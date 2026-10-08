@@ -189,6 +189,157 @@ class Remember_Notifications {
 	}
 
 	/**
+	 * Who receives staff vetting emails.
+	 *
+	 * `team` is everyone with the Vetting role. `assigned` is the primary
+	 * vetter and collaborators on that case. The member's own result email
+	 * does not use this.
+	 *
+	 * @return string team|assigned
+	 */
+	public static function vetting_notify_scope() {
+		$options = get_option( 'remember_options', array() );
+		$scope   = isset( $options['vetting_notify_targets'] ) ? $options['vetting_notify_targets'] : 'team';
+		return 'assigned' === $scope ? 'assigned' : 'team';
+	}
+
+	/**
+	 * Emails for members who hold the Vetting role.
+	 *
+	 * @return string[]
+	 */
+	public static function vetting_team_emails() {
+		global $wpdb;
+		$ids = $wpdb->get_col(
+			$wpdb->prepare(
+				"SELECT DISTINCT mr.member_id
+				FROM {$wpdb->prefix}remember_member_roles mr
+				INNER JOIN {$wpdb->prefix}remember_roles r ON r.role_id = mr.role_id
+				WHERE r.role_name = %s",
+				'Vetting'
+			)
+		);
+		return self::emails_for_user_ids( $ids );
+	}
+
+	/**
+	 * Staff recipients for one vetting case, following the notification setting.
+	 *
+	 * @param int $vetting_id Vetting case ID.
+	 * @return string[]
+	 */
+	public static function vetting_case_recipient_emails( $vetting_id ) {
+		if ( 'team' === self::vetting_notify_scope() ) {
+			return self::vetting_team_emails();
+		}
+
+		$vetting_id = absint( $vetting_id );
+		if ( $vetting_id < 1 ) {
+			return array();
+		}
+
+		require_once plugin_dir_path( __FILE__ ) . '../models/class-vetting.php';
+		$case = ( new Remember_Vetting() )->get( $vetting_id );
+		if ( ! $case ) {
+			return array();
+		}
+
+		$ids = array();
+		if ( ! empty( $case->primary_vetter_id ) ) {
+			$ids[] = (int) $case->primary_vetter_id;
+		}
+		foreach ( ( new Remember_Vetting() )->get_collaborators( $vetting_id ) as $collaborator ) {
+			if ( ! empty( $collaborator->member_id ) ) {
+				$ids[] = (int) $collaborator->member_id;
+			}
+		}
+
+		return self::emails_for_user_ids( $ids );
+	}
+
+	/**
+	 * Valid email addresses for a list of user IDs.
+	 *
+	 * @param array $user_ids User IDs.
+	 * @return string[]
+	 */
+	private static function emails_for_user_ids( $user_ids ) {
+		$emails = array();
+		foreach ( (array) $user_ids as $user_id ) {
+			$user = get_userdata( (int) $user_id );
+			if ( $user && is_email( $user->user_email ) ) {
+				$emails[] = $user->user_email;
+			}
+		}
+		return array_values( array_unique( $emails ) );
+	}
+
+	/**
+	 * Email staff about a vetting case, using the recipient setting.
+	 *
+	 * @param string $type       vetting_assigned, vetting_scheduled, vetting_completed, or vetting_collaborator_invited.
+	 * @param int    $vetting_id Vetting case ID.
+	 * @return void
+	 */
+	public static function notify_vetting_staff( $type, $vetting_id ) {
+		$allowed = array(
+			'vetting_assigned',
+			'vetting_scheduled',
+			'vetting_completed',
+			'vetting_collaborator_invited',
+		);
+		if ( ! in_array( $type, $allowed, true ) ) {
+			return;
+		}
+
+		$vetting_id = absint( $vetting_id );
+		require_once plugin_dir_path( __FILE__ ) . '../models/class-vetting.php';
+		$case = ( new Remember_Vetting() )->get( $vetting_id );
+		if ( ! $case || empty( $case->member_id ) ) {
+			return;
+		}
+
+		$emails = self::vetting_case_recipient_emails( $vetting_id );
+		if ( empty( $emails ) ) {
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
+			Remember_Logger::warning(
+				'Vetting email had no recipients',
+				array(
+					'type'       => $type,
+					'vetting_id' => $vetting_id,
+					'scope'      => self::vetting_notify_scope(),
+				)
+			);
+			return;
+		}
+
+		$extra = array( 'vetting_id' => $vetting_id );
+		if ( 'vetting_scheduled' === $type && ! empty( $case->scheduled_at ) ) {
+			$extra['date'] = date_i18n(
+				get_option( 'date_format' ) . ' ' . get_option( 'time_format' ),
+				strtotime( $case->scheduled_at )
+			);
+		}
+
+		$context = self::context_for_member( (int) $case->member_id, $extra );
+		foreach ( $emails as $email ) {
+			$result = self::send( $type, $context, $email );
+			if ( is_wp_error( $result ) ) {
+				require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
+				Remember_Logger::warning(
+					'Vetting staff email failed',
+					array(
+						'type'       => $type,
+						'vetting_id' => $vetting_id,
+						'to'         => $email,
+						'error'      => $result->get_error_message(),
+					)
+				);
+			}
+		}
+	}
+
+	/**
 	 * Placeholder context for a member (registration and vetting result mail).
 	 *
 	 * @param int   $member_id Member / WordPress user ID.

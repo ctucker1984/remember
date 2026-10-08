@@ -4,6 +4,7 @@ All notable changes to reMember are listed here. The current plugin version is i
 
 ## Unreleased
 
+- **Enhancement:** Settings can send vetting emails to everyone with the Vetting role, or only the primary vetter and collaborators on that case. Assignment, scheduling, completion, and collaborator invitations use that choice. The member’s own accepted or rejected email is unchanged.
 - **Enhancement:** After public registration, the new member is signed in, sees a short confirmation that the profile was received, and is sent to the membership dashboard.
 - **Enhancement:** When Allergies is anything other than None, a required explanation of the reaction appears immediately after that field. None hides it and does not require it.
 

@@ -12,6 +12,7 @@ if ( ! defined( 'WPINC' ) ) {
 }
 
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-logger.php';
+require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-notifications.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-vetting.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-member.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-application.php';
@@ -49,6 +50,7 @@ if ( isset( $_POST['remember_vetting_action'] ) && check_admin_referer( 'remembe
 					$vetting_model->add_note( $vetting_id, get_current_user_id(), $system_note, true );
 					
 					Remember_Logger::info( 'Vetter assigned', array( 'vetting_id' => $vetting_id, 'vetter_id' => $vetter_id ) );
+					Remember_Notifications::notify_vetting_staff( 'vetting_assigned', $vetting_id );
 					echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Vetter assigned successfully.', 'remember' ) . '</p></div>';
 				}
 			}
@@ -92,6 +94,7 @@ if ( isset( $_POST['remember_vetting_action'] ) && check_admin_referer( 'remembe
 					$vetting_model->add_note( $vetting_id, get_current_user_id(), $system_note, true );
 					
 					Remember_Logger::info( 'Vetting scheduled', array( 'vetting_id' => $vetting_id, 'scheduled_at' => $scheduled_at ) );
+					Remember_Notifications::notify_vetting_staff( 'vetting_scheduled', $vetting_id );
 					echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Vetting scheduled successfully.', 'remember' ) . '</p></div>';
 				}
 			}
@@ -135,8 +138,8 @@ if ( isset( $_POST['remember_vetting_action'] ) && check_admin_referer( 'remembe
 							}
 
 							if ( (int) $completed_cases[0]->vetting_id === (int) $vetting_id ) {
-								require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-notifications.php';
 								Remember_Notifications::send_vetting_result( $vetting->member_id, $latest_decision, $vetting_id );
+								Remember_Notifications::notify_vetting_staff( 'vetting_completed', $vetting_id );
 							}
 						}
 					}
@@ -185,6 +188,7 @@ if ( isset( $_POST['remember_vetting_action'] ) && check_admin_referer( 'remembe
 					$vetting_model->add_note( $vetting_id, get_current_user_id(), $system_note, true );
 					
 					Remember_Logger::info( 'Collaborator added', array( 'vetting_id' => $vetting_id, 'collaborator_id' => $collaborator_id ) );
+					Remember_Notifications::notify_vetting_staff( 'vetting_collaborator_invited', $vetting_id );
 					echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Collaborator added successfully.', 'remember' ) . '</p></div>';
 				}
 			}
