@@ -395,6 +395,11 @@ if ( '' === $remember_reg_im_type ) {
 				</label>
 			</div>
 
+			<?php
+			require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-registration-guard.php';
+			echo Remember_Registration_Guard::widget_html(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- site key is escaped in the helper.
+			?>
+
 			<div class="remember-register-row remember-register-row--actions">
 				<span class="remember-register-row__spacer" aria-hidden="true"></span>
 				<div class="remember-register-actions">

@@ -177,6 +177,12 @@ class Remember_Public {
 			$this->redirect_member_registration( 'invalid_nonce' );
 		}
 
+		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-registration-guard.php';
+		$limited = Remember_Registration_Guard::limit_attempt();
+		if ( '' !== $limited ) {
+			$this->redirect_member_registration( $limited );
+		}
+
 		$username         = isset( $_POST['remember_reg_username'] ) ? sanitize_user( wp_unslash( $_POST['remember_reg_username'] ), true ) : '';
 		$email            = isset( $_POST['remember_reg_email'] ) ? sanitize_email( wp_unslash( $_POST['remember_reg_email'] ) ) : '';
 		$password         = isset( $_POST['remember_reg_password'] ) ? wp_unslash( $_POST['remember_reg_password'] ) : '';
@@ -243,6 +249,12 @@ class Remember_Public {
 
 		if ( email_exists( $email ) ) {
 			$this->redirect_member_registration( 'email_exists' );
+		}
+
+		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-registration-guard.php';
+		$blocked = Remember_Registration_Guard::before_create( $username, $email );
+		if ( '' !== $blocked ) {
+			$this->redirect_member_registration( $blocked );
 		}
 
 		$remember_options     = get_option( 'remember_options', array() );
@@ -436,6 +448,10 @@ class Remember_Public {
 			'photo_failed'     => __( 'That photo could not be uploaded. Please try a different JPEG, PNG, or GIF.', 'remember' ),
 			'interests_too_long' => Remember_Profile_Fields::interests_too_long_message(),
 			'allergy_reaction' => __( 'Explain the nature and severity of your reaction to any allergen you selected.', 'remember' ),
+			'captcha_failed'   => __( 'The verification check failed. Please try again.', 'remember' ),
+			'rate_limited'     => __( 'Too many registration attempts from this network. Please wait an hour and try again.', 'remember' ),
+			'disposable_email' => __( 'Please use a permanent email address.', 'remember' ),
+			'rejected'         => __( 'Registration could not be completed.', 'remember' ),
 		);
 
 		return isset( $messages[ $code ] ) ? $messages[ $code ] : __( 'Registration could not be completed.', 'remember' );
@@ -485,6 +501,9 @@ class Remember_Public {
 			$code = sanitize_text_field( wp_unslash( $_GET['remember_reg_error'] ) );
 			$remember_register_error_message = $this->get_member_registration_error_message( $code );
 		}
+
+		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-registration-guard.php';
+		Remember_Registration_Guard::enqueue();
 
 		ob_start();
 		include plugin_dir_path( __FILE__ ) . 'partials/remember-register.php';

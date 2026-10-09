@@ -29,6 +29,40 @@ class Remember_Billing_Crypto {
 	private static $migrating = false;
 
 	/**
+	 * Encrypt a secret with the site key. Does not write a database key.
+	 *
+	 * @param string $plain Secret.
+	 * @return string|false
+	 */
+	public static function seal_site( $plain ) {
+		$plain = (string) $plain;
+		if ( '' === $plain || ! self::can_seal() ) {
+			return false;
+		}
+		try {
+			$nonce = random_bytes( SODIUM_CRYPTO_SECRETBOX_NONCEBYTES );
+			$boxed = sodium_crypto_secretbox( $plain, $nonce, self::key_bytes() );
+			return self::PREFIX . base64_encode( $nonce . $boxed );
+		} catch ( Exception $e ) {
+			unset( $e );
+			return false;
+		}
+	}
+
+	/**
+	 * Decrypt a value written by seal_site().
+	 *
+	 * @param string $payload Stored value.
+	 * @return string|false
+	 */
+	public static function open_site( $payload ) {
+		if ( ! self::is_current( $payload ) ) {
+			return false;
+		}
+		return self::open_current( $payload );
+	}
+
+	/**
 	 * Encrypt a secret for storage.
 	 *
 	 * @param string $plain         Secret.

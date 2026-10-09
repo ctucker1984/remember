@@ -332,6 +332,12 @@ if ( isset( $_POST['remember_settings_action'] ) && check_admin_referer( 'rememb
 			$targets = sanitize_text_field( wp_unslash( $_POST['vetting_notify_targets'] ) );
 			$options['vetting_notify_targets'] = ( 'assigned' === $targets ) ? 'assigned' : 'team';
 		}
+
+		$registration_guard_error = '';
+		if ( isset( $_POST['registration_captcha_provider'] ) ) {
+			require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-registration-guard.php';
+			$registration_guard_error = Remember_Registration_Guard::apply_settings( $options );
+		}
 		
 		// Update log level
 		if ( isset( $_POST['log_level'] ) ) {
@@ -345,6 +351,15 @@ if ( isset( $_POST['remember_settings_action'] ) && check_admin_referer( 'rememb
 		update_option( 'remember_options', $options );
 		Remember_Logger::info( 'Settings updated' );
 		echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Settings saved successfully.', 'remember' ) . '</p></div>';
+		if ( ! empty( $registration_guard_error ) ) {
+			$registration_guard_messages = array(
+				'site_key' => __( 'Registration CAPTCHA was not changed. Enter a site key for the selected provider.', 'remember' ),
+				'secret'   => __( 'Registration CAPTCHA was not changed. Enter the secret key.', 'remember' ),
+				'seal'     => __( 'Registration CAPTCHA was not changed. The secret could not be stored.', 'remember' ),
+			);
+			$registration_guard_message = isset( $registration_guard_messages[ $registration_guard_error ] ) ? $registration_guard_messages[ $registration_guard_error ] : __( 'Registration CAPTCHA was not changed.', 'remember' );
+			echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html( $registration_guard_message ) . '</p></div>';
+		}
 	}
 	
 	// Handle notification settings update
@@ -795,6 +810,44 @@ $im_platforms = Remember_Im_Platforms::get_all();
 				</tr>
 				<tr>
 					<th scope="row">
+						<label for="registration_captcha_provider"><?php esc_html_e( 'Registration CAPTCHA', 'remember' ); ?></label>
+					</th>
+					<td>
+						<?php
+						require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-registration-guard.php';
+						$registration_captcha_provider = Remember_Registration_Guard::provider();
+						$registration_rate_limit       = Remember_Registration_Guard::rate_limit();
+						?>
+						<select id="registration_captcha_provider" name="registration_captcha_provider" class="regular-text">
+							<option value="none" <?php selected( $registration_captcha_provider, 'none' ); ?>><?php esc_html_e( 'None', 'remember' ); ?></option>
+							<option value="turnstile" <?php selected( $registration_captcha_provider, 'turnstile' ); ?>><?php esc_html_e( 'Cloudflare Turnstile', 'remember' ); ?></option>
+							<option value="hcaptcha" <?php selected( $registration_captcha_provider, 'hcaptcha' ); ?>><?php esc_html_e( 'hCaptcha', 'remember' ); ?></option>
+						</select>
+						<p class="description"><?php esc_html_e( 'Shown on the public registration form. None leaves the existing nonce and honeypot in place.', 'remember' ); ?></p>
+						<p>
+							<label for="registration_captcha_site_key"><?php esc_html_e( 'Site key', 'remember' ); ?></label><br>
+							<input type="text" id="registration_captcha_site_key" name="registration_captcha_site_key" value="<?php echo esc_attr( Remember_Registration_Guard::site_key() ); ?>" class="regular-text" autocomplete="off">
+						</p>
+						<p>
+							<label for="registration_captcha_secret"><?php esc_html_e( 'Secret key', 'remember' ); ?></label><br>
+							<input type="password" id="registration_captcha_secret" name="registration_captcha_secret" value="" class="regular-text" autocomplete="new-password">
+							<?php if ( Remember_Registration_Guard::has_secret() ) : ?>
+								<span class="description"><?php esc_html_e( 'A secret is saved. Leave this blank to keep it.', 'remember' ); ?></span>
+							<?php endif; ?>
+						</p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row">
+						<label for="registration_rate_limit"><?php esc_html_e( 'Registration attempts', 'remember' ); ?></label>
+					</th>
+					<td>
+						<input type="number" id="registration_rate_limit" name="registration_rate_limit" value="<?php echo esc_attr( (string) $registration_rate_limit ); ?>" min="0" max="100" class="small-text">
+						<p class="description"><?php esc_html_e( 'How many registration submissions one IP address may make in an hour. 0 turns this limit off. The default is 10.', 'remember' ); ?></p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row">
 						<label for="subtotal_disclaimer_text"><?php esc_html_e( 'Subtotal Disclaimer', 'remember' ); ?></label>
 					</th>
 					<td>
@@ -922,6 +975,7 @@ $im_platforms = Remember_Im_Platforms::get_all();
 								<ul style="margin: 0; padding-left: 20px;">
 									<li><?php esc_html_e( 'Creates a WordPress user and reMember member record; does not require “Anyone can register” in Settings → General.', 'remember' ); ?></li>
 									<li><?php esc_html_e( 'Disable the form site-wide with the remember_allow_public_registration filter.', 'remember' ); ?></li>
+									<li><?php esc_html_e( 'Reject an email domain with the remember_registration_disposable_email filter, or stop account creation with remember_registration_pre_create.', 'remember' ); ?></li>
 								</ul>
 							</div>
 						<?php elseif ( 'remember_profile' === $page_data['shortcode'] ) : ?>

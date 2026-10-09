@@ -970,6 +970,7 @@ class Remember_Backup {
 			'remember_qb_encryption_key',
 			'remember_xero_encryption_key',
 			'remember_xero_last_oauth',
+			'remember_registration_captcha_secret',
 		);
 	}
 
