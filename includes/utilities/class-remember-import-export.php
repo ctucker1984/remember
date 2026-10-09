@@ -745,30 +745,58 @@ class Remember_Import_Export {
 			require_once plugin_dir_path( __FILE__ ) . 'class-remember-clothing-sizes.php';
 			require_once plugin_dir_path( __FILE__ ) . 'class-remember-im-platforms.php';
 			require_once plugin_dir_path( __FILE__ ) . 'class-remember-profile-fields.php';
-			$tz_for_profile = array_key_exists( 'Timezone', $row_data )
-				? sanitize_text_field( (string) $row_data['Timezone'] )
-				: '';
-			
-			$profile_data = array_merge(
-				self::member_import_legal_names( $row_data, $user_id ),
-				array(
-					'address_street'                 => $row_data['Street Address'] ?? '',
-					'address_city'                   => $row_data['City'] ?? '',
-					'address_state'                  => $row_data['State'] ?? '',
-					'address_postal'                 => $row_data['Postal Code'] ?? '',
-					'address_country'                => $row_data['Country'] ?? 'US',
-					'cell_phone'                     => $row_data['Cell Phone'] ?? '',
-					'timezone'                       => $tz_for_profile,
-					'im_handle'                      => $row_data['IM Handle'] ?? '',
-					'im_type'                        => Remember_Im_Platforms::sanitize_key_value( $row_data['IM Type'] ?? '' ),
-					'shirt_size'                     => Remember_Clothing_Sizes::sanitize( 'shirt', $row_data['Shirt Size'] ?? '' ),
-					'pants_size'                     => Remember_Clothing_Sizes::sanitize( 'pants', $row_data['Pants Size'] ?? '' ),
-					'shoe_size'                      => Remember_Clothing_Sizes::sanitize( 'shoe', $row_data['Shoe Size'] ?? '' ),
-					'interests'                      => isset( $row_data['Interests'] ) ? Remember_Profile_Fields::clamp_interests( $row_data['Interests'] ) : '',
-					'updated_at'                     => current_time( 'mysql' ),
-					'updated_by'                     => get_current_user_id() ? get_current_user_id() : null,
-				)
+
+			$is_new_profile = ! $profile;
+			$profile_data   = array(
+				'updated_at' => current_time( 'mysql' ),
+				'updated_by' => get_current_user_id() ? get_current_user_id() : null,
 			);
+			$legal_names    = self::member_import_legal_names( $row_data, $user_id );
+			if ( $is_new_profile || array_key_exists( 'Legal First Name', $row_data ) || array_key_exists( 'First Name', $row_data ) ) {
+				$profile_data['legal_first_name'] = $legal_names['legal_first_name'];
+			}
+			if ( $is_new_profile || array_key_exists( 'Legal Last Name', $row_data ) || array_key_exists( 'Last Name', $row_data ) ) {
+				$profile_data['legal_last_name'] = $legal_names['legal_last_name'];
+			}
+
+			$text_columns = array(
+				'Street Address' => 'address_street',
+				'City'           => 'address_city',
+				'State'          => 'address_state',
+				'Postal Code'    => 'address_postal',
+				'Cell Phone'     => 'cell_phone',
+				'IM Handle'      => 'im_handle',
+			);
+			foreach ( $text_columns as $column => $field ) {
+				if ( $is_new_profile || array_key_exists( $column, $row_data ) ) {
+					$profile_data[ $field ] = (string) ( $row_data[ $column ] ?? '' );
+				}
+			}
+			if ( $is_new_profile || array_key_exists( 'Country', $row_data ) ) {
+				$profile_data['address_country'] = (string) ( $row_data['Country'] ?? 'US' );
+			}
+			if ( $is_new_profile || array_key_exists( 'Timezone', $row_data ) ) {
+				$profile_data['timezone'] = array_key_exists( 'Timezone', $row_data )
+					? sanitize_text_field( (string) $row_data['Timezone'] )
+					: '';
+			}
+			if ( $is_new_profile || array_key_exists( 'IM Type', $row_data ) ) {
+				$profile_data['im_type'] = Remember_Im_Platforms::sanitize_key_value( (string) ( $row_data['IM Type'] ?? '' ) );
+			}
+			if ( $is_new_profile || array_key_exists( 'Shirt Size', $row_data ) ) {
+				$profile_data['shirt_size'] = Remember_Clothing_Sizes::sanitize( 'shirt', (string) ( $row_data['Shirt Size'] ?? '' ) );
+			}
+			if ( $is_new_profile || array_key_exists( 'Pants Size', $row_data ) ) {
+				$profile_data['pants_size'] = Remember_Clothing_Sizes::sanitize( 'pants', (string) ( $row_data['Pants Size'] ?? '' ) );
+			}
+			if ( $is_new_profile || array_key_exists( 'Shoe Size', $row_data ) ) {
+				$profile_data['shoe_size'] = Remember_Clothing_Sizes::sanitize( 'shoe', (string) ( $row_data['Shoe Size'] ?? '' ) );
+			}
+			if ( $is_new_profile || array_key_exists( 'Interests', $row_data ) ) {
+				$profile_data['interests'] = array_key_exists( 'Interests', $row_data )
+					? Remember_Profile_Fields::clamp_interests( $row_data['Interests'] )
+					: '';
+			}
 
 			if ( current_user_can( 'remember_access_health' ) && array_key_exists( 'Allergy Reaction', $row_data ) ) {
 				Remember_Profile_Fields::ensure_allergy_reaction_column();
@@ -776,10 +804,17 @@ class Remember_Import_Export {
 			}
 
 			if ( current_user_can( 'remember_access_emergency_contact' ) ) {
-				$profile_data['emergency_contact_first']        = $row_data['Emergency Contact First'] ?? '';
-				$profile_data['emergency_contact_last']         = $row_data['Emergency Contact Last'] ?? '';
-				$profile_data['emergency_contact_phone']        = $row_data['Emergency Contact Phone'] ?? '';
-				$profile_data['emergency_contact_relationship'] = $row_data['Emergency Contact Relationship'] ?? '';
+				$emergency_columns = array(
+					'Emergency Contact First'        => 'emergency_contact_first',
+					'Emergency Contact Last'         => 'emergency_contact_last',
+					'Emergency Contact Phone'        => 'emergency_contact_phone',
+					'Emergency Contact Relationship' => 'emergency_contact_relationship',
+				);
+				foreach ( $emergency_columns as $column => $field ) {
+					if ( $is_new_profile || array_key_exists( $column, $row_data ) ) {
+						$profile_data[ $field ] = (string) ( $row_data[ $column ] ?? '' );
+					}
+				}
 			}
 			
 			if ( $profile ) {

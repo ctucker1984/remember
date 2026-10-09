@@ -144,7 +144,7 @@ $remember_ie_page  = admin_url( 'admin.php?page=remember-import-export' );
 $remember_ie_tools = array(
 	array(
 		'title'         => __( 'Members', 'remember' ),
-		'blurb'         => __( 'CSV of profiles. Existing emails are updated; new emails create WordPress users.', 'remember' ),
+		'blurb'         => __( 'CSV of profiles. Existing emails are updated; new emails create WordPress users. A blank cell clears that field. A column left out of the file is left as it is.', 'remember' ),
 		'export'        => 'export_members',
 		'export_label'  => __( 'Export', 'remember' ),
 		'import'        => 'import_members',
