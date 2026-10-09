@@ -371,6 +371,26 @@ class Remember_QuickBooks_API {
 			if ( is_wp_error( $existing ) ) {
 				return $existing;
 			}
+			$existing_email = '';
+			if ( ! empty( $existing['PrimaryEmailAddr']['Address'] ) ) {
+				$existing_email = (string) $existing['PrimaryEmailAddr']['Address'];
+			}
+			$next_email = isset( $customer_data['email'] ) ? (string) $customer_data['email'] : '';
+			if ( '' !== $next_email && strtolower( $existing_email ) !== strtolower( $next_email ) ) {
+				require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-logger.php';
+				Remember_Logger::info(
+					'Updating QuickBooks customer email',
+					array( 'qb_customer_id' => $customer_data['qb_customer_id'] )
+				);
+				Remember_Logger::debug(
+					'Updating QuickBooks customer email',
+					array(
+						'qb_customer_id' => $customer_data['qb_customer_id'],
+						'from'           => $existing_email,
+						'to'             => $next_email,
+					)
+				);
+			}
 			$data['Id']         = $customer_data['qb_customer_id'];
 			$data['SyncToken']  = isset( $existing['SyncToken'] ) ? (string) $existing['SyncToken'] : '0';
 			$endpoint           = 'customer';

@@ -120,6 +120,11 @@ class Remember {
 		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/utilities/class-remember-login-screen.php';
 		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/utilities/class-remember-profile-duplicates.php';
 		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/utilities/class-remember-reports.php';
+		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/utilities/class-remember-access-log.php';
+		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/utilities/class-remember-privacy.php';
+		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/utilities/class-remember-registration-guard.php';
+		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/utilities/class-remember-waitlist.php';
+		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/utilities/class-remember-checkin.php';
 		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/utilities/class-remember-logger.php';
 
 		$this->loader = new Remember_Loader();
@@ -154,6 +159,7 @@ class Remember {
 		$this->loader->add_action( 'wp_ajax_remember_get_event_roles', $plugin_admin, 'ajax_get_event_roles' );
 		$this->loader->add_action( 'wp_ajax_remember_get_event_addons', $plugin_admin, 'ajax_get_event_addons' );
 		$this->loader->add_action( 'wp_ajax_remember_get_event_agreements', $plugin_admin, 'ajax_get_event_agreements' );
+		$this->loader->add_action( 'wp_ajax_remember_get_event_survey', $plugin_admin, 'ajax_get_event_survey' );
 		$this->loader->add_action( 'admin_menu', $plugin_admin, 'add_admin_menu' );
 		$this->loader->add_filter( 'submenu_file', $plugin_admin, 'highlight_settings_hub_submenu' );
 		$this->loader->add_action( 'wp_dashboard_setup', $plugin_admin, 'register_dashboard_widget' );
@@ -227,6 +233,9 @@ class Remember {
 		Remember_Login_Screen::init();
 		Remember_Profile_Duplicates::init();
 		Remember_Reports::init();
+		Remember_Access_Log::init();
+		Remember_Privacy::init();
+		Remember_Waitlist::init();
 	}
 
 	/**

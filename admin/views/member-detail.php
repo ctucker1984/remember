@@ -112,6 +112,31 @@ require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remem
 							?>
 						</p>
 					<?php endif; ?>
+					<?php if ( current_user_can( 'manage_options' ) ) : ?>
+						<?php
+						require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-access-log.php';
+						$remember_last_access = Remember_Access_Log::last_for_member( (int) $view_member_id );
+						?>
+						<p class="description remember-no-print">
+							<?php
+							if ( $remember_last_access ) {
+								$remember_last_user = get_userdata( (int) $remember_last_access->user_id );
+								$remember_last_name = $remember_last_user ? $remember_last_user->display_name : sprintf( /* translators: %d: user ID */ __( 'User %d', 'remember' ), (int) $remember_last_access->user_id );
+								echo esc_html(
+									sprintf(
+										/* translators: 1: staff name, 2: date and time, 3: what was opened */
+										__( 'Last sensitive access: %1$s, %2$s, %3$s.', 'remember' ),
+										$remember_last_name,
+										mysql2date( 'Y-m-d H:i', $remember_last_access->created_at ),
+										Remember_Access_Log::label( $remember_last_access->access_what )
+									)
+								);
+							} else {
+								esc_html_e( 'No sensitive access recorded yet.', 'remember' );
+							}
+							?>
+						</p>
+					<?php endif; ?>
 					<p class="remember-member-detail-contact">
 						<?php if ( ! empty( $view_user->user_email ) ) : ?>
 							<span class="remember-member-detail-contact__item">
@@ -226,6 +251,21 @@ require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remem
 	<?php
 	$remember_show_emergency = current_user_can( 'remember_access_emergency_contact' );
 	$remember_show_health    = current_user_can( 'remember_access_health' );
+	if ( $remember_show_emergency || $remember_show_health ) {
+		require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-access-log.php';
+		$remember_access_topics = array();
+		if ( $remember_show_health ) {
+			$remember_access_topics[] = 'health';
+		}
+		if ( $remember_show_emergency ) {
+			$remember_access_topics[] = 'emergency';
+		}
+		Remember_Access_Log::record(
+			(int) $view_member_id,
+			Remember_Access_Log::what_from_topics( $remember_access_topics ),
+			$is_editing ? __( 'Member edit', 'remember' ) : __( 'Member detail', 'remember' )
+		);
+	}
 	// Emergency and health are capability-gated, so the row can hold one, two, or
 	// three cards. Track the count and let the remaining cards claim the full width.
 	$remember_detail_columns = 1 + ( $remember_show_emergency ? 1 : 0 ) + ( $remember_show_health ? 1 : 0 );
@@ -427,6 +467,28 @@ require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remem
 						</div>
 					<?php else : ?>
 						<p class="remember-member-detail-none"><?php esc_html_e( 'None', 'remember' ); ?></p>
+					<?php endif; ?>
+					<?php
+					$remember_reaction_text = ( $view_profile && isset( $view_profile->allergy_reaction ) ) ? trim( (string) $view_profile->allergy_reaction ) : '';
+					$remember_show_reaction = ( '' !== $remember_reaction_text );
+					if ( ! $remember_show_reaction && ! empty( $view_allergies ) ) {
+						foreach ( $view_allergies as $remember_allergy_name ) {
+							if ( 'None' !== $remember_allergy_name ) {
+								$remember_show_reaction = true;
+								break;
+							}
+						}
+					}
+					if ( $remember_show_reaction ) :
+						?>
+						<div class="remember-member-detail-reaction">
+							<strong class="remember-member-detail-reaction__label"><?php echo esc_html( Remember_Profile_Fields::allergy_reaction_prompt() ); ?></strong>
+							<?php if ( '' !== $remember_reaction_text ) : ?>
+								<p><?php echo nl2br( esc_html( $remember_reaction_text ) ); ?></p>
+							<?php else : ?>
+								<p class="remember-member-detail-none"><?php esc_html_e( 'Not provided', 'remember' ); ?></p>
+							<?php endif; ?>
+						</div>
 					<?php endif; ?>
 				</div>
 				<div class="remember-member-detail-section remember-member-detail-health-card">

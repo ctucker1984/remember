@@ -129,7 +129,7 @@ $is_multi_day = $viewing_event->start_date !== $viewing_event->end_date;
 	</div>
 
 	<!-- Applications Section -->
-	<div style="background: #fff; border: 1px solid #ccd0d4; border-radius: 4px; padding: 20px; margin-top: 20px;">
+	<div class="remember-event-applications" style="background: #fff; border: 1px solid #ccd0d4; border-radius: 4px; padding: 20px; margin-top: 20px;">
 		<h3 style="margin-top: 0;">
 			<?php esc_html_e( 'Applications', 'remember' ); ?>
 			<?php if ( ! empty( $event_applications ) ) : ?>
@@ -330,6 +330,86 @@ $is_multi_day = $viewing_event->start_date !== $viewing_event->end_date;
 			</div>
 		<?php else : ?>
 			<p class="description"><?php esc_html_e( 'No attendees yet. Accepted applications will appear here.', 'remember' ); ?></p>
+		<?php endif; ?>
+	</div>
+
+	<?php
+	require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-surveys.php';
+	$event_survey_results = Remember_Surveys::results_for_event( (int) $viewing_event->event_id );
+	?>
+	<div class="remember-event-surveys">
+		<h3>
+			<?php esc_html_e( 'Surveys', 'remember' ); ?>
+			<?php if ( ! empty( $event_survey_results ) ) : ?>
+				<span class="remember-event-surveys-count">(<?php echo esc_html( (string) count( $event_survey_results ) ); ?>)</span>
+			<?php endif; ?>
+		</h3>
+		<?php if ( empty( $event_survey_results ) ) : ?>
+			<p class="description"><?php esc_html_e( 'No surveys for this event yet.', 'remember' ); ?></p>
+		<?php else : ?>
+			<p class="description"><?php esc_html_e( 'Percentages are the share of submitted responses. A question that allows several choices can total more than 100%.', 'remember' ); ?></p>
+			<?php foreach ( $event_survey_results as $result ) : ?>
+				<?php
+				$survey = $result['survey'];
+				$responses = (int) $result['responses'];
+				if ( Remember_Surveys::PLACEMENT_APPLICATION === $survey->placement ) {
+					$when = __( 'On the application', 'remember' );
+				} elseif ( 'issued' === $survey->status ) {
+					$when = 'before' === $survey->timing ? __( 'Issued, before the event', 'remember' ) : __( 'Issued, after the event', 'remember' );
+				} else {
+					$when = 'before' === $survey->timing ? __( 'Draft, before the event', 'remember' ) : __( 'Draft, after the event', 'remember' );
+				}
+				$roles = $survey->role_names ? $survey->role_names : __( 'All roles', 'remember' );
+				$response_label = $responses > 0
+					? sprintf(
+						/* translators: %s: number of submitted survey responses. */
+						_n( '%s response', '%s responses', $responses, 'remember' ),
+						number_format_i18n( $responses )
+					)
+					: __( 'No responses yet', 'remember' );
+				?>
+				<section class="remember-event-survey">
+					<div class="remember-event-survey-line">
+						<a class="remember-event-survey-title" href="<?php echo esc_url( admin_url( 'admin.php?page=remember-surveys&survey_id=' . (int) $survey->survey_id ) ); ?>">
+							<?php echo esc_html( $survey->title ); ?>
+						</a>
+						<span class="remember-event-survey-meta"><?php echo esc_html( $roles ); ?></span>
+						<span class="remember-event-survey-meta"><?php echo esc_html( $when ); ?></span>
+						<span class="remember-event-survey-meta"><?php echo esc_html( $response_label ); ?></span>
+					</div>
+					<?php if ( $responses > 0 && ! empty( $result['questions'] ) ) : ?>
+						<div class="remember-event-survey-results">
+							<?php foreach ( $result['questions'] as $question ) : ?>
+								<div class="remember-event-survey-question">
+									<div class="remember-event-survey-question-label"><?php echo esc_html( $question['label'] ); ?></div>
+									<?php if ( ! empty( $question['choices'] ) ) : ?>
+										<?php foreach ( $question['choices'] as $choice ) : ?>
+											<div class="remember-event-survey-choice">
+												<span class="remember-event-survey-choice-label"><?php echo esc_html( $choice['label'] ); ?></span>
+												<span class="remember-event-survey-bar" aria-hidden="true"><span style="width: <?php echo esc_attr( (string) (int) $choice['percent'] ); ?>%;"></span></span>
+												<span class="remember-event-survey-count"><?php echo esc_html( number_format_i18n( (int) $choice['count'] ) ); ?></span>
+												<span class="remember-event-survey-percent"><?php echo esc_html( (string) (int) $choice['percent'] ); ?>%</span>
+											</div>
+										<?php endforeach; ?>
+									<?php else : ?>
+										<p class="description">
+											<?php
+											echo esc_html(
+												sprintf(
+													/* translators: %s: number of written answers. */
+													_n( '%s written answer', '%s written answers', (int) $question['written'], 'remember' ),
+													number_format_i18n( (int) $question['written'] )
+												)
+											);
+											?>
+										</p>
+									<?php endif; ?>
+								</div>
+							<?php endforeach; ?>
+						</div>
+					<?php endif; ?>
+				</section>
+			<?php endforeach; ?>
 		<?php endif; ?>
 	</div>
 </div>

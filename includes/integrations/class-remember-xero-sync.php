@@ -113,17 +113,35 @@ class Remember_Xero_Sync {
 		$xero_contact_id = get_user_meta( $member_id, 'remember_xero_contact_id', true );
 		if ( $xero_contact_id ) {
 			$existing = Remember_Xero_API::get_contact( $xero_contact_id );
-			if ( is_wp_error( $existing ) || ! self::contact_email_matches( $existing, $user->user_email ) ) {
+			if ( is_wp_error( $existing ) ) {
 				Remember_Logger::warning(
-					'Clearing Xero contact link (missing or email mismatch)',
+					'Clearing Xero contact link (contact missing)',
 					array(
 						'member_id'       => $member_id,
 						'xero_contact_id' => $xero_contact_id,
-						'member_email'    => $user->user_email,
 					)
 				);
 				delete_user_meta( $member_id, 'remember_xero_contact_id' );
 				$xero_contact_id = '';
+			} elseif ( ! self::contact_email_matches( $existing, $user->user_email ) ) {
+				// The stored contact is still this member. Write the new address onto it
+				// instead of dropping the link and creating a second contact.
+				Remember_Logger::info(
+					'Updating Xero contact email',
+					array(
+						'member_id'       => $member_id,
+						'xero_contact_id' => $xero_contact_id,
+					)
+				);
+				Remember_Logger::debug(
+					'Updating Xero contact email',
+					array(
+						'member_id'       => $member_id,
+						'xero_contact_id' => $xero_contact_id,
+						'from'            => isset( $existing['EmailAddress'] ) ? (string) $existing['EmailAddress'] : '',
+						'to'              => (string) $user->user_email,
+					)
+				);
 			}
 		}
 

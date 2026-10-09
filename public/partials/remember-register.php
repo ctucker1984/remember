@@ -73,21 +73,7 @@ if ( '' === $remember_reg_im_type ) {
 
 ?>
 <div class="remember-register remember-register-form">
-	<?php if ( $remember_register_success ) : ?>
-		<div class="remember-notice remember-success" role="status">
-			<p>
-				<?php
-				echo wp_kses_post(
-					sprintf(
-						/* translators: %s: Log in link */
-						__( 'Your member account was created. %s', 'remember' ),
-						'<a href="' . esc_url( wp_login_url( get_permalink() ) ) . '">' . esc_html__( 'Log in', 'remember' ) . '</a>'
-					)
-				);
-				?>
-			</p>
-		</div>
-	<?php else : ?>
+	<?php if ( ! $remember_register_success ) : ?>
 		<?php if ( $remember_register_error_message ) : ?>
 			<div class="remember-notice remember-error" role="alert">
 				<p><?php echo esc_html( $remember_register_error_message ); ?></p>
@@ -334,15 +320,35 @@ if ( '' === $remember_reg_im_type ) {
 			<?php endif; ?>
 
 			<?php if ( ! empty( $allergies ) ) : ?>
-				<h3 class="remember-register-section-title"><?php esc_html_e( 'Known Allergies', 'remember' ); ?> <span class="required">*</span></h3>
-				<p class="remember-register-section-help"><?php esc_html_e( 'Required. Select at least one — choose None if none apply. For event organizers — not shown to other participants.', 'remember' ); ?></p>
-				<div class="remember-register-checkboxes" data-remember-require-one="1">
-					<?php foreach ( $allergies as $allergy ) : ?>
-						<label class="remember-checkbox-label">
-							<input type="checkbox" name="allergies[]" value="<?php echo esc_attr( $allergy->allergy_id ); ?>"<?php echo ( 'None' === $allergy->allergy_name ) ? ' data-remember-none="1"' : ''; ?>>
-							<span><?php echo esc_html( $allergy->allergy_name ); ?></span>
-						</label>
-					<?php endforeach; ?>
+				<?php
+				$remember_reg_allergy_ids = array();
+				if ( isset( $_POST['allergies'] ) && is_array( $_POST['allergies'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing -- sticky display only.
+					$remember_reg_allergy_ids = array_map( 'absint', wp_unslash( $_POST['allergies'] ) );
+				}
+				$remember_reg_reaction_needed = false;
+				foreach ( $allergies as $allergy ) {
+					if ( 'None' !== $allergy->allergy_name && in_array( (int) $allergy->allergy_id, $remember_reg_allergy_ids, true ) ) {
+						$remember_reg_reaction_needed = true;
+						break;
+					}
+				}
+				$remember_reg_reaction = isset( $_POST['allergy_reaction'] ) ? sanitize_textarea_field( wp_unslash( $_POST['allergy_reaction'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing -- sticky display only.
+				?>
+				<div data-remember-allergy-group="1">
+					<h3 class="remember-register-section-title"><?php esc_html_e( 'Known Allergies', 'remember' ); ?> <span class="required">*</span></h3>
+					<p class="remember-register-section-help"><?php esc_html_e( 'Required. Select at least one — choose None if none apply. For event organizers — not shown to other participants.', 'remember' ); ?></p>
+					<div class="remember-register-checkboxes" data-remember-require-one="1">
+						<?php foreach ( $allergies as $allergy ) : ?>
+							<label class="remember-checkbox-label">
+								<input type="checkbox" name="allergies[]" value="<?php echo esc_attr( $allergy->allergy_id ); ?>" <?php checked( in_array( (int) $allergy->allergy_id, $remember_reg_allergy_ids, true ) ); ?><?php echo ( 'None' === $allergy->allergy_name ) ? ' data-remember-none="1"' : ''; ?>>
+								<span><?php echo esc_html( $allergy->allergy_name ); ?></span>
+							</label>
+						<?php endforeach; ?>
+					</div>
+					<div class="remember-register-row remember-register-row--stack remember-allergy-reaction" data-remember-allergy-reaction="1"<?php echo $remember_reg_reaction_needed ? '' : ' hidden'; ?>>
+						<label for="remember_reg_allergy_reaction"><?php echo esc_html( Remember_Profile_Fields::allergy_reaction_prompt() ); ?> <span class="required">*</span></label>
+						<textarea name="allergy_reaction" id="remember_reg_allergy_reaction" rows="5" class="remember-register-input"<?php echo $remember_reg_reaction_needed ? ' required' : ''; ?>><?php echo esc_textarea( $remember_reg_reaction ); ?></textarea>
+					</div>
 				</div>
 			<?php endif; ?>
 
@@ -388,6 +394,11 @@ if ( '' === $remember_reg_im_type ) {
 					<span><?php esc_html_e( 'Share Interests', 'remember' ); ?></span>
 				</label>
 			</div>
+
+			<?php
+			require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-registration-guard.php';
+			echo Remember_Registration_Guard::widget_html(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- site key is escaped in the helper.
+			?>
 
 			<div class="remember-register-row remember-register-row--actions">
 				<span class="remember-register-row__spacer" aria-hidden="true"></span>

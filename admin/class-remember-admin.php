@@ -113,7 +113,9 @@ class Remember_Admin {
 			return;
 		}
 		if ( strpos( $screen->id, 'remember' ) !== false ) {
-			wp_enqueue_style( $this->plugin_name, plugin_dir_url( __FILE__ ) . '../assets/css/admin.css', array(), $this->version, 'all' );
+			$admin_css = plugin_dir_path( __FILE__ ) . '../assets/css/admin.css';
+			$admin_ver = is_readable( $admin_css ) ? (string) filemtime( $admin_css ) : $this->version;
+			wp_enqueue_style( $this->plugin_name, plugin_dir_url( __FILE__ ) . '../assets/css/admin.css', array(), $admin_ver, 'all' );
 			// Photo cropper styles (shared with front-end) on Members edit.
 			if ( false !== strpos( $screen->id, 'remember-members' ) ) {
 				$public_css = plugin_dir_path( __FILE__ ) . '../assets/css/public.css';
@@ -187,11 +189,13 @@ class Remember_Admin {
 				wp_enqueue_media();
 			}
 			if ( false !== strpos( $screen->id, 'remember-reports' ) ) {
+				$reports_js  = plugin_dir_path( __FILE__ ) . '../assets/js/reports.js';
+				$reports_ver = is_readable( $reports_js ) ? (string) filemtime( $reports_js ) : $this->version;
 				wp_enqueue_script(
 					$this->plugin_name . '-reports',
 					plugin_dir_url( __FILE__ ) . '../assets/js/reports.js',
 					array( 'jquery' ),
-					$this->version,
+					$reports_ver,
 					true
 				);
 				wp_localize_script(
@@ -227,6 +231,11 @@ class Remember_Admin {
 							'copy'         => __( 'Copy', 'remember' ),
 							'copyCancel'   => __( 'Cancel', 'remember' ),
 							'copyNeedSave' => __( 'Save this report before copying it.', 'remember' ),
+							'scheduleNeedSave' => __( 'Save this report before scheduling it.', 'remember' ),
+							'scheduleSaved' => __( 'Schedule saved.', 'remember' ),
+							'scheduleNote' => __( 'Times use the site timezone (%s). The CSV uses your access. Each person is checked again when it sends.', 'remember' ),
+							'lastSent'     => __( 'Last sent %s.', 'remember' ),
+							'notSentYet'   => __( 'Not sent yet.', 'remember' ),
 							'copyNeedUser' => __( 'Choose someone to copy this report to.', 'remember' ),
 							'noRecipients' => __( 'No one else can receive this report. They need View Reports plus the read access this subject uses.', 'remember' ),
 							'loadingRecipients' => __( 'Loading…', 'remember' ),
@@ -462,6 +471,15 @@ class Remember_Admin {
 			array( $this, 'display_reports_page' )
 		);
 
+		add_submenu_page(
+			'remember',
+			__( 'Sensitive access log', 'remember' ),
+			__( 'Access log', 'remember' ),
+			'manage_options',
+			'remember-access-log',
+			array( $this, 'display_access_log_page' )
+		);
+
 		// Events
 		add_submenu_page(
 			'remember',
@@ -470,6 +488,15 @@ class Remember_Admin {
 			'remember_read_events',
 			'remember-events',
 			array( $this, 'display_events_page' )
+		);
+
+		add_submenu_page(
+			'remember',
+			__( 'Surveys', 'remember' ),
+			__( 'Surveys', 'remember' ),
+			'remember_read_events',
+			'remember-surveys',
+			array( $this, 'display_surveys_page' )
 		);
 
 		// Applications
@@ -490,6 +517,18 @@ class Remember_Admin {
 			'remember_read_applications',
 			'remember-waitlist',
 			array( $this, 'display_waitlist_page' )
+		);
+
+		if ( current_user_can( 'manage_options' ) && ! current_user_can( 'remember_checkin_attendees' ) ) {
+			wp_get_current_user()->add_cap( 'remember_checkin_attendees' );
+		}
+		add_submenu_page(
+			'remember',
+			__( 'Check-in', 'remember' ),
+			__( 'Check-in', 'remember' ),
+			'remember_checkin_attendees',
+			'remember-checkin',
+			array( $this, 'display_checkin_page' )
 		);
 
 		// Vetting
@@ -740,6 +779,24 @@ class Remember_Admin {
 	}
 
 	/**
+	 * Who viewed or exported health and emergency-contact data.
+	 *
+	 * @return void
+	 */
+	public function display_access_log_page() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( __( 'You do not have sufficient permissions to access this page.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+		}
+		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-access-log.php';
+		if ( isset( $_POST['remember_access_log_retention'] ) && check_admin_referer( 'remember_access_log_retention', 'remember_access_log_nonce' ) ) {
+			Remember_Access_Log::set_retention_months( isset( $_POST['retention_months'] ) ? absint( wp_unslash( $_POST['retention_months'] ) ) : 12 );
+			wp_safe_redirect( admin_url( 'admin.php?page=remember-access-log&updated=1' ) );
+			exit;
+		}
+		include_once 'views/access-log.php';
+	}
+
+	/**
 	 * Staff reporting builder.
 	 *
 	 * @return void
@@ -749,6 +806,18 @@ class Remember_Admin {
 			wp_die( __( 'You do not have sufficient permissions to access this page.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
 		}
 		include_once 'views/reports.php';
+	}
+
+	/**
+	 * Event surveys.
+	 *
+	 * @return void
+	 */
+	public function display_surveys_page() {
+		if ( ! current_user_can( 'remember_read_events' ) ) {
+			wp_die( __( 'You do not have sufficient permissions to access this page.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+		}
+		include_once 'views/surveys.php';
 	}
 
 	/**
@@ -780,6 +849,18 @@ class Remember_Admin {
 		
 		require_once plugin_dir_path( __FILE__ ) . '../includes/models/class-application.php';
 		include_once 'views/applications.php';
+	}
+
+	/**
+	 * Render the door check-in page.
+	 *
+	 * @since    2.2.0
+	 */
+	public function display_checkin_page() {
+		if ( ! current_user_can( 'remember_checkin_attendees' ) && ! current_user_can( 'manage_options' ) ) {
+			wp_die( __( 'You do not have sufficient permissions to access this page.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+		}
+		include_once 'views/checkin.php';
 	}
 
 	/**
@@ -1796,6 +1877,29 @@ class Remember_Admin {
 		wp_send_json_success(
 			array(
 				'html' => Remember_Agreements::render_apply_html( $event_id ),
+			)
+		);
+	}
+
+	/**
+	 * AJAX: application survey HTML, empty when the event has none.
+	 *
+	 * @return void
+	 */
+	public function ajax_get_event_survey() {
+		check_ajax_referer( 'remember_get_event_survey', 'nonce' );
+
+		$event_id      = isset( $_POST['event_id'] ) ? absint( $_POST['event_id'] ) : 0;
+		$event_role_id = isset( $_POST['event_role_id'] ) ? absint( $_POST['event_role_id'] ) : 0;
+		if ( $event_id <= 0 || ! is_user_logged_in() ) {
+			wp_send_json_error( array( 'message' => __( 'Invalid event.', 'remember' ) ) );
+		}
+
+		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-surveys.php';
+		$html = Remember_Surveys::render_apply_html( $event_id, $event_role_id );
+		wp_send_json_success(
+			array(
+				'html' => $html,
 			)
 		);
 	}

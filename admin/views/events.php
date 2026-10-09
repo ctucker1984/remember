@@ -296,6 +296,17 @@ function remember_render_addon_role_limits( $index, $event_roles, $limits_by_rol
 }
 
 /**
+ * Waitlist action from the event form.
+ *
+ * @return string
+ */
+function remember_event_waitlist_mode() {
+	require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-waitlist.php';
+	$mode = isset( $_POST['waitlist_mode'] ) ? wp_unslash( $_POST['waitlist_mode'] ) : 'off';
+	return Remember_Waitlist::sanitize_mode( $mode );
+}
+
+/**
  * Optional registration window from the event form.
  *
  * @return array|WP_Error
@@ -341,7 +352,42 @@ function remember_render_registration_window_fields( $event = null ) {
 			<p class="description"><?php esc_html_e( 'Optional. Leave blank to keep registration open until the event status changes.', 'remember' ); ?></p>
 		</td>
 	</tr>
+	<tr>
+		<th><label for="waitlist_mode"><?php esc_html_e( 'When a spot opens', 'remember' ); ?></label></th>
+		<td>
+			<?php
+			require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-waitlist.php';
+			$waitlist_mode = Remember_Waitlist::sanitize_mode( $event && isset( $event->waitlist_mode ) ? $event->waitlist_mode : 'off' );
+			?>
+			<select id="waitlist_mode" name="waitlist_mode">
+				<option value="off" <?php selected( $waitlist_mode, 'off' ); ?>><?php esc_html_e( 'Off', 'remember' ); ?></option>
+				<option value="notify" <?php selected( $waitlist_mode, 'notify' ); ?>><?php esc_html_e( 'Email event administrators', 'remember' ); ?></option>
+				<option value="auto" <?php selected( $waitlist_mode, 'auto' ); ?>><?php esc_html_e( 'Move the next waiting application to pending', 'remember' ); ?></option>
+			</select>
+			<p class="description"><?php esc_html_e( 'Runs when an accepted application is withdrawn or declined. Off leaves the waitlist for staff. Email tells accepted Event Administrators how many people are waiting for that role. The automatic choice moves the oldest waiting application for that role to pending while registration is open and the role has room. It does not accept the application or create an invoice.', 'remember' ); ?></p>
+		</td>
+	</tr>
+	<tr>
+		<th><label for="checkin_enabled"><?php esc_html_e( 'Door check-in', 'remember' ); ?></label></th>
+		<td>
+			<?php $checkin_enabled = $event && ! empty( $event->checkin_enabled ); ?>
+			<label>
+				<input type="checkbox" id="checkin_enabled" name="checkin_enabled" value="1" <?php checked( $checkin_enabled ); ?>>
+				<?php esc_html_e( 'Print a check-in code on the admission ticket', 'remember' ); ?>
+			</label>
+			<p class="description"><?php esc_html_e( 'Off leaves the printed ticket unchanged. On adds a code to that same ticket and lists the event on the Check-in screen. Staff can scan it, type it, or search by name.', 'remember' ); ?></p>
+		</td>
+	</tr>
 	<?php
+}
+
+/**
+ * Whether the event form turned door check-in on.
+ *
+ * @return int
+ */
+function remember_event_checkin_enabled() {
+	return ! empty( $_POST['checkin_enabled'] ) ? 1 : 0;
 }
 
 // Handle form submissions
@@ -363,6 +409,8 @@ if ( isset( $_POST['remember_event_action'] ) && check_admin_referer( 'remember_
 			'end_date'          => sanitize_text_field( wp_unslash( $_POST['end_date'] ) ),
 			'is_private'        => isset( $_POST['is_private'] ) ? 1 : 0,
 			'status'            => sanitize_text_field( wp_unslash( $_POST['status'] ) ),
+			'waitlist_mode'     => remember_event_waitlist_mode(),
+			'checkin_enabled'   => remember_event_checkin_enabled(),
 			'created_by'        => get_current_user_id(),
 		);
 		$event_id = 0;
@@ -405,6 +453,8 @@ if ( isset( $_POST['remember_event_action'] ) && check_admin_referer( 'remember_
 			'end_date'          => sanitize_text_field( wp_unslash( $_POST['end_date'] ) ),
 			'is_private'        => isset( $_POST['is_private'] ) ? 1 : 0,
 			'status'            => sanitize_text_field( wp_unslash( $_POST['status'] ) ),
+			'waitlist_mode'     => remember_event_waitlist_mode(),
+			'checkin_enabled'   => remember_event_checkin_enabled(),
 		);
 		$result = false;
 		if ( is_wp_error( $registration_fields ) ) {

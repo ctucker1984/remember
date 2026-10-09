@@ -68,9 +68,27 @@ if ( isset( $_POST['remember_profile_action'] ) && check_admin_referer( 'remembe
 		wp_safe_redirect( Remember_Profile_Audit::with_return_args( add_query_arg( array( 'edit' => '1', 'remember_profile_error' => $missing_health ) ) ) );
 		exit;
 	}
+	if ( Remember_Profile_Fields::allergy_reaction_is_missing() ) {
+		wp_safe_redirect( Remember_Profile_Audit::with_return_args( add_query_arg( array( 'edit' => '1', 'remember_profile_error' => 'allergy_reaction' ) ) ) );
+		exit;
+	}
+	$remember_new_email = isset( $_POST['user_email'] ) ? sanitize_email( wp_unslash( $_POST['user_email'] ) ) : '';
+	$remember_email_error = Remember_Profile_Fields::user_email_change_error( $user->ID, $remember_new_email );
+	if ( '' !== $remember_email_error ) {
+		wp_safe_redirect( Remember_Profile_Audit::with_return_args( add_query_arg( array( 'edit' => '1', 'remember_profile_error' => $remember_email_error ) ) ) );
+		exit;
+	}
 	if ( Remember_Profile_Fields::interests_is_over_limit( $profile_data['interests'] ) ) {
 		wp_safe_redirect( Remember_Profile_Audit::with_return_args( add_query_arg( array( 'edit' => '1', 'remember_profile_error' => 'interests_too_long' ) ) ) );
 		exit;
+	}
+	if ( isset( $_POST['timezone_string'] ) ) {
+		require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-timezone.php';
+		$remember_posted_timezone = sanitize_text_field( wp_unslash( $_POST['timezone_string'] ) );
+		if ( '' !== $remember_posted_timezone && ! Remember_Timezone::is_valid_timezone( $remember_posted_timezone ) ) {
+			wp_safe_redirect( Remember_Profile_Audit::with_return_args( add_query_arg( array( 'edit' => '1', 'remember_profile_error' => 'invalid_timezone' ) ) ) );
+			exit;
+		}
 	}
 
 	$current_password = isset( $_POST['current_password'] ) ? (string) wp_unslash( $_POST['current_password'] ) : '';
@@ -111,15 +129,16 @@ if ( isset( $_POST['remember_profile_action'] ) && check_admin_referer( 'remembe
 			);
 		} else {
 			$current_member = $member_model->get( $user->ID );
-			if ( $current_member && ! empty( $current_member->photo_url ) ) {
-				Remember_Image_Uploader::delete_image( $current_member->photo_url );
-			}
 
 			$upload_result = Remember_Image_Uploader::upload_square_image( $_FILES['photo_file'], $photo_max_dimensions );
 			if ( is_wp_error( $upload_result ) ) {
 				$photo_error = $upload_result->get_error_message();
 			} else {
 				$member_model->update_photo( $user->ID, $upload_result['url'] );
+				// Delete the old photo only once the new one is saved.
+				if ( $current_member && ! empty( $current_member->photo_url ) && $current_member->photo_url !== $upload_result['url'] ) {
+					Remember_Image_Uploader::delete_image( $current_member->photo_url );
+				}
 			}
 		}
 	} elseif ( isset( $_POST['delete_photo'] ) && '1' === (string) wp_unslash( $_POST['delete_photo'] ) ) {
@@ -168,13 +187,27 @@ if ( isset( $_POST['remember_profile_action'] ) && check_admin_referer( 'remembe
 	$requested_display = isset( $_POST['display_name'] ) ? sanitize_text_field( wp_unslash( $_POST['display_name'] ) ) : '';
 	$safe_display      = Remember_Member::resolve_public_display_name( $user, $nickname, $requested_display );
 
-	wp_update_user(
-		array(
-			'ID'           => $user->ID,
-			'display_name' => $safe_display,
-			'nickname'     => $nickname,
-		)
+	$remember_user_update = array(
+		'ID'           => $user->ID,
+		'display_name' => $safe_display,
+		'nickname'     => $nickname,
 	);
+	$remember_email_changed = strtolower( (string) $user->user_email ) !== strtolower( $remember_new_email );
+	if ( $remember_email_changed ) {
+		$remember_user_update['user_email'] = $remember_new_email;
+	}
+	$remember_user_result = wp_update_user( $remember_user_update );
+	if ( $remember_email_changed && ! is_wp_error( $remember_user_result ) ) {
+		require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-logger.php';
+		Remember_Logger::info( 'Member account email updated', array( 'user_id' => $user->ID ) );
+		Remember_Logger::debug(
+			'Member account email updated',
+			array(
+				'user_id' => $user->ID,
+				'email'   => $remember_new_email,
+			)
+		);
+	}
 	
 	// Save timezone to WP user meta (not member_profiles)
 	if ( isset( $_POST['timezone_string'] ) ) {
@@ -367,6 +400,10 @@ if ( ! empty( $selected_allergy_ids ) ) {
 					$labels = Remember_Profile_Fields::labels();
 					if ( 'interests_too_long' === $profile_error ) {
 						echo esc_html( Remember_Profile_Fields::interests_too_long_message() );
+					} elseif ( 'invalid_timezone' === $profile_error ) {
+						esc_html_e( 'Please select a valid time zone.', 'remember' );
+					} elseif ( in_array( $profile_error, array( 'invalid_email', 'email_exists' ), true ) ) {
+						echo esc_html( Remember_Profile_Fields::user_email_change_message( $profile_error ) );
 					} elseif ( isset( $labels[ $profile_error ] ) ) {
 						echo esc_html(
 							sprintf(
@@ -588,6 +625,17 @@ if ( ! empty( $selected_allergy_ids ) ) {
 			<div class="remember-form-section">
 				<h3 class="remember-form-section-title"><?php esc_html_e( 'Contact Information', 'remember' ); ?></h3>
 				<div class="remember-form-row">
+					<div class="remember-form-col remember-form-col-full">
+						<label for="user_email" class="remember-form-label">
+							<?php esc_html_e( 'Email Address', 'remember' ); ?>
+							<span class="remember-required">*</span>
+						</label>
+						<input type="email" id="user_email" name="user_email" class="remember-form-control" required autocomplete="email"
+							value="<?php echo esc_attr( $user->user_email ); ?>">
+						<p class="remember-form-help"><?php esc_html_e( 'This is your login and password-reset address. Saving a different address changes it immediately, updates the linked Xero or QuickBooks contact, and WordPress emails the previous address.', 'remember' ); ?></p>
+					</div>
+				</div>
+				<div class="remember-form-row">
 					<div class="remember-form-col">
 						<label for="cell_phone" class="remember-form-label">
 							<?php esc_html_e( 'Cell Phone', 'remember' ); ?>
@@ -720,7 +768,17 @@ if ( ! empty( $selected_allergy_ids ) ) {
 			<?php endif; ?>
 
 			<?php if ( ! empty( $allergies ) ) : ?>
-				<div class="remember-form-section">
+				<?php
+				$remember_reaction_needed = false;
+				foreach ( $allergies as $allergy ) {
+					if ( 'None' !== $allergy->allergy_name && in_array( (string) $allergy->allergy_id, array_map( 'strval', (array) $selected_allergy_ids ), true ) ) {
+						$remember_reaction_needed = true;
+						break;
+					}
+				}
+				$remember_reaction_text = ( $profile && isset( $profile->allergy_reaction ) ) ? (string) $profile->allergy_reaction : '';
+				?>
+				<div class="remember-form-section" data-remember-allergy-group="1">
 					<h3 class="remember-form-section-title"><?php esc_html_e( 'Known Allergies', 'remember' ); ?> <span class="remember-required">*</span></h3>
 					<p class="remember-form-help"><?php esc_html_e( 'Required. Select at least one — choose None if none apply. Used by event organizers — not shown to other participants.', 'remember' ); ?></p>
 					<div class="remember-checkbox-grid" data-remember-require-one="1">
@@ -730,6 +788,14 @@ if ( ! empty( $selected_allergy_ids ) ) {
 								<span><?php echo esc_html( $allergy->allergy_name ); ?></span>
 							</label>
 						<?php endforeach; ?>
+					</div>
+					<div class="remember-allergy-reaction" data-remember-allergy-reaction="1"<?php echo $remember_reaction_needed ? '' : ' hidden'; ?>>
+						<div class="remember-form-row">
+							<div class="remember-form-col remember-form-col-full">
+								<label for="remember_allergy_reaction" class="remember-form-label"><?php echo esc_html( Remember_Profile_Fields::allergy_reaction_prompt() ); ?> <span class="remember-required">*</span></label>
+								<textarea name="allergy_reaction" id="remember_allergy_reaction" rows="5" class="remember-form-control"<?php echo $remember_reaction_needed ? ' required' : ''; ?>><?php echo esc_textarea( $remember_reaction_text ); ?></textarea>
+							</div>
+						</div>
 					</div>
 				</div>
 			<?php endif; ?>
@@ -950,6 +1016,14 @@ if ( ! empty( $selected_allergy_ids ) ) {
 								<span class="remember-profile-view-value"><?php echo esc_html( $remember_legal_name_line ); ?></span>
 							</div>
 						<?php endif; ?>
+						<?php if ( ! empty( $user->user_email ) ) : ?>
+							<div class="remember-profile-view-item">
+								<strong class="remember-profile-view-label"><?php esc_html_e( 'Email Address', 'remember' ); ?></strong>
+								<span class="remember-profile-view-value">
+									<a href="mailto:<?php echo esc_attr( $user->user_email ); ?>"><?php echo esc_html( $user->user_email ); ?></a>
+								</span>
+							</div>
+						<?php endif; ?>
 						<?php if ( ! empty( $profile->cell_phone ) ) : ?>
 							<div class="remember-profile-view-item">
 								<strong class="remember-profile-view-label"><?php esc_html_e( 'Cell Phone', 'remember' ); ?></strong>
@@ -1087,6 +1161,12 @@ if ( ! empty( $selected_allergy_ids ) ) {
 					<div class="remember-profile-view-item remember-profile-view-item-full">
 						<span class="remember-profile-view-value"><?php echo esc_html( ! empty( $selected_allergy_names ) ? implode( ', ', $selected_allergy_names ) : __( 'None Selected', 'remember' ) ); ?></span>
 					</div>
+					<?php if ( $profile && ! empty( $profile->allergy_reaction ) ) : ?>
+						<div class="remember-profile-view-item remember-profile-view-item-full">
+							<strong class="remember-profile-view-label"><?php echo esc_html( Remember_Profile_Fields::allergy_reaction_prompt() ); ?></strong>
+							<span class="remember-profile-view-value"><?php echo nl2br( esc_html( (string) $profile->allergy_reaction ) ); ?></span>
+						</div>
+					<?php endif; ?>
 				</div>
 
 				<?php

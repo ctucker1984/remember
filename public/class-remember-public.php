@@ -110,6 +110,7 @@ class Remember_Public {
 		add_shortcode( 'remember_dashboard', array( $this, 'shortcode_dashboard' ) );
 		add_shortcode( 'remember_events', array( $this, 'shortcode_events' ) );
 		add_shortcode( 'remember_apply', array( $this, 'shortcode_apply' ) );
+		add_shortcode( 'remember_survey', array( $this, 'shortcode_survey' ) );
 		add_shortcode( 'remember_profile', array( $this, 'shortcode_profile' ) );
 		add_shortcode( 'remember_event_directory', array( $this, 'shortcode_event_directory' ) );
 		add_shortcode( 'remember_event_detail', array( $this, 'shortcode_event_detail' ) );
@@ -176,6 +177,12 @@ class Remember_Public {
 			$this->redirect_member_registration( 'invalid_nonce' );
 		}
 
+		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-registration-guard.php';
+		$limited = Remember_Registration_Guard::limit_attempt();
+		if ( '' !== $limited ) {
+			$this->redirect_member_registration( $limited );
+		}
+
 		$username         = isset( $_POST['remember_reg_username'] ) ? sanitize_user( wp_unslash( $_POST['remember_reg_username'] ), true ) : '';
 		$email            = isset( $_POST['remember_reg_email'] ) ? sanitize_email( wp_unslash( $_POST['remember_reg_email'] ) ) : '';
 		$password         = isset( $_POST['remember_reg_password'] ) ? wp_unslash( $_POST['remember_reg_password'] ) : '';
@@ -207,6 +214,9 @@ class Remember_Public {
 		}
 		if ( '' !== Remember_Profile_Fields::first_missing_required_health_catalog() ) {
 			$this->redirect_member_registration( 'missing_fields' );
+		}
+		if ( Remember_Profile_Fields::allergy_reaction_is_missing() ) {
+			$this->redirect_member_registration( 'allergy_reaction' );
 		}
 		if ( Remember_Profile_Fields::interests_is_over_limit( $profile_data['interests'] ) ) {
 			$this->redirect_member_registration( 'interests_too_long' );
@@ -241,6 +251,12 @@ class Remember_Public {
 			$this->redirect_member_registration( 'email_exists' );
 		}
 
+		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-registration-guard.php';
+		$blocked = Remember_Registration_Guard::before_create( $username, $email );
+		if ( '' !== $blocked ) {
+			$this->redirect_member_registration( $blocked );
+		}
+
 		$remember_options     = get_option( 'remember_options', array() );
 		$photo_max_dimensions = isset( $remember_options['photo_max_dimensions'] ) ? absint( $remember_options['photo_max_dimensions'] ) : 800;
 		$photo_max_bytes      = isset( $remember_options['photo_max_size'] ) ? absint( $remember_options['photo_max_size'] ) : 2097152;
@@ -267,6 +283,21 @@ class Remember_Public {
 		require_once plugin_dir_path( __FILE__ ) . '../includes/models/class-member.php';
 		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-vetting-workflow.php';
 		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-logger.php';
+		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-image-uploader.php';
+		// wp_delete_user() (used for cleanup below) is admin-only and not loaded on the front end.
+		require_once ABSPATH . 'wp-admin/includes/user.php';
+
+		$upload_result = Remember_Image_Uploader::upload_square_image( $_FILES['photo_file'], $photo_max_dimensions );
+		if ( is_wp_error( $upload_result ) || empty( $upload_result['url'] ) ) {
+			Remember_Logger::warning(
+				'Public member registration: photo upload failed',
+				array(
+					'error' => is_wp_error( $upload_result ) ? $upload_result->get_error_message() : '',
+				)
+			);
+			$this->redirect_member_registration( 'photo_failed' );
+		}
+		$photo_url = $upload_result['url'];
 
 		$user_id = wp_create_user( $username, $password, $email );
 
@@ -275,6 +306,7 @@ class Remember_Public {
 				'Public member registration: wp_create_user failed',
 				array( 'error' => $user_id->get_error_message() )
 			);
+			Remember_Image_Uploader::delete_image( $photo_url );
 			$this->redirect_member_registration( 'create_failed' );
 		}
 
@@ -302,6 +334,7 @@ class Remember_Public {
 
 		if ( ! $member_ok ) {
 			Remember_Logger::error( 'Public member registration: member row failed', array( 'user_id' => $user_id ) );
+			Remember_Image_Uploader::delete_image( $photo_url );
 			wp_delete_user( $user_id );
 			$this->redirect_member_registration( 'member_failed' );
 		}
@@ -320,9 +353,22 @@ class Remember_Public {
 				'Public member registration: profile insert failed',
 				array( 'user_id' => $user_id, 'db_error' => $wpdb->last_error )
 			);
+			Remember_Image_Uploader::delete_image( $photo_url );
 			$member_model->delete( $user_id );
 			wp_delete_user( $user_id );
 			$this->redirect_member_registration( 'profile_failed' );
+		}
+
+		$photo_saved = $member_model->update_photo( $user_id, $photo_url );
+		if ( false === $photo_saved ) {
+			Remember_Logger::error(
+				'Public member registration: photo could not be saved',
+				array( 'user_id' => $user_id, 'db_error' => $wpdb->last_error )
+			);
+			Remember_Image_Uploader::delete_image( $photo_url );
+			$member_model->delete( $user_id );
+			wp_delete_user( $user_id );
+			$this->redirect_member_registration( 'photo_failed' );
 		}
 
 		Remember_Profile_Fields::save_junctions_from_request( $user_id );
@@ -335,26 +381,17 @@ class Remember_Public {
 			}
 		}
 
-		if ( $has_photo && isset( $_FILES['photo_file'] ) && UPLOAD_ERR_OK === (int) $_FILES['photo_file']['error'] ) {
-			require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-image-uploader.php';
-			$upload_result = Remember_Image_Uploader::upload_square_image( $_FILES['photo_file'], $photo_max_dimensions );
-			if ( is_wp_error( $upload_result ) ) {
-				Remember_Logger::warning(
-					'Public member registration: photo upload failed (account still created)',
-					array(
-						'user_id' => $user_id,
-						'error'   => $upload_result->get_error_message(),
-					)
-				);
-			} elseif ( ! empty( $upload_result['url'] ) ) {
-				$member_model->update_photo( $user_id, $upload_result['url'] );
-			}
-		}
-
 		Remember_Logger::info( 'Public member registration completed', array( 'user_id' => $user_id ) );
 
 		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-notifications.php';
 		Remember_Notifications::notify_member_registered( $user_id );
+
+		$registered_user = get_user_by( 'id', $user_id );
+		if ( $registered_user instanceof WP_User ) {
+			wp_set_current_user( $user_id );
+			wp_set_auth_cookie( $user_id, true, is_ssl() );
+			do_action( 'wp_login', $registered_user->user_login, $registered_user );
+		}
 
 		$this->redirect_member_registration( null, true );
 	}
@@ -369,7 +406,8 @@ class Remember_Public {
 	private function redirect_member_registration( $error_code, $success = false ) {
 		$redirect = wp_get_referer();
 		if ( ! $redirect ) {
-			$redirect = home_url( '/' );
+			// The form posts to itself, so WordPress reports no referer. Stay on this page.
+			$redirect = remove_query_arg( array( 'remember_registered', 'remember_reg_error' ) );
 		}
 		$redirect = wp_validate_redirect( $redirect, home_url( '/' ) );
 
@@ -409,6 +447,11 @@ class Remember_Public {
 			'photo_too_large'  => __( 'That photo is too large. Please choose a smaller image and try again.', 'remember' ),
 			'photo_failed'     => __( 'That photo could not be uploaded. Please try a different JPEG, PNG, or GIF.', 'remember' ),
 			'interests_too_long' => Remember_Profile_Fields::interests_too_long_message(),
+			'allergy_reaction' => __( 'Explain the nature and severity of your reaction to any allergen you selected.', 'remember' ),
+			'captcha_failed'   => __( 'The verification check failed. Please try again.', 'remember' ),
+			'rate_limited'     => __( 'Too many registration attempts from this network. Please wait an hour and try again.', 'remember' ),
+			'disposable_email' => __( 'Please use a permanent email address.', 'remember' ),
+			'rejected'         => __( 'Registration could not be completed.', 'remember' ),
 		);
 
 		return isset( $messages[ $code ] ) ? $messages[ $code ] : __( 'Registration could not be completed.', 'remember' );
@@ -421,6 +464,21 @@ class Remember_Public {
 	 * @return string
 	 */
 	public function shortcode_register( $atts ) {
+		$remember_register_success = isset( $_GET['remember_registered'] ) && '1' === (string) wp_unslash( $_GET['remember_registered'] );
+		if ( $remember_register_success ) {
+			require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-profile-audit.php';
+			$dashboard_url = Remember_Profile_Audit::get_dashboard_url();
+			ob_start();
+			?>
+			<div class="remember-register-splash" data-remember-register-splash="1" data-dashboard-url="<?php echo esc_url( $dashboard_url ); ?>" role="status">
+				<h2><?php esc_html_e( 'Your profile was successfully received.', 'remember' ); ?></h2>
+				<p><?php esc_html_e( 'Taking you to your dashboard.', 'remember' ); ?></p>
+				<p><a href="<?php echo esc_url( $dashboard_url ); ?>"><?php esc_html_e( 'Continue to your dashboard', 'remember' ); ?></a></p>
+			</div>
+			<?php
+			return ob_get_clean();
+		}
+
 		if ( is_user_logged_in() ) {
 			$created_pages     = get_option( 'remember_created_pages', array() );
 			$dashboard_page_id = isset( $created_pages['member_dashboard'] ) ? absint( $created_pages['member_dashboard'] ) : ( isset( $created_pages['dashboard'] ) ? absint( $created_pages['dashboard'] ) : 0 );
@@ -443,6 +501,9 @@ class Remember_Public {
 			$code = sanitize_text_field( wp_unslash( $_GET['remember_reg_error'] ) );
 			$remember_register_error_message = $this->get_member_registration_error_message( $code );
 		}
+
+		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-registration-guard.php';
+		Remember_Registration_Guard::enqueue();
 
 		ob_start();
 		include plugin_dir_path( __FILE__ ) . 'partials/remember-register.php';
@@ -573,6 +634,28 @@ class Remember_Public {
 				'updated_at' => $updated_at,
 			)
 		);
+	}
+
+	/**
+	 * Follow-on survey shortcode.
+	 *
+	 * @return string
+	 */
+	public function shortcode_survey() {
+		if ( ! is_user_logged_in() ) {
+			$login_url = wp_login_url( get_permalink() );
+			return '<p class="remember-notice remember-error">' . sprintf(
+				/* translators: %s: login link */
+				__( 'Please %s to open this survey.', 'remember' ),
+				'<a href="' . esc_url( $login_url ) . '">' . esc_html__( 'log in', 'remember' ) . '</a>'
+			) . '</p>';
+		}
+		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-surveys.php';
+		$survey_id = isset( $_REQUEST['survey_id'] ) ? absint( $_REQUEST['survey_id'] ) : 0;
+		if ( $survey_id < 1 ) {
+			return '<p class="remember-notice remember-error">' . esc_html__( 'Survey not found.', 'remember' ) . '</p>';
+		}
+		return Remember_Surveys::render_followup_page( $survey_id, get_current_user_id() );
 	}
 
 	/**

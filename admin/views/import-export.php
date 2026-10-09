@@ -35,10 +35,9 @@ if ( isset( $_POST['remember_import_export_action'] ) ) {
 			if ( ! in_array( $file_type['ext'], array( 'csv' ), true ) ) {
 				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Invalid file type. Please upload a CSV file.', 'remember' ) . '</p></div>';
 			} else {
-				$upload_dir = wp_upload_dir();
-				$temp_file  = $upload_dir['path'] . '/' . sanitize_file_name( $file['name'] );
+				$temp_file = $file['tmp_name'];
 
-				if ( move_uploaded_file( $file['tmp_name'], $temp_file ) ) {
+				if ( is_uploaded_file( $temp_file ) ) {
 					$results = array();
 
 					if ( 'import_members' === $action ) {
@@ -95,7 +94,7 @@ if ( isset( $_POST['remember_import_export_action'] ) ) {
 
 					@unlink( $temp_file ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 				} else {
-					echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Could not save uploaded file.', 'remember' ) . '</p></div>';
+					echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Could not read the uploaded file.', 'remember' ) . '</p></div>';
 				}
 			}
 		}
@@ -112,9 +111,8 @@ if ( isset( $_POST['remember_import_export_action'] ) ) {
 			if ( 'json' !== $ext ) {
 				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Upload a .json backup file.', 'remember' ) . '</p></div>';
 			} else {
-				$upload_dir = wp_upload_dir();
-				$temp_file  = $upload_dir['path'] . '/' . sanitize_file_name( $file['name'] );
-				if ( move_uploaded_file( $file['tmp_name'], $temp_file ) ) {
+				$temp_file = $file['tmp_name'];
+				if ( is_uploaded_file( $temp_file ) ) {
 					$result = Remember_Backup::restore_from_file( $temp_file );
 					@unlink( $temp_file ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 					if ( is_wp_error( $result ) ) {
@@ -132,7 +130,7 @@ if ( isset( $_POST['remember_import_export_action'] ) ) {
 						) . '</p></div>';
 					}
 				} else {
-					echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Could not save uploaded file.', 'remember' ) . '</p></div>';
+					echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Could not read the uploaded file.', 'remember' ) . '</p></div>';
 				}
 			}
 		}
@@ -144,7 +142,7 @@ $remember_ie_page  = admin_url( 'admin.php?page=remember-import-export' );
 $remember_ie_tools = array(
 	array(
 		'title'         => __( 'Members', 'remember' ),
-		'blurb'         => __( 'CSV of profiles. Existing emails are updated; new emails create WordPress users.', 'remember' ),
+		'blurb'         => __( 'CSV of profiles. Existing emails are updated; new emails create WordPress users. A blank cell clears that field. A column left out of the file is left as it is.', 'remember' ),
 		'export'        => 'export_members',
 		'export_label'  => __( 'Export', 'remember' ),
 		'import'        => 'import_members',

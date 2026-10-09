@@ -218,6 +218,7 @@ class Remember_Seeder {
 				// Vetting (read only)
 				'remember_read_vetting',
 				'remember_view_reports',
+				'remember_checkin_attendees',
 			);
 			$role_model->set_capabilities( $event_admin_role_id, $event_admin_capabilities );
 		}
@@ -625,7 +626,10 @@ class Remember_Seeder {
 			'event_application_accepted',
 			'event_application_declined',
 			'event_application_waitlisted',
+			'waitlist_spot_opened',
+			'waitlist_promoted',
 			'event_ticket_paid',
+			'survey_issued',
 			'payment_recorded',
 			'payment_due_reminder',
 			'vetting_collaborator_invited',

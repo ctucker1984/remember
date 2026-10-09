@@ -1577,6 +1577,249 @@ class Remember_Database_Updater {
 			}
 		}
 
+		// Update to 2.2.3 (allergy reaction text on the member profile).
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '2.2.3', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '2.2.3' ) );
+			require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-profile-fields.php';
+			if ( Remember_Profile_Fields::ensure_allergy_reaction_column() ) {
+				update_option( 'remember_db_version', '2.2.3' );
+				Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '2.2.3' ) );
+			}
+		}
+
+		// Update to 2.3.0 (event surveys).
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '2.3.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '2.3.0' ) );
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-database.php';
+			require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-page-creator.php';
+			$db = new Remember_Database();
+			$db->create_surveys_table();
+			$db->create_survey_questions_table();
+			$db->create_survey_responses_table();
+			$db->create_survey_answers_table();
+			Remember_Page_Creator::create_pages( array( 'survey' ) );
+			update_option( 'remember_db_version', '2.3.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '2.3.0' ) );
+		}
+
+		// Update to 2.3.1 (survey questions match custom-field shape).
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '2.3.1', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '2.3.1' ) );
+			global $wpdb;
+			$table   = $wpdb->prefix . 'remember_survey_questions';
+			$columns = $wpdb->get_col( "SHOW COLUMNS FROM {$table}", 0 );
+			if ( ! is_array( $columns ) ) {
+				$columns = array();
+				Remember_Logger::error( 'Could not read survey question columns', array( 'error' => $wpdb->last_error ) );
+			}
+			$add = array(
+				'field_key'           => "ALTER TABLE {$table} ADD COLUMN field_key VARCHAR(64) NOT NULL DEFAULT '' AFTER label",
+				'is_required'         => "ALTER TABLE {$table} ADD COLUMN is_required TINYINT(1) NOT NULL DEFAULT 0 AFTER options_text",
+				'required_when_json'  => "ALTER TABLE {$table} ADD COLUMN required_when_json TEXT NULL AFTER is_required",
+			);
+			$schema_ok = true;
+			foreach ( $add as $column_name => $sql ) {
+				if ( in_array( $column_name, $columns, true ) ) {
+					continue;
+				}
+				$added = $wpdb->query( $sql );
+				if ( false === $added ) {
+					$schema_ok = false;
+					Remember_Logger::error( 'Failed to add survey question column', array( 'column' => $column_name, 'error' => $wpdb->last_error ) );
+				} else {
+					Remember_Logger::info( 'Added survey question column', array( 'column' => $column_name ) );
+				}
+			}
+			if ( $schema_ok ) {
+				update_option( 'remember_db_version', '2.3.1' );
+				Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '2.3.1' ) );
+			}
+		}
+
+		// Update to 2.3.2 (survey header instructions).
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '2.3.2', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '2.3.2' ) );
+			global $wpdb;
+			$table   = $wpdb->prefix . 'remember_surveys';
+			$columns = $wpdb->get_col( "SHOW COLUMNS FROM {$table}", 0 );
+			if ( ! is_array( $columns ) ) {
+				$columns = array();
+				Remember_Logger::error( 'Could not read survey columns', array( 'error' => $wpdb->last_error ) );
+			}
+			$schema_ok = true;
+			if ( ! in_array( 'instructions', $columns, true ) ) {
+				$added = $wpdb->query( "ALTER TABLE {$table} ADD COLUMN instructions TEXT NULL AFTER title" );
+				if ( false === $added ) {
+					$schema_ok = false;
+					Remember_Logger::error( 'Failed to add survey instructions column', array( 'error' => $wpdb->last_error ) );
+				} else {
+					Remember_Logger::info( 'Added survey column', array( 'column' => 'instructions' ) );
+				}
+			}
+			if ( $schema_ok ) {
+				update_option( 'remember_db_version', '2.3.2' );
+				Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '2.3.2' ) );
+			}
+		}
+
+		// Update to 2.3.3 (optional event role on a survey).
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '2.3.3', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '2.3.3' ) );
+			global $wpdb;
+			$table   = $wpdb->prefix . 'remember_surveys';
+			$columns = $wpdb->get_col( "SHOW COLUMNS FROM {$table}", 0 );
+			if ( ! is_array( $columns ) ) {
+				$columns = array();
+				Remember_Logger::error( 'Could not read survey columns', array( 'error' => $wpdb->last_error ) );
+			}
+			$schema_ok = true;
+			if ( ! in_array( 'event_role_id', $columns, true ) ) {
+				$added = $wpdb->query( "ALTER TABLE {$table} ADD COLUMN event_role_id BIGINT(20) UNSIGNED DEFAULT NULL AFTER event_id" );
+				if ( false === $added ) {
+					$schema_ok = false;
+					Remember_Logger::error( 'Failed to add survey role column', array( 'error' => $wpdb->last_error ) );
+				} else {
+					Remember_Logger::info( 'Added survey column', array( 'column' => 'event_role_id' ) );
+				}
+			}
+			if ( $schema_ok ) {
+				$index = $wpdb->get_results( "SHOW INDEX FROM {$table} WHERE Key_name = 'event_role'" );
+				if ( empty( $index ) ) {
+					$indexed = $wpdb->query( "ALTER TABLE {$table} ADD KEY event_role (event_id, event_role_id, placement)" );
+					if ( false === $indexed ) {
+						Remember_Logger::error( 'Failed to add survey role index', array( 'error' => $wpdb->last_error ) );
+					}
+				}
+				update_option( 'remember_db_version', '2.3.3' );
+				Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '2.3.3' ) );
+			}
+		}
+
+		// Update to 2.3.4 (a survey can include several roles; none selected means every role).
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '2.3.4', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '2.3.4' ) );
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-database.php';
+			$db = new Remember_Database();
+			$db->create_survey_roles_table();
+			global $wpdb;
+			$surveys = $wpdb->prefix . 'remember_surveys';
+			$roles   = $wpdb->prefix . 'remember_survey_roles';
+			$copied  = $wpdb->query( "INSERT INTO {$roles} (survey_id, event_role_id) SELECT survey_id, event_role_id FROM {$surveys} s WHERE s.event_role_id IS NOT NULL AND s.event_role_id > 0 AND NOT EXISTS (SELECT 1 FROM {$roles} sr WHERE sr.survey_id = s.survey_id AND sr.event_role_id = s.event_role_id)" );
+			if ( false === $copied ) {
+				Remember_Logger::error( 'Failed to copy survey roles', array( 'error' => $wpdb->last_error ) );
+			} else {
+				$wpdb->query( "UPDATE {$surveys} SET event_role_id = NULL WHERE event_role_id IS NOT NULL" );
+				update_option( 'remember_db_version', '2.3.4' );
+				Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '2.3.4' ) );
+			}
+		}
+
+		// Update to 2.3.5 (billing secrets no longer use a key stored in the database).
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '2.3.5', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '2.3.5' ) );
+			require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-billing-crypto.php';
+			require_once plugin_dir_path( __FILE__ ) . '../integrations/class-remember-quickbooks-oauth.php';
+			require_once plugin_dir_path( __FILE__ ) . '../integrations/class-remember-xero-oauth.php';
+			Remember_QuickBooks_OAuth::get_settings();
+			Remember_Xero_OAuth::get_settings();
+			if ( ! Remember_Billing_Crypto::legacy_secrets_remain() ) {
+				delete_option( 'remember_qb_encryption_key' );
+				delete_option( 'remember_xero_encryption_key' );
+				update_option( 'remember_db_version', '2.3.5' );
+				Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '2.3.5' ) );
+			}
+		}
+
+		// Update to 2.3.6 (log of who viewed or exported health and emergency-contact data).
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '2.3.6', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '2.3.6' ) );
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-database.php';
+			$db = new Remember_Database();
+			$db->create_sensitive_access_log_table();
+			$log_table = $wpdb->prefix . 'remember_sensitive_access_log';
+			$exists    = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $log_table ) );
+			if ( $exists === $log_table ) {
+				update_option( 'remember_db_version', '2.3.6' );
+				Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '2.3.6' ) );
+			} else {
+				Remember_Logger::error( 'Failed to create sensitive access log table' );
+			}
+		}
+
+		// Update to 2.3.7 (per-event waitlist action when an accepted spot opens).
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '2.3.7', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '2.3.7' ) );
+			$events_table = $wpdb->prefix . 'remember_events';
+			$column       = $wpdb->get_var( $wpdb->prepare( "SHOW COLUMNS FROM {$events_table} LIKE %s", 'waitlist_mode' ) );
+			if ( 'waitlist_mode' !== $column ) {
+				$added = $wpdb->query( "ALTER TABLE {$events_table} ADD COLUMN waitlist_mode VARCHAR(20) NOT NULL DEFAULT 'off' AFTER registration_closes_at" );
+				if ( false === $added ) {
+					Remember_Logger::error( 'Failed to add waitlist mode column', array( 'error' => $wpdb->last_error ) );
+				}
+			}
+			$column = $wpdb->get_var( $wpdb->prepare( "SHOW COLUMNS FROM {$events_table} LIKE %s", 'waitlist_mode' ) );
+			if ( 'waitlist_mode' === $column ) {
+				update_option( 'remember_db_version', '2.3.7' );
+				Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '2.3.7' ) );
+			}
+		}
+
+		// Update to 2.3.8 (optional door check-in on the existing admission ticket).
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '2.3.8', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '2.3.8' ) );
+			$events_table = $wpdb->prefix . 'remember_events';
+			$apps_table   = $wpdb->prefix . 'remember_event_applications';
+			$schema_ok    = true;
+			$event_col    = $wpdb->get_var( $wpdb->prepare( "SHOW COLUMNS FROM {$events_table} LIKE %s", 'checkin_enabled' ) );
+			if ( 'checkin_enabled' !== $event_col ) {
+				$added = $wpdb->query( "ALTER TABLE {$events_table} ADD COLUMN checkin_enabled TINYINT(1) NOT NULL DEFAULT 0 AFTER waitlist_mode" );
+				if ( false === $added ) {
+					$schema_ok = false;
+					Remember_Logger::error( 'Failed to add check-in column', array( 'error' => $wpdb->last_error ) );
+				}
+			}
+			foreach ( array( 'checked_in_at' => 'DATETIME NULL DEFAULT NULL', 'checked_in_by' => 'BIGINT(20) UNSIGNED NULL DEFAULT NULL' ) as $column_name => $definition ) {
+				$found = $wpdb->get_var( $wpdb->prepare( "SHOW COLUMNS FROM {$apps_table} LIKE %s", $column_name ) );
+				if ( $column_name === $found ) {
+					continue;
+				}
+				$added = $wpdb->query( "ALTER TABLE {$apps_table} ADD COLUMN {$column_name} {$definition}" );
+				if ( false === $added ) {
+					$schema_ok = false;
+					Remember_Logger::error( 'Failed to add check-in application column', array( 'column' => $column_name, 'error' => $wpdb->last_error ) );
+				}
+			}
+			if ( $schema_ok ) {
+				$admin = get_role( 'administrator' );
+				if ( $admin ) {
+					$admin->add_cap( 'remember_checkin_attendees' );
+				}
+				require_once plugin_dir_path( __FILE__ ) . '../models/class-role.php';
+				$role_model = new Remember_Role();
+				$event_admin = $wpdb->get_var( $wpdb->prepare( "SELECT role_id FROM {$wpdb->prefix}remember_roles WHERE role_name = %s", 'Event Administrator' ) );
+				if ( $event_admin ) {
+					$role_model->add_capability( (int) $event_admin, 'remember_checkin_attendees' );
+				}
+				update_option( 'remember_db_version', '2.3.8' );
+				Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '2.3.8' ) );
+			}
+		}
+
+		// Update to 2.3.9 (email a saved report on a schedule).
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '2.3.9', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '2.3.9' ) );
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-database.php';
+			$db = new Remember_Database();
+			$db->create_report_schedules_table();
+			$found = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->prefix . 'remember_report_schedules' ) );
+			if ( $found === $wpdb->prefix . 'remember_report_schedules' ) {
+				update_option( 'remember_db_version', '2.3.9' );
+				Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '2.3.9' ) );
+			} else {
+				Remember_Logger::error( 'Failed to add report schedule table', array( 'error' => $wpdb->last_error ) );
+			}
+		}
+
 		// Always re-ensure health catalogs (idempotent). Catches sites that stalled mid-migration
 		// or activated before catalog seed rows were added.
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-seeder.php';

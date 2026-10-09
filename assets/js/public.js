@@ -370,6 +370,114 @@
 	}
 
 	/**
+	 * Show the allergy reaction field only when an allergy other than None is checked.
+	 */
+	function rememberInitSurvey(root) {
+		var $root = root ? $(root) : $(document);
+		$root.find('[data-remember-survey]').each(function() {
+			var $survey = $(this);
+			if ($survey.data('rememberSurveyReady')) {
+				return;
+			}
+			$survey.data('rememberSurveyReady', 1);
+
+			function currentValues($question) {
+				var type = $question.attr('data-field-type');
+				if (type === 'multiselect') {
+					return $question.find('input:checked').map(function() {
+						return $(this).val();
+					}).get();
+				}
+				if (type === 'boolean') {
+					var picked = $question.find('input:checked').val() || '';
+					return picked ? [picked] : [];
+				}
+				var $field = $question.find('select, textarea, input[type="text"]').first();
+				var value = $field.length ? ($field.val() || '') : '';
+				return value ? [value] : [];
+			}
+
+			function apply() {
+				var $questions = $survey.find('[data-remember-survey-question]');
+				for (var pass = 0; pass < 2; pass++) {
+					$questions.each(function() {
+						var $question = $(this);
+						var rawRule = $question.attr('data-remember-pq-when');
+						if (!rawRule) {
+							return;
+						}
+						var rule = null;
+						try {
+							rule = JSON.parse(rawRule);
+						} catch (error) {
+							rule = null;
+						}
+						var match = false;
+						if (rule && rule.field_key && rule.values && rule.values.length) {
+							var $parent = $survey.find('[data-remember-pq-key="' + rule.field_key + '"]');
+							if ($parent.length && !$parent.prop('hidden')) {
+								var picked = currentValues($parent);
+								match = picked.some(function(value) {
+									return rule.values.indexOf(value) !== -1;
+								});
+							}
+						}
+						$question.prop('hidden', !match);
+						$question.find(':input').prop('disabled', !match);
+						$question.find('.remember-required').prop('hidden', !match);
+					});
+				}
+			}
+
+			$survey.on('change input', ':input', apply);
+			apply();
+		});
+	}
+	window.rememberInitSurvey = rememberInitSurvey;
+
+	function initAllergyReactionFields() {
+		$('[data-remember-allergy-group]').each(function() {
+			var $group = $(this);
+			var $reaction = $group.find('[data-remember-allergy-reaction]');
+			var $field = $reaction.find('textarea');
+			var $boxes = $group.find('input[type="checkbox"][name="allergies[]"]');
+			if (!$reaction.length || !$boxes.length) {
+				return;
+			}
+
+			function sync() {
+				var needs = $boxes.filter(':checked').filter(function() {
+					return !this.hasAttribute('data-remember-none');
+				}).length > 0;
+				if (needs) {
+					$reaction.removeAttr('hidden');
+					$field.prop('required', true);
+				} else {
+					$reaction.attr('hidden', 'hidden');
+					$field.prop('required', false);
+				}
+			}
+
+			$boxes.on('change.rememberAllergyReaction', sync);
+			sync();
+		});
+	}
+
+	function initRegistrationSuccessSplash() {
+		var splash = document.querySelector('[data-remember-register-splash]');
+		if (!splash) {
+			return;
+		}
+		var url = splash.getAttribute('data-dashboard-url');
+		if (!url) {
+			return;
+		}
+		window.setTimeout(function() {
+			window.location.assign(url);
+		}, 3000);
+	}
+
+	/**
 	 * Require at least one checkbox in dietary / medical / allergy groups.
 	 * Selecting "None" clears other options in the same group (and vice versa).
 	 */
@@ -664,6 +772,9 @@
 		initDisplayNameNicknameSync();
 		initProfilePhotoCropper();
 		initRequireOneCheckboxGroups();
+		initAllergyReactionFields();
+		rememberInitSurvey();
+		initRegistrationSuccessSplash();
 		initConditionalProfileQuestions();
 		initProfileCurrencyConfirm();
 		initApplyGate();

@@ -67,10 +67,11 @@ class Remember_Image_Uploader {
 
 		self::$upload_subdir = $subdir;
 		add_filter( 'upload_dir', array( __CLASS__, 'filter_upload_dir' ) );
-		$uploaded_file = wp_handle_upload(
-			$file,
-			array( 'test_form' => false )
-		);
+		$overrides = array( 'test_form' => false );
+		if ( self::SUBDIR_PHOTOS === $subdir ) {
+			$overrides['unique_filename_callback'] = array( __CLASS__, 'random_photo_filename' );
+		}
+		$uploaded_file = wp_handle_upload( $file, $overrides );
 		remove_filter( 'upload_dir', array( __CLASS__, 'filter_upload_dir' ) );
 		self::$upload_subdir = '';
 
@@ -127,6 +128,30 @@ class Remember_Image_Uploader {
 			'url'  => $uploaded_file['url'],
 			'path' => $file_path,
 		);
+	}
+
+	/**
+	 * Name a profile photo so the original camera filename is not in the URL.
+	 *
+	 * @param string $dir  Destination directory.
+	 * @param string $name Original basename. Unused.
+	 * @param string $ext  Extension, including the leading dot.
+	 * @return string
+	 */
+	public static function random_photo_filename( $dir, $name, $ext ) {
+		unset( $name );
+		$ext = strtolower( (string) $ext );
+		if ( ! in_array( $ext, array( '.jpg', '.jpeg', '.png', '.gif' ), true ) ) {
+			$ext = '.jpg';
+		}
+		$dir = trailingslashit( (string) $dir );
+		for ( $i = 0; $i < 5; $i++ ) {
+			$filename = wp_generate_password( 24, false, false ) . $ext;
+			if ( ! file_exists( $dir . $filename ) ) {
+				return $filename;
+			}
+		}
+		return wp_generate_password( 32, false, false ) . $ext;
 	}
 
 	/**

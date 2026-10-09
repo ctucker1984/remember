@@ -302,12 +302,20 @@ if ( isset( $_POST['remember_application_action'] ) && check_admin_referer( 'rem
 					if ( 'accepted' === $previous_status ) {
 						$event = $event_model->get( $application->event_id );
 						$event_name = $event ? $event->event_name : __( 'Unknown Event', 'remember' );
-						remember_notify_event_admins(
-							$application->event_id,
-							sprintf( __( 'Seat opened for %s', 'remember' ), $event_name ),
-							sprintf( __( 'A previously accepted attendee was declined. A seat is now available for this event.%1$sEvent: %2$s', 'remember' ), "\n", $event_name )
-						);
-						echo '<div class="notice notice-info is-dismissible"><p>' . esc_html__( 'Seat opened and Event Administrators were notified for manual waitlist promotion.', 'remember' ) . '</p></div>';
+						require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-waitlist.php';
+						$waitlist_mode = Remember_Waitlist::sanitize_mode( $event && isset( $event->waitlist_mode ) ? $event->waitlist_mode : 'off' );
+						if ( 'off' === $waitlist_mode ) {
+							remember_notify_event_admins(
+								$application->event_id,
+								sprintf( __( 'Seat opened for %s', 'remember' ), $event_name ),
+								sprintf( __( 'A previously accepted attendee was declined. A seat is now available for this event.%1$sEvent: %2$s', 'remember' ), "\n", $event_name )
+							);
+							echo '<div class="notice notice-info is-dismissible"><p>' . esc_html__( 'Seat opened and Event Administrators were notified for manual waitlist promotion.', 'remember' ) . '</p></div>';
+						} elseif ( 'promoted' === Remember_Waitlist::last_notice() ) {
+							echo '<div class="notice notice-info is-dismissible"><p>' . esc_html__( 'The next waiting application for that role was moved to pending.', 'remember' ) . '</p></div>';
+						} elseif ( 'notified' === Remember_Waitlist::last_notice() ) {
+							echo '<div class="notice notice-info is-dismissible"><p>' . esc_html__( 'Event Administrators were emailed that a spot opened.', 'remember' ) . '</p></div>';
+						}
 					}
 
 					$member_user = get_user_by( 'ID', $application->member_id );

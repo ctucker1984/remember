@@ -57,6 +57,10 @@ class Remember_Report_Catalog {
 				'label' => __( 'Events', 'remember' ),
 				'cap'   => array( 'remember_read_events' ),
 			),
+			'surveys'      => array(
+				'label' => __( 'Surveys', 'remember' ),
+				'cap'   => array( 'remember_read_applications' ),
+			),
 		);
 	}
 
@@ -141,6 +145,57 @@ class Remember_Report_Catalog {
 			}
 		}
 		return true;
+	}
+
+	/**
+	 * Health or emergency topics a report definition would show.
+	 *
+	 * @param string $subject    Subject.
+	 * @param array  $definition Builder JSON.
+	 * @return string[] health and/or emergency.
+	 */
+	public static function sensitive_topics( $subject, $definition ) {
+		$fields = self::raw_fields( $subject );
+		if ( ! is_array( $definition ) ) {
+			$definition = array();
+		}
+		$needed = array();
+		foreach ( array( 'columns', 'group_by' ) as $key ) {
+			if ( empty( $definition[ $key ] ) || ! is_array( $definition[ $key ] ) ) {
+				continue;
+			}
+			foreach ( $definition[ $key ] as $id ) {
+				$needed[] = (string) $id;
+			}
+		}
+		if ( ! empty( $definition['filters'] ) && is_array( $definition['filters'] ) ) {
+			foreach ( $definition['filters'] as $filter ) {
+				if ( is_array( $filter ) && ! empty( $filter['field'] ) ) {
+					$needed[] = (string) $filter['field'];
+				}
+			}
+		}
+		if ( ! empty( $definition['aggregations'] ) && is_array( $definition['aggregations'] ) ) {
+			foreach ( $definition['aggregations'] as $agg ) {
+				if ( is_array( $agg ) && ! empty( $agg['field'] ) && '*' !== $agg['field'] ) {
+					$needed[] = (string) $agg['field'];
+				}
+			}
+		}
+		if ( ! empty( $definition['sort']['field'] ) ) {
+			$needed[] = (string) $definition['sort']['field'];
+		}
+		$topics = array();
+		foreach ( array_unique( $needed ) as $id ) {
+			if ( empty( $fields[ $id ]['sensitive'] ) ) {
+				continue;
+			}
+			$topic = (string) $fields[ $id ]['sensitive'];
+			if ( 'health' === $topic || 'emergency' === $topic ) {
+				$topics[ $topic ] = true;
+			}
+		}
+		return array_keys( $topics );
 	}
 
 	/**
@@ -242,7 +297,7 @@ class Remember_Report_Catalog {
 		foreach ( $subjects as $id => $label ) {
 			$fields = array();
 			foreach ( self::fields_for_current_user( $id ) as $fid => $field ) {
-				$fields[] = array(
+				$row = array(
 					'id'      => $fid,
 					'label'   => $field['label'],
 					'group'   => $field['group'],
@@ -251,6 +306,10 @@ class Remember_Report_Catalog {
 					'measure' => ! empty( $field['measure'] ),
 					'list'    => ! empty( $field['list'] ),
 				);
+				if ( ! empty( $field['questions'] ) && is_array( $field['questions'] ) ) {
+					$row['questions'] = $field['questions'];
+				}
+				$fields[] = $row;
 			}
 			$out['subjects'][] = array(
 				'id'      => $id,
@@ -374,6 +433,7 @@ class Remember_Report_Catalog {
 			'payments'     => array( 'user.display_name', 'event.event_name', 'payment.total_amount', 'payment.amount_due', 'payment.payment_status' ),
 			'vetting'      => array( 'user.display_name', 'vetting.status', 'vetting.decision', 'vetter.display_name', 'vetting.scheduled_at' ),
 			'events'       => array( 'event.event_name', 'event.status', 'event.start_date', 'event.end_date', 'location.location_name' ),
+			'surveys'      => array( 'event.event_name', 'survey.title', 'role.role_name', 'user.display_name', 'question.label', 'answer.value', 'response.submitted_at' ),
 		);
 		return isset( $map[ $subject ] ) ? $map[ $subject ] : array();
 	}
@@ -455,6 +515,7 @@ class Remember_Report_Catalog {
 					'emergency.relationship'     => self::f( __( 'Emergency contact relationship', 'remember' ), 'Emergency', 'string', 'p.emergency_contact_relationship', 'profile', false, array(), 'emergency' ),
 					'health.dietary'             => self::csv_list_field( __( 'Dietary restrictions', 'remember' ), 'Health', $dietary_sql, $dietary_opts, 'health' ),
 					'health.allergies'           => self::csv_list_field( __( 'Allergies', 'remember' ), 'Health', $allergy_sql, $allergy_opts, 'health' ),
+					'health.allergy_reaction'    => self::f( __( 'Allergy reaction', 'remember' ), 'Health', 'string', 'p.allergy_reaction', 'profile', false, array(), 'health' ),
 					'health.medical'             => self::csv_list_field( __( 'Medical accommodations', 'remember' ), 'Health', $medical_sql, $medical_opts, 'health' ),
 				),
 				$mid
@@ -476,10 +537,12 @@ class Remember_Report_Catalog {
 					'application.waitlisted_at'  => self::f( __( 'Waitlisted', 'remember' ), 'Application', 'datetime', 'a.waitlisted_at' ),
 					'application.processed_at'   => self::f( __( 'Processed', 'remember' ), 'Application', 'datetime', 'a.processed_at' ),
 					'application.ticket_voided'  => self::f( __( 'Ticket voided', 'remember' ), 'Application', 'enum', 'a.ticket_voided', null, false, array( '0', '1' ) ),
+					'application.checked_in_at'  => self::f( __( 'Checked in', 'remember' ), 'Application', 'datetime', 'a.checked_in_at' ),
 					'application.superseded_at'  => self::f( __( 'Superseded', 'remember' ), 'Application', 'datetime', 'a.superseded_at' ),
 					'member.status'              => self::f( __( 'Member status', 'remember' ), 'Member', 'enum', 'm.status', 'member', false, $member_status ),
 					'health.dietary'             => self::csv_list_field( __( 'Dietary restrictions', 'remember' ), 'Health', $dietary_sql, $dietary_opts, 'health' ),
 					'health.allergies'           => self::csv_list_field( __( 'Allergies', 'remember' ), 'Health', $allergy_sql, $allergy_opts, 'health' ),
+					'health.allergy_reaction'    => self::f( __( 'Allergy reaction', 'remember' ), 'Health', 'string', 'p.allergy_reaction', 'profile', false, array(), 'health' ),
 					'health.medical'             => self::csv_list_field( __( 'Medical accommodations', 'remember' ), 'Health', $medical_sql, $medical_opts, 'health' ),
 				),
 				$mid
@@ -518,6 +581,53 @@ class Remember_Report_Catalog {
 				'vetting.completed_at'   => self::f( __( 'Completed', 'remember' ), 'Vetting', 'datetime', 'v.completed_at' ),
 				'vetting.decision_date'  => self::f( __( 'Decision date', 'remember' ), 'Vetting', 'datetime', 'v.decision_date' ),
 				'vetting.created_at'     => self::f( __( 'Opened', 'remember' ), 'Vetting', 'datetime', 'v.created_at' ),
+			);
+		}
+
+		if ( 'surveys' === $subject ) {
+			$survey_questions = self::survey_question_catalog();
+			$all_roles        = __( 'All roles', 'remember' );
+			$survey_roles     = $event_roles;
+			if ( ! in_array( $all_roles, $survey_roles, true ) ) {
+				array_unshift( $survey_roles, $all_roles );
+			}
+			$role_field         = self::csv_list_field( __( 'Role', 'remember' ), 'Survey', "COALESCE(survey_role_names.role_names, '" . esc_sql( $all_roles ) . "')", $survey_roles );
+			$role_field['join'] = 'role';
+			$answer             = self::f( __( 'Answer', 'remember' ), 'Survey', 'string', 'ans.value_text' );
+			$answer['questions'] = $survey_questions['questions'];
+			return array(
+				'event.event_name'       => self::f( __( 'Event', 'remember' ), 'Event', 'string', 'e.event_name', 'event' ),
+				'survey.title'           => self::f( __( 'Survey', 'remember' ), 'Survey', 'string', 'sv.title' ),
+				'role.role_name'         => $role_field,
+				'survey.placement'       => self::f(
+					__( 'Survey kind', 'remember' ),
+					'Survey',
+					'enum',
+					'sv.placement',
+					null,
+					false,
+					array(
+						array( 'id' => 'application', 'label' => __( 'Application', 'remember' ) ),
+						array( 'id' => 'followup', 'label' => __( 'Follow-on', 'remember' ) ),
+					)
+				),
+				'survey.timing'          => self::f(
+					__( 'Survey timing', 'remember' ),
+					'Survey',
+					'enum',
+					'sv.timing',
+					null,
+					false,
+					array(
+						array( 'id' => 'before', 'label' => __( 'Before the event', 'remember' ) ),
+						array( 'id' => 'after', 'label' => __( 'After the event', 'remember' ) ),
+					)
+				),
+				'user.display_name'      => self::f( __( 'Member', 'remember' ), 'Member', 'string', 'u.display_name', 'user' ),
+				'user.user_email'        => self::f( __( 'Email', 'remember' ), 'Member', 'string', 'u.user_email', 'user' ),
+				'question.label'         => self::f( __( 'Question', 'remember' ), 'Survey', 'enum', 'sq.label', null, false, $survey_questions['options'] ),
+				'answer.value'           => $answer,
+				'response.submitted_at'  => self::f( __( 'Submitted', 'remember' ), 'Survey', 'date', 'resp.submitted_at' ),
 			);
 		}
 
@@ -589,12 +699,175 @@ class Remember_Report_Catalog {
 	}
 
 	/**
+	 * Survey questions as filter choices, and the type each label uses for answer filters.
+	 *
+	 * A shared label keeps one question option. If those questions do not share a type,
+	 * the answer filter stays free text.
+	 *
+	 * @return array{options:array<int,array{id:string,label:string}>,questions:array<int,array<string,mixed>>}
+	 */
+	private static function survey_question_catalog() {
+		global $wpdb;
+		$p    = $wpdb->prefix;
+		$rows = $wpdb->get_results(
+			"SELECT sq.label, sq.field_type, sq.options_text, sv.title
+			FROM {$p}remember_survey_questions sq
+			INNER JOIN {$p}remember_surveys sv ON sv.survey_id = sq.survey_id
+			ORDER BY sv.title ASC, sq.sort_order ASC, sq.question_id ASC"
+		); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- prefix only.
+		$grouped = array();
+		if ( is_array( $rows ) ) {
+			foreach ( $rows as $row ) {
+				$label = isset( $row->label ) ? trim( (string) $row->label ) : '';
+				if ( '' === $label ) {
+					continue;
+				}
+				if ( ! isset( $grouped[ $label ] ) ) {
+					$grouped[ $label ] = array(
+						'type'    => '',
+						'options' => array(),
+						'titles'  => array(),
+						'mixed'   => false,
+					);
+				}
+				$title = isset( $row->title ) ? trim( (string) $row->title ) : '';
+				if ( '' !== $title && ! in_array( $title, $grouped[ $label ]['titles'], true ) ) {
+					$grouped[ $label ]['titles'][] = $title;
+				}
+				$shaped = self::survey_answer_shape( isset( $row->field_type ) ? (string) $row->field_type : 'text', isset( $row->options_text ) ? $row->options_text : '' );
+				if ( '' === $grouped[ $label ]['type'] ) {
+					$grouped[ $label ]['type']    = $shaped['type'];
+					$grouped[ $label ]['options'] = $shaped['options'];
+				} elseif ( $grouped[ $label ]['type'] !== $shaped['type'] || $grouped[ $label ]['options'] !== $shaped['options'] ) {
+					$grouped[ $label ]['mixed']   = true;
+					$grouped[ $label ]['type']    = 'string';
+					$grouped[ $label ]['options'] = array();
+				}
+			}
+		}
+		$options   = array();
+		$questions = array();
+		foreach ( $grouped as $label => $row ) {
+			$display = $label;
+			if ( count( $row['titles'] ) > 1 ) {
+				$display = $label . ' (' . implode( ', ', $row['titles'] ) . ')';
+			} elseif ( 1 === count( $row['titles'] ) ) {
+				$display = $row['titles'][0] . ' — ' . $label;
+			}
+			$options[]   = array(
+				'id'    => $label,
+				'label' => $display,
+			);
+			$questions[] = array(
+				'label'   => $label,
+				'type'    => $row['mixed'] ? 'string' : $row['type'],
+				'options' => $row['mixed'] ? array() : $row['options'],
+			);
+		}
+		return array(
+			'options'   => $options,
+			'questions' => $questions,
+		);
+	}
+
+	/**
+	 * Map a survey question type onto the report filter type.
+	 *
+	 * @param string $field_type   Question type.
+	 * @param mixed  $options_text Stored choices.
+	 * @return array{type:string,options:array<int,array{id:string,label:string}>}
+	 */
+	private static function survey_answer_shape( $field_type, $options_text ) {
+		$field_type = sanitize_key( $field_type );
+		if ( 'boolean' === $field_type ) {
+			return array(
+				'type'    => 'enum',
+				'options' => array(
+					array( 'id' => 'yes', 'label' => __( 'Yes', 'remember' ) ),
+					array( 'id' => 'no', 'label' => __( 'No', 'remember' ) ),
+				),
+			);
+		}
+		if ( 'select' === $field_type ) {
+			return array(
+				'type'    => 'enum',
+				'options' => self::question_choice_options( $options_text ),
+			);
+		}
+		if ( 'multiselect' === $field_type ) {
+			return array(
+				'type'    => 'multiselect',
+				'options' => self::question_choice_options( $options_text ),
+			);
+		}
+		return array(
+			'type'    => 'string',
+			'options' => array(),
+		);
+	}
+
+	/**
+	 * Answer field shaped like the question a sibling filter has pinned.
+	 *
+	 * @param array $field   Answer catalog field.
+	 * @param array $filters All filters on the report.
+	 * @return array<string,mixed>|null
+	 */
+	public static function answer_filter_field( $field, $filters ) {
+		if ( empty( $field['questions'] ) || ! is_array( $field['questions'] ) || ! is_array( $filters ) ) {
+			return null;
+		}
+		$label = '';
+		foreach ( $filters as $filter ) {
+			if ( ! is_array( $filter ) || empty( $filter['field'] ) || 'question.label' !== (string) $filter['field'] ) {
+				continue;
+			}
+			$op = isset( $filter['op'] ) ? sanitize_key( $filter['op'] ) : '';
+			if ( ! in_array( $op, array( 'eq', 'in' ), true ) ) {
+				continue;
+			}
+			$raw = isset( $filter['value'] ) ? $filter['value'] : '';
+			$values = is_array( $raw ) ? $raw : explode( ',', (string) $raw );
+			$values = array_values( array_filter( array_map( 'strval', $values ), 'strlen' ) );
+			if ( 1 !== count( $values ) ) {
+				continue;
+			}
+			if ( '' !== $label && $label !== $values[0] ) {
+				return null;
+			}
+			$label = $values[0];
+		}
+		if ( '' === $label ) {
+			return null;
+		}
+		foreach ( $field['questions'] as $question ) {
+			if ( ! is_array( $question ) || ! isset( $question['label'] ) || (string) $question['label'] !== $label ) {
+				continue;
+			}
+			$type = isset( $question['type'] ) ? (string) $question['type'] : 'string';
+			if ( 'enum' !== $type && 'multiselect' !== $type ) {
+				return null;
+			}
+			$copy             = $field;
+			$copy['type']     = $type;
+			$copy['options']  = isset( $question['options'] ) && is_array( $question['options'] ) ? $question['options'] : array();
+			$copy['list']     = ( 'multiselect' === $type );
+			if ( 'multiselect' === $type ) {
+				$copy['list_match'] = 'pipe';
+			}
+			return $copy;
+		}
+		return null;
+	}
+
+	/**
 	 * Custom-question choices as {id,label} for the filter UI.
 	 *
 	 * @param mixed $json Options JSON.
 	 * @return array<int,array{id:string,label:string}>
 	 */
 	private static function question_choice_options( $json ) {
+		require_once plugin_dir_path( __FILE__ ) . 'class-remember-profile-questions.php';
 		$out = array();
 		foreach ( Remember_Profile_Questions::parse_options( $json ) as $row ) {
 			if ( empty( $row['key'] ) ) {

@@ -31,7 +31,11 @@ class Remember_Reports {
 		add_action( 'wp_ajax_remember_report_delete', array( __CLASS__, 'ajax_delete' ) );
 		add_action( 'wp_ajax_remember_report_recipients', array( __CLASS__, 'ajax_recipients' ) );
 		add_action( 'wp_ajax_remember_report_copy', array( __CLASS__, 'ajax_copy' ) );
+		add_action( 'wp_ajax_remember_report_schedule_get', array( __CLASS__, 'ajax_schedule_get' ) );
+		add_action( 'wp_ajax_remember_report_schedule_save', array( __CLASS__, 'ajax_schedule_save' ) );
 		add_action( 'admin_post_remember_report_export', array( __CLASS__, 'handle_export' ) );
+		require_once plugin_dir_path( __FILE__ ) . 'class-remember-report-schedule.php';
+		Remember_Report_Schedule::init();
 	}
 
 	/**
@@ -72,6 +76,7 @@ class Remember_Reports {
 		if ( is_wp_error( $result ) ) {
 			wp_send_json_error( array( 'message' => $result->get_error_message() ), 400 );
 		}
+		self::log_sensitive_report( $definition, __( 'Report preview', 'remember' ), count( $result['rows'] ) );
 		wp_send_json_success( $result );
 	}
 
@@ -154,7 +159,77 @@ class Remember_Reports {
 		if ( ! Remember_Saved_Report::delete_owned( $id, get_current_user_id() ) ) {
 			wp_send_json_error( array( 'message' => __( 'Could not delete that report.', 'remember' ) ), 400 );
 		}
+		require_once plugin_dir_path( __FILE__ ) . 'class-remember-report-schedule.php';
+		Remember_Report_Schedule::delete_for_report( $id );
 		wp_send_json_success();
+	}
+
+	/**
+	 * Schedule and the staff who can receive this saved report.
+	 *
+	 * @return void
+	 */
+	public static function ajax_schedule_get() {
+		self::require_ajax();
+		require_once plugin_dir_path( __FILE__ ) . '../models/class-saved-report.php';
+		require_once plugin_dir_path( __FILE__ ) . 'class-remember-report-catalog.php';
+		require_once plugin_dir_path( __FILE__ ) . 'class-remember-report-schedule.php';
+		$row = self::owned_from_request();
+		if ( ! $row ) {
+			wp_send_json_error( array( 'message' => __( 'Save this report before scheduling it.', 'remember' ) ), 404 );
+		}
+		$definition = self::definition_from_row( $row );
+		wp_send_json_success(
+			array(
+				'schedule'   => Remember_Report_Schedule::for_report( $row->report_id ),
+				'sensitive'  => ! empty( Remember_Report_Catalog::sensitive_topics( $row->subject, $definition ) ),
+				'recipients' => Remember_Report_Catalog::recipients_for_report( $row->subject, $definition, 0 ),
+				'timezone'   => wp_timezone_string(),
+			)
+		);
+	}
+
+	/**
+	 * Save the email schedule for an owned report.
+	 *
+	 * @return void
+	 */
+	public static function ajax_schedule_save() {
+		self::require_ajax();
+		require_once plugin_dir_path( __FILE__ ) . '../models/class-saved-report.php';
+		require_once plugin_dir_path( __FILE__ ) . 'class-remember-report-schedule.php';
+		$row = self::owned_from_request();
+		if ( ! $row ) {
+			wp_send_json_error( array( 'message' => __( 'Save this report before scheduling it.', 'remember' ) ), 404 );
+		}
+		$ids = array();
+		if ( isset( $_POST['recipient_ids'] ) ) {
+			$raw = wp_unslash( $_POST['recipient_ids'] ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+			if ( ! is_array( $raw ) ) {
+				$raw = array( $raw );
+			}
+			foreach ( $raw as $id ) {
+				$ids[] = absint( $id );
+			}
+		}
+		$result = Remember_Report_Schedule::save_for_report(
+			$row,
+			array(
+				'enabled'          => ! empty( $_POST['enabled'] ),
+				'frequency'        => isset( $_POST['frequency'] ) ? sanitize_key( wp_unslash( $_POST['frequency'] ) ) : 'weekly',
+				'weekday'          => isset( $_POST['weekday'] ) ? absint( wp_unslash( $_POST['weekday'] ) ) : 1,
+				'monthday'         => isset( $_POST['monthday'] ) ? absint( wp_unslash( $_POST['monthday'] ) ) : 1,
+				'send_time'        => isset( $_POST['send_time'] ) ? sanitize_text_field( wp_unslash( $_POST['send_time'] ) ) : '08:00',
+				'event_id'         => isset( $_POST['event_id'] ) ? absint( wp_unslash( $_POST['event_id'] ) ) : 0,
+				'skip_empty'       => ! empty( $_POST['skip_empty'] ),
+				'sensitive_opt_in' => ! empty( $_POST['sensitive_opt_in'] ),
+				'recipient_ids'    => $ids,
+			)
+		);
+		if ( is_wp_error( $result ) ) {
+			wp_send_json_error( array( 'message' => $result->get_error_message() ), 400 );
+		}
+		wp_send_json_success( array( 'schedule' => $result ) );
 	}
 
 	/**
@@ -235,6 +310,7 @@ class Remember_Reports {
 		if ( is_wp_error( $result ) ) {
 			wp_die( esc_html( $result->get_error_message() ) );
 		}
+		self::log_sensitive_report( $definition, __( 'Report CSV', 'remember' ), count( $result['rows'] ) );
 		$filename = 'remember-report-' . gmdate( 'Y-m-d-H-i-s' ) . '.csv';
 		header( 'Content-Type: text/csv; charset=utf-8' );
 		header( 'Content-Disposition: attachment; filename=' . $filename );
@@ -257,6 +333,29 @@ class Remember_Reports {
 		}
 		fclose( $out );
 		exit;
+	}
+
+	/**
+	 * Record a report run that includes health or emergency columns.
+	 *
+	 * @param array  $definition Builder JSON.
+	 * @param string $context    Preview or CSV.
+	 * @param int    $row_count  Rows returned.
+	 * @return void
+	 */
+	private static function log_sensitive_report( $definition, $context, $row_count ) {
+		require_once plugin_dir_path( __FILE__ ) . 'class-remember-report-catalog.php';
+		require_once plugin_dir_path( __FILE__ ) . 'class-remember-access-log.php';
+		$subject = isset( $definition['subject'] ) ? (string) $definition['subject'] : '';
+		$what    = Remember_Access_Log::what_from_topics( Remember_Report_Catalog::sensitive_topics( $subject, $definition ) );
+		if ( '' === $what ) {
+			return;
+		}
+		$name = isset( $_POST['name'] ) ? sanitize_text_field( wp_unslash( $_POST['name'] ) ) : '';
+		if ( '' !== $name ) {
+			$context = $name . ' — ' . $context;
+		}
+		Remember_Access_Log::record( 0, $what, $context, $row_count );
 	}
 
 	/**

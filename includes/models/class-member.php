@@ -36,6 +36,15 @@ class Remember_Member extends Remember_Base_Model {
 	protected $primary_key = 'member_id';
 
 	/**
+	 * Statuses the members table can store.
+	 *
+	 * @return string[]
+	 */
+	public static function statuses() {
+		return array( 'pending_vetting', 'unvetted', 'in_vetting', 'vetted', 'rejected', 'inactive', 'merged' );
+	}
+
+	/**
 	 * Get all members, excluding merged (locked) profiles unless requested.
 	 *
 	 * @param array $args Query arguments. Set include_merged to true to include locked profiles.
@@ -75,9 +84,17 @@ class Remember_Member extends Remember_Base_Model {
 	 * @return int|false Member ID or false on error.
 	 */
 	public function create( $user_id, $status = 'pending_vetting' ) {
+		$status = strtolower( trim( (string) $status ) );
+		if ( '' === $status ) {
+			$status = 'pending_vetting';
+		}
+		if ( ! in_array( $status, self::statuses(), true ) ) {
+			return false;
+		}
+
 		$data = array(
-			'member_id' => $user_id,
-			'status'    => $status,
+			'member_id'  => $user_id,
+			'status'     => $status,
 			'created_at' => current_time( 'mysql' ),
 			'updated_at' => current_time( 'mysql' ),
 		);

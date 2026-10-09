@@ -213,6 +213,9 @@ class Remember_QuickBooks_OAuth {
 			}
 		}
 
+		require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-billing-crypto.php';
+		Remember_Billing_Crypto::migrate_processor( 'quickbooks', $settings );
+
 		return $settings;
 	}
 
@@ -262,50 +265,18 @@ class Remember_QuickBooks_OAuth {
 	 * @return string Encrypted data.
 	 */
 	private static function encrypt( $data ) {
-		if ( ! function_exists( 'openssl_encrypt' ) ) {
-			// Fallback to base64 if OpenSSL not available (not secure, but better than plain text)
-			return base64_encode( $data );
-		}
-
-		$key = self::get_encryption_key();
-		$iv = openssl_random_pseudo_bytes( openssl_cipher_iv_length( 'AES-256-CBC' ) );
-		$encrypted = openssl_encrypt( $data, 'AES-256-CBC', $key, 0, $iv );
-
-		return base64_encode( $iv . $encrypted );
+		require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-billing-crypto.php';
+		return Remember_Billing_Crypto::seal( $data, 'remember_qb_encryption_key' );
 	}
 
 	/**
 	 * Decrypt sensitive data.
 	 *
 	 * @param string $data Encrypted data.
-	 * @return string Decrypted data.
+	 * @return string|false Decrypted data.
 	 */
 	private static function decrypt( $data ) {
-		if ( ! function_exists( 'openssl_decrypt' ) ) {
-			// Fallback to base64 decode if OpenSSL not available
-			return base64_decode( $data );
-		}
-
-		$key = self::get_encryption_key();
-		$data = base64_decode( $data );
-		$iv_length = openssl_cipher_iv_length( 'AES-256-CBC' );
-		$iv = substr( $data, 0, $iv_length );
-		$encrypted = substr( $data, $iv_length );
-
-		return openssl_decrypt( $encrypted, 'AES-256-CBC', $key, 0, $iv );
-	}
-
-	/**
-	 * Get encryption key.
-	 *
-	 * @return string Encryption key.
-	 */
-	private static function get_encryption_key() {
-		$key = get_option( 'remember_qb_encryption_key' );
-		if ( ! $key ) {
-			$key = wp_generate_password( 32, true, true );
-			update_option( 'remember_qb_encryption_key', $key );
-		}
-		return $key;
+		require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-billing-crypto.php';
+		return Remember_Billing_Crypto::open( $data, 'remember_qb_encryption_key' );
 	}
 }

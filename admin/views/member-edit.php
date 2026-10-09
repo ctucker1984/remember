@@ -145,6 +145,13 @@ if ( $photo_max_bytes < 1 ) {
 	<h3><?php esc_html_e( 'WordPress User Information', 'remember' ); ?></h3>
 	<table class="form-table">
 		<tr>
+			<th><label for="user_email"><?php esc_html_e( 'Email Address', 'remember' ); ?> <span class="description"><?php esc_html_e( '(required)', 'remember' ); ?></span></label></th>
+			<td>
+				<input type="email" id="user_email" name="user_email" class="regular-text" value="<?php echo esc_attr( $view_user->user_email ); ?>" required autocomplete="email">
+				<p class="description"><?php esc_html_e( 'Login and password-reset address. Saving a different address changes it immediately, updates the linked Xero or QuickBooks contact, and WordPress emails the previous address.', 'remember' ); ?></p>
+			</td>
+		</tr>
+		<tr>
 			<th><label for="nickname"><?php esc_html_e( 'Nickname', 'remember' ); ?> <span class="description"><?php esc_html_e( '(required)', 'remember' ); ?></span></label></th>
 			<td>
 				<input type="text" id="nickname" name="nickname" class="regular-text" value="<?php echo esc_attr( get_user_meta( $view_user->ID, 'nickname', true ) ); ?>" required>
@@ -437,22 +444,38 @@ if ( $photo_max_bytes < 1 ) {
 	
 	<!-- Allergies -->
 	<?php if ( ! empty( $allergies ) ) : ?>
-		<h3><?php esc_html_e( 'Known Allergies', 'remember' ); ?></h3>
-		<table class="form-table">
-			<tr>
-				<th><?php esc_html_e( 'Select Allergies', 'remember' ); ?></th>
-				<td>
-					<fieldset style="max-height: 200px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 3px;">
-						<?php foreach ( $allergies as $allergy ) : ?>
-							<label style="display: block; margin: 5px 0;">
-								<input type="checkbox" name="allergies[]" value="<?php echo esc_attr( $allergy->allergy_id ); ?>" <?php checked( in_array( $allergy->allergy_id, $selected_allergy_ids ) ); ?>>
-								<?php echo esc_html( $allergy->allergy_name ); ?>
-							</label>
-						<?php endforeach; ?>
-					</fieldset>
-				</td>
-			</tr>
-		</table>
+		<?php
+		$remember_reaction_needed = false;
+		foreach ( $allergies as $allergy ) {
+			if ( 'None' !== $allergy->allergy_name && in_array( (string) $allergy->allergy_id, array_map( 'strval', (array) $selected_allergy_ids ), true ) ) {
+				$remember_reaction_needed = true;
+				break;
+			}
+		}
+		$remember_reaction_text = ( $view_profile && isset( $view_profile->allergy_reaction ) ) ? (string) $view_profile->allergy_reaction : '';
+		?>
+		<div data-remember-allergy-group="1">
+			<h3><?php esc_html_e( 'Known Allergies', 'remember' ); ?></h3>
+			<table class="form-table">
+				<tr>
+					<th><?php esc_html_e( 'Select Allergies', 'remember' ); ?></th>
+					<td>
+						<fieldset style="max-height: 200px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 3px;">
+							<?php foreach ( $allergies as $allergy ) : ?>
+								<label style="display: block; margin: 5px 0;">
+									<input type="checkbox" name="allergies[]" value="<?php echo esc_attr( $allergy->allergy_id ); ?>" <?php checked( in_array( (string) $allergy->allergy_id, array_map( 'strval', (array) $selected_allergy_ids ), true ) ); ?><?php echo ( 'None' === $allergy->allergy_name ) ? ' data-remember-none="1"' : ''; ?>>
+									<?php echo esc_html( $allergy->allergy_name ); ?>
+								</label>
+							<?php endforeach; ?>
+						</fieldset>
+						<div class="remember-allergy-reaction" data-remember-allergy-reaction="1"<?php echo $remember_reaction_needed ? '' : ' hidden'; ?>>
+							<label for="remember_allergy_reaction"><?php echo esc_html( Remember_Profile_Fields::allergy_reaction_prompt() ); ?></label>
+							<textarea name="allergy_reaction" id="remember_allergy_reaction" rows="6" class="large-text"<?php echo $remember_reaction_needed ? ' required' : ''; ?>><?php echo esc_textarea( $remember_reaction_text ); ?></textarea>
+						</div>
+					</td>
+				</tr>
+			</table>
+		</div>
 	<?php endif; ?>
 	<?php endif; ?>
 	

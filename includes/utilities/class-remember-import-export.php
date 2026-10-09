@@ -144,6 +144,7 @@ class Remember_Import_Export {
 				array(
 					'Dietary Restrictions',
 					'Allergies',
+					'Allergy Reaction',
 					'Medical Accommodations',
 				)
 			);
@@ -152,11 +153,52 @@ class Remember_Import_Export {
 	}
 
 	/**
+	 * Open a CSV download or a file. Sends HTTP headers only for a download.
+	 *
+	 * @param string $path     Empty to stream the download.
+	 * @param string $filename Download filename.
+	 * @return resource|false
+	 */
+	private static function begin_csv_export( $path, $filename ) {
+		$path = (string) $path;
+		if ( '' === $path ) {
+			header( 'Content-Type: text/csv; charset=utf-8' );
+			header( 'Content-Disposition: attachment; filename=' . $filename );
+			header( 'Pragma: no-cache' );
+			header( 'Expires: 0' );
+			$output = fopen( 'php://output', 'w' );
+		} else {
+			$output = fopen( $path, 'w' );
+		}
+		if ( ! is_resource( $output ) ) {
+			return false;
+		}
+		fprintf( $output, chr( 0xEF ) . chr( 0xBB ) . chr( 0xBF ) );
+		return $output;
+	}
+
+	/**
+	 * Close a CSV export. A browser download ends the request.
+	 *
+	 * @param resource $output Handle.
+	 * @param string   $path   Empty when this is a download.
+	 * @return bool
+	 */
+	private static function finish_csv_export( $output, $path ) {
+		fclose( $output );
+		if ( '' === (string) $path ) {
+			exit;
+		}
+		return true;
+	}
+
+	/**
 	 * Export members to CSV.
 	 *
-	 * @return void
+	 * @param string $path File path. Empty streams a download and exits.
+	 * @return bool True when a file was written.
 	 */
-	public static function export_members() {
+	public static function export_members( $path = '' ) {
 		if ( ! current_user_can( 'remember_read_members' ) && ! current_user_can( 'remember_read_attendees' ) ) {
 			wp_die( __( 'You do not have sufficient permissions to export members.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
 		}
@@ -171,18 +213,20 @@ class Remember_Import_Export {
 		} else {
 			$members = $member_model->get_all();
 		}
+		if ( ! is_array( $members ) ) {
+			$members = array();
+		}
+		require_once plugin_dir_path( __FILE__ ) . 'class-remember-access-log.php';
+		$remember_export_what = Remember_Access_Log::what_from_topics( Remember_Access_Log::topics_for_current_user() );
+		if ( '' !== $remember_export_what ) {
+			Remember_Access_Log::record( 0, $remember_export_what, __( 'Member CSV', 'remember' ), count( $members ) );
+		}
 		
 		$filename = 'members-export-' . date( 'Y-m-d-H-i-s' ) . '.csv';
-		
-		header( 'Content-Type: text/csv; charset=utf-8' );
-		header( 'Content-Disposition: attachment; filename=' . $filename );
-		header( 'Pragma: no-cache' );
-		header( 'Expires: 0' );
-		
-		$output = fopen( 'php://output', 'w' );
-		
-		// Add BOM for Excel compatibility
-		fprintf( $output, chr( 0xEF ) . chr( 0xBB ) . chr( 0xBF ) );
+		$output   = self::begin_csv_export( $path, $filename );
+		if ( ! is_resource( $output ) ) {
+			return false;
+		}
 
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-profile-questions.php';
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-clothing-sizes.php';
@@ -248,6 +292,7 @@ class Remember_Import_Export {
 			if ( current_user_can( 'remember_access_health' ) ) {
 				$row[] = self::member_list_labels( (int) $member->member_id, 'dietary' );
 				$row[] = self::member_list_labels( (int) $member->member_id, 'allergies' );
+				$row[] = $profile->allergy_reaction ?? '';
 				$row[] = self::member_list_labels( (int) $member->member_id, 'medical' );
 			}
 			foreach ( $field_keys as $fkey ) {
@@ -256,8 +301,7 @@ class Remember_Import_Export {
 			self::write_csv_line( $output, $row );
 		}
 		
-		fclose( $output );
-		exit;
+		return self::finish_csv_export( $output, $path );
 	}
 
 	/**
@@ -311,24 +355,19 @@ class Remember_Import_Export {
 	/**
 	 * Export events to CSV.
 	 *
-	 * @return void
+	 * @param string $path File path. Empty streams a download and exits.
+	 * @return bool True when a file was written.
 	 */
-	public static function export_events() {
+	public static function export_events( $path = '' ) {
 		$event_model = new Remember_Event();
 		$events = $event_model->get_all();
 		
 		$filename = 'events-export-' . date( 'Y-m-d-H-i-s' ) . '.csv';
-		
-		header( 'Content-Type: text/csv; charset=utf-8' );
-		header( 'Content-Disposition: attachment; filename=' . $filename );
-		header( 'Pragma: no-cache' );
-		header( 'Expires: 0' );
-		
-		$output = fopen( 'php://output', 'w' );
-		
-		// Add BOM for Excel compatibility
-		fprintf( $output, chr( 0xEF ) . chr( 0xBB ) . chr( 0xBF ) );
-		
+		$output   = self::begin_csv_export( $path, $filename );
+		if ( ! is_resource( $output ) ) {
+			return false;
+		}
+
 		// Headers
 		self::write_csv_line( $output, array(
 			'Event ID',
@@ -363,9 +402,8 @@ class Remember_Import_Export {
 				$location_name,
 			) );
 		}
-		
-		fclose( $output );
-		exit;
+
+		return self::finish_csv_export( $output, $path );
 	}
 
 	/**
@@ -419,24 +457,19 @@ class Remember_Import_Export {
 	/**
 	 * Export locations to CSV.
 	 *
-	 * @return void
+	 * @param string $path File path. Empty streams a download and exits.
+	 * @return bool True when a file was written.
 	 */
-	public static function export_locations() {
+	public static function export_locations( $path = '' ) {
 		$location_model = new Remember_Location();
 		$locations = $location_model->get_all();
 		
 		$filename = 'locations-export-' . date( 'Y-m-d-H-i-s' ) . '.csv';
-		
-		header( 'Content-Type: text/csv; charset=utf-8' );
-		header( 'Content-Disposition: attachment; filename=' . $filename );
-		header( 'Pragma: no-cache' );
-		header( 'Expires: 0' );
-		
-		$output = fopen( 'php://output', 'w' );
-		
-		// Add BOM for Excel compatibility
-		fprintf( $output, chr( 0xEF ) . chr( 0xBB ) . chr( 0xBF ) );
-		
+		$output   = self::begin_csv_export( $path, $filename );
+		if ( ! is_resource( $output ) ) {
+			return false;
+		}
+
 		// Headers
 		self::write_csv_line( $output, array(
 			'Location ID',
@@ -464,9 +497,8 @@ class Remember_Import_Export {
 				$location->is_active ? 'Yes' : 'No',
 			) );
 		}
-		
-		fclose( $output );
-		exit;
+
+		return self::finish_csv_export( $output, $path );
 	}
 
 	/**
@@ -501,6 +533,33 @@ class Remember_Import_Export {
 			return '';
 		}
 		return $s;
+	}
+
+	/**
+	 * Row error for a database write that returned false. Zero changed rows is not a failure.
+	 *
+	 * @param int    $row_number CSV row number.
+	 * @param string $message    What failed, without the row number.
+	 * @param string $db_error   Database error captured before any later query.
+	 * @return string
+	 */
+	private static function import_row_write_error( $row_number, $message, $db_error = '' ) {
+		$db_error = trim( (string) $db_error );
+		if ( '' === $db_error ) {
+			return sprintf(
+				/* translators: 1: CSV row number, 2: what failed */
+				__( 'Row %1$d: %2$s', 'remember' ),
+				$row_number,
+				$message
+			);
+		}
+		return sprintf(
+			/* translators: 1: CSV row number, 2: what failed, 3: database error */
+			__( 'Row %1$d: %2$s %3$s', 'remember' ),
+			$row_number,
+			$message,
+			$db_error
+		);
 	}
 
 	/**
@@ -606,9 +665,10 @@ class Remember_Import_Export {
 	 * Import members from CSV.
 	 *
 	 * @param string $file_path Path to CSV file.
+	 * @param bool   $dry_run   Validate rows and skip every save.
 	 * @return array Results array with success/error counts.
 	 */
-	public static function import_members( $file_path ) {
+	public static function import_members( $file_path, $dry_run = false ) {
 		$results = array(
 			'success' => 0,
 			'error'   => 0,
@@ -652,7 +712,8 @@ class Remember_Import_Export {
 				continue;
 			}
 			
-			$row_data = array_combine( $headers, $data );
+			// Ignore extra trailing cells (e.g. a trailing comma from Excel).
+			$row_data = array_combine( $headers, array_slice( $data, 0, count( $headers ) ) );
 			
 			// Required fields
 			if ( empty( $row_data['Email'] ) ) {
@@ -661,15 +722,38 @@ class Remember_Import_Export {
 				continue;
 			}
 			
+			$status = 'pending_vetting';
+			if ( array_key_exists( 'Status', $row_data ) && '' !== trim( (string) $row_data['Status'] ) ) {
+				$status = strtolower( trim( (string) $row_data['Status'] ) );
+				if ( ! in_array( $status, Remember_Member::statuses(), true ) ) {
+					Remember_Logger::warning(
+						'Member import rejected status',
+						array(
+							'row'    => $row_number,
+							'status' => $status,
+						)
+					);
+					$results['error']++;
+					$results['errors'][] = sprintf( __( 'Row %d: Status is not a member status.', 'remember' ), $row_number );
+					continue;
+				}
+			}
+
 			// Check if user exists
 			$user = get_user_by( 'email', $row_data['Email'] );
 			$user_id = null;
+			$created_user = false;
 			
 			if ( ! $user ) {
 				// Create WordPress user
 				$username = sanitize_user( $row_data['Email'] );
 				$password = wp_generate_password( 12, false );
 				$display_name = ! empty( $row_data['Display Name'] ) ? $row_data['Display Name'] : $row_data['Email'];
+
+				if ( $dry_run ) {
+					$results['success']++;
+					continue;
+				}
 				
 				$user_id = wp_create_user( $username, $password, $row_data['Email'] );
 				
@@ -678,6 +762,7 @@ class Remember_Import_Export {
 					$results['errors'][] = sprintf( __( 'Row %d: Could not create user - %s', 'remember' ), $row_number, $user_id->get_error_message() );
 					continue;
 				}
+				$created_user = true;
 				
 				// Update user data (do not store Excel "0" placeholders in user meta).
 				wp_update_user( array(
@@ -688,6 +773,22 @@ class Remember_Import_Export {
 				) );
 			} else {
 				$user_id = $user->ID;
+				if ( user_can( $user, 'manage_options' ) && ! current_user_can( 'manage_options' ) ) {
+					Remember_Logger::warning(
+						'Member import skipped a WordPress administrator',
+						array(
+							'row'     => $row_number,
+							'user_id' => $user_id,
+						)
+					);
+					$results['error']++;
+					$results['errors'][] = sprintf( __( 'Row %d: That email belongs to a WordPress administrator.', 'remember' ), $row_number );
+					continue;
+				}
+				if ( $dry_run ) {
+					$results['success']++;
+					continue;
+				}
 				// Sync WP name fields from CSV on re-import (clears Excel "0" placeholders).
 				$user_update = array( 'ID' => $user_id );
 				if ( ! empty( trim( (string) ( $row_data['Display Name'] ?? '' ) ) ) ) {
@@ -707,10 +808,20 @@ class Remember_Import_Export {
 			// Check if member record exists
 			$member = $member_model->get( $user_id );
 			if ( ! $member ) {
-				$status = ! empty( $row_data['Status'] ) ? $row_data['Status'] : 'pending_vetting';
 				$member_id = $member_model->create( $user_id, $status );
 				
 				if ( ! $member_id ) {
+					if ( $created_user ) {
+						require_once ABSPATH . 'wp-admin/includes/user.php';
+						wp_delete_user( $user_id );
+						Remember_Logger::error(
+							'Member import removed a user after the member row failed',
+							array(
+								'user_id' => $user_id,
+								'row'     => $row_number,
+							)
+						);
+					}
 					$results['error']++;
 					$results['errors'][] = sprintf( __( 'Row %d: Could not create member record.', 'remember' ), $row_number );
 					continue;
@@ -742,40 +853,80 @@ class Remember_Import_Export {
 			require_once plugin_dir_path( __FILE__ ) . 'class-remember-clothing-sizes.php';
 			require_once plugin_dir_path( __FILE__ ) . 'class-remember-im-platforms.php';
 			require_once plugin_dir_path( __FILE__ ) . 'class-remember-profile-fields.php';
-			$tz_for_profile = array_key_exists( 'Timezone', $row_data )
-				? sanitize_text_field( (string) $row_data['Timezone'] )
-				: '';
-			
-			$profile_data = array_merge(
-				self::member_import_legal_names( $row_data, $user_id ),
-				array(
-					'address_street'                 => $row_data['Street Address'] ?? '',
-					'address_city'                   => $row_data['City'] ?? '',
-					'address_state'                  => $row_data['State'] ?? '',
-					'address_postal'                 => $row_data['Postal Code'] ?? '',
-					'address_country'                => $row_data['Country'] ?? 'US',
-					'cell_phone'                     => $row_data['Cell Phone'] ?? '',
-					'timezone'                       => $tz_for_profile,
-					'im_handle'                      => $row_data['IM Handle'] ?? '',
-					'im_type'                        => Remember_Im_Platforms::sanitize_key_value( $row_data['IM Type'] ?? '' ),
-					'shirt_size'                     => Remember_Clothing_Sizes::sanitize( 'shirt', $row_data['Shirt Size'] ?? '' ),
-					'pants_size'                     => Remember_Clothing_Sizes::sanitize( 'pants', $row_data['Pants Size'] ?? '' ),
-					'shoe_size'                      => Remember_Clothing_Sizes::sanitize( 'shoe', $row_data['Shoe Size'] ?? '' ),
-					'interests'                      => isset( $row_data['Interests'] ) ? Remember_Profile_Fields::clamp_interests( $row_data['Interests'] ) : '',
-					'updated_at'                     => current_time( 'mysql' ),
-					'updated_by'                     => get_current_user_id() ? get_current_user_id() : null,
-				)
+
+			$is_new_profile = ! $profile;
+			$profile_data   = array(
+				'updated_at' => current_time( 'mysql' ),
+				'updated_by' => get_current_user_id() ? get_current_user_id() : null,
 			);
+			$legal_names    = self::member_import_legal_names( $row_data, $user_id );
+			if ( $is_new_profile || array_key_exists( 'Legal First Name', $row_data ) || array_key_exists( 'First Name', $row_data ) ) {
+				$profile_data['legal_first_name'] = $legal_names['legal_first_name'];
+			}
+			if ( $is_new_profile || array_key_exists( 'Legal Last Name', $row_data ) || array_key_exists( 'Last Name', $row_data ) ) {
+				$profile_data['legal_last_name'] = $legal_names['legal_last_name'];
+			}
+
+			$text_columns = array(
+				'Street Address' => 'address_street',
+				'City'           => 'address_city',
+				'State'          => 'address_state',
+				'Postal Code'    => 'address_postal',
+				'Cell Phone'     => 'cell_phone',
+				'IM Handle'      => 'im_handle',
+			);
+			foreach ( $text_columns as $column => $field ) {
+				if ( $is_new_profile || array_key_exists( $column, $row_data ) ) {
+					$profile_data[ $field ] = (string) ( $row_data[ $column ] ?? '' );
+				}
+			}
+			if ( $is_new_profile || array_key_exists( 'Country', $row_data ) ) {
+				$profile_data['address_country'] = (string) ( $row_data['Country'] ?? 'US' );
+			}
+			if ( $is_new_profile || array_key_exists( 'Timezone', $row_data ) ) {
+				$profile_data['timezone'] = array_key_exists( 'Timezone', $row_data )
+					? sanitize_text_field( (string) $row_data['Timezone'] )
+					: '';
+			}
+			if ( $is_new_profile || array_key_exists( 'IM Type', $row_data ) ) {
+				$profile_data['im_type'] = Remember_Im_Platforms::sanitize_key_value( (string) ( $row_data['IM Type'] ?? '' ) );
+			}
+			if ( $is_new_profile || array_key_exists( 'Shirt Size', $row_data ) ) {
+				$profile_data['shirt_size'] = Remember_Clothing_Sizes::sanitize( 'shirt', (string) ( $row_data['Shirt Size'] ?? '' ) );
+			}
+			if ( $is_new_profile || array_key_exists( 'Pants Size', $row_data ) ) {
+				$profile_data['pants_size'] = Remember_Clothing_Sizes::sanitize( 'pants', (string) ( $row_data['Pants Size'] ?? '' ) );
+			}
+			if ( $is_new_profile || array_key_exists( 'Shoe Size', $row_data ) ) {
+				$profile_data['shoe_size'] = Remember_Clothing_Sizes::sanitize( 'shoe', (string) ( $row_data['Shoe Size'] ?? '' ) );
+			}
+			if ( $is_new_profile || array_key_exists( 'Interests', $row_data ) ) {
+				$profile_data['interests'] = array_key_exists( 'Interests', $row_data )
+					? Remember_Profile_Fields::clamp_interests( $row_data['Interests'] )
+					: '';
+			}
+
+			if ( current_user_can( 'remember_access_health' ) && array_key_exists( 'Allergy Reaction', $row_data ) ) {
+				Remember_Profile_Fields::ensure_allergy_reaction_column();
+				$profile_data['allergy_reaction'] = sanitize_textarea_field( (string) $row_data['Allergy Reaction'] );
+			}
 
 			if ( current_user_can( 'remember_access_emergency_contact' ) ) {
-				$profile_data['emergency_contact_first']        = $row_data['Emergency Contact First'] ?? '';
-				$profile_data['emergency_contact_last']         = $row_data['Emergency Contact Last'] ?? '';
-				$profile_data['emergency_contact_phone']        = $row_data['Emergency Contact Phone'] ?? '';
-				$profile_data['emergency_contact_relationship'] = $row_data['Emergency Contact Relationship'] ?? '';
+				$emergency_columns = array(
+					'Emergency Contact First'        => 'emergency_contact_first',
+					'Emergency Contact Last'         => 'emergency_contact_last',
+					'Emergency Contact Phone'        => 'emergency_contact_phone',
+					'Emergency Contact Relationship' => 'emergency_contact_relationship',
+				);
+				foreach ( $emergency_columns as $column => $field ) {
+					if ( $is_new_profile || array_key_exists( $column, $row_data ) ) {
+						$profile_data[ $field ] = (string) ( $row_data[ $column ] ?? '' );
+					}
+				}
 			}
 			
 			if ( $profile ) {
-				$wpdb->update(
+				$saved = $wpdb->update(
 					$wpdb->prefix . 'remember_member_profiles',
 					$profile_data,
 					array( 'member_id' => $user_id )
@@ -783,10 +934,24 @@ class Remember_Import_Export {
 			} else {
 				$profile_data['member_id']  = $user_id;
 				$profile_data['created_at'] = current_time( 'mysql' );
-				$wpdb->insert(
+				$saved = $wpdb->insert(
 					$wpdb->prefix . 'remember_member_profiles',
 					$profile_data
 				);
+			}
+			if ( false === $saved ) {
+				$db_error = $wpdb->last_error;
+				$results['error']++;
+				$results['errors'][] = self::import_row_write_error( $row_number, __( 'Could not save the profile.', 'remember' ), $db_error );
+				Remember_Logger::error(
+					'Member import profile save failed',
+					array(
+						'user_id'  => $user_id,
+						'row'      => $row_number,
+						'db_error' => $db_error,
+					)
+				);
+				continue;
 			}
 
 			if ( current_user_can( 'remember_access_health' ) ) {
@@ -824,9 +989,10 @@ class Remember_Import_Export {
 	 * Import events from CSV.
 	 *
 	 * @param string $file_path Path to CSV file.
+	 * @param bool   $dry_run   Validate rows and skip every save.
 	 * @return array Results array with success/error counts.
 	 */
-	public static function import_events( $file_path ) {
+	public static function import_events( $file_path, $dry_run = false ) {
 		$results = array(
 			'success' => 0,
 			'error'   => 0,
@@ -870,7 +1036,8 @@ class Remember_Import_Export {
 				continue;
 			}
 			
-			$row_data = array_combine( $headers, $data );
+			// Ignore extra trailing cells (e.g. a trailing comma from Excel).
+			$row_data = array_combine( $headers, array_slice( $data, 0, count( $headers ) ) );
 			
 			// Required fields
 			if ( empty( $row_data['Event Name'] ) ) {
@@ -919,12 +1086,26 @@ class Remember_Import_Export {
 				'is_private'        => ( ! empty( $row_data['Is Private'] ) && strtolower( $row_data['Is Private'] ) === 'yes' ) ? 1 : 0,
 				'location_id'       => $location_id,
 			);
+
+			if ( $dry_run ) {
+				$results['success']++;
+				continue;
+			}
 			
 			$event_id = $event_model->create( $event_data );
 			
 			if ( ! $event_id ) {
+				global $wpdb;
+				$db_error = $wpdb->last_error;
 				$results['error']++;
-				$results['errors'][] = sprintf( __( 'Row %d: Could not create event.', 'remember' ), $row_number );
+				$results['errors'][] = self::import_row_write_error( $row_number, __( 'Could not create event.', 'remember' ), $db_error );
+				Remember_Logger::error(
+					'Event import save failed',
+					array(
+						'row'      => $row_number,
+						'db_error' => $db_error,
+					)
+				);
 				continue;
 			}
 			
@@ -939,9 +1120,10 @@ class Remember_Import_Export {
 	 * Import locations from CSV.
 	 *
 	 * @param string $file_path Path to CSV file.
+	 * @param bool   $dry_run   Validate rows and skip every save.
 	 * @return array Results array with success/error counts.
 	 */
-	public static function import_locations( $file_path ) {
+	public static function import_locations( $file_path, $dry_run = false ) {
 		$results = array(
 			'success' => 0,
 			'error'   => 0,
@@ -985,7 +1167,8 @@ class Remember_Import_Export {
 				continue;
 			}
 			
-			$row_data = array_combine( $headers, $data );
+			// Ignore extra trailing cells (e.g. a trailing comma from Excel).
+			$row_data = array_combine( $headers, array_slice( $data, 0, count( $headers ) ) );
 			
 			// Required fields
 			if ( empty( $row_data['Location Name'] ) ) {
@@ -1012,12 +1195,26 @@ class Remember_Import_Export {
 				'details'        => $row_data['Details'] ?? '',
 				'is_active'      => ( ! empty( $row_data['Is Active'] ) && strtolower( $row_data['Is Active'] ) === 'yes' ) ? 1 : 0,
 			);
+
+			if ( $dry_run ) {
+				$results['success']++;
+				continue;
+			}
 			
 			$location_id = $location_model->create( $location_data );
 			
 			if ( ! $location_id ) {
+				global $wpdb;
+				$db_error = $wpdb->last_error;
 				$results['error']++;
-				$results['errors'][] = sprintf( __( 'Row %d: Could not create location.', 'remember' ), $row_number );
+				$results['errors'][] = self::import_row_write_error( $row_number, __( 'Could not create location.', 'remember' ), $db_error );
+				Remember_Logger::error(
+					'Location import save failed',
+					array(
+						'row'      => $row_number,
+						'db_error' => $db_error,
+					)
+				);
 				continue;
 			}
 			
@@ -1213,6 +1410,8 @@ class Remember_Import_Export {
 			'Applied At',
 			'Status',
 			'Ticket Voided',
+			'Checked In At',
+			'Checked In By',
 			'Ticket Ready Emailed At',
 			'User ID',
 			'Email',
@@ -1255,6 +1454,7 @@ class Remember_Import_Export {
 				array(
 					'Dietary Restrictions',
 					'Allergies',
+					'Allergy Reaction',
 					'Medical Accommodations',
 				)
 			);
@@ -1280,6 +1480,21 @@ class Remember_Import_Export {
 		);
 		if ( ! is_array( $applications ) ) {
 			$applications = array();
+		}
+
+		require_once plugin_dir_path( __FILE__ ) . 'class-remember-access-log.php';
+		$remember_export_what = Remember_Access_Log::what_from_topics( Remember_Access_Log::topics_for_current_user() );
+		if ( '' !== $remember_export_what ) {
+			Remember_Access_Log::record(
+				0,
+				$remember_export_what,
+				sprintf(
+					/* translators: %s: event name */
+					__( 'Event participants CSV: %s', 'remember' ),
+					isset( $event->event_name ) ? (string) $event->event_name : (string) $event_id
+				),
+				count( $applications )
+			);
 		}
 
 		$filename = 'event-' . $event_id . '-participants-' . gmdate( 'Y-m-d-H-i-s' ) . '.csv';
@@ -1328,6 +1543,11 @@ class Remember_Import_Export {
 			}
 
 			$custom = Remember_Profile_Questions::get_responses_by_field_key( (int) $app->member_id );
+			$checked_in_by = '';
+			if ( ! empty( $app->checked_in_by ) ) {
+				$checker = get_user_by( 'id', (int) $app->checked_in_by );
+				$checked_in_by = $checker ? $checker->display_name : '';
+			}
 
 			$row = array(
 				(int) $app->application_id,
@@ -1337,6 +1557,8 @@ class Remember_Import_Export {
 				isset( $app->applied_at ) ? $app->applied_at : '',
 				'accepted',
 				! empty( $app->ticket_voided ) ? 'Yes' : 'No',
+				isset( $app->checked_in_at ) ? (string) $app->checked_in_at : '',
+				$checked_in_by,
 				isset( $app->ticket_ready_emailed_at ) ? (string) $app->ticket_ready_emailed_at : '',
 				(int) $app->member_id,
 				$user->user_email,
@@ -1371,6 +1593,7 @@ class Remember_Import_Export {
 			if ( current_user_can( 'remember_access_health' ) ) {
 				$row[] = self::member_list_labels( (int) $app->member_id, 'dietary' );
 				$row[] = self::member_list_labels( (int) $app->member_id, 'allergies' );
+				$row[] = $profile->allergy_reaction ?? '';
 				$row[] = self::member_list_labels( (int) $app->member_id, 'medical' );
 			}
 
@@ -1490,9 +1713,10 @@ class Remember_Import_Export {
 	 * Import custom field definitions from CSV (upsert by Short Name).
 	 *
 	 * @param string $file_path Path to CSV.
+	 * @param bool   $dry_run   Validate rows and skip every save.
 	 * @return array{success:int,error:int,errors:string[]}
 	 */
-	public static function import_profile_questions( $file_path ) {
+	public static function import_profile_questions( $file_path, $dry_run = false ) {
 		$results = array(
 			'success' => 0,
 			'error'   => 0,
@@ -1612,6 +1836,11 @@ class Remember_Import_Export {
 			);
 			if ( null !== $event_card ) {
 				$payload['show_on_event_card'] = $event_card;
+			}
+
+			if ( $dry_run ) {
+				$results['success']++;
+				continue;
 			}
 
 			if ( $existing ) {

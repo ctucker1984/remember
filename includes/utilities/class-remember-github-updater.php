@@ -16,6 +16,9 @@
  * GitHub's generated "Source code" zip unpacks to remember-<tag>/ and would install
  * beside the active copy instead of replacing it.
  *
+ * There is no signature check. The GitHub accounts that can publish a release are
+ * the trust boundary. See the readme section on updates.
+ *
  * @package    reMember
  * @subpackage reMember/includes/utilities
  */

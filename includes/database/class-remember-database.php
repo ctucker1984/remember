@@ -89,10 +89,17 @@ class Remember_Database {
 			'profile_questions'              => 'create_profile_questions_table',
 			'profile_question_responses'     => 'create_profile_question_responses_table',
 			'saved_reports'                  => 'create_saved_reports_table',
+			'report_schedules'               => 'create_report_schedules_table',
 			'agreements'                     => 'create_agreements_table',
 			'agreement_revisions'            => 'create_agreement_revisions_table',
 			'event_agreements'               => 'create_event_agreements_table',
 			'agreement_acceptances'          => 'create_agreement_acceptances_table',
+			'surveys'                        => 'create_surveys_table',
+			'survey_roles'                   => 'create_survey_roles_table',
+			'survey_questions'               => 'create_survey_questions_table',
+			'survey_responses'               => 'create_survey_responses_table',
+			'survey_answers'                 => 'create_survey_answers_table',
+			'sensitive_access_log'           => 'create_sensitive_access_log_table',
 			'plugin_version'                 => 'create_plugin_version_table',
 		);
 
@@ -157,6 +164,7 @@ class Remember_Database {
 			im_handle VARCHAR(100) DEFAULT NULL,
 			im_type VARCHAR(50) DEFAULT 'telegram',
 			interests TEXT DEFAULT NULL,
+			allergy_reaction TEXT DEFAULT NULL,
 			shirt_size VARCHAR(20) DEFAULT NULL,
 			pants_size VARCHAR(20) DEFAULT NULL,
 			shoe_size VARCHAR(20) DEFAULT NULL,
@@ -514,6 +522,8 @@ class Remember_Database {
 			end_date DATE NOT NULL,
 			registration_opens_at DATETIME DEFAULT NULL,
 			registration_closes_at DATETIME DEFAULT NULL,
+			waitlist_mode VARCHAR(20) NOT NULL DEFAULT 'off',
+			checkin_enabled TINYINT(1) NOT NULL DEFAULT 0,
 			is_private BOOLEAN DEFAULT 0,
 			status ENUM('draft', 'open', 'closed', 'completed', 'cancelled') DEFAULT 'draft',
 			created_by BIGINT(20) UNSIGNED NOT NULL,
@@ -621,6 +631,8 @@ class Remember_Database {
 			ticket_voided TINYINT(1) NOT NULL DEFAULT 0,
 			ticket_ready_emailed_at DATETIME DEFAULT NULL,
 			superseded_at DATETIME DEFAULT NULL,
+			checked_in_at DATETIME DEFAULT NULL,
+			checked_in_by BIGINT(20) UNSIGNED DEFAULT NULL,
 			PRIMARY KEY (application_id),
 			KEY event_member_role_active (event_id, member_id, event_role_id, superseded_at),
 			KEY event_id (event_id),
@@ -1042,6 +1054,33 @@ class Remember_Database {
 	}
 
 	/**
+	 * Who viewed or exported health and emergency-contact data.
+	 *
+	 * @return void
+	 */
+	public function create_sensitive_access_log_table() {
+		$table_name      = $this->prefix . 'sensitive_access_log';
+		$charset_collate = $this->wpdb->get_charset_collate();
+
+		$sql = "CREATE TABLE $table_name (
+			log_id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+			user_id BIGINT(20) UNSIGNED NOT NULL,
+			member_id BIGINT(20) UNSIGNED NOT NULL DEFAULT 0,
+			access_what VARCHAR(20) NOT NULL,
+			context VARCHAR(191) NOT NULL DEFAULT '',
+			row_count INT(10) UNSIGNED NOT NULL DEFAULT 0,
+			ip VARCHAR(45) NOT NULL DEFAULT '',
+			created_at DATETIME NOT NULL,
+			PRIMARY KEY (log_id),
+			KEY member_created (member_id, created_at),
+			KEY user_created (user_id, created_at),
+			KEY created_at (created_at)
+		) $charset_collate;";
+
+		dbDelta( $sql );
+	}
+
+	/**
 	 * Per-user saved report definitions.
 	 *
 	 * @return void
@@ -1061,6 +1100,35 @@ class Remember_Database {
 			PRIMARY KEY (report_id),
 			KEY owner_id (owner_id),
 			KEY owner_updated (owner_id, updated_at)
+		) $charset_collate;";
+
+		dbDelta( $sql );
+	}
+
+	/**
+	 * Optional email schedule for one saved report.
+	 */
+	public function create_report_schedules_table() {
+		$table_name      = $this->prefix . 'report_schedules';
+		$charset_collate = $this->wpdb->get_charset_collate();
+
+		$sql = "CREATE TABLE $table_name (
+			schedule_id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+			report_id BIGINT(20) UNSIGNED NOT NULL,
+			enabled TINYINT(1) NOT NULL DEFAULT 0,
+			frequency VARCHAR(20) NOT NULL DEFAULT 'weekly',
+			weekday TINYINT(3) UNSIGNED NOT NULL DEFAULT 1,
+			monthday TINYINT(3) UNSIGNED NOT NULL DEFAULT 1,
+			send_time CHAR(5) NOT NULL DEFAULT '08:00',
+			event_id BIGINT(20) UNSIGNED NOT NULL DEFAULT 0,
+			skip_empty TINYINT(1) NOT NULL DEFAULT 1,
+			sensitive_opt_in TINYINT(1) NOT NULL DEFAULT 0,
+			recipient_ids TEXT NOT NULL,
+			last_sent_at DATETIME DEFAULT NULL,
+			created_at DATETIME NOT NULL,
+			updated_at DATETIME NOT NULL,
+			PRIMARY KEY (schedule_id),
+			UNIQUE KEY report_id (report_id)
 		) $charset_collate;";
 
 		dbDelta( $sql );
@@ -1150,6 +1218,123 @@ class Remember_Database {
 			UNIQUE KEY application_revision (application_id, revision_id),
 			KEY application_id (application_id),
 			KEY revision_id (revision_id)
+		) $charset_collate;";
+
+		dbDelta( $sql );
+	}
+
+	/**
+	 * Surveys attached to an event. event_role_id null means every role on that event.
+	 */
+	public function create_surveys_table() {
+		$table_name      = $this->prefix . 'surveys';
+		$charset_collate = $this->wpdb->get_charset_collate();
+
+		$sql = "CREATE TABLE $table_name (
+			survey_id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+			event_id BIGINT(20) UNSIGNED NOT NULL,
+			event_role_id BIGINT(20) UNSIGNED DEFAULT NULL,
+			title VARCHAR(255) NOT NULL,
+			instructions TEXT NULL,
+			placement VARCHAR(20) NOT NULL DEFAULT 'followup',
+			timing VARCHAR(20) NOT NULL DEFAULT '',
+			status VARCHAR(20) NOT NULL DEFAULT 'draft',
+			issued_at DATETIME DEFAULT NULL,
+			created_by BIGINT(20) UNSIGNED DEFAULT NULL,
+			created_at DATETIME NOT NULL,
+			updated_at DATETIME NOT NULL,
+			PRIMARY KEY (survey_id),
+			KEY event_id (event_id),
+			KEY event_placement (event_id, placement),
+			KEY event_role (event_id, event_role_id, placement)
+		) $charset_collate;";
+
+		dbDelta( $sql );
+	}
+
+	/**
+	 * Roles a survey is limited to. No rows means every role on the event.
+	 */
+	public function create_survey_roles_table() {
+		$table_name      = $this->prefix . 'survey_roles';
+		$charset_collate = $this->wpdb->get_charset_collate();
+
+		$sql = "CREATE TABLE $table_name (
+			survey_role_id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+			survey_id BIGINT(20) UNSIGNED NOT NULL,
+			event_role_id BIGINT(20) UNSIGNED NOT NULL,
+			PRIMARY KEY (survey_role_id),
+			UNIQUE KEY survey_role (survey_id, event_role_id),
+			KEY event_role_id (event_role_id)
+		) $charset_collate;";
+
+		dbDelta( $sql );
+	}
+
+	/**
+	 * Questions on a survey.
+	 */
+	public function create_survey_questions_table() {
+		$table_name      = $this->prefix . 'survey_questions';
+		$charset_collate = $this->wpdb->get_charset_collate();
+
+		$sql = "CREATE TABLE $table_name (
+			question_id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+			survey_id BIGINT(20) UNSIGNED NOT NULL,
+			sort_order INT(11) NOT NULL DEFAULT 0,
+			label TEXT NOT NULL,
+			field_key VARCHAR(64) NOT NULL DEFAULT '',
+			field_type VARCHAR(20) NOT NULL DEFAULT 'text',
+			options_text TEXT NULL,
+			is_required TINYINT(1) NOT NULL DEFAULT 0,
+			required_when_json TEXT NULL,
+			show_if_question_id BIGINT(20) UNSIGNED DEFAULT NULL,
+			show_if_value VARCHAR(255) NOT NULL DEFAULT '',
+			PRIMARY KEY (question_id),
+			KEY survey_id (survey_id)
+		) $charset_collate;";
+
+		dbDelta( $sql );
+	}
+
+	/**
+	 * One submitted survey per member.
+	 */
+	public function create_survey_responses_table() {
+		$table_name      = $this->prefix . 'survey_responses';
+		$charset_collate = $this->wpdb->get_charset_collate();
+
+		$sql = "CREATE TABLE $table_name (
+			response_id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+			survey_id BIGINT(20) UNSIGNED NOT NULL,
+			event_id BIGINT(20) UNSIGNED NOT NULL,
+			member_id BIGINT(20) UNSIGNED NOT NULL,
+			application_id BIGINT(20) UNSIGNED DEFAULT NULL,
+			submitted_at DATETIME NOT NULL,
+			PRIMARY KEY (response_id),
+			UNIQUE KEY survey_member (survey_id, member_id),
+			KEY event_id (event_id),
+			KEY application_id (application_id)
+		) $charset_collate;";
+
+		dbDelta( $sql );
+	}
+
+	/**
+	 * One answer per question on a response.
+	 */
+	public function create_survey_answers_table() {
+		$table_name      = $this->prefix . 'survey_answers';
+		$charset_collate = $this->wpdb->get_charset_collate();
+
+		$sql = "CREATE TABLE $table_name (
+			answer_id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+			response_id BIGINT(20) UNSIGNED NOT NULL,
+			question_id BIGINT(20) UNSIGNED NOT NULL,
+			value_text TEXT NULL,
+			PRIMARY KEY (answer_id),
+			UNIQUE KEY response_question (response_id, question_id),
+			KEY question_id (question_id)
 		) $charset_collate;";
 
 		dbDelta( $sql );

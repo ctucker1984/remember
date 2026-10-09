@@ -148,6 +148,7 @@ class Remember_Ticket {
 		require_once plugin_dir_path( __FILE__ ) . '../models/class-location.php';
 		require_once plugin_dir_path( __FILE__ ) . '../models/class-payment.php';
 		require_once plugin_dir_path( __FILE__ ) . '../models/class-member.php';
+		require_once plugin_dir_path( __FILE__ ) . 'class-remember-checkin.php';
 
 		$application_model = new Remember_Application();
 		$application       = $application_model->get( $application_id );
@@ -307,6 +308,7 @@ class Remember_Ticket {
 			'amount_paid'        => $amount_paid,
 			'amount_due'         => $amount_due,
 			'invoice_number'     => $invoice_number,
+			'checkin_code'       => ( $event && ! empty( $event->checkin_enabled ) ) ? Remember_Checkin::code( $application->application_id, $event->event_id ) : '',
 			'vendor_name'        => get_bloginfo( 'name' ),
 			'vendor_url'         => home_url( '/' ),
 			'logo_url'           => self::get_logo_url(),

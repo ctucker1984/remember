@@ -71,6 +71,9 @@ class Remember_Ticket_Renderer {
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<title><?php echo $title; ?></title>
 	<style><?php echo self::get_styles(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static CSS. ?></style>
+	<?php if ( ! empty( $data['checkin_code'] ) ) : ?>
+	<script src="<?php echo esc_url( REMEMBER_PLUGIN_URL . 'assets/js/vendor/qrcode.js' ); ?>"></script>
+	<?php endif; ?>
 </head>
 <body class="remember-ticket-body">
 	<?php echo $body; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in render(). ?>
@@ -82,6 +85,20 @@ class Remember_Ticket_Renderer {
 			}
 		});
 	</script>
+	<?php if ( ! empty( $data['checkin_code'] ) ) : ?>
+	<script>
+		(function () {
+			var slot = document.getElementById('remember-ticket-qr');
+			if (!slot || typeof qrcode !== 'function') return;
+			var code = slot.getAttribute('data-code') || '';
+			if (!code) return;
+			var mark = qrcode(0, 'M');
+			mark.addData(code);
+			mark.make();
+			slot.innerHTML = mark.createSvgTag(4, 2);
+		})();
+	</script>
+	<?php endif; ?>
 </body>
 </html>
 		<?php
@@ -181,6 +198,14 @@ class Remember_Ticket_Renderer {
 					</span>
 				</p>
 			</section>
+
+			<?php if ( ! empty( $data['checkin_code'] ) ) : ?>
+			<section class="remember-ticket-section remember-ticket-checkin">
+				<h2><?php esc_html_e( 'Check-in', 'remember' ); ?></h2>
+				<div id="remember-ticket-qr" class="remember-ticket-qr" data-code="<?php echo esc_attr( $data['checkin_code'] ); ?>"></div>
+				<p class="remember-ticket-checkin-code"><?php echo esc_html( $data['checkin_code'] ); ?></p>
+			</section>
+			<?php endif; ?>
 
 			<section class="remember-ticket-section">
 				<h2><?php esc_html_e( 'Receipt', 'remember' ); ?></h2>
@@ -405,6 +430,15 @@ class Remember_Ticket_Renderer {
 			.remember-ticket-lines tfoot th,
 			.remember-ticket-lines tfoot td {
 				text-align: right;
+			}
+			.remember-ticket-qr svg {
+				width: 168px;
+				height: 168px;
+			}
+			.remember-ticket-checkin-code {
+				font-family: ui-monospace, monospace;
+				font-size: 14px;
+				letter-spacing: 0.04em;
 			}
 			.remember-ticket-footer {
 				border-top: 1px solid var(--rt-line);
