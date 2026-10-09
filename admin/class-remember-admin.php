@@ -187,11 +187,13 @@ class Remember_Admin {
 				wp_enqueue_media();
 			}
 			if ( false !== strpos( $screen->id, 'remember-reports' ) ) {
+				$reports_js  = plugin_dir_path( __FILE__ ) . '../assets/js/reports.js';
+				$reports_ver = is_readable( $reports_js ) ? (string) filemtime( $reports_js ) : $this->version;
 				wp_enqueue_script(
 					$this->plugin_name . '-reports',
 					plugin_dir_url( __FILE__ ) . '../assets/js/reports.js',
 					array( 'jquery' ),
-					$this->version,
+					$reports_ver,
 					true
 				);
 				wp_localize_script(
@@ -1829,13 +1831,14 @@ class Remember_Admin {
 	public function ajax_get_event_survey() {
 		check_ajax_referer( 'remember_get_event_survey', 'nonce' );
 
-		$event_id = isset( $_POST['event_id'] ) ? absint( $_POST['event_id'] ) : 0;
+		$event_id      = isset( $_POST['event_id'] ) ? absint( $_POST['event_id'] ) : 0;
+		$event_role_id = isset( $_POST['event_role_id'] ) ? absint( $_POST['event_role_id'] ) : 0;
 		if ( $event_id <= 0 || ! is_user_logged_in() ) {
 			wp_send_json_error( array( 'message' => __( 'Invalid event.', 'remember' ) ) );
 		}
 
 		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-surveys.php';
-		$html = Remember_Surveys::render_apply_html( $event_id );
+		$html = Remember_Surveys::render_apply_html( $event_id, $event_role_id );
 		wp_send_json_success(
 			array(
 				'html' => $html,

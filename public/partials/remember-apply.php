@@ -55,7 +55,7 @@ if ( isset( $_POST['remember_apply_action'] ) && check_admin_referer( 'remember_
 		if ( $existing ) {
 			$submission_error = __( 'You have already applied for this event and role.', 'remember' );
 		} else {
-			$survey_error = Remember_Surveys::validate_apply( $event_id );
+			$survey_error = Remember_Surveys::validate_apply( $event_id, $event_role_id );
 			if ( $survey_error ) {
 				$submission_error = $survey_error;
 			} else {
@@ -81,7 +81,7 @@ if ( isset( $_POST['remember_apply_action'] ) && check_admin_referer( 'remember_
 			$new_application_id = $application_model->create( $data );
 
 			if ( $new_application_id ) {
-				Remember_Surveys::save_apply_response( $new_application_id, $event_id, $member_id );
+				Remember_Surveys::save_apply_response( $new_application_id, $event_id, $member_id, $event_role_id );
 				Remember_Agreements::save_apply_acceptances( $new_application_id, $event_id );
 				Remember_Profile_Audit::touch_updated( $member_id, $member_id );
 
@@ -261,13 +261,8 @@ $registration_block = $selected_event ? Remember_Event::registration_block_reaso
 				</div>
 			</div>
 
-			<?php
-			$remember_survey_html = $selected_event ? Remember_Surveys::render_apply_html( (int) $event_id ) : '';
-			?>
-			<div id="remember-event-survey" class="remember-form-group"<?php echo $remember_survey_html ? '' : ' hidden'; ?>>
-				<div id="remember-event-survey-fields">
-					<?php echo $remember_survey_html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in helper ?>
-				</div>
+			<div id="remember-event-survey" class="remember-form-group" hidden>
+				<div id="remember-event-survey-fields"></div>
 			</div>
 
 			<div class="remember-form-group">
@@ -304,8 +299,17 @@ $registration_block = $selected_event ? Remember_Event::registration_block_reaso
 		var $surveyWrap = $('#remember-event-survey');
 		var $surveyFields = $('#remember-event-survey-fields');
 
-		function loadEventSurvey(selectedEventId) {
-			if (!selectedEventId) {
+		function currentEventId() {
+			var fromSelect = $eventSelect.val();
+			if (fromSelect) {
+				return fromSelect;
+			}
+			var hidden = $('input[name="event_id"]').val();
+			return hidden || eventId || '';
+		}
+
+		function loadEventSurvey(selectedEventId, selectedRoleId) {
+			if (!selectedEventId || !selectedRoleId) {
 				$surveyFields.empty();
 				$surveyWrap.prop('hidden', true);
 				return;
@@ -316,6 +320,7 @@ $registration_block = $selected_event ? Remember_Event::registration_block_reaso
 				data: {
 					action: 'remember_get_event_survey',
 					event_id: selectedEventId,
+					event_role_id: selectedRoleId,
 					nonce: '<?php echo esc_js( wp_create_nonce( 'remember_get_event_survey' ) ); ?>'
 				},
 				success: function(response) {
@@ -512,11 +517,12 @@ $registration_block = $selected_event ? Remember_Event::registration_block_reaso
 			loadEventRoles(selectedEventId);
 			loadEventAddons(selectedEventId, '');
 			loadEventAgreements(selectedEventId);
-			loadEventSurvey(selectedEventId);
+			loadEventSurvey(selectedEventId, '');
 		});
 
 		$roleSelect.on('change', function() {
-			loadEventAddons($eventSelect.val(), $(this).val());
+			loadEventAddons(currentEventId(), $(this).val());
+			loadEventSurvey(currentEventId(), $(this).val());
 		});
 
 		$(document).on('change', '.remember-addon-toggle', function() {

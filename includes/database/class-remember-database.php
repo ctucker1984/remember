@@ -94,6 +94,7 @@ class Remember_Database {
 			'event_agreements'               => 'create_event_agreements_table',
 			'agreement_acceptances'          => 'create_agreement_acceptances_table',
 			'surveys'                        => 'create_surveys_table',
+			'survey_roles'                   => 'create_survey_roles_table',
 			'survey_questions'               => 'create_survey_questions_table',
 			'survey_responses'               => 'create_survey_responses_table',
 			'survey_answers'                 => 'create_survey_answers_table',
@@ -1161,7 +1162,7 @@ class Remember_Database {
 	}
 
 	/**
-	 * Surveys attached to an event (one application survey, any number of follow-ups).
+	 * Surveys attached to an event. event_role_id null means every role on that event.
 	 */
 	public function create_surveys_table() {
 		$table_name      = $this->prefix . 'surveys';
@@ -1170,6 +1171,7 @@ class Remember_Database {
 		$sql = "CREATE TABLE $table_name (
 			survey_id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
 			event_id BIGINT(20) UNSIGNED NOT NULL,
+			event_role_id BIGINT(20) UNSIGNED DEFAULT NULL,
 			title VARCHAR(255) NOT NULL,
 			instructions TEXT NULL,
 			placement VARCHAR(20) NOT NULL DEFAULT 'followup',
@@ -1181,7 +1183,27 @@ class Remember_Database {
 			updated_at DATETIME NOT NULL,
 			PRIMARY KEY (survey_id),
 			KEY event_id (event_id),
-			KEY event_placement (event_id, placement)
+			KEY event_placement (event_id, placement),
+			KEY event_role (event_id, event_role_id, placement)
+		) $charset_collate;";
+
+		dbDelta( $sql );
+	}
+
+	/**
+	 * Roles a survey is limited to. No rows means every role on the event.
+	 */
+	public function create_survey_roles_table() {
+		$table_name      = $this->prefix . 'survey_roles';
+		$charset_collate = $this->wpdb->get_charset_collate();
+
+		$sql = "CREATE TABLE $table_name (
+			survey_role_id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+			survey_id BIGINT(20) UNSIGNED NOT NULL,
+			event_role_id BIGINT(20) UNSIGNED NOT NULL,
+			PRIMARY KEY (survey_role_id),
+			UNIQUE KEY survey_role (survey_id, event_role_id),
+			KEY event_role_id (event_role_id)
 		) $charset_collate;";
 
 		dbDelta( $sql );

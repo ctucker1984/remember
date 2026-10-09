@@ -296,21 +296,30 @@ function remember_survey_header_form( $survey, $event_id, $events ) {
 		$timing         = isset( $_POST['survey_timing'] ) ? sanitize_key( wp_unslash( $_POST['survey_timing'] ) ) : 'after';
 		$on_application = ! empty( $_POST['on_application'] );
 		$event_id       = isset( $_POST['event_id'] ) ? absint( $_POST['event_id'] ) : $event_id;
+		$posted_roles   = isset( $_POST['event_role_ids'] ) ? wp_unslash( $_POST['event_role_ids'] ) : array();
+		$event_role_ids = array();
+		foreach ( is_array( $posted_roles ) ? $posted_roles : array() as $posted_role ) {
+			$posted_role = absint( $posted_role );
+			if ( $posted_role > 0 ) {
+				$event_role_ids[] = $posted_role;
+			}
+		}
 	} else {
 		$title          = $survey ? (string) $survey->title : '';
 		$instructions   = ( $survey && isset( $survey->instructions ) ) ? (string) $survey->instructions : '';
 		$timing         = ( $survey && 'before' === $survey->timing ) ? 'before' : 'after';
 		$on_application = $survey && Remember_Surveys::PLACEMENT_APPLICATION === $survey->placement;
+		$event_role_ids = $survey ? Remember_Surveys::role_ids_for_survey( $survey->survey_id ) : array();
 	}
 	$survey_id = $survey ? (int) $survey->survey_id : 0;
+	$role_options = Remember_Surveys::roles_for_event( $event_id );
 	$action    = array( 'page' => 'remember-surveys' );
 	if ( $survey_id > 0 ) {
 		$action['survey_id'] = $survey_id;
 	} else {
 		$action['new'] = 1;
 	}
-	$taken = Remember_Surveys::application_survey( $event_id );
-	$taken = $taken && (int) $taken->survey_id !== $survey_id;
+	$audience = Remember_Surveys::audience_editor_payload();
 	?>
 	<form method="post" class="remember-survey-masthead" action="<?php echo esc_url( add_query_arg( $action, admin_url( 'admin.php' ) ) ); ?>">
 		<?php wp_nonce_field( 'remember_survey_admin', 'remember_survey_nonce' ); ?>
@@ -321,6 +330,7 @@ function remember_survey_header_form( $survey, $event_id, $events ) {
 				<label for="survey_title"><?php esc_html_e( 'Title', 'remember' ); ?></label>
 				<input type="text" class="remember-survey-title-input" name="survey_title" id="survey_title" value="<?php echo esc_attr( $title ); ?>" required placeholder="<?php esc_attr_e( 'Survey title', 'remember' ); ?>">
 			</p>
+			<div>
 			<p>
 				<label for="survey_event_id"><?php esc_html_e( 'Event', 'remember' ); ?></label>
 				<?php if ( $survey ) : ?>
@@ -339,6 +349,19 @@ function remember_survey_header_form( $survey, $event_id, $events ) {
 					</select>
 				<?php endif; ?>
 			</p>
+			<p>
+				<span class="remember-survey-roles-label" id="survey_roles_label"><?php esc_html_e( 'Roles', 'remember' ); ?></span>
+				<span class="remember-survey-roles" id="remember-survey-roles" role="group" aria-labelledby="survey_roles_label" data-selected="<?php echo esc_attr( implode( ',', $event_role_ids ) ); ?>">
+					<?php foreach ( $role_options as $role ) : ?>
+						<label>
+							<input type="checkbox" name="event_role_ids[]" value="<?php echo esc_attr( (string) $role->event_role_id ); ?>" <?php checked( in_array( (int) $role->event_role_id, $event_role_ids, true ) ); ?>>
+							<?php echo esc_html( $role->role_name ); ?>
+						</label>
+					<?php endforeach; ?>
+				</span>
+				<span class="description"><?php esc_html_e( 'Leave every role unchecked to include everyone on this event. Check the roles this survey is for.', 'remember' ); ?></span>
+			</p>
+			</div>
 		</div>
 		<p class="remember-survey-instructions-field">
 			<label for="survey_instructions"><?php esc_html_e( 'Instructions', 'remember' ); ?></label>
@@ -347,13 +370,11 @@ function remember_survey_header_form( $survey, $event_id, $events ) {
 		<div class="remember-survey-header-grid">
 			<p>
 				<label>
-					<input type="checkbox" name="on_application" id="survey_on_application" value="1" <?php checked( $on_application ); ?> <?php disabled( $taken && ! $on_application ); ?>>
+					<input type="checkbox" name="on_application" id="survey_on_application" value="1" <?php checked( $on_application ); ?>>
 					<?php esc_html_e( 'Show on the event application', 'remember' ); ?>
 				</label>
-				<span class="description"><?php esc_html_e( 'Off by default. Turn this on to put the survey on the application, before the agreements. An event can have one. Leave it off to send the survey later to accepted participants.', 'remember' ); ?></span>
-				<?php if ( $taken && ! $on_application ) : ?>
-					<span class="description"><?php esc_html_e( 'This event already has a survey on the application.', 'remember' ); ?></span>
-				<?php endif; ?>
+				<span class="description"><?php esc_html_e( 'Off by default. Turn this on to put the survey on the application for the roles checked above, before the agreements. Each role can be on one application survey. A role named here does not also see the survey that has no roles checked. Leave it off to send the survey later to accepted participants in those roles.', 'remember' ); ?></span>
+				<span class="description" id="remember-survey-role-taken" hidden></span>
 			</p>
 			<p id="remember-survey-timing" <?php echo $on_application ? 'hidden' : ''; ?>>
 				<label for="survey_timing"><?php esc_html_e( 'When', 'remember' ); ?></label>
@@ -365,6 +386,7 @@ function remember_survey_header_form( $survey, $event_id, $events ) {
 			</p>
 		</div>
 		<?php submit_button( __( 'Save survey', 'remember' ), 'primary', 'submit', false ); ?>
+		<script type="application/json" id="remember-survey-audiences"><?php echo wp_json_encode( $audience ); ?></script>
 	</form>
 	<?php
 }
@@ -532,9 +554,10 @@ if (window.history && history.replaceState) {
 			<thead>
 				<tr>
 					<th class="column-name"><?php esc_html_e( 'Survey', 'remember' ); ?></th>
-					<th><?php esc_html_e( 'Event', 'remember' ); ?></th>
-					<th><?php esc_html_e( 'When', 'remember' ); ?></th>
-					<th><?php esc_html_e( 'Questions', 'remember' ); ?></th>
+					<th class="column-event"><?php esc_html_e( 'Event', 'remember' ); ?></th>
+					<th class="column-roles"><?php esc_html_e( 'Roles', 'remember' ); ?></th>
+					<th class="column-when"><?php esc_html_e( 'When', 'remember' ); ?></th>
+					<th class="column-questions"><?php esc_html_e( 'Questions', 'remember' ); ?></th>
 					<th class="column-status"><?php esc_html_e( 'Status', 'remember' ); ?></th>
 					<th class="column-actions"><?php esc_html_e( 'Actions', 'remember' ); ?></th>
 				</tr>
@@ -575,8 +598,11 @@ if (window.history && history.replaceState) {
 						<td class="column-name">
 							<strong><a href="<?php echo esc_url( $edit_url ); ?>"><?php echo esc_html( $row->title ); ?></a></strong>
 						</td>
-						<td><?php echo esc_html( $row->event_name ? $row->event_name : __( '(event removed)', 'remember' ) ); ?></td>
-						<td>
+						<td class="column-event"><?php echo esc_html( $row->event_name ? $row->event_name : __( '(event removed)', 'remember' ) ); ?></td>
+						<td class="column-roles">
+							<?php echo esc_html( $row->role_names ? $row->role_names : __( 'All roles', 'remember' ) ); ?>
+						</td>
+						<td class="column-when">
 							<?php
 							if ( $on_application ) {
 								echo '—';
@@ -585,7 +611,10 @@ if (window.history && history.replaceState) {
 							}
 							?>
 						</td>
-						<td><?php echo esc_html( (string) $row->question_count ); ?></td>
+						<td class="column-questions">
+							<span class="remember-survey-list-meta-label"><?php esc_html_e( 'Questions', 'remember' ); ?></span>
+							<?php echo esc_html( (string) $row->question_count ); ?>
+						</td>
 						<td class="column-status">
 							<span style="color: <?php echo esc_attr( $status_color ); ?>; font-weight: bold;"><?php echo esc_html( $status_label ); ?></span>
 						</td>
@@ -716,15 +745,104 @@ if (window.history && history.replaceState) {
 		toggleWhen();
 		var onApplication = document.getElementById('survey_on_application');
 		var timingRow = document.getElementById('remember-survey-timing');
-		if (onApplication && timingRow) {
-			onApplication.addEventListener('change', function () {
+		var eventField = document.getElementById('survey_event_id');
+		var roleBox = document.getElementById('remember-survey-roles');
+		var takenNote = document.getElementById('remember-survey-role-taken');
+		var audienceNode = document.getElementById('remember-survey-audiences');
+		var audience = { roles: [], slots: [] };
+		if (audienceNode) {
+			try {
+				audience = JSON.parse(audienceNode.textContent || '{}');
+			} catch (error) {
+				audience = { roles: [], slots: [] };
+			}
+		}
+		function surveyId() {
+			var input = document.querySelector('input[name="survey_id"]');
+			return input ? String(input.value || '0') : '0';
+		}
+		function selectedRoleIds() {
+			if (!roleBox) return [];
+			return [].slice.call(roleBox.querySelectorAll('input:checked')).map(function (input) {
+				return String(input.value);
+			});
+		}
+		function fillRoles() {
+			if (!eventField || !roleBox) return;
+			var eventId = String(eventField.value || '0');
+			var current = selectedRoleIds();
+			if (!current.length && roleBox.getAttribute('data-selected')) {
+				current = String(roleBox.getAttribute('data-selected')).split(',').filter(Boolean);
+			}
+			roleBox.innerHTML = '';
+			roleBox.removeAttribute('data-selected');
+			(audience.roles || []).forEach(function (role) {
+				if (String(role.event_id) !== eventId) return;
+				var label = document.createElement('label');
+				var input = document.createElement('input');
+				input.type = 'checkbox';
+				input.name = 'event_role_ids[]';
+				input.value = String(role.event_role_id);
+				input.checked = current.indexOf(String(role.event_role_id)) !== -1;
+				label.appendChild(input);
+				label.appendChild(document.createTextNode(' ' + role.role_name));
+				roleBox.appendChild(label);
+			});
+		}
+		function slotTaken() {
+			if (!eventField || !roleBox) return false;
+			var eventId = String(eventField.value || '0');
+			var picked = selectedRoleIds();
+			var mine = surveyId();
+			var others = (audience.slots || []).filter(function (slot) {
+				return String(slot.event_id) === eventId && String(slot.survey_id) !== mine;
+			});
+			if (!picked.length) {
+				return others.some(function (slot) {
+					return !slot.event_role_ids || !slot.event_role_ids.length;
+				});
+			}
+			return others.some(function (slot) {
+				return (slot.event_role_ids || []).some(function (id) {
+					return picked.indexOf(String(id)) !== -1;
+				});
+			});
+		}
+		function syncApplicationSlot() {
+			if (!onApplication) return;
+			var taken = slotTaken();
+			var picked = selectedRoleIds();
+			onApplication.disabled = taken;
+			if (taken) onApplication.checked = false;
+			if (takenNote) {
+				if (taken) {
+					takenNote.hidden = false;
+					takenNote.textContent = picked.length
+						? <?php echo wp_json_encode( __( 'One of these roles already has a survey on the application.', 'remember' ) ); ?>
+						: <?php echo wp_json_encode( __( 'This event already has a survey on the application for every role.', 'remember' ) ); ?>;
+				} else {
+					takenNote.hidden = true;
+					takenNote.textContent = '';
+				}
+			}
+			if (timingRow) {
 				if (onApplication.checked) {
 					timingRow.setAttribute('hidden', 'hidden');
 				} else {
 					timingRow.removeAttribute('hidden');
 				}
-			});
+			}
 		}
+		if (onApplication && timingRow) {
+			onApplication.addEventListener('change', syncApplicationSlot);
+		}
+		if (eventField) eventField.addEventListener('change', function () {
+			fillRoles();
+			syncApplicationSlot();
+		});
+		if (roleBox) roleBox.addEventListener('change', syncApplicationSlot);
+		fillRoles();
+		syncApplicationSlot();
 		var whenField = document.getElementById('required_when_field');
 		if (whenField) {
 			whenField.addEventListener('change', function () { renderWhenValues(whenField.value); });

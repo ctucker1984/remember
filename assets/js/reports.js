@@ -326,11 +326,70 @@
 		});
 	}
 
+	function pinnedQuestionLabel(ignoreIndex) {
+		var found = '';
+		var i;
+		for (i = 0; i < state.filters.length; i++) {
+			if (i === ignoreIndex) {
+				continue;
+			}
+			var filter = state.filters[i];
+			if (!filter || filter.field !== 'question.label') {
+				continue;
+			}
+			if (filter.op !== 'eq' && filter.op !== 'in') {
+				continue;
+			}
+			var values = Array.isArray(filter.value) ? filter.value.slice() : String(filter.value || '').split(',');
+			values = values.map(function (value) {
+				return String(value);
+			}).filter(function (value) {
+				return value !== '';
+			});
+			if (values.length !== 1) {
+				continue;
+			}
+			if (found && found !== values[0]) {
+				return '';
+			}
+			found = values[0];
+		}
+		return found;
+	}
+
+	function shapeForFilter(field, index) {
+		if (!field || field.id !== 'answer.value' || !field.questions || !field.questions.length) {
+			return field;
+		}
+		var label = pinnedQuestionLabel(index);
+		if (!label) {
+			return field;
+		}
+		var match = null;
+		field.questions.forEach(function (question) {
+			if (question.label === label) {
+				match = question;
+			}
+		});
+		if (!match || (match.type !== 'enum' && match.type !== 'multiselect')) {
+			return field;
+		}
+		return {
+			id: field.id,
+			label: field.label,
+			group: field.group,
+			type: match.type,
+			options: match.options || [],
+			list: match.type === 'multiselect',
+			measure: false
+		};
+	}
+
 	function renderFilters() {
 		var $box = $('#remember-report-filters');
 		$box.empty();
 		state.filters.forEach(function (filter, index) {
-			var field = fieldById(filter.field) || fields()[0];
+			var field = shapeForFilter(fieldById(filter.field) || fields()[0], index);
 			if (!field) {
 				return;
 			}
@@ -730,6 +789,15 @@
 			renderFilters();
 		});
 		$('#remember-report-filters').on('change', '.remember-filter-field, .remember-filter-op', function () {
+			readFiltersFromDom();
+			renderFilters();
+		});
+		$('#remember-report-filters').on('change', '.remember-filter-val', function () {
+			var index = parseInt($(this).attr('data-index'), 10);
+			var filter = state.filters[index];
+			if (!filter || filter.field !== 'question.label') {
+				return;
+			}
 			readFiltersFromDom();
 			renderFilters();
 		});

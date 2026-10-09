@@ -197,7 +197,14 @@ class Remember_Report_Engine {
 		}
 
 		foreach ( $filters as $filter ) {
-			$clause = self::filter_clause( $filter, $fields );
+			$clause_fields = $fields;
+			if ( is_array( $filter ) && isset( $filter['field'] ) && 'answer.value' === (string) $filter['field'] && isset( $fields['answer.value'] ) ) {
+				$shaped = Remember_Report_Catalog::answer_filter_field( $fields['answer.value'], $filters );
+				if ( is_array( $shaped ) ) {
+					$clause_fields['answer.value'] = $shaped;
+				}
+			}
+			$clause = self::filter_clause( $filter, $clause_fields );
 			if ( is_wp_error( $clause ) ) {
 				continue;
 			}
@@ -359,6 +366,7 @@ class Remember_Report_Engine {
 			'surveys'      => array(
 				'user'  => "INNER JOIN {$users} u ON u.ID = resp.member_id",
 				'event' => "LEFT JOIN {$p}remember_events e ON e.event_id = sv.event_id",
+				'role'  => "LEFT JOIN (SELECT sr.survey_id, GROUP_CONCAT(r.role_name ORDER BY r.role_name SEPARATOR ', ') AS role_names FROM {$p}remember_survey_roles sr INNER JOIN {$p}remember_event_roles er ON er.event_role_id = sr.event_role_id INNER JOIN {$p}remember_roles r ON r.role_id = er.role_id GROUP BY sr.survey_id) survey_role_names ON survey_role_names.survey_id = sv.survey_id",
 			),
 		);
 
@@ -554,8 +562,10 @@ class Remember_Report_Engine {
 			$match  = isset( $fields[ $fid ]['list_match'] ) ? (string) $fields[ $fid ]['list_match'] : 'json';
 			$ors    = array();
 			$params = array();
-			if ( 'csv' === $match ) {
-				$csv = "REPLACE({$sql}, ', ', ',')";
+			if ( 'csv' === $match || 'pipe' === $match ) {
+				$csv = 'pipe' === $match
+					? "REPLACE({$sql}, ' | ', ',')"
+					: "REPLACE({$sql}, ', ', ',')";
 				foreach ( $keys as $key ) {
 					$ors[]    = "FIND_IN_SET(%s, {$csv}) > 0";
 					$params[] = $key;
@@ -568,7 +578,7 @@ class Remember_Report_Engine {
 			}
 			$clause = '(' . implode( ' OR ', $ors ) . ')';
 			if ( in_array( $op, array( 'neq', 'not_in' ), true ) ) {
-				$blank = 'csv' === $match
+				$blank = ( 'csv' === $match || 'pipe' === $match )
 					? "({$sql} IS NULL OR {$sql} = '')"
 					: "({$sql} IS NULL OR {$sql} = '' OR {$sql} = '[]')";
 				$clause = "(NOT {$clause} OR {$blank})";

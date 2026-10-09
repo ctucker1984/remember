@@ -246,7 +246,7 @@ class Remember_Report_Catalog {
 		foreach ( $subjects as $id => $label ) {
 			$fields = array();
 			foreach ( self::fields_for_current_user( $id ) as $fid => $field ) {
-				$fields[] = array(
+				$row = array(
 					'id'      => $fid,
 					'label'   => $field['label'],
 					'group'   => $field['group'],
@@ -255,6 +255,10 @@ class Remember_Report_Catalog {
 					'measure' => ! empty( $field['measure'] ),
 					'list'    => ! empty( $field['list'] ),
 				);
+				if ( ! empty( $field['questions'] ) && is_array( $field['questions'] ) ) {
+					$row['questions'] = $field['questions'];
+				}
+				$fields[] = $row;
 			}
 			$out['subjects'][] = array(
 				'id'      => $id,
@@ -378,7 +382,7 @@ class Remember_Report_Catalog {
 			'payments'     => array( 'user.display_name', 'event.event_name', 'payment.total_amount', 'payment.amount_due', 'payment.payment_status' ),
 			'vetting'      => array( 'user.display_name', 'vetting.status', 'vetting.decision', 'vetter.display_name', 'vetting.scheduled_at' ),
 			'events'       => array( 'event.event_name', 'event.status', 'event.start_date', 'event.end_date', 'location.location_name' ),
-			'surveys'      => array( 'event.event_name', 'survey.title', 'user.display_name', 'question.label', 'answer.value', 'response.submitted_at' ),
+			'surveys'      => array( 'event.event_name', 'survey.title', 'role.role_name', 'user.display_name', 'question.label', 'answer.value', 'response.submitted_at' ),
 		);
 		return isset( $map[ $subject ] ) ? $map[ $subject ] : array();
 	}
@@ -529,13 +533,24 @@ class Remember_Report_Catalog {
 		}
 
 		if ( 'surveys' === $subject ) {
+			$survey_questions = self::survey_question_catalog();
+			$all_roles        = __( 'All roles', 'remember' );
+			$survey_roles     = $event_roles;
+			if ( ! in_array( $all_roles, $survey_roles, true ) ) {
+				array_unshift( $survey_roles, $all_roles );
+			}
+			$role_field         = self::csv_list_field( __( 'Role', 'remember' ), 'Survey', "COALESCE(survey_role_names.role_names, '" . esc_sql( $all_roles ) . "')", $survey_roles );
+			$role_field['join'] = 'role';
+			$answer             = self::f( __( 'Answer', 'remember' ), 'Survey', 'string', 'ans.value_text' );
+			$answer['questions'] = $survey_questions['questions'];
 			return array(
 				'event.event_name'       => self::f( __( 'Event', 'remember' ), 'Event', 'string', 'e.event_name', 'event' ),
 				'survey.title'           => self::f( __( 'Survey', 'remember' ), 'Survey', 'string', 'sv.title' ),
+				'role.role_name'         => $role_field,
 				'survey.placement'       => self::f(
 					__( 'Survey kind', 'remember' ),
 					'Survey',
-					'string',
+					'enum',
 					'sv.placement',
 					null,
 					false,
@@ -544,11 +559,22 @@ class Remember_Report_Catalog {
 						array( 'id' => 'followup', 'label' => __( 'Follow-on', 'remember' ) ),
 					)
 				),
-				'survey.timing'          => self::f( __( 'Survey timing', 'remember' ), 'Survey', 'string', 'sv.timing' ),
+				'survey.timing'          => self::f(
+					__( 'Survey timing', 'remember' ),
+					'Survey',
+					'enum',
+					'sv.timing',
+					null,
+					false,
+					array(
+						array( 'id' => 'before', 'label' => __( 'Before the event', 'remember' ) ),
+						array( 'id' => 'after', 'label' => __( 'After the event', 'remember' ) ),
+					)
+				),
 				'user.display_name'      => self::f( __( 'Member', 'remember' ), 'Member', 'string', 'u.display_name', 'user' ),
 				'user.user_email'        => self::f( __( 'Email', 'remember' ), 'Member', 'string', 'u.user_email', 'user' ),
-				'question.label'         => self::f( __( 'Question', 'remember' ), 'Survey', 'string', 'sq.label' ),
-				'answer.value'           => self::f( __( 'Answer', 'remember' ), 'Survey', 'string', 'ans.value_text' ),
+				'question.label'         => self::f( __( 'Question', 'remember' ), 'Survey', 'enum', 'sq.label', null, false, $survey_questions['options'] ),
+				'answer.value'           => $answer,
 				'response.submitted_at'  => self::f( __( 'Submitted', 'remember' ), 'Survey', 'date', 'resp.submitted_at' ),
 			);
 		}
@@ -621,12 +647,175 @@ class Remember_Report_Catalog {
 	}
 
 	/**
+	 * Survey questions as filter choices, and the type each label uses for answer filters.
+	 *
+	 * A shared label keeps one question option. If those questions do not share a type,
+	 * the answer filter stays free text.
+	 *
+	 * @return array{options:array<int,array{id:string,label:string}>,questions:array<int,array<string,mixed>>}
+	 */
+	private static function survey_question_catalog() {
+		global $wpdb;
+		$p    = $wpdb->prefix;
+		$rows = $wpdb->get_results(
+			"SELECT sq.label, sq.field_type, sq.options_text, sv.title
+			FROM {$p}remember_survey_questions sq
+			INNER JOIN {$p}remember_surveys sv ON sv.survey_id = sq.survey_id
+			ORDER BY sv.title ASC, sq.sort_order ASC, sq.question_id ASC"
+		); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- prefix only.
+		$grouped = array();
+		if ( is_array( $rows ) ) {
+			foreach ( $rows as $row ) {
+				$label = isset( $row->label ) ? trim( (string) $row->label ) : '';
+				if ( '' === $label ) {
+					continue;
+				}
+				if ( ! isset( $grouped[ $label ] ) ) {
+					$grouped[ $label ] = array(
+						'type'    => '',
+						'options' => array(),
+						'titles'  => array(),
+						'mixed'   => false,
+					);
+				}
+				$title = isset( $row->title ) ? trim( (string) $row->title ) : '';
+				if ( '' !== $title && ! in_array( $title, $grouped[ $label ]['titles'], true ) ) {
+					$grouped[ $label ]['titles'][] = $title;
+				}
+				$shaped = self::survey_answer_shape( isset( $row->field_type ) ? (string) $row->field_type : 'text', isset( $row->options_text ) ? $row->options_text : '' );
+				if ( '' === $grouped[ $label ]['type'] ) {
+					$grouped[ $label ]['type']    = $shaped['type'];
+					$grouped[ $label ]['options'] = $shaped['options'];
+				} elseif ( $grouped[ $label ]['type'] !== $shaped['type'] || $grouped[ $label ]['options'] !== $shaped['options'] ) {
+					$grouped[ $label ]['mixed']   = true;
+					$grouped[ $label ]['type']    = 'string';
+					$grouped[ $label ]['options'] = array();
+				}
+			}
+		}
+		$options   = array();
+		$questions = array();
+		foreach ( $grouped as $label => $row ) {
+			$display = $label;
+			if ( count( $row['titles'] ) > 1 ) {
+				$display = $label . ' (' . implode( ', ', $row['titles'] ) . ')';
+			} elseif ( 1 === count( $row['titles'] ) ) {
+				$display = $row['titles'][0] . ' — ' . $label;
+			}
+			$options[]   = array(
+				'id'    => $label,
+				'label' => $display,
+			);
+			$questions[] = array(
+				'label'   => $label,
+				'type'    => $row['mixed'] ? 'string' : $row['type'],
+				'options' => $row['mixed'] ? array() : $row['options'],
+			);
+		}
+		return array(
+			'options'   => $options,
+			'questions' => $questions,
+		);
+	}
+
+	/**
+	 * Map a survey question type onto the report filter type.
+	 *
+	 * @param string $field_type   Question type.
+	 * @param mixed  $options_text Stored choices.
+	 * @return array{type:string,options:array<int,array{id:string,label:string}>}
+	 */
+	private static function survey_answer_shape( $field_type, $options_text ) {
+		$field_type = sanitize_key( $field_type );
+		if ( 'boolean' === $field_type ) {
+			return array(
+				'type'    => 'enum',
+				'options' => array(
+					array( 'id' => 'yes', 'label' => __( 'Yes', 'remember' ) ),
+					array( 'id' => 'no', 'label' => __( 'No', 'remember' ) ),
+				),
+			);
+		}
+		if ( 'select' === $field_type ) {
+			return array(
+				'type'    => 'enum',
+				'options' => self::question_choice_options( $options_text ),
+			);
+		}
+		if ( 'multiselect' === $field_type ) {
+			return array(
+				'type'    => 'multiselect',
+				'options' => self::question_choice_options( $options_text ),
+			);
+		}
+		return array(
+			'type'    => 'string',
+			'options' => array(),
+		);
+	}
+
+	/**
+	 * Answer field shaped like the question a sibling filter has pinned.
+	 *
+	 * @param array $field   Answer catalog field.
+	 * @param array $filters All filters on the report.
+	 * @return array<string,mixed>|null
+	 */
+	public static function answer_filter_field( $field, $filters ) {
+		if ( empty( $field['questions'] ) || ! is_array( $field['questions'] ) || ! is_array( $filters ) ) {
+			return null;
+		}
+		$label = '';
+		foreach ( $filters as $filter ) {
+			if ( ! is_array( $filter ) || empty( $filter['field'] ) || 'question.label' !== (string) $filter['field'] ) {
+				continue;
+			}
+			$op = isset( $filter['op'] ) ? sanitize_key( $filter['op'] ) : '';
+			if ( ! in_array( $op, array( 'eq', 'in' ), true ) ) {
+				continue;
+			}
+			$raw = isset( $filter['value'] ) ? $filter['value'] : '';
+			$values = is_array( $raw ) ? $raw : explode( ',', (string) $raw );
+			$values = array_values( array_filter( array_map( 'strval', $values ), 'strlen' ) );
+			if ( 1 !== count( $values ) ) {
+				continue;
+			}
+			if ( '' !== $label && $label !== $values[0] ) {
+				return null;
+			}
+			$label = $values[0];
+		}
+		if ( '' === $label ) {
+			return null;
+		}
+		foreach ( $field['questions'] as $question ) {
+			if ( ! is_array( $question ) || ! isset( $question['label'] ) || (string) $question['label'] !== $label ) {
+				continue;
+			}
+			$type = isset( $question['type'] ) ? (string) $question['type'] : 'string';
+			if ( 'enum' !== $type && 'multiselect' !== $type ) {
+				return null;
+			}
+			$copy             = $field;
+			$copy['type']     = $type;
+			$copy['options']  = isset( $question['options'] ) && is_array( $question['options'] ) ? $question['options'] : array();
+			$copy['list']     = ( 'multiselect' === $type );
+			if ( 'multiselect' === $type ) {
+				$copy['list_match'] = 'pipe';
+			}
+			return $copy;
+		}
+		return null;
+	}
+
+	/**
 	 * Custom-question choices as {id,label} for the filter UI.
 	 *
 	 * @param mixed $json Options JSON.
 	 * @return array<int,array{id:string,label:string}>
 	 */
 	private static function question_choice_options( $json ) {
+		require_once plugin_dir_path( __FILE__ ) . 'class-remember-profile-questions.php';
 		$out = array();
 		foreach ( Remember_Profile_Questions::parse_options( $json ) as $row ) {
 			if ( empty( $row['key'] ) ) {

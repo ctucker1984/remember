@@ -1662,6 +1662,58 @@ class Remember_Database_Updater {
 			}
 		}
 
+		// Update to 2.3.3 (optional event role on a survey).
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '2.3.3', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '2.3.3' ) );
+			global $wpdb;
+			$table   = $wpdb->prefix . 'remember_surveys';
+			$columns = $wpdb->get_col( "SHOW COLUMNS FROM {$table}", 0 );
+			if ( ! is_array( $columns ) ) {
+				$columns = array();
+				Remember_Logger::error( 'Could not read survey columns', array( 'error' => $wpdb->last_error ) );
+			}
+			$schema_ok = true;
+			if ( ! in_array( 'event_role_id', $columns, true ) ) {
+				$added = $wpdb->query( "ALTER TABLE {$table} ADD COLUMN event_role_id BIGINT(20) UNSIGNED DEFAULT NULL AFTER event_id" );
+				if ( false === $added ) {
+					$schema_ok = false;
+					Remember_Logger::error( 'Failed to add survey role column', array( 'error' => $wpdb->last_error ) );
+				} else {
+					Remember_Logger::info( 'Added survey column', array( 'column' => 'event_role_id' ) );
+				}
+			}
+			if ( $schema_ok ) {
+				$index = $wpdb->get_results( "SHOW INDEX FROM {$table} WHERE Key_name = 'event_role'" );
+				if ( empty( $index ) ) {
+					$indexed = $wpdb->query( "ALTER TABLE {$table} ADD KEY event_role (event_id, event_role_id, placement)" );
+					if ( false === $indexed ) {
+						Remember_Logger::error( 'Failed to add survey role index', array( 'error' => $wpdb->last_error ) );
+					}
+				}
+				update_option( 'remember_db_version', '2.3.3' );
+				Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '2.3.3' ) );
+			}
+		}
+
+		// Update to 2.3.4 (a survey can include several roles; none selected means every role).
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '2.3.4', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '2.3.4' ) );
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-database.php';
+			$db = new Remember_Database();
+			$db->create_survey_roles_table();
+			global $wpdb;
+			$surveys = $wpdb->prefix . 'remember_surveys';
+			$roles   = $wpdb->prefix . 'remember_survey_roles';
+			$copied  = $wpdb->query( "INSERT INTO {$roles} (survey_id, event_role_id) SELECT survey_id, event_role_id FROM {$surveys} s WHERE s.event_role_id IS NOT NULL AND s.event_role_id > 0 AND NOT EXISTS (SELECT 1 FROM {$roles} sr WHERE sr.survey_id = s.survey_id AND sr.event_role_id = s.event_role_id)" );
+			if ( false === $copied ) {
+				Remember_Logger::error( 'Failed to copy survey roles', array( 'error' => $wpdb->last_error ) );
+			} else {
+				$wpdb->query( "UPDATE {$surveys} SET event_role_id = NULL WHERE event_role_id IS NOT NULL" );
+				update_option( 'remember_db_version', '2.3.4' );
+				Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '2.3.4' ) );
+			}
+		}
+
 		// Always re-ensure health catalogs (idempotent). Catches sites that stalled mid-migration
 		// or activated before catalog seed rows were added.
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-seeder.php';

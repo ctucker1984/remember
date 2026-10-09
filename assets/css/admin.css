@@ -1065,10 +1065,36 @@
 	}
 }
 
-.remember-survey-masthead label {
+.remember-survey-masthead label,
+.remember-survey-roles-label {
 	display: block;
 	margin-bottom: 4px;
 	font-weight: 600;
+}
+
+.remember-survey-roles {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px 14px;
+	max-height: 8.5em;
+	overflow: auto;
+	margin: 0;
+	padding: 6px 8px;
+	border: 1px solid #8c8f94;
+	border-radius: 4px;
+	background: #fff;
+}
+
+.remember-survey-roles label {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	margin: 0;
+	font-weight: 400;
+}
+
+.remember-survey-list-meta-label {
+	display: none;
 }
 
 .remember-survey-title-input {
@@ -1933,6 +1959,72 @@
 
 	.remember-members .remember-member-list-line {
 		white-space: normal;
+	}
+
+	.remember-surveys .remember-filters form {
+		flex-direction: row;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 8px;
+	}
+
+	.remember-surveys .remember-filters select,
+	.remember-surveys .remember-filters .button {
+		width: auto;
+	}
+
+	.remember-surveys .remember-responsive-table tbody tr {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		column-gap: 12px;
+		row-gap: 4px;
+		padding: 8px 12px;
+		margin-bottom: 8px;
+	}
+
+	.remember-surveys .remember-responsive-table tbody td {
+		display: block;
+		width: auto;
+		max-width: none;
+		padding: 0;
+	}
+
+	.remember-surveys .remember-responsive-table tbody td::before {
+		content: none;
+	}
+
+	.remember-surveys .remember-responsive-table td.column-name {
+		order: 0;
+		flex: 1 0 100%;
+		width: 100%;
+	}
+
+	.remember-surveys .remember-responsive-table td.column-event,
+	.remember-surveys .remember-responsive-table td.column-roles,
+	.remember-surveys .remember-responsive-table td.column-when,
+	.remember-surveys .remember-responsive-table td.column-questions,
+	.remember-surveys .remember-responsive-table td.column-status,
+	.remember-surveys .remember-responsive-table td.column-actions {
+		order: 1;
+		flex: 0 0 auto;
+		width: auto !important;
+	}
+
+	.remember-surveys .remember-responsive-table td.column-roles {
+		color: #646970;
+	}
+
+	.remember-surveys .remember-responsive-table td.column-actions {
+		margin-left: auto;
+		text-align: right;
+	}
+
+	.remember-surveys .remember-survey-list-meta-label {
+		display: inline;
+		font-weight: 600;
+		margin-right: 0.25em;
+		color: #1d2327;
 	}
 }
 
