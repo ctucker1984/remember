@@ -506,6 +506,33 @@ class Remember_Import_Export {
 	}
 
 	/**
+	 * Row error for a database write that returned false. Zero changed rows is not a failure.
+	 *
+	 * @param int    $row_number CSV row number.
+	 * @param string $message    What failed, without the row number.
+	 * @param string $db_error   Database error captured before any later query.
+	 * @return string
+	 */
+	private static function import_row_write_error( $row_number, $message, $db_error = '' ) {
+		$db_error = trim( (string) $db_error );
+		if ( '' === $db_error ) {
+			return sprintf(
+				/* translators: 1: CSV row number, 2: what failed */
+				__( 'Row %1$d: %2$s', 'remember' ),
+				$row_number,
+				$message
+			);
+		}
+		return sprintf(
+			/* translators: 1: CSV row number, 2: what failed, 3: database error */
+			__( 'Row %1$d: %2$s %3$s', 'remember' ),
+			$row_number,
+			$message,
+			$db_error
+		);
+	}
+
+	/**
 	 * Legal names from CSV + WordPress user when placeholders appear in the sheet.
 	 *
 	 * @param array    $row_data Row keyed by CSV header.
@@ -847,7 +874,7 @@ class Remember_Import_Export {
 			}
 			
 			if ( $profile ) {
-				$wpdb->update(
+				$saved = $wpdb->update(
 					$wpdb->prefix . 'remember_member_profiles',
 					$profile_data,
 					array( 'member_id' => $user_id )
@@ -855,10 +882,24 @@ class Remember_Import_Export {
 			} else {
 				$profile_data['member_id']  = $user_id;
 				$profile_data['created_at'] = current_time( 'mysql' );
-				$wpdb->insert(
+				$saved = $wpdb->insert(
 					$wpdb->prefix . 'remember_member_profiles',
 					$profile_data
 				);
+			}
+			if ( false === $saved ) {
+				$db_error = $wpdb->last_error;
+				$results['error']++;
+				$results['errors'][] = self::import_row_write_error( $row_number, __( 'Could not save the profile.', 'remember' ), $db_error );
+				Remember_Logger::error(
+					'Member import profile save failed',
+					array(
+						'user_id'  => $user_id,
+						'row'      => $row_number,
+						'db_error' => $db_error,
+					)
+				);
+				continue;
 			}
 
 			if ( current_user_can( 'remember_access_health' ) ) {
@@ -996,8 +1037,17 @@ class Remember_Import_Export {
 			$event_id = $event_model->create( $event_data );
 			
 			if ( ! $event_id ) {
+				global $wpdb;
+				$db_error = $wpdb->last_error;
 				$results['error']++;
-				$results['errors'][] = sprintf( __( 'Row %d: Could not create event.', 'remember' ), $row_number );
+				$results['errors'][] = self::import_row_write_error( $row_number, __( 'Could not create event.', 'remember' ), $db_error );
+				Remember_Logger::error(
+					'Event import save failed',
+					array(
+						'row'      => $row_number,
+						'db_error' => $db_error,
+					)
+				);
 				continue;
 			}
 			
@@ -1090,8 +1140,17 @@ class Remember_Import_Export {
 			$location_id = $location_model->create( $location_data );
 			
 			if ( ! $location_id ) {
+				global $wpdb;
+				$db_error = $wpdb->last_error;
 				$results['error']++;
-				$results['errors'][] = sprintf( __( 'Row %d: Could not create location.', 'remember' ), $row_number );
+				$results['errors'][] = self::import_row_write_error( $row_number, __( 'Could not create location.', 'remember' ), $db_error );
+				Remember_Logger::error(
+					'Location import save failed',
+					array(
+						'row'      => $row_number,
+						'db_error' => $db_error,
+					)
+				);
 				continue;
 			}
 			
