@@ -275,6 +275,9 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 		$member_number = Remember_Profile_Fields::sanitize_member_number(
 			isset( $_POST['member_number'] ) ? wp_unslash( $_POST['member_number'] ) : ''
 		);
+		$remember_email_error = isset( $_POST['user_email'] )
+			? Remember_Profile_Fields::user_email_change_error( $member_id, wp_unslash( $_POST['user_email'] ) )
+			: '';
 		$member_number_error = '';
 		if ( null === $member_number ) {
 			$member_number_error = __( 'Member number must be alphanumeric (letters and numbers only).', 'remember' );
@@ -298,16 +301,28 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html( Remember_Profile_Fields::interests_too_long_message() ) . '</p></div>';
 		} elseif ( '' !== $member_number_error ) {
 			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html( $member_number_error ) . '</p></div>';
+		} elseif ( '' !== $remember_email_error ) {
+			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html( Remember_Profile_Fields::user_email_change_message( $remember_email_error ) ) . '</p></div>';
 		} else {
 		
 		global $wpdb;
 		
 		// Update WordPress user display_name and nickname if provided
-		if ( isset( $_POST['display_name'] ) || isset( $_POST['nickname'] ) ) {
+		if ( isset( $_POST['display_name'] ) || isset( $_POST['nickname'] ) || isset( $_POST['user_email'] ) ) {
 			$user_update_data = array( 'ID' => $member_id );
 			
 			if ( isset( $_POST['display_name'] ) ) {
 				$user_update_data['display_name'] = sanitize_text_field( wp_unslash( $_POST['display_name'] ) );
+			}
+
+			$remember_email_changed = false;
+			if ( isset( $_POST['user_email'] ) ) {
+				$posted_email = sanitize_email( wp_unslash( $_POST['user_email'] ) );
+				$current_account = get_userdata( $member_id );
+				if ( $current_account && strtolower( $current_account->user_email ) !== strtolower( $posted_email ) ) {
+					$user_update_data['user_email'] = $posted_email;
+					$remember_email_changed         = true;
+				}
 			}
 			
 			$update_result = wp_update_user( $user_update_data );
@@ -318,6 +333,16 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 					update_user_meta( $member_id, 'nickname', sanitize_text_field( wp_unslash( $_POST['nickname'] ) ) );
 				}
 				Remember_Logger::info( 'WordPress user updated', array( 'user_id' => $member_id ) );
+				if ( ! empty( $remember_email_changed ) ) {
+					Remember_Logger::info( 'Member account email updated', array( 'user_id' => $member_id, 'by_user_id' => get_current_user_id() ) );
+					Remember_Logger::debug(
+						'Member account email updated',
+						array(
+							'user_id' => $member_id,
+							'email'   => isset( $posted_email ) ? $posted_email : '',
+						)
+					);
+				}
 			} else {
 				Remember_Logger::error( 'Failed to update WordPress user', array( 'user_id' => $member_id, 'error' => $update_result->get_error_message() ) );
 			}
@@ -701,6 +726,8 @@ if ( $view_member_id > 0 ) {
 	
 	// Get member profile
 	global $wpdb;
+	require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-fields.php';
+	Remember_Profile_Fields::ensure_allergy_reaction_column();
 	$view_profile = $wpdb->get_row( $wpdb->prepare(
 		"SELECT * FROM {$wpdb->prefix}remember_member_profiles WHERE member_id = %d",
 		$view_member_id

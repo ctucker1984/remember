@@ -428,8 +428,27 @@ require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remem
 					<?php else : ?>
 						<p class="remember-member-detail-none"><?php esc_html_e( 'None', 'remember' ); ?></p>
 					<?php endif; ?>
-					<?php if ( $view_profile && ! empty( $view_profile->allergy_reaction ) ) : ?>
-						<p><?php echo nl2br( esc_html( (string) $view_profile->allergy_reaction ) ); ?></p>
+					<?php
+					$remember_reaction_text = ( $view_profile && isset( $view_profile->allergy_reaction ) ) ? trim( (string) $view_profile->allergy_reaction ) : '';
+					$remember_show_reaction = ( '' !== $remember_reaction_text );
+					if ( ! $remember_show_reaction && ! empty( $view_allergies ) ) {
+						foreach ( $view_allergies as $remember_allergy_name ) {
+							if ( 'None' !== $remember_allergy_name ) {
+								$remember_show_reaction = true;
+								break;
+							}
+						}
+					}
+					if ( $remember_show_reaction ) :
+						?>
+						<div class="remember-member-detail-reaction">
+							<strong class="remember-member-detail-reaction__label"><?php echo esc_html( Remember_Profile_Fields::allergy_reaction_prompt() ); ?></strong>
+							<?php if ( '' !== $remember_reaction_text ) : ?>
+								<p><?php echo nl2br( esc_html( $remember_reaction_text ) ); ?></p>
+							<?php else : ?>
+								<p class="remember-member-detail-none"><?php esc_html_e( 'Not provided', 'remember' ); ?></p>
+							<?php endif; ?>
+						</div>
 					<?php endif; ?>
 				</div>
 				<div class="remember-member-detail-section remember-member-detail-health-card">

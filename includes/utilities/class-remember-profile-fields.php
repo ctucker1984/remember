@@ -396,6 +396,40 @@ class Remember_Profile_Fields {
 	}
 
 	/**
+	 * Why a proposed account email cannot be saved, or an empty string when it can.
+	 *
+	 * An unchanged address is allowed. WordPress requires user_email to be unique.
+	 *
+	 * @param int    $user_id   Member / WordPress user ID.
+	 * @param string $raw_email Proposed address.
+	 * @return string invalid_email, email_exists, or empty.
+	 */
+	public static function user_email_change_error( $user_id, $raw_email ) {
+		$email = sanitize_email( is_string( $raw_email ) ? $raw_email : '' );
+		if ( ! is_email( $email ) ) {
+			return 'invalid_email';
+		}
+		$owner = email_exists( $email );
+		if ( $owner && (int) $owner !== (int) $user_id ) {
+			return 'email_exists';
+		}
+		return '';
+	}
+
+	/**
+	 * Message for a user_email_change_error() code.
+	 *
+	 * @param string $code Error code.
+	 * @return string
+	 */
+	public static function user_email_change_message( $code ) {
+		if ( 'email_exists' === $code ) {
+			return __( 'That email address is already used by another account.', 'remember' );
+		}
+		return __( 'Please enter a valid email address.', 'remember' );
+	}
+
+	/**
 	 * Replace social / dietary / medical / allergy junctions for a member from POST.
 	 *
 	 * @param int $member_id Member user ID.

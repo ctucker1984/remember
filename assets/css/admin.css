@@ -2694,6 +2694,35 @@
 	}
 }
 
+.remember-allergy-reaction {
+	margin-top: 12px;
+}
+
 .remember-allergy-reaction[hidden] {
 	display: none !important;
+}
+
+.remember-allergy-reaction label {
+	display: block;
+	margin: 0 0 6px;
+	font-weight: 600;
+}
+
+.remember-allergy-reaction textarea.large-text {
+	width: 100%;
+	max-width: 100%;
+	min-height: 8rem;
+}
+
+.remember-member-detail-reaction {
+	margin-top: 12px;
+}
+
+.remember-member-detail-reaction__label {
+	display: block;
+	margin: 0 0 4px;
+}
+
+.remember-member-detail-reaction p {
+	margin: 0;
 }

@@ -4,6 +4,8 @@ All notable changes to reMember are listed here. The current plugin version is i
 
 ## Unreleased
 
+- **Fix:** The allergy reaction explanation shows on the admin member edit form, directly under the allergy list, and on the member detail page whenever an allergy other than None is selected.
+- **Enhancement:** A member can change their account email from their profile, and staff can change it on the admin member edit form. The address must be valid and unused. Saving a new address changes it immediately, updates the linked Xero contact or QuickBooks customer, and WordPress emails the previous address.
 - **Enhancement:** Settings can send vetting emails to everyone with the Vetting role, or only the primary vetter and collaborators on that case. Assignment, scheduling, completion, and collaborator invitations use that choice. The member’s own accepted or rejected email is unchanged.
 - **Enhancement:** After public registration, the new member is signed in, sees a short confirmation that the profile was received, and is sent to the membership dashboard.
 - **Enhancement:** When Allergies is anything other than None, a required explanation of the reaction appears immediately after that field. None hides it and does not require it.

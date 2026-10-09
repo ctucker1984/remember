@@ -145,6 +145,13 @@ if ( $photo_max_bytes < 1 ) {
 	<h3><?php esc_html_e( 'WordPress User Information', 'remember' ); ?></h3>
 	<table class="form-table">
 		<tr>
+			<th><label for="user_email"><?php esc_html_e( 'Email Address', 'remember' ); ?> <span class="description"><?php esc_html_e( '(required)', 'remember' ); ?></span></label></th>
+			<td>
+				<input type="email" id="user_email" name="user_email" class="regular-text" value="<?php echo esc_attr( $view_user->user_email ); ?>" required autocomplete="email">
+				<p class="description"><?php esc_html_e( 'Login and password-reset address. Saving a different address changes it immediately, updates the linked Xero or QuickBooks contact, and WordPress emails the previous address.', 'remember' ); ?></p>
+			</td>
+		</tr>
+		<tr>
 			<th><label for="nickname"><?php esc_html_e( 'Nickname', 'remember' ); ?> <span class="description"><?php esc_html_e( '(required)', 'remember' ); ?></span></label></th>
 			<td>
 				<input type="text" id="nickname" name="nickname" class="regular-text" value="<?php echo esc_attr( get_user_meta( $view_user->ID, 'nickname', true ) ); ?>" required>
@@ -461,12 +468,10 @@ if ( $photo_max_bytes < 1 ) {
 								</label>
 							<?php endforeach; ?>
 						</fieldset>
-					</td>
-				</tr>
-				<tr class="remember-allergy-reaction" data-remember-allergy-reaction="1"<?php echo $remember_reaction_needed ? '' : ' hidden'; ?>>
-					<th><label for="remember_allergy_reaction"><?php echo esc_html( Remember_Profile_Fields::allergy_reaction_prompt() ); ?></label></th>
-					<td>
-						<textarea name="allergy_reaction" id="remember_allergy_reaction" rows="6" class="large-text"<?php echo $remember_reaction_needed ? ' required' : ''; ?>><?php echo esc_textarea( $remember_reaction_text ); ?></textarea>
+						<div class="remember-allergy-reaction" data-remember-allergy-reaction="1"<?php echo $remember_reaction_needed ? '' : ' hidden'; ?>>
+							<label for="remember_allergy_reaction"><?php echo esc_html( Remember_Profile_Fields::allergy_reaction_prompt() ); ?></label>
+							<textarea name="allergy_reaction" id="remember_allergy_reaction" rows="6" class="large-text"<?php echo $remember_reaction_needed ? ' required' : ''; ?>><?php echo esc_textarea( $remember_reaction_text ); ?></textarea>
+						</div>
 					</td>
 				</tr>
 			</table>
