@@ -4,6 +4,7 @@ All notable changes to reMember are listed here. The current plugin version is i
 
 ## Unreleased
 
+- **Security:** The readme states that one-click updates install the latest GitHub release zip with no signature check. The accounts that can publish a release are what keep that update safe.
 - **Fix:** QuickBooks and Xero secrets are encrypted with a key that is not stored in the database. Existing connections are rewritten only after the new value decrypts to the same secret. If that check fails, the old key and the old values stay.
 - **Fix:** A new profile photo is stored under a random file name. The original camera name is no longer part of the URL. Photos already on the site keep their current names.
 - **Fix:** Registration checks the profile photo before it creates an account. A photo that is not a real image is rejected, and no account is left behind.

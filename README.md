@@ -22,6 +22,10 @@ Members log in through WordPress (`wp-login.php` or the site’s login). reMembe
 
 **Updates:** From **1.3.5+**, new releases appear under **Plugins → Updates** in wp-admin (WordPress 5.8+). reMember reads [GitHub Releases](https://github.com/ctucker1984/remember/releases) and installs the packaged `remember-x.y.z.zip`. Getting to 1.3.5 itself still requires one manual upload.
 
+The updater does not check a signature or checksum. It installs whatever `remember-x.y.z.zip` is attached to the latest GitHub release, and it ignores GitHub’s automatic “Source code” zip. An account that can publish a release can ship code to every site running reMember. A checksum file on that same release would not change this, because the same account could publish the checksum too.
+
+Keep that list small. Turn on two-factor authentication for every collaborator, give write access to as few people as possible, and protect `master` and release tags so a release cannot be published from an unprotected push.
+
 **Upgrade tip:** From **1.3.0+**, Upload → Replace deactivates reMember, replaces files, then reactivates. When upgrading **from ≤1.2.x**, deactivate reMember first, then upload and activate.
 
 **Deactivate vs Delete:** Deactivate pauses the plugin and keeps data. Delete (shown only after deactivate) removes plugin files and wipes reMember tables, settings, logs, photos, setup pages, and capabilities. WordPress user accounts stay. Deactivate offers a backup download first.
