@@ -129,7 +129,7 @@ $is_multi_day = $viewing_event->start_date !== $viewing_event->end_date;
 	</div>
 
 	<!-- Applications Section -->
-	<div style="background: #fff; border: 1px solid #ccd0d4; border-radius: 4px; padding: 20px; margin-top: 20px;">
+	<div class="remember-event-applications" style="background: #fff; border: 1px solid #ccd0d4; border-radius: 4px; padding: 20px; margin-top: 20px;">
 		<h3 style="margin-top: 0;">
 			<?php esc_html_e( 'Applications', 'remember' ); ?>
 			<?php if ( ! empty( $event_applications ) ) : ?>
