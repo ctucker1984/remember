@@ -153,11 +153,52 @@ class Remember_Import_Export {
 	}
 
 	/**
+	 * Open a CSV download or a file. Sends HTTP headers only for a download.
+	 *
+	 * @param string $path     Empty to stream the download.
+	 * @param string $filename Download filename.
+	 * @return resource|false
+	 */
+	private static function begin_csv_export( $path, $filename ) {
+		$path = (string) $path;
+		if ( '' === $path ) {
+			header( 'Content-Type: text/csv; charset=utf-8' );
+			header( 'Content-Disposition: attachment; filename=' . $filename );
+			header( 'Pragma: no-cache' );
+			header( 'Expires: 0' );
+			$output = fopen( 'php://output', 'w' );
+		} else {
+			$output = fopen( $path, 'w' );
+		}
+		if ( ! is_resource( $output ) ) {
+			return false;
+		}
+		fprintf( $output, chr( 0xEF ) . chr( 0xBB ) . chr( 0xBF ) );
+		return $output;
+	}
+
+	/**
+	 * Close a CSV export. A browser download ends the request.
+	 *
+	 * @param resource $output Handle.
+	 * @param string   $path   Empty when this is a download.
+	 * @return bool
+	 */
+	private static function finish_csv_export( $output, $path ) {
+		fclose( $output );
+		if ( '' === (string) $path ) {
+			exit;
+		}
+		return true;
+	}
+
+	/**
 	 * Export members to CSV.
 	 *
-	 * @return void
+	 * @param string $path File path. Empty streams a download and exits.
+	 * @return bool True when a file was written.
 	 */
-	public static function export_members() {
+	public static function export_members( $path = '' ) {
 		if ( ! current_user_can( 'remember_read_members' ) && ! current_user_can( 'remember_read_attendees' ) ) {
 			wp_die( __( 'You do not have sufficient permissions to export members.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
 		}
@@ -182,16 +223,10 @@ class Remember_Import_Export {
 		}
 		
 		$filename = 'members-export-' . date( 'Y-m-d-H-i-s' ) . '.csv';
-		
-		header( 'Content-Type: text/csv; charset=utf-8' );
-		header( 'Content-Disposition: attachment; filename=' . $filename );
-		header( 'Pragma: no-cache' );
-		header( 'Expires: 0' );
-		
-		$output = fopen( 'php://output', 'w' );
-		
-		// Add BOM for Excel compatibility
-		fprintf( $output, chr( 0xEF ) . chr( 0xBB ) . chr( 0xBF ) );
+		$output   = self::begin_csv_export( $path, $filename );
+		if ( ! is_resource( $output ) ) {
+			return false;
+		}
 
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-profile-questions.php';
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-clothing-sizes.php';
@@ -266,8 +301,7 @@ class Remember_Import_Export {
 			self::write_csv_line( $output, $row );
 		}
 		
-		fclose( $output );
-		exit;
+		return self::finish_csv_export( $output, $path );
 	}
 
 	/**
@@ -321,24 +355,19 @@ class Remember_Import_Export {
 	/**
 	 * Export events to CSV.
 	 *
-	 * @return void
+	 * @param string $path File path. Empty streams a download and exits.
+	 * @return bool True when a file was written.
 	 */
-	public static function export_events() {
+	public static function export_events( $path = '' ) {
 		$event_model = new Remember_Event();
 		$events = $event_model->get_all();
 		
 		$filename = 'events-export-' . date( 'Y-m-d-H-i-s' ) . '.csv';
-		
-		header( 'Content-Type: text/csv; charset=utf-8' );
-		header( 'Content-Disposition: attachment; filename=' . $filename );
-		header( 'Pragma: no-cache' );
-		header( 'Expires: 0' );
-		
-		$output = fopen( 'php://output', 'w' );
-		
-		// Add BOM for Excel compatibility
-		fprintf( $output, chr( 0xEF ) . chr( 0xBB ) . chr( 0xBF ) );
-		
+		$output   = self::begin_csv_export( $path, $filename );
+		if ( ! is_resource( $output ) ) {
+			return false;
+		}
+
 		// Headers
 		self::write_csv_line( $output, array(
 			'Event ID',
@@ -373,9 +402,8 @@ class Remember_Import_Export {
 				$location_name,
 			) );
 		}
-		
-		fclose( $output );
-		exit;
+
+		return self::finish_csv_export( $output, $path );
 	}
 
 	/**
@@ -429,24 +457,19 @@ class Remember_Import_Export {
 	/**
 	 * Export locations to CSV.
 	 *
-	 * @return void
+	 * @param string $path File path. Empty streams a download and exits.
+	 * @return bool True when a file was written.
 	 */
-	public static function export_locations() {
+	public static function export_locations( $path = '' ) {
 		$location_model = new Remember_Location();
 		$locations = $location_model->get_all();
 		
 		$filename = 'locations-export-' . date( 'Y-m-d-H-i-s' ) . '.csv';
-		
-		header( 'Content-Type: text/csv; charset=utf-8' );
-		header( 'Content-Disposition: attachment; filename=' . $filename );
-		header( 'Pragma: no-cache' );
-		header( 'Expires: 0' );
-		
-		$output = fopen( 'php://output', 'w' );
-		
-		// Add BOM for Excel compatibility
-		fprintf( $output, chr( 0xEF ) . chr( 0xBB ) . chr( 0xBF ) );
-		
+		$output   = self::begin_csv_export( $path, $filename );
+		if ( ! is_resource( $output ) ) {
+			return false;
+		}
+
 		// Headers
 		self::write_csv_line( $output, array(
 			'Location ID',
@@ -474,9 +497,8 @@ class Remember_Import_Export {
 				$location->is_active ? 'Yes' : 'No',
 			) );
 		}
-		
-		fclose( $output );
-		exit;
+
+		return self::finish_csv_export( $output, $path );
 	}
 
 	/**
@@ -643,9 +665,10 @@ class Remember_Import_Export {
 	 * Import members from CSV.
 	 *
 	 * @param string $file_path Path to CSV file.
+	 * @param bool   $dry_run   Validate rows and skip every save.
 	 * @return array Results array with success/error counts.
 	 */
-	public static function import_members( $file_path ) {
+	public static function import_members( $file_path, $dry_run = false ) {
 		$results = array(
 			'success' => 0,
 			'error'   => 0,
@@ -726,6 +749,11 @@ class Remember_Import_Export {
 				$username = sanitize_user( $row_data['Email'] );
 				$password = wp_generate_password( 12, false );
 				$display_name = ! empty( $row_data['Display Name'] ) ? $row_data['Display Name'] : $row_data['Email'];
+
+				if ( $dry_run ) {
+					$results['success']++;
+					continue;
+				}
 				
 				$user_id = wp_create_user( $username, $password, $row_data['Email'] );
 				
@@ -755,6 +783,10 @@ class Remember_Import_Export {
 					);
 					$results['error']++;
 					$results['errors'][] = sprintf( __( 'Row %d: That email belongs to a WordPress administrator.', 'remember' ), $row_number );
+					continue;
+				}
+				if ( $dry_run ) {
+					$results['success']++;
 					continue;
 				}
 				// Sync WP name fields from CSV on re-import (clears Excel "0" placeholders).
@@ -957,9 +989,10 @@ class Remember_Import_Export {
 	 * Import events from CSV.
 	 *
 	 * @param string $file_path Path to CSV file.
+	 * @param bool   $dry_run   Validate rows and skip every save.
 	 * @return array Results array with success/error counts.
 	 */
-	public static function import_events( $file_path ) {
+	public static function import_events( $file_path, $dry_run = false ) {
 		$results = array(
 			'success' => 0,
 			'error'   => 0,
@@ -1053,6 +1086,11 @@ class Remember_Import_Export {
 				'is_private'        => ( ! empty( $row_data['Is Private'] ) && strtolower( $row_data['Is Private'] ) === 'yes' ) ? 1 : 0,
 				'location_id'       => $location_id,
 			);
+
+			if ( $dry_run ) {
+				$results['success']++;
+				continue;
+			}
 			
 			$event_id = $event_model->create( $event_data );
 			
@@ -1082,9 +1120,10 @@ class Remember_Import_Export {
 	 * Import locations from CSV.
 	 *
 	 * @param string $file_path Path to CSV file.
+	 * @param bool   $dry_run   Validate rows and skip every save.
 	 * @return array Results array with success/error counts.
 	 */
-	public static function import_locations( $file_path ) {
+	public static function import_locations( $file_path, $dry_run = false ) {
 		$results = array(
 			'success' => 0,
 			'error'   => 0,
@@ -1156,6 +1195,11 @@ class Remember_Import_Export {
 				'details'        => $row_data['Details'] ?? '',
 				'is_active'      => ( ! empty( $row_data['Is Active'] ) && strtolower( $row_data['Is Active'] ) === 'yes' ) ? 1 : 0,
 			);
+
+			if ( $dry_run ) {
+				$results['success']++;
+				continue;
+			}
 			
 			$location_id = $location_model->create( $location_data );
 			
@@ -1669,9 +1713,10 @@ class Remember_Import_Export {
 	 * Import custom field definitions from CSV (upsert by Short Name).
 	 *
 	 * @param string $file_path Path to CSV.
+	 * @param bool   $dry_run   Validate rows and skip every save.
 	 * @return array{success:int,error:int,errors:string[]}
 	 */
-	public static function import_profile_questions( $file_path ) {
+	public static function import_profile_questions( $file_path, $dry_run = false ) {
 		$results = array(
 			'success' => 0,
 			'error'   => 0,
@@ -1791,6 +1836,11 @@ class Remember_Import_Export {
 			);
 			if ( null !== $event_card ) {
 				$payload['show_on_event_card'] = $event_card;
+			}
+
+			if ( $dry_run ) {
+				$results['success']++;
+				continue;
 			}
 
 			if ( $existing ) {

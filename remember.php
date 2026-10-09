@@ -108,3 +108,17 @@ function run_remember() {
 
 // Run the plugin after WordPress is fully loaded
 add_action( 'plugins_loaded', 'run_remember' );
+
+/**
+ * Register WP-CLI commands after the plugin has loaded.
+ *
+ * @return void
+ */
+function remember_register_cli() {
+	if ( ! defined( 'WP_CLI' ) || ! WP_CLI ) {
+		return;
+	}
+	require_once plugin_dir_path( __FILE__ ) . 'includes/cli/class-remember-cli.php';
+	WP_CLI::add_command( 'remember', 'Remember_CLI' );
+}
+add_action( 'plugins_loaded', 'remember_register_cli', 20 );

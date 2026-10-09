@@ -26,6 +26,20 @@ class Remember_Backup {
 	const CHUNK = 500;
 
 	/**
+	 * Open stream for the JSON writer. Null means echo.
+	 *
+	 * @var resource|null
+	 */
+	private static $stream = null;
+
+	/**
+	 * Whether a fwrite to the backup stream failed.
+	 *
+	 * @var bool
+	 */
+	private static $stream_failed = false;
+
+	/**
 	 * Whether the current user may download or restore a full backup.
 	 *
 	 * @return bool
@@ -428,12 +442,64 @@ class Remember_Backup {
 		header( 'Content-Type: application/json; charset=utf-8' );
 		header( 'Content-Disposition: attachment; filename=' . $filename );
 
+		$out = fopen( 'php://output', 'w' );
+		self::stream_document( $out );
+		if ( is_resource( $out ) ) {
+			fclose( $out );
+		}
+		exit;
+	}
+
+	/**
+	 * Write a full backup to a path outside the request.
+	 *
+	 * @param string $path Absolute file path.
+	 * @return true|\WP_Error
+	 */
+	public static function write_to_path( $path ) {
+		if ( ! self::current_user_can_backup() ) {
+			return new WP_Error( 'cap', __( 'You cannot download a full reMember backup.', 'remember' ) );
+		}
+		$path = (string) $path;
+		if ( '' === $path || ! wp_is_writable( dirname( $path ) ) ) {
+			return new WP_Error( 'file', __( 'Could not write that backup file.', 'remember' ) );
+		}
+
+		require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
+		require_once plugin_dir_path( __FILE__ ) . 'class-remember-access-log.php';
+
+		$out = fopen( $path, 'w' );
+		if ( ! is_resource( $out ) ) {
+			return new WP_Error( 'file', __( 'Could not write that backup file.', 'remember' ) );
+		}
+		$ok = self::stream_document( $out );
+		fclose( $out );
+		if ( ! $ok ) {
+			wp_delete_file( $path );
+			return new WP_Error( 'file', __( 'Could not write that backup file.', 'remember' ) );
+		}
+
+		Remember_Logger::info( 'Full plugin backup downloaded', array( 'user_id' => get_current_user_id() ) );
+		Remember_Access_Log::record( 0, 'backup', __( 'Full backup', 'remember' ) );
+		return true;
+	}
+
+	/**
+	 * Write the backup document to an open stream.
+	 *
+	 * @param resource $out Destination.
+	 * @return bool
+	 */
+	private static function stream_document( $out ) {
+		self::$stream        = $out;
+		self::$stream_failed = false;
+
 		$flags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES;
 		if ( defined( 'JSON_INVALID_UTF8_SUBSTITUTE' ) ) {
 			$flags |= JSON_INVALID_UTF8_SUBSTITUTE;
 		}
 
-		echo '{';
+		self::put( '{' );
 		self::emit_key( 'format', self::FORMAT, $flags, true );
 		self::emit_key( 'format_version', self::FORMAT_VERSION, $flags );
 		self::emit_key( 'plugin_version', defined( 'REMEMBER_VERSION' ) ? REMEMBER_VERSION : '', $flags );
@@ -442,14 +508,33 @@ class Remember_Backup {
 		self::emit_key( 'site_url', home_url( '/' ), $flags );
 		self::emit_key( 'prefix', self::table_prefix(), $flags );
 
-		echo ',"users":';
-		echo wp_json_encode( self::user_index(), $flags );
-		echo ',"options":';
-		echo wp_json_encode( self::plugin_options(), $flags );
-		echo ',"tables":{';
+		self::put( ',"users":' );
+		self::put( wp_json_encode( self::user_index(), $flags ) );
+		self::put( ',"options":' );
+		self::put( wp_json_encode( self::plugin_options(), $flags ) );
+		self::put( ',"tables":{' );
 		self::stream_tables( $flags );
-		echo '}}';
-		exit;
+		self::put( '}}' );
+
+		$ok            = ! self::$stream_failed;
+		self::$stream  = null;
+		return $ok;
+	}
+
+	/**
+	 * Write one chunk of the backup document.
+	 *
+	 * @param string $text Chunk.
+	 * @return void
+	 */
+	private static function put( $text ) {
+		if ( ! is_resource( self::$stream ) ) {
+			echo $text; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- JSON backup stream.
+			return;
+		}
+		if ( false === fwrite( self::$stream, $text ) ) {
+			self::$stream_failed = true;
+		}
 	}
 
 	/**
@@ -589,11 +674,11 @@ class Remember_Backup {
 				continue;
 			}
 			if ( ! $first ) {
-				echo ',';
+				self::put( ',' );
 			}
 			$first = false;
-			echo wp_json_encode( $suffix, $flags );
-			echo ':';
+			self::put( wp_json_encode( $suffix, $flags ) );
+			self::put( ':' );
 			self::stream_table_rows( $table, $suffix, $flags );
 		}
 	}
@@ -608,7 +693,7 @@ class Remember_Backup {
 	 */
 	private static function stream_table_rows( $table, $suffix, $flags ) {
 		global $wpdb;
-		echo '[';
+		self::put( '[' );
 		$offset = 0;
 		$first  = true;
 		while ( true ) {
@@ -625,17 +710,17 @@ class Remember_Backup {
 			}
 			foreach ( $rows as $row ) {
 				if ( ! $first ) {
-					echo ',';
+					self::put( ',' );
 				}
 				$first = false;
-				echo wp_json_encode( self::sanitize_table_row( $suffix, $row ), $flags );
+				self::put( wp_json_encode( self::sanitize_table_row( $suffix, $row ), $flags ) );
 			}
 			if ( count( $rows ) < self::CHUNK ) {
 				break;
 			}
 			$offset += self::CHUNK;
 		}
-		echo ']';
+		self::put( ']' );
 	}
 
 	/**
@@ -649,11 +734,11 @@ class Remember_Backup {
 	 */
 	private static function emit_key( $key, $value, $flags, $first = false ) {
 		if ( ! $first ) {
-			echo ',';
+			self::put( ',' );
 		}
-		echo wp_json_encode( (string) $key, $flags );
-		echo ':';
-		echo wp_json_encode( $value, $flags );
+		self::put( wp_json_encode( (string) $key, $flags ) );
+		self::put( ':' );
+		self::put( wp_json_encode( $value, $flags ) );
 	}
 
 	/**
