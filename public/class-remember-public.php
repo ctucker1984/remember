@@ -271,8 +271,21 @@ class Remember_Public {
 		require_once plugin_dir_path( __FILE__ ) . '../includes/models/class-member.php';
 		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-vetting-workflow.php';
 		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-logger.php';
+		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-image-uploader.php';
 		// wp_delete_user() (used for cleanup below) is admin-only and not loaded on the front end.
 		require_once ABSPATH . 'wp-admin/includes/user.php';
+
+		$upload_result = Remember_Image_Uploader::upload_square_image( $_FILES['photo_file'], $photo_max_dimensions );
+		if ( is_wp_error( $upload_result ) || empty( $upload_result['url'] ) ) {
+			Remember_Logger::warning(
+				'Public member registration: photo upload failed',
+				array(
+					'error' => is_wp_error( $upload_result ) ? $upload_result->get_error_message() : '',
+				)
+			);
+			$this->redirect_member_registration( 'photo_failed' );
+		}
+		$photo_url = $upload_result['url'];
 
 		$user_id = wp_create_user( $username, $password, $email );
 
@@ -281,6 +294,7 @@ class Remember_Public {
 				'Public member registration: wp_create_user failed',
 				array( 'error' => $user_id->get_error_message() )
 			);
+			Remember_Image_Uploader::delete_image( $photo_url );
 			$this->redirect_member_registration( 'create_failed' );
 		}
 
@@ -308,6 +322,7 @@ class Remember_Public {
 
 		if ( ! $member_ok ) {
 			Remember_Logger::error( 'Public member registration: member row failed', array( 'user_id' => $user_id ) );
+			Remember_Image_Uploader::delete_image( $photo_url );
 			wp_delete_user( $user_id );
 			$this->redirect_member_registration( 'member_failed' );
 		}
@@ -326,9 +341,22 @@ class Remember_Public {
 				'Public member registration: profile insert failed',
 				array( 'user_id' => $user_id, 'db_error' => $wpdb->last_error )
 			);
+			Remember_Image_Uploader::delete_image( $photo_url );
 			$member_model->delete( $user_id );
 			wp_delete_user( $user_id );
 			$this->redirect_member_registration( 'profile_failed' );
+		}
+
+		$photo_saved = $member_model->update_photo( $user_id, $photo_url );
+		if ( false === $photo_saved ) {
+			Remember_Logger::error(
+				'Public member registration: photo could not be saved',
+				array( 'user_id' => $user_id, 'db_error' => $wpdb->last_error )
+			);
+			Remember_Image_Uploader::delete_image( $photo_url );
+			$member_model->delete( $user_id );
+			wp_delete_user( $user_id );
+			$this->redirect_member_registration( 'photo_failed' );
 		}
 
 		Remember_Profile_Fields::save_junctions_from_request( $user_id );
@@ -338,22 +366,6 @@ class Remember_Public {
 			$vetting_result = Remember_Vetting_Workflow::create_vetting_case( $user_id );
 			if ( ! $vetting_result ) {
 				Remember_Logger::warning( 'Public member registration: vetting case not created', array( 'member_id' => $user_id ) );
-			}
-		}
-
-		if ( $has_photo && isset( $_FILES['photo_file'] ) && UPLOAD_ERR_OK === (int) $_FILES['photo_file']['error'] ) {
-			require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-image-uploader.php';
-			$upload_result = Remember_Image_Uploader::upload_square_image( $_FILES['photo_file'], $photo_max_dimensions );
-			if ( is_wp_error( $upload_result ) ) {
-				Remember_Logger::warning(
-					'Public member registration: photo upload failed (account still created)',
-					array(
-						'user_id' => $user_id,
-						'error'   => $upload_result->get_error_message(),
-					)
-				);
-			} elseif ( ! empty( $upload_result['url'] ) ) {
-				$member_model->update_photo( $user_id, $upload_result['url'] );
 			}
 		}
 

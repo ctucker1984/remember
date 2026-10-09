@@ -4,6 +4,7 @@ All notable changes to reMember are listed here. The current plugin version is i
 
 ## Unreleased
 
+- **Fix:** Registration checks the profile photo before it creates an account. A photo that is not a real image is rejected, and no account is left behind.
 - **Fix:** A backup restore that fails removes WordPress users it just created. Accounts that were already on the site stay.
 - **Fix:** Saving a profile rejects a time zone that is not a real zone. A blank time zone still defaults to America/Los_Angeles. Registration already rejected a bad zone.
 - **Fix:** A member import skips a WordPress administrator unless the person importing is also an administrator. Their name is left as it is, and no member record is attached.
