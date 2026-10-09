@@ -1,6 +1,7 @@
 <?php
 /**
- * Full plugin JSON backup (tables + options). Does not delete WordPress users.
+ * Full plugin JSON backup (tables + options). Existing WordPress users are
+ * never deleted. Users created for a restore that then fails are removed.
  *
  * @package    reMember
  * @subpackage reMember/includes/utilities
@@ -38,6 +39,7 @@ class Remember_Backup {
 	 * Replaces all reMember tables and plugin options (except site-specific
 	 * keys). WordPress users are matched by email, then login; missing users
 	 * are created with a random password. Existing WP users are never deleted.
+	 * Users created for this restore are removed if the table restore rolls back.
 	 *
 	 * @param string $path Absolute path to the JSON file.
 	 * @return array{users_matched:int,users_created:int,tables:int,rows:int}|\WP_Error
@@ -127,6 +129,7 @@ class Remember_Backup {
 				if ( false === self::insert_row( $table, $prepared ) ) {
 					$wpdb->query( 'ROLLBACK' );
 					$wpdb->query( 'SET FOREIGN_KEY_CHECKS=1' );
+					self::delete_created_users( isset( $map['created_ids'] ) ? $map['created_ids'] : array() );
 					return new WP_Error(
 						'insert',
 						sprintf(
@@ -654,12 +657,13 @@ class Remember_Backup {
 	 * Match backup users to this site, creating WordPress users when needed.
 	 *
 	 * @param array $users Backup user index.
-	 * @return array{ids:array<int,int>,matched:int,created:int}|\WP_Error
+	 * @return array{ids:array<int,int>,matched:int,created:int,created_ids:int[]}|\WP_Error
 	 */
 	private static function reconcile_users( $users ) {
-		$map     = array();
-		$matched = 0;
-		$created = 0;
+		$map         = array();
+		$matched     = 0;
+		$created     = 0;
+		$created_ids = array();
 		$used_emails = array();
 
 		foreach ( $users as $row ) {
@@ -735,6 +739,7 @@ class Remember_Backup {
 				)
 			);
 			if ( is_wp_error( $new_id ) ) {
+				self::delete_created_users( $created_ids );
 				return new WP_Error(
 					'user',
 					sprintf(
@@ -747,14 +752,53 @@ class Remember_Backup {
 			}
 			$map[ $old_id ] = (int) $new_id;
 			$used_emails[ $email_key ] = (int) $new_id;
+			$created_ids[] = (int) $new_id;
 			$created++;
 		}
 
 		return array(
-			'ids'     => $map,
-			'matched' => $matched,
-			'created' => $created,
+			'ids'         => $map,
+			'matched'     => $matched,
+			'created'     => $created,
+			'created_ids' => $created_ids,
 		);
+	}
+
+	/**
+	 * Remove WordPress users this restore created after the restore fails.
+	 *
+	 * @param int[] $user_ids User IDs created by reconcile_users.
+	 * @return void
+	 */
+	private static function delete_created_users( $user_ids ) {
+		if ( ! is_array( $user_ids ) || empty( $user_ids ) ) {
+			return;
+		}
+		require_once ABSPATH . 'wp-admin/includes/user.php';
+		$removed = array();
+		foreach ( $user_ids as $user_id ) {
+			$user_id = (int) $user_id;
+			if ( $user_id < 1 || $user_id === (int) get_current_user_id() ) {
+				continue;
+			}
+			if ( wp_delete_user( $user_id ) ) {
+				$removed[] = $user_id;
+			} else {
+				Remember_Logger::warning(
+					'Failed restore could not remove a WordPress user it created',
+					array( 'user_id' => $user_id )
+				);
+			}
+		}
+		if ( ! empty( $removed ) ) {
+			Remember_Logger::info(
+				'Failed restore removed WordPress users it had created',
+				array(
+					'user_id' => get_current_user_id(),
+					'removed' => $removed,
+				)
+			);
+		}
 	}
 
 	/**
