@@ -113,7 +113,9 @@ class Remember_Admin {
 			return;
 		}
 		if ( strpos( $screen->id, 'remember' ) !== false ) {
-			wp_enqueue_style( $this->plugin_name, plugin_dir_url( __FILE__ ) . '../assets/css/admin.css', array(), $this->version, 'all' );
+			$admin_css = plugin_dir_path( __FILE__ ) . '../assets/css/admin.css';
+			$admin_ver = is_readable( $admin_css ) ? (string) filemtime( $admin_css ) : $this->version;
+			wp_enqueue_style( $this->plugin_name, plugin_dir_url( __FILE__ ) . '../assets/css/admin.css', array(), $admin_ver, 'all' );
 			// Photo cropper styles (shared with front-end) on Members edit.
 			if ( false !== strpos( $screen->id, 'remember-members' ) ) {
 				$public_css = plugin_dir_path( __FILE__ ) . '../assets/css/public.css';

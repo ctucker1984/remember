@@ -1600,6 +1600,123 @@ class Remember_Surveys {
 		return '';
 	}
 
+	/**
+	 * Answer tallies for the event screen.
+	 *
+	 * Fixed-choice questions list every option. The percent is that option's share of submitted responses.
+	 * A multi-select can total more than 100 percent because one response may include several choices.
+	 *
+	 * @param int $event_id Event.
+	 * @return array<int,array{survey:object,responses:int,questions:array<int,array<string,mixed>>}>
+	 */
+	public static function results_for_event( $event_id ) {
+		global $wpdb;
+		$event_id = absint( $event_id );
+		if ( $event_id < 1 ) {
+			return array();
+		}
+		$surveys = self::list_for_admin( $event_id );
+		if ( empty( $surveys ) ) {
+			return array();
+		}
+
+		$response_counts = $wpdb->get_results(
+			$wpdb->prepare(
+				'SELECT survey_id, COUNT(*) AS response_count FROM ' . self::responses_table() . ' WHERE event_id = %d GROUP BY survey_id',
+				$event_id
+			),
+			OBJECT_K
+		);
+		$answers = $wpdb->get_results(
+			$wpdb->prepare(
+				'SELECT ans.question_id, ans.value_text
+				FROM ' . self::answers_table() . ' ans
+				INNER JOIN ' . self::responses_table() . ' resp ON resp.response_id = ans.response_id
+				WHERE resp.event_id = %d',
+				$event_id
+			)
+		);
+		$by_question = array();
+		if ( is_array( $answers ) ) {
+			foreach ( $answers as $row ) {
+				$qid = (int) $row->question_id;
+				if ( ! isset( $by_question[ $qid ] ) ) {
+					$by_question[ $qid ] = array();
+				}
+				$by_question[ $qid ][] = (string) $row->value_text;
+			}
+		}
+
+		$out = array();
+		foreach ( $surveys as $survey ) {
+			$sid       = (int) $survey->survey_id;
+			$responses = 0;
+			if ( is_array( $response_counts ) && isset( $response_counts[ $sid ] ) ) {
+				$responses = (int) $response_counts[ $sid ]->response_count;
+			}
+			$questions = array();
+			foreach ( self::questions( $sid ) as $question ) {
+				$qid    = (int) $question->question_id;
+				$values = isset( $by_question[ $qid ] ) ? $by_question[ $qid ] : array();
+				$type   = (string) $question->field_type;
+				$item   = array(
+					'label'      => (string) $question->label,
+					'field_type' => $type,
+					'choices'    => array(),
+					'written'    => 0,
+				);
+				if ( in_array( $type, array( 'select', 'multiselect', 'boolean' ), true ) ) {
+					$counts = array();
+					foreach ( self::option_pairs( $question ) as $pair ) {
+						$key = isset( $pair['key'] ) ? (string) $pair['key'] : '';
+						if ( '' === $key ) {
+							continue;
+						}
+						$counts[ $key ] = array(
+							'label' => isset( $pair['label'] ) && $pair['label'] ? (string) $pair['label'] : $key,
+							'count' => 0,
+						);
+					}
+					foreach ( $values as $value ) {
+						$keys = ( 'multiselect' === $type )
+							? array_map( 'trim', explode( '|', $value ) )
+							: array( trim( $value ) );
+						foreach ( $keys as $key ) {
+							if ( isset( $counts[ $key ] ) ) {
+								$counts[ $key ]['count']++;
+							}
+						}
+					}
+					foreach ( $counts as $choice ) {
+						$item['choices'][] = array(
+							'label'   => $choice['label'],
+							'count'   => $choice['count'],
+							'percent' => $responses > 0 ? (int) round( ( $choice['count'] / $responses ) * 100 ) : 0,
+						);
+					}
+				} else {
+					$written = 0;
+					foreach ( $values as $value ) {
+						if ( '' !== trim( $value ) ) {
+							$written++;
+						}
+					}
+					$item['written'] = $written;
+				}
+				$questions[] = $item;
+			}
+			$out[] = array(
+				'survey'    => $survey,
+				'responses' => $responses,
+				'questions' => $questions,
+			);
+		}
+		return $out;
+	}
+
+	/**
+	 * @return string
+	 */
 	private static function surveys_table() {
 		global $wpdb;
 		return $wpdb->prefix . 'remember_surveys';

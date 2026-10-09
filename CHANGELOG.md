@@ -4,6 +4,7 @@ All notable changes to reMember are listed here. The current plugin version is i
 
 ## Unreleased
 
+- **Enhancement:** The event screen lists each survey under Attendees. Fixed-choice questions show how many people picked each answer and that count's share of submitted responses.
 - **Fix:** Report filters follow the field type. Choice fields, including survey role, question, survey kind, and timing, offer their lists. An answer filter uses the selected question: a dropdown for pick-one and yes/no, a multi-select for pick-several, and a text box for typed answers.
 - **Enhancement:** An event can include one survey on the application, shown before agreements and hidden when the event has none. Follow-on surveys are issued separately to accepted participants. Survey answers are a Reports subject, and the event picker limits a run to one event. The Surveys screen lists existing surveys, with edit and delete on each row. A survey is not on the application unless that is turned on. Each survey has its own title and an optional instructions block above the questions. A survey can include any number of event roles. Leaving every role unchecked covers everyone on the event. A role sees an application survey that names it before the survey for everyone. Follow-on surveys go only to accepted participants in the selected roles. Database 2.3.0, 2.3.4.
 - **Fix:** The allergy reaction explanation shows on the admin member edit form, directly under the allergy list, and on the member detail page whenever an allergy other than None is selected.
