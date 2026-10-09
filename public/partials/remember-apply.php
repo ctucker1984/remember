@@ -18,6 +18,7 @@ require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-merchand
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-vetting-workflow.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-messaging.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-agreements.php';
+require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-surveys.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-audit.php';
 
 // $event_id should be set by shortcode handler
@@ -54,6 +55,10 @@ if ( isset( $_POST['remember_apply_action'] ) && check_admin_referer( 'remember_
 		if ( $existing ) {
 			$submission_error = __( 'You have already applied for this event and role.', 'remember' );
 		} else {
+			$survey_error = Remember_Surveys::validate_apply( $event_id );
+			if ( $survey_error ) {
+				$submission_error = $survey_error;
+			} else {
 			$agreement_error = Remember_Agreements::validate_apply_acceptances( $event_id );
 			if ( $agreement_error ) {
 				$submission_error = $agreement_error;
@@ -76,6 +81,7 @@ if ( isset( $_POST['remember_apply_action'] ) && check_admin_referer( 'remember_
 			$new_application_id = $application_model->create( $data );
 
 			if ( $new_application_id ) {
+				Remember_Surveys::save_apply_response( $new_application_id, $event_id, $member_id );
 				Remember_Agreements::save_apply_acceptances( $new_application_id, $event_id );
 				Remember_Profile_Audit::touch_updated( $member_id, $member_id );
 
@@ -135,6 +141,7 @@ if ( isset( $_POST['remember_apply_action'] ) && check_admin_referer( 'remember_
 				$submission_error = __( 'Failed to submit application. Please try again.', 'remember' );
 			}
 				}
+			}
 			}
 		}
 		}
@@ -254,6 +261,15 @@ $registration_block = $selected_event ? Remember_Event::registration_block_reaso
 				</div>
 			</div>
 
+			<?php
+			$remember_survey_html = $selected_event ? Remember_Surveys::render_apply_html( (int) $event_id ) : '';
+			?>
+			<div id="remember-event-survey" class="remember-form-group"<?php echo $remember_survey_html ? '' : ' hidden'; ?>>
+				<div id="remember-event-survey-fields">
+					<?php echo $remember_survey_html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in helper ?>
+				</div>
+			</div>
+
 			<div class="remember-form-group">
 				<label class="remember-form-label"><?php esc_html_e( 'Agreements', 'remember' ); ?></label>
 				<div id="remember-event-agreements">
@@ -285,6 +301,38 @@ $registration_block = $selected_event ? Remember_Event::registration_block_reaso
 		var $eventSelect = $('#event_id');
 		var $addonsContainer = $('#remember-event-addons');
 		var $agreementsContainer = $('#remember-event-agreements');
+		var $surveyWrap = $('#remember-event-survey');
+		var $surveyFields = $('#remember-event-survey-fields');
+
+		function loadEventSurvey(selectedEventId) {
+			if (!selectedEventId) {
+				$surveyFields.empty();
+				$surveyWrap.prop('hidden', true);
+				return;
+			}
+			$.ajax({
+				url: typeof rememberPublic !== 'undefined' && rememberPublic.ajaxurl ? rememberPublic.ajaxurl : ajaxurl,
+				type: 'POST',
+				data: {
+					action: 'remember_get_event_survey',
+					event_id: selectedEventId,
+					nonce: '<?php echo esc_js( wp_create_nonce( 'remember_get_event_survey' ) ); ?>'
+				},
+				success: function(response) {
+					var html = response.success && response.data ? response.data.html : '';
+					if (html) {
+						$surveyFields.html(html);
+						$surveyWrap.prop('hidden', false);
+						if (window.rememberInitSurvey) {
+							window.rememberInitSurvey($surveyFields);
+						}
+					} else {
+						$surveyFields.empty();
+						$surveyWrap.prop('hidden', true);
+					}
+				}
+			});
+		}
 
 		function loadEventAgreements(selectedEventId) {
 			if (!selectedEventId) {
@@ -453,6 +501,9 @@ $registration_block = $selected_event ? Remember_Event::registration_block_reaso
 		// Load roles if event is pre-selected
 		if (eventId > 0) {
 			loadEventRoles(eventId);
+			if (window.rememberInitSurvey) {
+				window.rememberInitSurvey($surveyFields);
+			}
 		}
 
 		// Load roles when event selection changes
@@ -461,6 +512,7 @@ $registration_block = $selected_event ? Remember_Event::registration_block_reaso
 			loadEventRoles(selectedEventId);
 			loadEventAddons(selectedEventId, '');
 			loadEventAgreements(selectedEventId);
+			loadEventSurvey(selectedEventId);
 		});
 
 		$roleSelect.on('change', function() {

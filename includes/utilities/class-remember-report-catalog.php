@@ -57,6 +57,10 @@ class Remember_Report_Catalog {
 				'label' => __( 'Events', 'remember' ),
 				'cap'   => array( 'remember_read_events' ),
 			),
+			'surveys'      => array(
+				'label' => __( 'Surveys', 'remember' ),
+				'cap'   => array( 'remember_read_applications' ),
+			),
 		);
 	}
 
@@ -374,6 +378,7 @@ class Remember_Report_Catalog {
 			'payments'     => array( 'user.display_name', 'event.event_name', 'payment.total_amount', 'payment.amount_due', 'payment.payment_status' ),
 			'vetting'      => array( 'user.display_name', 'vetting.status', 'vetting.decision', 'vetter.display_name', 'vetting.scheduled_at' ),
 			'events'       => array( 'event.event_name', 'event.status', 'event.start_date', 'event.end_date', 'location.location_name' ),
+			'surveys'      => array( 'event.event_name', 'survey.title', 'user.display_name', 'question.label', 'answer.value', 'response.submitted_at' ),
 		);
 		return isset( $map[ $subject ] ) ? $map[ $subject ] : array();
 	}
@@ -520,6 +525,31 @@ class Remember_Report_Catalog {
 				'vetting.completed_at'   => self::f( __( 'Completed', 'remember' ), 'Vetting', 'datetime', 'v.completed_at' ),
 				'vetting.decision_date'  => self::f( __( 'Decision date', 'remember' ), 'Vetting', 'datetime', 'v.decision_date' ),
 				'vetting.created_at'     => self::f( __( 'Opened', 'remember' ), 'Vetting', 'datetime', 'v.created_at' ),
+			);
+		}
+
+		if ( 'surveys' === $subject ) {
+			return array(
+				'event.event_name'       => self::f( __( 'Event', 'remember' ), 'Event', 'string', 'e.event_name', 'event' ),
+				'survey.title'           => self::f( __( 'Survey', 'remember' ), 'Survey', 'string', 'sv.title' ),
+				'survey.placement'       => self::f(
+					__( 'Survey kind', 'remember' ),
+					'Survey',
+					'string',
+					'sv.placement',
+					null,
+					false,
+					array(
+						array( 'id' => 'application', 'label' => __( 'Application', 'remember' ) ),
+						array( 'id' => 'followup', 'label' => __( 'Follow-on', 'remember' ) ),
+					)
+				),
+				'survey.timing'          => self::f( __( 'Survey timing', 'remember' ), 'Survey', 'string', 'sv.timing' ),
+				'user.display_name'      => self::f( __( 'Member', 'remember' ), 'Member', 'string', 'u.display_name', 'user' ),
+				'user.user_email'        => self::f( __( 'Email', 'remember' ), 'Member', 'string', 'u.user_email', 'user' ),
+				'question.label'         => self::f( __( 'Question', 'remember' ), 'Survey', 'string', 'sq.label' ),
+				'answer.value'           => self::f( __( 'Answer', 'remember' ), 'Survey', 'string', 'ans.value_text' ),
+				'response.submitted_at'  => self::f( __( 'Submitted', 'remember' ), 'Survey', 'date', 'resp.submitted_at' ),
 			);
 		}
 

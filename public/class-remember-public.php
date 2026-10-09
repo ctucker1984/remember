@@ -110,6 +110,7 @@ class Remember_Public {
 		add_shortcode( 'remember_dashboard', array( $this, 'shortcode_dashboard' ) );
 		add_shortcode( 'remember_events', array( $this, 'shortcode_events' ) );
 		add_shortcode( 'remember_apply', array( $this, 'shortcode_apply' ) );
+		add_shortcode( 'remember_survey', array( $this, 'shortcode_survey' ) );
 		add_shortcode( 'remember_profile', array( $this, 'shortcode_profile' ) );
 		add_shortcode( 'remember_event_directory', array( $this, 'shortcode_event_directory' ) );
 		add_shortcode( 'remember_event_detail', array( $this, 'shortcode_event_detail' ) );
@@ -600,6 +601,28 @@ class Remember_Public {
 				'updated_at' => $updated_at,
 			)
 		);
+	}
+
+	/**
+	 * Follow-on survey shortcode.
+	 *
+	 * @return string
+	 */
+	public function shortcode_survey() {
+		if ( ! is_user_logged_in() ) {
+			$login_url = wp_login_url( get_permalink() );
+			return '<p class="remember-notice remember-error">' . sprintf(
+				/* translators: %s: login link */
+				__( 'Please %s to open this survey.', 'remember' ),
+				'<a href="' . esc_url( $login_url ) . '">' . esc_html__( 'log in', 'remember' ) . '</a>'
+			) . '</p>';
+		}
+		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-surveys.php';
+		$survey_id = isset( $_REQUEST['survey_id'] ) ? absint( $_REQUEST['survey_id'] ) : 0;
+		if ( $survey_id < 1 ) {
+			return '<p class="remember-notice remember-error">' . esc_html__( 'Survey not found.', 'remember' ) . '</p>';
+		}
+		return Remember_Surveys::render_followup_page( $survey_id, get_current_user_id() );
 	}
 
 	/**

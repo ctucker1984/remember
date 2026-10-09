@@ -1587,6 +1587,81 @@ class Remember_Database_Updater {
 			}
 		}
 
+		// Update to 2.3.0 (event surveys).
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '2.3.0', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '2.3.0' ) );
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-database.php';
+			require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-page-creator.php';
+			$db = new Remember_Database();
+			$db->create_surveys_table();
+			$db->create_survey_questions_table();
+			$db->create_survey_responses_table();
+			$db->create_survey_answers_table();
+			Remember_Page_Creator::create_pages( array( 'survey' ) );
+			update_option( 'remember_db_version', '2.3.0' );
+			Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '2.3.0' ) );
+		}
+
+		// Update to 2.3.1 (survey questions match custom-field shape).
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '2.3.1', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '2.3.1' ) );
+			global $wpdb;
+			$table   = $wpdb->prefix . 'remember_survey_questions';
+			$columns = $wpdb->get_col( "SHOW COLUMNS FROM {$table}", 0 );
+			if ( ! is_array( $columns ) ) {
+				$columns = array();
+				Remember_Logger::error( 'Could not read survey question columns', array( 'error' => $wpdb->last_error ) );
+			}
+			$add = array(
+				'field_key'           => "ALTER TABLE {$table} ADD COLUMN field_key VARCHAR(64) NOT NULL DEFAULT '' AFTER label",
+				'is_required'         => "ALTER TABLE {$table} ADD COLUMN is_required TINYINT(1) NOT NULL DEFAULT 0 AFTER options_text",
+				'required_when_json'  => "ALTER TABLE {$table} ADD COLUMN required_when_json TEXT NULL AFTER is_required",
+			);
+			$schema_ok = true;
+			foreach ( $add as $column_name => $sql ) {
+				if ( in_array( $column_name, $columns, true ) ) {
+					continue;
+				}
+				$added = $wpdb->query( $sql );
+				if ( false === $added ) {
+					$schema_ok = false;
+					Remember_Logger::error( 'Failed to add survey question column', array( 'column' => $column_name, 'error' => $wpdb->last_error ) );
+				} else {
+					Remember_Logger::info( 'Added survey question column', array( 'column' => $column_name ) );
+				}
+			}
+			if ( $schema_ok ) {
+				update_option( 'remember_db_version', '2.3.1' );
+				Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '2.3.1' ) );
+			}
+		}
+
+		// Update to 2.3.2 (survey header instructions).
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '2.3.2', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '2.3.2' ) );
+			global $wpdb;
+			$table   = $wpdb->prefix . 'remember_surveys';
+			$columns = $wpdb->get_col( "SHOW COLUMNS FROM {$table}", 0 );
+			if ( ! is_array( $columns ) ) {
+				$columns = array();
+				Remember_Logger::error( 'Could not read survey columns', array( 'error' => $wpdb->last_error ) );
+			}
+			$schema_ok = true;
+			if ( ! in_array( 'instructions', $columns, true ) ) {
+				$added = $wpdb->query( "ALTER TABLE {$table} ADD COLUMN instructions TEXT NULL AFTER title" );
+				if ( false === $added ) {
+					$schema_ok = false;
+					Remember_Logger::error( 'Failed to add survey instructions column', array( 'error' => $wpdb->last_error ) );
+				} else {
+					Remember_Logger::info( 'Added survey column', array( 'column' => 'instructions' ) );
+				}
+			}
+			if ( $schema_ok ) {
+				update_option( 'remember_db_version', '2.3.2' );
+				Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '2.3.2' ) );
+			}
+		}
+
 		// Always re-ensure health catalogs (idempotent). Catches sites that stalled mid-migration
 		// or activated before catalog seed rows were added.
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-seeder.php';

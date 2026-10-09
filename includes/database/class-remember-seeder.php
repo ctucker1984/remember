@@ -626,6 +626,7 @@ class Remember_Seeder {
 			'event_application_declined',
 			'event_application_waitlisted',
 			'event_ticket_paid',
+			'survey_issued',
 			'payment_recorded',
 			'payment_due_reminder',
 			'vetting_collaborator_invited',

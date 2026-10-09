@@ -451,6 +451,8 @@
 				msg = t('eventHintPay', 'This run is limited to payments for the selected event. The saved report stays global.');
 			} else if (sub === 'events') {
 				msg = t('eventHintEvents', 'This run is limited to the selected event. The saved report stays global.');
+			} else if (sub === 'surveys') {
+				msg = t('eventHintSurveys', 'This run is limited to survey answers for the selected event. The saved report stays global.');
 			} else {
 				msg = t('eventHintMembers', 'This run is limited to accepted participants of the selected event. The saved report stays global.');
 			}

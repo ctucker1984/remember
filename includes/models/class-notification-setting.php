@@ -114,6 +114,7 @@ class Remember_Notification_Setting extends Remember_Base_Model {
 			'event_application_declined'    => __( 'Event Application Declined', 'remember' ),
 			'event_application_waitlisted'  => __( 'Event Application Waitlisted', 'remember' ),
 			'event_ticket_paid'             => __( 'Event Ticket Paid', 'remember' ),
+			'survey_issued'                 => __( 'Survey Issued', 'remember' ),
 			'payment_recorded'              => __( 'Payment Recorded', 'remember' ),
 			'payment_due_reminder'          => __( 'Payment Due Reminder', 'remember' ),
 			'vetting_collaborator_invited'  => __( 'Vetting Collaborator Invited', 'remember' ),
@@ -145,6 +146,7 @@ class Remember_Notification_Setting extends Remember_Base_Model {
 			'event_application_declined'    => __( 'Sent to member when their event application is declined.', 'remember' ),
 			'event_application_waitlisted'  => __( 'Sent to member when their event application is waitlisted.', 'remember' ),
 			'event_ticket_paid'             => __( 'Sent to member when their event ticket is paid in full (includes ticket link).', 'remember' ),
+			'survey_issued'                 => __( 'Sent to accepted participants when a follow-on survey is issued.', 'remember' ),
 			'payment_recorded'              => __( 'Sent when a payment is recorded.', 'remember' ),
 			'payment_due_reminder'          => __( 'Sent as a reminder when payment is due (also used for balance-due blasts).', 'remember' ),
 			'vetting_collaborator_invited'  => __( 'Sent when a collaborator is invited to a vetting case.', 'remember' ),
@@ -178,6 +180,7 @@ class Remember_Notification_Setting extends Remember_Base_Model {
 			'event_application_declined',
 			'event_application_waitlisted',
 			'event_ticket_paid',
+			'survey_issued',
 		);
 		$billing = array(
 			'payment_recorded',
@@ -215,6 +218,7 @@ class Remember_Notification_Setting extends Remember_Base_Model {
 			'event_application_declined'    => __( 'Application Update for {event_name}', 'remember' ),
 			'event_application_waitlisted'  => __( 'Application Waitlisted for {event_name}', 'remember' ),
 			'event_ticket_paid'             => __( 'Your paid ticket for {event_name}', 'remember' ),
+			'survey_issued'                 => __( 'Survey for {event_name}', 'remember' ),
 			'payment_recorded'              => __( 'Payment Recorded - \${amount}', 'remember' ),
 			'payment_due_reminder'          => __( 'Payment Reminder - \${amount_due} Due for {event_name}', 'remember' ),
 			'vetting_collaborator_invited'  => __( 'Invitation to Collaborate on Vetting Case', 'remember' ),
@@ -272,6 +276,8 @@ class Remember_Notification_Setting extends Remember_Base_Model {
 			'event_application_waitlisted' => __( "Hello {member_name},\n\nYour application for {event_name} has been placed on our waitlist.\n\nApplication ID: {application_id}\nEvent: {event_name}\nDate: {date}\n\nWe will notify you if a spot becomes available.\n\nThank you for your patience,\nThe Team", 'remember' ),
 
 			'event_ticket_paid' => __( "Hello {member_name},\n\nYour payment for {event_name} has been recorded as paid in full.\n\nTicket ID: {ticket_id}\nApplication ID: {application_id}\nEvent: {event_name}\nDates: {event_dates}\nLocation: {event_location}\n\nView or print your paid admission ticket / receipt:\n{ticket_url}\n\nWe look forward to seeing you at the event.\n\nBest regards,\nThe Team", 'remember' ),
+
+			'survey_issued' => __( "Hello {member_name},\n\nPlease complete {survey_title} for {event_name}.\n\n{survey_url}\n\nThank you,\nThe Team", 'remember' ),
 			
 			'payment_recorded' => __( "Hello {member_name},\n\nThis email confirms that a payment has been recorded.\n\nAmount: \${amount}\nDate: {date}\nApplication ID: {application_id}\n\nThank you for your payment.\n\nBest regards,\nThe Team", 'remember' ),
 			

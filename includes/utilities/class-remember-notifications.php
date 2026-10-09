@@ -75,7 +75,7 @@ class Remember_Notifications {
 	 * @return string[]
 	 */
 	private static function url_placeholder_keys() {
-		return array( 'ticket_url', 'profile_url', 'review_url', 'vetting_url' );
+		return array( 'ticket_url', 'profile_url', 'review_url', 'vetting_url', 'survey_url' );
 	}
 
 	/**
@@ -733,6 +733,8 @@ class Remember_Notifications {
 			'profile_url'    => '',
 			'vetting_url'    => '',
 			'decision'       => '',
+			'survey_title'   => '',
+			'survey_url'     => '',
 		);
 		return wp_parse_args( $context, $defaults );
 	}

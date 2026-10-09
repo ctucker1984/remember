@@ -4,6 +4,7 @@ All notable changes to reMember are listed here. The current plugin version is i
 
 ## Unreleased
 
+- **Enhancement:** An event can include one survey on the application, shown before agreements and hidden when the event has none. Follow-on surveys are issued separately to accepted participants. Survey answers are a Reports subject, and the event picker limits a run to one event. The Surveys screen lists existing surveys, with edit and delete on each row. A survey is not on the application unless that is turned on. Each survey has its own title and an optional instructions block above the questions. Database 2.3.0, 2.3.2.
 - **Fix:** The allergy reaction explanation shows on the admin member edit form, directly under the allergy list, and on the member detail page whenever an allergy other than None is selected.
 - **Enhancement:** A member can change their account email from their profile, and staff can change it on the admin member edit form. The address must be valid and unused. Saving a new address changes it immediately, updates the linked Xero contact or QuickBooks customer, and WordPress emails the previous address.
 - **Enhancement:** Settings can send vetting emails to everyone with the Vetting role, or only the primary vetter and collaborators on that case. Assignment, scheduling, completion, and collaborator invitations use that choice. The member’s own accepted or rejected email is unchanged.

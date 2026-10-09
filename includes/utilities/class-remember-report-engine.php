@@ -302,6 +302,7 @@ class Remember_Report_Engine {
 			'payments'     => "FROM {$p}remember_payments pay",
 			'vetting'      => "FROM {$p}remember_vetting v",
 			'events'       => "FROM {$p}remember_events e",
+			'surveys'      => "FROM {$p}remember_survey_answers ans INNER JOIN {$p}remember_survey_responses resp ON resp.response_id = ans.response_id INNER JOIN {$p}remember_surveys sv ON sv.survey_id = resp.survey_id INNER JOIN {$p}remember_survey_questions sq ON sq.question_id = ans.question_id",
 		);
 		return isset( $map[ $subject ] ) ? $map[ $subject ] : $map['members'];
 	}
@@ -354,6 +355,10 @@ class Remember_Report_Engine {
 			),
 			'events'       => array(
 				'location' => "LEFT JOIN {$p}remember_locations loc ON loc.location_id = e.location_id",
+			),
+			'surveys'      => array(
+				'user'  => "INNER JOIN {$users} u ON u.ID = resp.member_id",
+				'event' => "LEFT JOIN {$p}remember_events e ON e.event_id = sv.event_id",
 			),
 		);
 
@@ -443,6 +448,11 @@ class Remember_Report_Engine {
 		} elseif ( 'events' === $subject ) {
 			$sql      = "e.event_id IN (SELECT DISTINCT event_id FROM {$p}remember_event_applications WHERE member_id = %d AND status = 'accepted')";
 			$params[] = $uid;
+		} elseif ( 'surveys' === $subject ) {
+			$extra    = str_replace( '{T}', 'resp.member_id', $att );
+			$sql      = $sql ? $sql . ' AND ' . $extra : $extra;
+			$params[] = $uid;
+			$params[] = $uid;
 		}
 
 		return array( 'sql' => $sql, 'params' => $params );
@@ -491,6 +501,12 @@ class Remember_Report_Engine {
 		if ( 'events' === $subject ) {
 			return array(
 				'sql'    => 'e.event_id = %d',
+				'params' => array( $event_id ),
+			);
+		}
+		if ( 'surveys' === $subject ) {
+			return array(
+				'sql'    => 'sv.event_id = %d',
 				'params' => array( $event_id ),
 			);
 		}

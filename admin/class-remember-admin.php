@@ -472,6 +472,15 @@ class Remember_Admin {
 			array( $this, 'display_events_page' )
 		);
 
+		add_submenu_page(
+			'remember',
+			__( 'Surveys', 'remember' ),
+			__( 'Surveys', 'remember' ),
+			'remember_read_events',
+			'remember-surveys',
+			array( $this, 'display_surveys_page' )
+		);
+
 		// Applications
 		add_submenu_page(
 			'remember',
@@ -749,6 +758,18 @@ class Remember_Admin {
 			wp_die( __( 'You do not have sufficient permissions to access this page.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
 		}
 		include_once 'views/reports.php';
+	}
+
+	/**
+	 * Event surveys.
+	 *
+	 * @return void
+	 */
+	public function display_surveys_page() {
+		if ( ! current_user_can( 'remember_read_events' ) ) {
+			wp_die( __( 'You do not have sufficient permissions to access this page.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+		}
+		include_once 'views/surveys.php';
 	}
 
 	/**
@@ -1796,6 +1817,28 @@ class Remember_Admin {
 		wp_send_json_success(
 			array(
 				'html' => Remember_Agreements::render_apply_html( $event_id ),
+			)
+		);
+	}
+
+	/**
+	 * AJAX: application survey HTML, empty when the event has none.
+	 *
+	 * @return void
+	 */
+	public function ajax_get_event_survey() {
+		check_ajax_referer( 'remember_get_event_survey', 'nonce' );
+
+		$event_id = isset( $_POST['event_id'] ) ? absint( $_POST['event_id'] ) : 0;
+		if ( $event_id <= 0 || ! is_user_logged_in() ) {
+			wp_send_json_error( array( 'message' => __( 'Invalid event.', 'remember' ) ) );
+		}
+
+		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-surveys.php';
+		$html = Remember_Surveys::render_apply_html( $event_id );
+		wp_send_json_success(
+			array(
+				'html' => $html,
 			)
 		);
 	}

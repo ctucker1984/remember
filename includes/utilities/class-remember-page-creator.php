@@ -49,6 +49,13 @@ class Remember_Page_Creator {
 				'shortcode' => '[remember_events status="open"]',
 				'description' => __( 'Lists all open events available for applications.', 'remember' ),
 			),
+			'survey' => array(
+				'title'       => __( 'Survey', 'remember' ),
+				'slug'        => 'survey',
+				'content'     => '<!-- wp:shortcode -->[remember_survey]<!-- /wp:shortcode -->',
+				'shortcode'   => '[remember_survey]',
+				'description' => __( 'Follow-on event survey. Opened from the link in the survey email (?survey_id=).', 'remember' ),
+			),
 			'apply' => array(
 				'title'   => __( 'Apply for Event', 'remember' ),
 				'slug'    => 'apply',
