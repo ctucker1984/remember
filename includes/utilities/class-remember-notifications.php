@@ -735,6 +735,8 @@ class Remember_Notifications {
 			'decision'       => '',
 			'survey_title'   => '',
 			'survey_url'     => '',
+			'role_name'      => '',
+			'waitlist_count' => '',
 		);
 		return wp_parse_args( $context, $defaults );
 	}

@@ -4,6 +4,7 @@ All notable changes to reMember are listed here. The current plugin version is i
 
 ## Unreleased
 
+- **Feature:** An event can email Event Administrators, or move the oldest waiting application for that role to pending, when an accepted spot is withdrawn or declined. The automatic choice runs only while registration is open and the role has room. It does not accept the application or create an invoice. Off leaves the waitlist for staff.
 - **Feature:** Public registration can require Cloudflare Turnstile or hCaptcha. The secret key is encrypted and left out of backups. The same form allows 10 attempts from one IP address in an hour unless that number is changed. A site can also reject an email domain or add its own check before an account is created.
 - **Feature:** Tools → Export Personal Data and Erase Personal Data include the reMember profile, health, emergency contact, applications, and survey answers. Erase removes those personal fields and the photo. Payment amounts and invoice identifiers stay. Staff note text is left out of the export and deleted on erase.
 - **Feature:** A log records who views or exports health information or emergency contacts, including member screens, duplicate review, member and event CSVs, reports, and full backups. WordPress administrators can read it under Access log. Entries are kept for 12 months unless that is changed. The log is included in a full backup and does not contain the sensitive values themselves.

@@ -1746,6 +1746,24 @@ class Remember_Database_Updater {
 			}
 		}
 
+		// Update to 2.3.7 (per-event waitlist action when an accepted spot opens).
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '2.3.7', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '2.3.7' ) );
+			$events_table = $wpdb->prefix . 'remember_events';
+			$column       = $wpdb->get_var( $wpdb->prepare( "SHOW COLUMNS FROM {$events_table} LIKE %s", 'waitlist_mode' ) );
+			if ( 'waitlist_mode' !== $column ) {
+				$added = $wpdb->query( "ALTER TABLE {$events_table} ADD COLUMN waitlist_mode VARCHAR(20) NOT NULL DEFAULT 'off' AFTER registration_closes_at" );
+				if ( false === $added ) {
+					Remember_Logger::error( 'Failed to add waitlist mode column', array( 'error' => $wpdb->last_error ) );
+				}
+			}
+			$column = $wpdb->get_var( $wpdb->prepare( "SHOW COLUMNS FROM {$events_table} LIKE %s", 'waitlist_mode' ) );
+			if ( 'waitlist_mode' === $column ) {
+				update_option( 'remember_db_version', '2.3.7' );
+				Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '2.3.7' ) );
+			}
+		}
+
 		// Always re-ensure health catalogs (idempotent). Catches sites that stalled mid-migration
 		// or activated before catalog seed rows were added.
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-seeder.php';

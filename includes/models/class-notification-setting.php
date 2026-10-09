@@ -113,6 +113,8 @@ class Remember_Notification_Setting extends Remember_Base_Model {
 			'event_application_accepted'     => __( 'Event Application Accepted', 'remember' ),
 			'event_application_declined'    => __( 'Event Application Declined', 'remember' ),
 			'event_application_waitlisted'  => __( 'Event Application Waitlisted', 'remember' ),
+			'waitlist_spot_opened'          => __( 'Waitlist Spot Opened (Staff)', 'remember' ),
+			'waitlist_promoted'             => __( 'Waitlist Spot Offered', 'remember' ),
 			'event_ticket_paid'             => __( 'Event Ticket Paid', 'remember' ),
 			'survey_issued'                 => __( 'Survey Issued', 'remember' ),
 			'payment_recorded'              => __( 'Payment Recorded', 'remember' ),
@@ -145,6 +147,8 @@ class Remember_Notification_Setting extends Remember_Base_Model {
 			'event_application_accepted'     => __( 'Sent to member when their event application is accepted (includes ticket link).', 'remember' ),
 			'event_application_declined'    => __( 'Sent to member when their event application is declined.', 'remember' ),
 			'event_application_waitlisted'  => __( 'Sent to member when their event application is waitlisted.', 'remember' ),
+			'waitlist_spot_opened'          => __( 'Sent to accepted Event Administrators when an accepted spot opens and the event is set to email them.', 'remember' ),
+			'waitlist_promoted'             => __( 'Sent to a member when their waitlisted application is moved to pending because a spot opened.', 'remember' ),
 			'event_ticket_paid'             => __( 'Sent to member when their event ticket is paid in full (includes ticket link).', 'remember' ),
 			'survey_issued'                 => __( 'Sent to accepted participants when a follow-on survey is issued.', 'remember' ),
 			'payment_recorded'              => __( 'Sent when a payment is recorded.', 'remember' ),
@@ -179,6 +183,8 @@ class Remember_Notification_Setting extends Remember_Base_Model {
 			'event_application_accepted',
 			'event_application_declined',
 			'event_application_waitlisted',
+			'waitlist_spot_opened',
+			'waitlist_promoted',
 			'event_ticket_paid',
 			'survey_issued',
 		);
@@ -217,6 +223,8 @@ class Remember_Notification_Setting extends Remember_Base_Model {
 			'event_application_accepted'     => __( 'Application Accepted for {event_name}', 'remember' ),
 			'event_application_declined'    => __( 'Application Update for {event_name}', 'remember' ),
 			'event_application_waitlisted'  => __( 'Application Waitlisted for {event_name}', 'remember' ),
+			'waitlist_spot_opened'          => __( 'A spot opened for {event_name}', 'remember' ),
+			'waitlist_promoted'             => __( 'A spot opened for {event_name}', 'remember' ),
 			'event_ticket_paid'             => __( 'Your paid ticket for {event_name}', 'remember' ),
 			'survey_issued'                 => __( 'Survey for {event_name}', 'remember' ),
 			'payment_recorded'              => __( 'Payment Recorded - \${amount}', 'remember' ),
@@ -274,6 +282,10 @@ class Remember_Notification_Setting extends Remember_Base_Model {
 			'event_application_declined' => __( "Hello {member_name},\n\nThank you for your interest in {event_name}.\n\nApplication ID: {application_id}\nEvent: {event_name}\nDate: {date}\n\nUnfortunately, we are unable to accept your application at this time. We appreciate your interest and encourage you to apply for future events.\n\nBest regards,\nThe Team", 'remember' ),
 			
 			'event_application_waitlisted' => __( "Hello {member_name},\n\nYour application for {event_name} has been placed on our waitlist.\n\nApplication ID: {application_id}\nEvent: {event_name}\nDate: {date}\n\nWe will notify you if a spot becomes available.\n\nThank you for your patience,\nThe Team", 'remember' ),
+
+			'waitlist_spot_opened' => __( "A spot opened for {event_name} ({role_name}). {waitlist_count} people are waiting.", 'remember' ),
+
+			'waitlist_promoted' => __( "Hello {member_name},\n\nA spot opened for {event_name} ({role_name}). Your application is pending review.\n\nApplication ID: {application_id}\nDate: {date}\n\nThe Team", 'remember' ),
 
 			'event_ticket_paid' => __( "Hello {member_name},\n\nYour payment for {event_name} has been recorded as paid in full.\n\nTicket ID: {ticket_id}\nApplication ID: {application_id}\nEvent: {event_name}\nDates: {event_dates}\nLocation: {event_location}\n\nView or print your paid admission ticket / receipt:\n{ticket_url}\n\nWe look forward to seeing you at the event.\n\nBest regards,\nThe Team", 'remember' ),
 

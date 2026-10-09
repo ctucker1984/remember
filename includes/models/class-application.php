@@ -132,6 +132,10 @@ class Remember_Application extends Remember_Base_Model {
 			);
 		}
 
+		if ( 'accepted' === $previous_status && in_array( $status, array( 'cancelled', 'declined' ), true ) ) {
+			do_action( 'remember_application_spot_freed', (int) $application_id, (int) $application->event_id, (int) $application->event_role_id );
+		}
+
 		return $result;
 	}
 
