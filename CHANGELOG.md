@@ -2,7 +2,7 @@
 
 All notable changes to reMember are listed here. The current plugin version is in `remember.php` (`REMEMBER_VERSION`) and [GitHub Releases](https://github.com/ctucker1984/remember/releases).
 
-## Unreleased
+## 2.2.0
 
 - **Feature:** The members list can be sorted by name, status, roles, joined date, or updated date. Updated is the last profile change. Each admin’s sort is remembered on their account.
 - **Feature:** `wp remember` can back up, restore, import, and export reMember data, sync QuickBooks or Xero payments, and scan for duplicate profiles. Commands run as the `--user` you pass, so the same access checks apply. Restore does nothing unless `--yes` is included. Import can `--dry-run`.
