@@ -80,6 +80,11 @@ class Remember_Backup {
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-capabilities.php';
 
+		$privilege_guard = null;
+		if ( ! current_user_can( 'manage_options' ) ) {
+			$privilege_guard = self::snapshot_privilege_guard();
+		}
+
 		$map = self::reconcile_users( $users );
 		if ( is_wp_error( $map ) ) {
 			return $map;
@@ -145,6 +150,10 @@ class Remember_Backup {
 		self::restore_options( $options );
 		self::restore_billing_customer_ids( $users, $map['ids'] );
 
+		if ( is_array( $privilege_guard ) ) {
+			self::apply_privilege_guard( $privilege_guard );
+		}
+
 		if ( function_exists( 'wp_cache_flush' ) ) {
 			wp_cache_flush();
 		}
@@ -195,6 +204,137 @@ class Remember_Backup {
 			'member_b_id',
 			'owner_id',
 		);
+	}
+
+	/**
+	 * Roles and assignments on this site, used so a non-admin restore cannot widen access.
+	 *
+	 * @return array{caps_by_name:array<string,string[]>,held:array<int,array<string,bool>>}
+	 */
+	private static function snapshot_privilege_guard() {
+		global $wpdb;
+		$roles_table = $wpdb->prefix . 'remember_roles';
+		$caps_table  = $wpdb->prefix . 'remember_role_capabilities';
+		$join_table  = $wpdb->prefix . 'remember_member_roles';
+
+		$caps_by_id = array();
+		$cap_rows   = $wpdb->get_results( "SELECT role_id, capability FROM `{$caps_table}`" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is prefixed.
+		if ( is_array( $cap_rows ) ) {
+			foreach ( $cap_rows as $row ) {
+				$caps_by_id[ (int) $row->role_id ][] = (string) $row->capability;
+			}
+		}
+
+		$caps_by_name = array();
+		$roles        = $wpdb->get_results( "SELECT role_id, role_name FROM `{$roles_table}`" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		if ( is_array( $roles ) ) {
+			foreach ( $roles as $role ) {
+				$role_id = (int) $role->role_id;
+				$caps_by_name[ (string) $role->role_name ] = isset( $caps_by_id[ $role_id ] ) ? $caps_by_id[ $role_id ] : array();
+			}
+		}
+
+		$held    = array();
+		$assigns = $wpdb->get_results(
+			"SELECT mr.member_id, r.role_name FROM `{$join_table}` mr INNER JOIN `{$roles_table}` r ON r.role_id = mr.role_id" // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		);
+		if ( is_array( $assigns ) ) {
+			foreach ( $assigns as $row ) {
+				$held[ (int) $row->member_id ][ (string) $row->role_name ] = true;
+			}
+		}
+
+		return array(
+			'caps_by_name' => $caps_by_name,
+			'held'         => $held,
+		);
+	}
+
+	/**
+	 * After a non-admin restore, drop capabilities and new role assignments that person cannot grant.
+	 *
+	 * Caps already on a role stay. A role assignment that already existed stays. WordPress
+	 * administrators never reach this method.
+	 *
+	 * @param array $guard Snapshot from snapshot_privilege_guard().
+	 * @return void
+	 */
+	private static function apply_privilege_guard( $guard ) {
+		global $wpdb;
+		$roles_table = $wpdb->prefix . 'remember_roles';
+		$caps_table  = $wpdb->prefix . 'remember_role_capabilities';
+		$join_table  = $wpdb->prefix . 'remember_member_roles';
+		$existing    = isset( $guard['caps_by_name'] ) && is_array( $guard['caps_by_name'] ) ? $guard['caps_by_name'] : array();
+		$held        = isset( $guard['held'] ) && is_array( $guard['held'] ) ? $guard['held'] : array();
+
+		$dropped_caps = 0;
+		$roles        = $wpdb->get_results( "SELECT role_id, role_name FROM `{$roles_table}`" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		if ( is_array( $roles ) ) {
+			foreach ( $roles as $role ) {
+				$role_id = (int) $role->role_id;
+				$name    = (string) $role->role_name;
+				$posted  = $wpdb->get_col(
+					$wpdb->prepare(
+						"SELECT capability FROM `{$caps_table}` WHERE role_id = %d", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+						$role_id
+					)
+				);
+				$posted  = is_array( $posted ) ? $posted : array();
+				$before  = isset( $existing[ $name ] ) ? $existing[ $name ] : array();
+				$merged  = Remember_Capabilities::merge_role_capabilities( $before, $posted );
+				$posted_sorted = $posted;
+				$merged_sorted = $merged;
+				sort( $posted_sorted );
+				sort( $merged_sorted );
+				if ( $posted_sorted === $merged_sorted ) {
+					continue;
+				}
+				$wpdb->delete( $caps_table, array( 'role_id' => $role_id ), array( '%d' ) );
+				$now = current_time( 'mysql' );
+				foreach ( $merged as $cap ) {
+					$wpdb->insert(
+						$caps_table,
+						array(
+							'role_id'    => $role_id,
+							'capability' => $cap,
+							'created_at' => $now,
+						),
+						array( '%d', '%s', '%s' )
+					);
+				}
+				$dropped_caps += count( array_diff( $posted, $merged ) );
+			}
+		}
+
+		$dropped_roles = 0;
+		$rows          = $wpdb->get_results(
+			"SELECT mr.member_role_id, mr.member_id, mr.role_id, r.role_name FROM `{$join_table}` mr INNER JOIN `{$roles_table}` r ON r.role_id = mr.role_id" // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		);
+		if ( is_array( $rows ) ) {
+			foreach ( $rows as $row ) {
+				$member_id = (int) $row->member_id;
+				$name      = (string) $row->role_name;
+				if ( isset( $held[ $member_id ][ $name ] ) ) {
+					continue;
+				}
+				if ( Remember_Capabilities::current_user_can_assign_role( (int) $row->role_id ) ) {
+					continue;
+				}
+				$wpdb->delete( $join_table, array( 'member_role_id' => (int) $row->member_role_id ), array( '%d' ) );
+				$dropped_roles++;
+			}
+		}
+
+		if ( $dropped_caps > 0 || $dropped_roles > 0 ) {
+			Remember_Logger::info(
+				'Backup restore kept capabilities the restorer cannot grant',
+				array(
+					'user_id'                   => get_current_user_id(),
+					'capabilities_removed'      => $dropped_caps,
+					'role_assignments_removed'  => $dropped_roles,
+				)
+			);
+		}
 	}
 
 	/**
