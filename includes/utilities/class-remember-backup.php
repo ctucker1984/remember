@@ -2,6 +2,7 @@
 /**
  * Full plugin JSON backup (tables + options). Existing WordPress users are
  * never deleted. Users created for a restore that then fails are removed.
+ * The sensitive-access log is included. It records who looked, not the health values.
  *
  * @package    reMember
  * @subpackage reMember/includes/utilities
@@ -418,7 +419,9 @@ class Remember_Backup {
 		}
 
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
+		require_once plugin_dir_path( __FILE__ ) . 'class-remember-access-log.php';
 		Remember_Logger::info( 'Full plugin backup downloaded', array( 'user_id' => get_current_user_id() ) );
+		Remember_Access_Log::record( 0, 'backup', __( 'Full backup', 'remember' ) );
 
 		$filename = 'remember-backup-' . gmdate( 'Y-m-d-H-i-s' ) . '.json';
 		nocache_headers();

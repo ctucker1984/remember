@@ -98,6 +98,7 @@ class Remember_Database {
 			'survey_questions'               => 'create_survey_questions_table',
 			'survey_responses'               => 'create_survey_responses_table',
 			'survey_answers'                 => 'create_survey_answers_table',
+			'sensitive_access_log'           => 'create_sensitive_access_log_table',
 			'plugin_version'                 => 'create_plugin_version_table',
 		);
 
@@ -1042,6 +1043,33 @@ class Remember_Database {
 			PRIMARY KEY (response_id),
 			UNIQUE KEY question_member (question_id, member_id),
 			KEY member_id (member_id)
+		) $charset_collate;";
+
+		dbDelta( $sql );
+	}
+
+	/**
+	 * Who viewed or exported health and emergency-contact data.
+	 *
+	 * @return void
+	 */
+	public function create_sensitive_access_log_table() {
+		$table_name      = $this->prefix . 'sensitive_access_log';
+		$charset_collate = $this->wpdb->get_charset_collate();
+
+		$sql = "CREATE TABLE $table_name (
+			log_id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+			user_id BIGINT(20) UNSIGNED NOT NULL,
+			member_id BIGINT(20) UNSIGNED NOT NULL DEFAULT 0,
+			access_what VARCHAR(20) NOT NULL,
+			context VARCHAR(191) NOT NULL DEFAULT '',
+			row_count INT(10) UNSIGNED NOT NULL DEFAULT 0,
+			ip VARCHAR(45) NOT NULL DEFAULT '',
+			created_at DATETIME NOT NULL,
+			PRIMARY KEY (log_id),
+			KEY member_created (member_id, created_at),
+			KEY user_created (user_id, created_at),
+			KEY created_at (created_at)
 		) $charset_collate;";
 
 		dbDelta( $sql );

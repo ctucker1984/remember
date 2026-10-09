@@ -148,6 +148,57 @@ class Remember_Report_Catalog {
 	}
 
 	/**
+	 * Health or emergency topics a report definition would show.
+	 *
+	 * @param string $subject    Subject.
+	 * @param array  $definition Builder JSON.
+	 * @return string[] health and/or emergency.
+	 */
+	public static function sensitive_topics( $subject, $definition ) {
+		$fields = self::raw_fields( $subject );
+		if ( ! is_array( $definition ) ) {
+			$definition = array();
+		}
+		$needed = array();
+		foreach ( array( 'columns', 'group_by' ) as $key ) {
+			if ( empty( $definition[ $key ] ) || ! is_array( $definition[ $key ] ) ) {
+				continue;
+			}
+			foreach ( $definition[ $key ] as $id ) {
+				$needed[] = (string) $id;
+			}
+		}
+		if ( ! empty( $definition['filters'] ) && is_array( $definition['filters'] ) ) {
+			foreach ( $definition['filters'] as $filter ) {
+				if ( is_array( $filter ) && ! empty( $filter['field'] ) ) {
+					$needed[] = (string) $filter['field'];
+				}
+			}
+		}
+		if ( ! empty( $definition['aggregations'] ) && is_array( $definition['aggregations'] ) ) {
+			foreach ( $definition['aggregations'] as $agg ) {
+				if ( is_array( $agg ) && ! empty( $agg['field'] ) && '*' !== $agg['field'] ) {
+					$needed[] = (string) $agg['field'];
+				}
+			}
+		}
+		if ( ! empty( $definition['sort']['field'] ) ) {
+			$needed[] = (string) $definition['sort']['field'];
+		}
+		$topics = array();
+		foreach ( array_unique( $needed ) as $id ) {
+			if ( empty( $fields[ $id ]['sensitive'] ) ) {
+				continue;
+			}
+			$topic = (string) $fields[ $id ]['sensitive'];
+			if ( 'health' === $topic || 'emergency' === $topic ) {
+				$topics[ $topic ] = true;
+			}
+		}
+		return array_keys( $topics );
+	}
+
+	/**
 	 * Staff who can receive a copy of this report.
 	 *
 	 * @param string $subject    Subject.

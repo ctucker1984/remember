@@ -466,6 +466,15 @@ class Remember_Admin {
 			array( $this, 'display_reports_page' )
 		);
 
+		add_submenu_page(
+			'remember',
+			__( 'Sensitive access log', 'remember' ),
+			__( 'Access log', 'remember' ),
+			'manage_options',
+			'remember-access-log',
+			array( $this, 'display_access_log_page' )
+		);
+
 		// Events
 		add_submenu_page(
 			'remember',
@@ -750,6 +759,24 @@ class Remember_Admin {
 			wp_die( __( 'You do not have sufficient permissions to access this page.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
 		}
 		include_once 'views/duplicates.php';
+	}
+
+	/**
+	 * Who viewed or exported health and emergency-contact data.
+	 *
+	 * @return void
+	 */
+	public function display_access_log_page() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( __( 'You do not have sufficient permissions to access this page.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+		}
+		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-access-log.php';
+		if ( isset( $_POST['remember_access_log_retention'] ) && check_admin_referer( 'remember_access_log_retention', 'remember_access_log_nonce' ) ) {
+			Remember_Access_Log::set_retention_months( isset( $_POST['retention_months'] ) ? absint( wp_unslash( $_POST['retention_months'] ) ) : 12 );
+			wp_safe_redirect( admin_url( 'admin.php?page=remember-access-log&updated=1' ) );
+			exit;
+		}
+		include_once 'views/access-log.php';
 	}
 
 	/**

@@ -300,6 +300,11 @@ $hit = $hit_id > 0 ? Remember_Profile_Duplicates::get_hit( $hit_id ) : null;
 					<tbody>
 						<?php
 						$can_emergency = current_user_can( 'remember_access_emergency_contact' );
+						if ( $can_emergency ) {
+							require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-access-log.php';
+							Remember_Access_Log::record( (int) $hit->member_a_id, 'emergency', __( 'Duplicate review', 'remember' ) );
+							Remember_Access_Log::record( (int) $hit->member_b_id, 'emergency', __( 'Duplicate review', 'remember' ) );
+						}
 						$emergency_keys = Remember_Profile_Duplicates::emergency_fields();
 						$emergency_shown = false;
 						foreach ( $fields as $field => $label ) :

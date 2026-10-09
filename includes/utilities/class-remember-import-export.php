@@ -172,6 +172,14 @@ class Remember_Import_Export {
 		} else {
 			$members = $member_model->get_all();
 		}
+		if ( ! is_array( $members ) ) {
+			$members = array();
+		}
+		require_once plugin_dir_path( __FILE__ ) . 'class-remember-access-log.php';
+		$remember_export_what = Remember_Access_Log::what_from_topics( Remember_Access_Log::topics_for_current_user() );
+		if ( '' !== $remember_export_what ) {
+			Remember_Access_Log::record( 0, $remember_export_what, __( 'Member CSV', 'remember' ), count( $members ) );
+		}
 		
 		$filename = 'members-export-' . date( 'Y-m-d-H-i-s' ) . '.csv';
 		
@@ -1426,6 +1434,21 @@ class Remember_Import_Export {
 		);
 		if ( ! is_array( $applications ) ) {
 			$applications = array();
+		}
+
+		require_once plugin_dir_path( __FILE__ ) . 'class-remember-access-log.php';
+		$remember_export_what = Remember_Access_Log::what_from_topics( Remember_Access_Log::topics_for_current_user() );
+		if ( '' !== $remember_export_what ) {
+			Remember_Access_Log::record(
+				0,
+				$remember_export_what,
+				sprintf(
+					/* translators: %s: event name */
+					__( 'Event participants CSV: %s', 'remember' ),
+					isset( $event->event_name ) ? (string) $event->event_name : (string) $event_id
+				),
+				count( $applications )
+			);
 		}
 
 		$filename = 'event-' . $event_id . '-participants-' . gmdate( 'Y-m-d-H-i-s' ) . '.csv';

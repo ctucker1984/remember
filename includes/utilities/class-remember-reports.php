@@ -72,6 +72,7 @@ class Remember_Reports {
 		if ( is_wp_error( $result ) ) {
 			wp_send_json_error( array( 'message' => $result->get_error_message() ), 400 );
 		}
+		self::log_sensitive_report( $definition, __( 'Report preview', 'remember' ), count( $result['rows'] ) );
 		wp_send_json_success( $result );
 	}
 
@@ -235,6 +236,7 @@ class Remember_Reports {
 		if ( is_wp_error( $result ) ) {
 			wp_die( esc_html( $result->get_error_message() ) );
 		}
+		self::log_sensitive_report( $definition, __( 'Report CSV', 'remember' ), count( $result['rows'] ) );
 		$filename = 'remember-report-' . gmdate( 'Y-m-d-H-i-s' ) . '.csv';
 		header( 'Content-Type: text/csv; charset=utf-8' );
 		header( 'Content-Disposition: attachment; filename=' . $filename );
@@ -257,6 +259,29 @@ class Remember_Reports {
 		}
 		fclose( $out );
 		exit;
+	}
+
+	/**
+	 * Record a report run that includes health or emergency columns.
+	 *
+	 * @param array  $definition Builder JSON.
+	 * @param string $context    Preview or CSV.
+	 * @param int    $row_count  Rows returned.
+	 * @return void
+	 */
+	private static function log_sensitive_report( $definition, $context, $row_count ) {
+		require_once plugin_dir_path( __FILE__ ) . 'class-remember-report-catalog.php';
+		require_once plugin_dir_path( __FILE__ ) . 'class-remember-access-log.php';
+		$subject = isset( $definition['subject'] ) ? (string) $definition['subject'] : '';
+		$what    = Remember_Access_Log::what_from_topics( Remember_Report_Catalog::sensitive_topics( $subject, $definition ) );
+		if ( '' === $what ) {
+			return;
+		}
+		$name = isset( $_POST['name'] ) ? sanitize_text_field( wp_unslash( $_POST['name'] ) ) : '';
+		if ( '' !== $name ) {
+			$context = $name . ' — ' . $context;
+		}
+		Remember_Access_Log::record( 0, $what, $context, $row_count );
 	}
 
 	/**

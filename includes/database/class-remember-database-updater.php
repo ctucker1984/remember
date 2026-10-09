@@ -1730,6 +1730,22 @@ class Remember_Database_Updater {
 			}
 		}
 
+		// Update to 2.3.6 (log of who viewed or exported health and emergency-contact data).
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '2.3.6', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '2.3.6' ) );
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-database.php';
+			$db = new Remember_Database();
+			$db->create_sensitive_access_log_table();
+			$log_table = $wpdb->prefix . 'remember_sensitive_access_log';
+			$exists    = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $log_table ) );
+			if ( $exists === $log_table ) {
+				update_option( 'remember_db_version', '2.3.6' );
+				Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '2.3.6' ) );
+			} else {
+				Remember_Logger::error( 'Failed to create sensitive access log table' );
+			}
+		}
+
 		// Always re-ensure health catalogs (idempotent). Catches sites that stalled mid-migration
 		// or activated before catalog seed rows were added.
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-seeder.php';
