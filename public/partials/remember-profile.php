@@ -82,6 +82,14 @@ if ( isset( $_POST['remember_profile_action'] ) && check_admin_referer( 'remembe
 		wp_safe_redirect( Remember_Profile_Audit::with_return_args( add_query_arg( array( 'edit' => '1', 'remember_profile_error' => 'interests_too_long' ) ) ) );
 		exit;
 	}
+	if ( isset( $_POST['timezone_string'] ) ) {
+		require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-timezone.php';
+		$remember_posted_timezone = sanitize_text_field( wp_unslash( $_POST['timezone_string'] ) );
+		if ( '' !== $remember_posted_timezone && ! Remember_Timezone::is_valid_timezone( $remember_posted_timezone ) ) {
+			wp_safe_redirect( Remember_Profile_Audit::with_return_args( add_query_arg( array( 'edit' => '1', 'remember_profile_error' => 'invalid_timezone' ) ) ) );
+			exit;
+		}
+	}
 
 	$current_password = isset( $_POST['current_password'] ) ? (string) wp_unslash( $_POST['current_password'] ) : '';
 	$new_password     = isset( $_POST['new_password'] ) ? (string) wp_unslash( $_POST['new_password'] ) : '';
@@ -392,6 +400,8 @@ if ( ! empty( $selected_allergy_ids ) ) {
 					$labels = Remember_Profile_Fields::labels();
 					if ( 'interests_too_long' === $profile_error ) {
 						echo esc_html( Remember_Profile_Fields::interests_too_long_message() );
+					} elseif ( 'invalid_timezone' === $profile_error ) {
+						esc_html_e( 'Please select a valid time zone.', 'remember' );
 					} elseif ( in_array( $profile_error, array( 'invalid_email', 'email_exists' ), true ) ) {
 						echo esc_html( Remember_Profile_Fields::user_email_change_message( $profile_error ) );
 					} elseif ( isset( $labels[ $profile_error ] ) ) {

@@ -4,6 +4,7 @@ All notable changes to reMember are listed here. The current plugin version is i
 
 ## Unreleased
 
+- **Fix:** Saving a profile rejects a time zone that is not a real zone. A blank time zone still defaults to America/Los_Angeles. Registration already rejected a bad zone.
 - **Fix:** A member import skips a WordPress administrator unless the person importing is also an administrator. Their name is left as it is, and no member record is attached.
 - **Fix:** A staff backup restore cannot add reMember capabilities that person cannot grant, and cannot newly assign a role that carries those capabilities. Assignments and capabilities already on the site stay. A WordPress administrator restore is unchanged.
 - **Fix:** Member CSV imports and backup restores read the uploaded file in place. The file is no longer copied into the public uploads folder under its original name.
