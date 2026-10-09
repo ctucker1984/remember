@@ -4,6 +4,7 @@ All notable changes to reMember are listed here. The current plugin version is i
 
 ## Unreleased
 
+- **Feature:** The members list can be sorted by name, status, roles, joined date, or updated date. Updated is the last profile change. Each admin’s sort is remembered on their account.
 - **Feature:** `wp remember` can back up, restore, import, and export reMember data, sync QuickBooks or Xero payments, and scan for duplicate profiles. Commands run as the `--user` you pass, so the same access checks apply. Restore does nothing unless `--yes` is included. Import can `--dry-run`.
 - **Feature:** A saved report can be emailed as a CSV on a daily, weekly, or monthly schedule. The file is built with the report owner's access and sent only to staff who can still run that report. An empty result can be skipped. A report with health or emergency fields is not emailed unless that is confirmed. Database 2.3.9.
 - **Feature:** An event can add a check-in code to the admission ticket that already prints. It is off unless the event turns it on. Staff with Check In Attendees open Check-in, scan or type the code or search by name, and see whether the ticket is valid, already used, void, or for another event. The event participant CSV and application reports include the check-in time. Database 2.3.8.

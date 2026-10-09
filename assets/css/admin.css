@@ -2074,6 +2074,7 @@
 
 	.remember-members .remember-responsive-table td.column-status,
 	.remember-members .remember-responsive-table td.column-joined,
+	.remember-members .remember-responsive-table td.column-updated,
 	.remember-members .remember-responsive-table td.column-actions {
 		flex: 0 0 auto;
 		width: auto;
@@ -2087,6 +2088,10 @@
 		order: 5;
 	}
 
+	.remember-members .remember-responsive-table td.column-updated {
+		order: 6;
+	}
+
 	.remember-members .remember-member-list-joined-label {
 		display: inline;
 		font-weight: 600;
@@ -2095,7 +2100,7 @@
 	}
 
 	.remember-members .remember-responsive-table td.column-actions {
-		order: 6;
+		order: 7;
 		margin-left: auto;
 		text-align: right;
 	}

@@ -671,6 +671,83 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 $filter_status = isset( $_GET['filter_status'] ) ? sanitize_text_field( $_GET['filter_status'] ) : '';
 $filter_role = isset( $_GET['filter_role'] ) ? absint( $_GET['filter_role'] ) : 0;
 
+$member_sort_columns = array( 'name', 'status', 'roles', 'joined', 'updated' );
+$member_sort_meta_key = 'remember_members_list_sort';
+$saved_member_sort    = get_user_meta( $current_user_id, $member_sort_meta_key, true );
+if ( ! is_array( $saved_member_sort ) ) {
+	$saved_member_sort = array();
+}
+$member_orderby     = '';
+$member_order       = 'ASC';
+$requested_orderby  = isset( $_GET['orderby'] ) ? sanitize_key( wp_unslash( $_GET['orderby'] ) ) : '';
+$requested_order    = isset( $_GET['order'] ) ? strtoupper( sanitize_text_field( wp_unslash( $_GET['order'] ) ) ) : '';
+if ( in_array( $requested_orderby, $member_sort_columns, true ) && in_array( $requested_order, array( 'ASC', 'DESC' ), true ) ) {
+	$member_orderby = $requested_orderby;
+	$member_order   = $requested_order;
+	$stored_sort    = array(
+		'orderby' => $member_orderby,
+		'order'   => $member_order,
+	);
+	if ( $saved_member_sort !== $stored_sort ) {
+		update_user_meta( $current_user_id, $member_sort_meta_key, $stored_sort );
+	}
+} elseif (
+	isset( $saved_member_sort['orderby'], $saved_member_sort['order'] )
+	&& in_array( $saved_member_sort['orderby'], $member_sort_columns, true )
+	&& in_array( $saved_member_sort['order'], array( 'ASC', 'DESC' ), true )
+) {
+	$member_orderby = $saved_member_sort['orderby'];
+	$member_order   = $saved_member_sort['order'];
+}
+
+if ( ! function_exists( 'remember_members_sort_header' ) ) {
+	/**
+	 * Print one sortable members-list heading.
+	 *
+	 * @param string $column        Column key.
+	 * @param string $label         Heading text.
+	 * @param string $orderby       Active column.
+	 * @param string $order         ASC or DESC.
+	 * @param string $filter_status Status filter.
+	 * @param int    $filter_role   Role filter.
+	 * @return void
+	 */
+	function remember_members_sort_header( $column, $label, $orderby, $order, $filter_status, $filter_role ) {
+		$is_current = ( $column === $orderby );
+		$next       = ( $is_current && 'ASC' === $order ) ? 'DESC' : 'ASC';
+		$class      = $is_current
+			? 'manage-column column-' . $column . ' sorted ' . strtolower( $order )
+			: 'manage-column column-' . $column . ' sortable ' . strtolower( $next );
+		$aria       = '';
+		if ( $is_current ) {
+			$aria = ( 'ASC' === $order ) ? ' aria-sort="ascending"' : ' aria-sort="descending"';
+		}
+		$args = array(
+			'page'    => 'remember-members',
+			'orderby' => $column,
+			'order'   => $next,
+		);
+		if ( '' !== (string) $filter_status ) {
+			$args['filter_status'] = $filter_status;
+		}
+		if ( (int) $filter_role > 0 ) {
+			$args['filter_role'] = (int) $filter_role;
+		}
+		$hint = ( 'ASC' === $next )
+			? __( 'Sort ascending.', 'remember' )
+			: __( 'Sort descending.', 'remember' );
+		echo '<th scope="col" class="' . esc_attr( $class ) . '"' . $aria . '>';
+		echo '<a href="' . esc_url( add_query_arg( $args, admin_url( 'admin.php' ) ) ) . '">';
+		echo '<span>' . esc_html( $label ) . '</span>';
+		echo '<span class="sorting-indicators">';
+		echo '<span class="sorting-indicator asc" aria-hidden="true"></span>';
+		echo '<span class="sorting-indicator desc" aria-hidden="true"></span>';
+		echo '</span>';
+		echo '<span class="screen-reader-text">' . esc_html( $hint ) . '</span>';
+		echo '</a></th>';
+	}
+}
+
 // Get role name if filtering by role
 $role_name = '';
 if ( $filter_role > 0 ) {
@@ -1335,6 +1412,10 @@ if ( $view_member_id > 0 ) {
 		<div class="remember-filters" style="margin: 20px 0; padding: 15px; background: #fff; border: 1px solid #ccd0d4; border-radius: 4px;">
 			<form method="get" action="">
 				<input type="hidden" name="page" value="remember-members">
+				<?php if ( '' !== $member_orderby ) : ?>
+					<input type="hidden" name="orderby" value="<?php echo esc_attr( $member_orderby ); ?>">
+					<input type="hidden" name="order" value="<?php echo esc_attr( $member_order ); ?>">
+				<?php endif; ?>
 				
 				<label for="filter_status"><?php esc_html_e( 'Filter by Status:', 'remember' ); ?></label>
 				<select id="filter_status" name="filter_status" style="margin-right: 20px;">
@@ -1383,6 +1464,8 @@ if ( $view_member_id > 0 ) {
 	<?php if ( ! empty( $members ) ) : ?>
 		<?php
 		$list_roles = array();
+		$list_profile_updated = array();
+		$list_names = array();
 		$list_member_ids = array();
 		foreach ( $members as $list_member ) {
 			$list_member_ids[] = (int) $list_member->member_id;
@@ -1406,18 +1489,91 @@ if ( $view_member_id > 0 ) {
 					$list_roles[ (int) $role_row->member_id ][] = $role_row;
 				}
 			}
+			$profile_rows = $wpdb->get_results(
+				$wpdb->prepare(
+					"SELECT member_id, updated_at FROM {$wpdb->prefix}remember_member_profiles WHERE member_id IN ($placeholders)",
+					$list_member_ids
+				)
+			);
+			if ( is_array( $profile_rows ) ) {
+				foreach ( $profile_rows as $profile_row ) {
+					$list_profile_updated[ (int) $profile_row->member_id ] = (string) $profile_row->updated_at;
+				}
+			}
+			$name_users = get_users(
+				array(
+					'include' => $list_member_ids,
+					'fields'  => array( 'ID', 'display_name' ),
+				)
+			);
+			foreach ( $name_users as $name_user ) {
+				$list_names[ (int) $name_user->ID ] = (string) $name_user->display_name;
+			}
+		}
+		$list_updated = array();
+		$list_role_text = array();
+		foreach ( $members as $list_member ) {
+			$sort_id = (int) $list_member->member_id;
+			$profile_updated = isset( $list_profile_updated[ $sort_id ] ) ? $list_profile_updated[ $sort_id ] : '';
+			if ( '' === $profile_updated || '0000-00-00 00:00:00' === $profile_updated ) {
+				$profile_updated = isset( $list_member->updated_at ) ? (string) $list_member->updated_at : '';
+			}
+			$list_updated[ $sort_id ] = ( '0000-00-00 00:00:00' === $profile_updated ) ? '' : $profile_updated;
+			$role_names = array();
+			if ( isset( $list_roles[ $sort_id ] ) ) {
+				foreach ( $list_roles[ $sort_id ] as $sort_role ) {
+					$role_names[] = (string) $sort_role->role_name;
+				}
+			}
+			$list_role_text[ $sort_id ] = implode( ', ', $role_names );
+		}
+		if ( '' !== $member_orderby ) {
+			$sort_direction = ( 'DESC' === $member_order ) ? -1 : 1;
+			usort(
+				$members,
+				static function ( $a, $b ) use ( $member_orderby, $sort_direction, $list_names, $list_role_text, $list_updated, $status_labels ) {
+					$id_a = (int) $a->member_id;
+					$id_b = (int) $b->member_id;
+					switch ( $member_orderby ) {
+						case 'name':
+							$cmp = strcasecmp( isset( $list_names[ $id_a ] ) ? $list_names[ $id_a ] : '', isset( $list_names[ $id_b ] ) ? $list_names[ $id_b ] : '' );
+							break;
+						case 'status':
+							$label_a = isset( $status_labels[ $a->status ] ) ? $status_labels[ $a->status ] : (string) $a->status;
+							$label_b = isset( $status_labels[ $b->status ] ) ? $status_labels[ $b->status ] : (string) $b->status;
+							$cmp     = strcasecmp( $label_a, $label_b );
+							break;
+						case 'roles':
+							$cmp = strcasecmp( isset( $list_role_text[ $id_a ] ) ? $list_role_text[ $id_a ] : '', isset( $list_role_text[ $id_b ] ) ? $list_role_text[ $id_b ] : '' );
+							break;
+						case 'joined':
+							$cmp = strcmp( (string) $a->created_at, (string) $b->created_at );
+							break;
+						case 'updated':
+							$cmp = strcmp( isset( $list_updated[ $id_a ] ) ? $list_updated[ $id_a ] : '', isset( $list_updated[ $id_b ] ) ? $list_updated[ $id_b ] : '' );
+							break;
+						default:
+							$cmp = 0;
+					}
+					if ( 0 === $cmp ) {
+						return $id_a <=> $id_b;
+					}
+					return $cmp * $sort_direction;
+				}
+			);
 		}
 		?>
 		<div class="remember-table-scroll">
 		<table class="wp-list-table widefat striped remember-responsive-table">
 			<thead>
 				<tr>
-					<th class="column-name"><?php esc_html_e( 'Name', 'remember' ); ?></th>
-					<th class="column-email"><?php esc_html_e( 'Contact', 'remember' ); ?></th>
-					<th class="column-status"><?php esc_html_e( 'Status', 'remember' ); ?></th>
-					<th class="column-roles"><?php esc_html_e( 'Roles', 'remember' ); ?></th>
-					<th class="column-joined"><?php esc_html_e( 'Joined', 'remember' ); ?></th>
-					<th class="column-actions"><?php esc_html_e( 'Actions', 'remember' ); ?></th>
+					<?php remember_members_sort_header( 'name', __( 'Name', 'remember' ), $member_orderby, $member_order, $filter_status, $filter_role ); ?>
+					<th class="column-email" scope="col"><?php esc_html_e( 'Contact', 'remember' ); ?></th>
+					<?php remember_members_sort_header( 'status', __( 'Status', 'remember' ), $member_orderby, $member_order, $filter_status, $filter_role ); ?>
+					<?php remember_members_sort_header( 'roles', __( 'Roles', 'remember' ), $member_orderby, $member_order, $filter_status, $filter_role ); ?>
+					<?php remember_members_sort_header( 'joined', __( 'Joined', 'remember' ), $member_orderby, $member_order, $filter_status, $filter_role ); ?>
+					<?php remember_members_sort_header( 'updated', __( 'Updated', 'remember' ), $member_orderby, $member_order, $filter_status, $filter_role ); ?>
+					<th class="column-actions" scope="col"><?php esc_html_e( 'Actions', 'remember' ); ?></th>
 				</tr>
 			</thead>
 			<tbody>
@@ -1484,6 +1640,17 @@ if ( $view_member_id > 0 ) {
 						<td class="column-joined" data-label="<?php echo esc_attr__( 'Joined', 'remember' ); ?>">
 							<span class="remember-member-list-joined-label"><?php esc_html_e( 'Joined:', 'remember' ); ?></span>
 							<?php echo esc_html( date_i18n( get_option( 'date_format' ), strtotime( $member->created_at ) ) ); ?>
+						</td>
+						<td class="column-updated" data-label="<?php echo esc_attr__( 'Updated', 'remember' ); ?>">
+							<span class="remember-member-list-joined-label"><?php esc_html_e( 'Updated:', 'remember' ); ?></span>
+							<?php
+							$updated_raw = isset( $list_updated[ (int) $member->member_id ] ) ? $list_updated[ (int) $member->member_id ] : '';
+							if ( '' !== $updated_raw ) {
+								echo esc_html( date_i18n( get_option( 'date_format' ), strtotime( $updated_raw ) ) );
+							} else {
+								echo '<span class="description">' . esc_html__( '—', 'remember' ) . '</span>';
+							}
+							?>
 						</td>
 						<td class="column-actions" data-label="<?php echo esc_attr__( 'Actions', 'remember' ); ?>">
 							<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-members&view=' . $member->member_id ) ); ?>"><?php esc_html_e( 'View Profile', 'remember' ); ?></a>
