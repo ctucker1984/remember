@@ -664,9 +664,27 @@ class Remember_Import_Export {
 				continue;
 			}
 			
+			$status = 'pending_vetting';
+			if ( array_key_exists( 'Status', $row_data ) && '' !== trim( (string) $row_data['Status'] ) ) {
+				$status = strtolower( trim( (string) $row_data['Status'] ) );
+				if ( ! in_array( $status, Remember_Member::statuses(), true ) ) {
+					Remember_Logger::warning(
+						'Member import rejected status',
+						array(
+							'row'    => $row_number,
+							'status' => $status,
+						)
+					);
+					$results['error']++;
+					$results['errors'][] = sprintf( __( 'Row %d: Status is not a member status.', 'remember' ), $row_number );
+					continue;
+				}
+			}
+
 			// Check if user exists
 			$user = get_user_by( 'email', $row_data['Email'] );
 			$user_id = null;
+			$created_user = false;
 			
 			if ( ! $user ) {
 				// Create WordPress user
@@ -681,6 +699,7 @@ class Remember_Import_Export {
 					$results['errors'][] = sprintf( __( 'Row %d: Could not create user - %s', 'remember' ), $row_number, $user_id->get_error_message() );
 					continue;
 				}
+				$created_user = true;
 				
 				// Update user data (do not store Excel "0" placeholders in user meta).
 				wp_update_user( array(
@@ -710,10 +729,20 @@ class Remember_Import_Export {
 			// Check if member record exists
 			$member = $member_model->get( $user_id );
 			if ( ! $member ) {
-				$status = ! empty( $row_data['Status'] ) ? $row_data['Status'] : 'pending_vetting';
 				$member_id = $member_model->create( $user_id, $status );
 				
 				if ( ! $member_id ) {
+					if ( $created_user ) {
+						require_once ABSPATH . 'wp-admin/includes/user.php';
+						wp_delete_user( $user_id );
+						Remember_Logger::error(
+							'Member import removed a user after the member row failed',
+							array(
+								'user_id' => $user_id,
+								'row'     => $row_number,
+							)
+						);
+					}
 					$results['error']++;
 					$results['errors'][] = sprintf( __( 'Row %d: Could not create member record.', 'remember' ), $row_number );
 					continue;

@@ -4,6 +4,7 @@ All notable changes to reMember are listed here. The current plugin version is i
 
 ## Unreleased
 
+- **Fix:** Member import rejects a Status the member table cannot store before it creates a WordPress user. A blank Status still starts as pending vetting. `Vetted` is accepted as `vetted`.
 - **Fix:** Re-importing members leaves profile columns alone when those columns are not in the file. A blank cell still clears that field. A new member still gets the usual empty defaults.
 - **Enhancement:** The event screen lists each survey under Attendees. Fixed-choice questions show how many people picked each answer and that count's share of submitted responses.
 - **Fix:** Report filters follow the field type. Choice fields, including survey role, question, survey kind, and timing, offer their lists. An answer filter uses the selected question: a dropdown for pick-one and yes/no, a multi-select for pick-several, and a text box for typed answers.
