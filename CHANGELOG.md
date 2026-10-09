@@ -4,6 +4,7 @@ All notable changes to reMember are listed here. The current plugin version is i
 
 ## Unreleased
 
+- **Feature:** Tools → Export Personal Data and Erase Personal Data include the reMember profile, health, emergency contact, applications, and survey answers. Erase removes those personal fields and the photo. Payment amounts and invoice identifiers stay. Staff note text is left out of the export and deleted on erase.
 - **Feature:** A log records who views or exports health information or emergency contacts, including member screens, duplicate review, member and event CSVs, reports, and full backups. WordPress administrators can read it under Access log. Entries are kept for 12 months unless that is changed. The log is included in a full backup and does not contain the sensitive values themselves.
 - **Security:** The readme states that one-click updates install the latest GitHub release zip with no signature check. The accounts that can publish a release are what keep that update safe.
 - **Fix:** QuickBooks and Xero secrets are encrypted with a key that is not stored in the database. Existing connections are rewritten only after the new value decrypts to the same secret. If that check fails, the old key and the old values stay.
