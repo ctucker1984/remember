@@ -48,6 +48,24 @@ class Remember_Saved_Report {
 	}
 
 	/**
+	 * Load one saved report.
+	 *
+	 * @param int $report_id Report ID.
+	 * @return object|null
+	 */
+	public static function get( $report_id ) {
+		global $wpdb;
+		$table = self::table_name();
+		$row   = $wpdb->get_row(
+			$wpdb->prepare(
+				"SELECT * FROM {$table} WHERE report_id = %d",
+				absint( $report_id )
+			)
+		); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		return $row ? $row : null;
+	}
+
+	/**
 	 * Load one report if owned by the user.
 	 *
 	 * @param int $report_id Report ID.

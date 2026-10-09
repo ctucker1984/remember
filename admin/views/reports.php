@@ -14,7 +14,7 @@ if ( ! defined( 'WPINC' ) ) {
 	<div class="remember-reports-pagehead">
 		<div>
 			<h1><?php esc_html_e( 'Reports', 'remember' ); ?></h1>
-			<p class="description"><?php esc_html_e( 'Build a table from members, applications, payments, vetting, or events. Saved reports are yours only; you can copy one into another staff member’s library if they can run it. Columns you cannot read are dropped when the report runs.', 'remember' ); ?></p>
+			<p class="description"><?php esc_html_e( 'Build a table from members, applications, payments, vetting, or events. Saved reports are yours only; you can copy one into another staff member’s library if they can run it. A saved report can also be emailed as a CSV on a schedule. Columns you cannot read are dropped when the report runs.', 'remember' ); ?></p>
 		</div>
 	</div>
 	<div id="remember-reports-notice"></div>
@@ -126,6 +126,7 @@ if ( ! defined( 'WPINC' ) ) {
 					<button type="button" class="button" id="remember-report-save"><?php esc_html_e( 'Save', 'remember' ); ?></button>
 					<button type="button" class="button" id="remember-report-save-as"><?php esc_html_e( 'Save as', 'remember' ); ?></button>
 					<button type="button" class="button" id="remember-report-copy" disabled><?php esc_html_e( 'Copy to…', 'remember' ); ?></button>
+					<button type="button" class="button" id="remember-report-schedule" disabled><?php esc_html_e( 'Schedule', 'remember' ); ?></button>
 					<button type="button" class="button" id="remember-report-delete" disabled><?php esc_html_e( 'Delete', 'remember' ); ?></button>
 					<span class="remember-reports-footer-spacer"></span>
 					<button type="button" class="button" id="remember-report-export"><?php esc_html_e( 'Export CSV', 'remember' ); ?></button>
@@ -137,6 +138,65 @@ if ( ! defined( 'WPINC' ) ) {
 					</label>
 					<button type="button" class="button" id="remember-report-copy-confirm"><?php esc_html_e( 'Copy', 'remember' ); ?></button>
 					<button type="button" class="button-link" id="remember-report-copy-cancel"><?php esc_html_e( 'Cancel', 'remember' ); ?></button>
+				</div>
+				<div id="remember-report-schedule-panel" class="remember-reports-schedule" hidden>
+					<h3><?php esc_html_e( 'Email schedule', 'remember' ); ?></h3>
+					<p class="description" id="remember-report-schedule-note"></p>
+					<label>
+						<input type="checkbox" id="remember-report-schedule-enabled" value="1">
+						<?php esc_html_e( 'Email this report', 'remember' ); ?>
+					</label>
+					<div class="remember-reports-criteria">
+						<label class="remember-reports-field">
+							<span class="remember-reports-label"><?php esc_html_e( 'How often', 'remember' ); ?></span>
+							<select id="remember-report-schedule-frequency">
+								<option value="daily"><?php esc_html_e( 'Every day', 'remember' ); ?></option>
+								<option value="weekly"><?php esc_html_e( 'Every week', 'remember' ); ?></option>
+								<option value="monthly"><?php esc_html_e( 'Every month', 'remember' ); ?></option>
+							</select>
+						</label>
+						<label class="remember-reports-field" id="remember-report-schedule-weekday-wrap">
+							<span class="remember-reports-label"><?php esc_html_e( 'Day', 'remember' ); ?></span>
+							<select id="remember-report-schedule-weekday">
+								<option value="1"><?php esc_html_e( 'Monday', 'remember' ); ?></option>
+								<option value="2"><?php esc_html_e( 'Tuesday', 'remember' ); ?></option>
+								<option value="3"><?php esc_html_e( 'Wednesday', 'remember' ); ?></option>
+								<option value="4"><?php esc_html_e( 'Thursday', 'remember' ); ?></option>
+								<option value="5"><?php esc_html_e( 'Friday', 'remember' ); ?></option>
+								<option value="6"><?php esc_html_e( 'Saturday', 'remember' ); ?></option>
+								<option value="7"><?php esc_html_e( 'Sunday', 'remember' ); ?></option>
+							</select>
+						</label>
+						<label class="remember-reports-field" id="remember-report-schedule-monthday-wrap" hidden>
+							<span class="remember-reports-label"><?php esc_html_e( 'Date', 'remember' ); ?></span>
+							<input type="number" id="remember-report-schedule-monthday" min="1" max="31" value="1">
+						</label>
+						<label class="remember-reports-field">
+							<span class="remember-reports-label"><?php esc_html_e( 'Time', 'remember' ); ?></span>
+							<input type="time" id="remember-report-schedule-time" value="08:00">
+						</label>
+						<label class="remember-reports-field">
+							<span class="remember-reports-label"><?php esc_html_e( 'Event', 'remember' ); ?></span>
+							<select id="remember-report-schedule-event"></select>
+						</label>
+					</div>
+					<label>
+						<input type="checkbox" id="remember-report-schedule-skip" value="1" checked>
+						<?php esc_html_e( 'Skip the email when the report has no rows', 'remember' ); ?>
+					</label>
+					<label id="remember-report-schedule-sensitive-wrap" hidden>
+						<input type="checkbox" id="remember-report-schedule-sensitive" value="1">
+						<?php esc_html_e( 'This report includes health or emergency contact fields. Include them in the email.', 'remember' ); ?>
+					</label>
+					<label class="remember-reports-field">
+						<span class="remember-reports-label"><?php esc_html_e( 'Send to', 'remember' ); ?></span>
+						<select id="remember-report-schedule-recipients" multiple size="6"></select>
+					</label>
+					<p class="description" id="remember-report-schedule-last"></p>
+					<p>
+						<button type="button" class="button button-primary" id="remember-report-schedule-save"><?php esc_html_e( 'Save schedule', 'remember' ); ?></button>
+						<button type="button" class="button-link" id="remember-report-schedule-cancel"><?php esc_html_e( 'Cancel', 'remember' ); ?></button>
+					</p>
 				</div>
 			</div>
 

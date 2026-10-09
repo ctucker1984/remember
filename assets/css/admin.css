@@ -2964,6 +2964,34 @@
 	margin: 0;
 }
 
+.remember-reports-schedule {
+	margin-top: 16px;
+	padding-top: 12px;
+	border-top: 1px solid #f0f0f1;
+}
+
+.remember-reports-schedule[hidden] {
+	display: none;
+}
+
+.remember-reports-schedule h3 {
+	margin: 0 0 8px;
+}
+
+.remember-reports-schedule label {
+	display: block;
+	margin: 8px 0;
+}
+
+.remember-reports-schedule .remember-reports-criteria {
+	align-items: flex-end;
+}
+
+#remember-report-schedule-recipients {
+	min-width: 280px;
+	max-width: 100%;
+}
+
 .remember-reports-results__head {
 	display: flex;
 	align-items: baseline;

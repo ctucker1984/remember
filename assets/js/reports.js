@@ -525,11 +525,61 @@
 		$('#remember-report-copy-confirm').prop('disabled', false);
 	}
 
+	function hideSchedulePanel() {
+		$('#remember-report-schedule-panel').prop('hidden', true);
+	}
+
+	function scheduleFrequencyFields() {
+		var frequency = $('#remember-report-schedule-frequency').val();
+		$('#remember-report-schedule-weekday-wrap').prop('hidden', frequency !== 'weekly');
+		$('#remember-report-schedule-monthday-wrap').prop('hidden', frequency !== 'monthly');
+	}
+
+	function fillSchedule(data) {
+		var schedule = data.schedule || {};
+		var note = t('scheduleNote', 'Times use the site timezone (%s). The CSV uses your access. Each person is checked again when it sends.');
+		$('#remember-report-schedule-note').text(note.replace('%s', data.timezone || ''));
+		$('#remember-report-schedule-enabled').prop('checked', !!parseInt(schedule.enabled, 10));
+		$('#remember-report-schedule-frequency').val(schedule.frequency || 'weekly');
+		$('#remember-report-schedule-weekday').val(String(schedule.weekday || 1));
+		$('#remember-report-schedule-monthday').val(String(schedule.monthday || 1));
+		$('#remember-report-schedule-time').val(schedule.send_time || '08:00');
+		$('#remember-report-schedule-skip').prop('checked', schedule.skip_empty === undefined || !!parseInt(schedule.skip_empty, 10));
+		$('#remember-report-schedule-sensitive').prop('checked', !!parseInt(schedule.sensitive_opt_in, 10));
+		$('#remember-report-schedule-sensitive-wrap').prop('hidden', !data.sensitive);
+		var events = (catalog && catalog.events) ? catalog.events : [];
+		var $event = $('#remember-report-schedule-event');
+		$event.html(optionList(events.map(function (event) {
+			return { id: String(event.id), label: event.label };
+		}), schedule.event_id ? String(schedule.event_id) : '', true, t('allEvents', 'All events')));
+		var chosen = {};
+		(schedule.recipient_ids || []).forEach(function (id) {
+			chosen[String(id)] = true;
+		});
+		var $people = $('#remember-report-schedule-recipients');
+		$people.empty();
+		(data.recipients || []).forEach(function (person) {
+			var $opt = $('<option></option>').val(String(person.id)).text(person.label);
+			if (chosen[String(person.id)]) {
+				$opt.prop('selected', true);
+			}
+			$people.append($opt);
+		});
+		if (schedule.last_sent_at) {
+			$('#remember-report-schedule-last').text(t('lastSent', 'Last sent %s.').replace('%s', schedule.last_sent_at));
+		} else {
+			$('#remember-report-schedule-last').text(t('notSentYet', 'Not sent yet.'));
+		}
+		scheduleFrequencyFields();
+		$('#remember-report-schedule-panel').prop('hidden', false);
+	}
+
 	function setSavedActions() {
 		var saved = !!state.reportId;
-		$('#remember-report-delete, #remember-report-copy').prop('disabled', !saved);
+		$('#remember-report-delete, #remember-report-copy, #remember-report-schedule').prop('disabled', !saved);
 		if (!saved) {
 			hideCopyPanel();
+			hideSchedulePanel();
 		}
 	}
 
@@ -686,6 +736,7 @@
 
 	function loadReport(id) {
 		hideCopyPanel();
+		hideSchedulePanel();
 		post('remember_report_get', { report_id: id }).done(function (res) {
 			if (!res || !res.success) {
 				notice((res && res.data && res.data.message) || t('error', 'Could not run that report.'), 'error');
@@ -898,6 +949,66 @@
 		});
 		$('#remember-report-copy-cancel').on('click', function () {
 			hideCopyPanel();
+		});
+		$('#remember-report-schedule').on('click', function () {
+			if (!state.reportId) {
+				notice(t('scheduleNeedSave', 'Save this report before scheduling it.'), 'error');
+				return;
+			}
+			post('remember_report_schedule_get', { report_id: state.reportId }).done(function (res) {
+				if (!res || !res.success) {
+					notice((res && res.data && res.data.message) || t('error', 'Could not run that report.'), 'error');
+					return;
+				}
+				fillSchedule(res.data || {});
+			}).fail(function (xhr) {
+				var msg = t('error', 'Could not run that report.');
+				if (xhr.responseJSON && xhr.responseJSON.data && xhr.responseJSON.data.message) {
+					msg = xhr.responseJSON.data.message;
+				}
+				notice(msg, 'error');
+			});
+		});
+		$('#remember-report-schedule-cancel').on('click', function () {
+			hideSchedulePanel();
+		});
+		$('#remember-report-schedule-frequency').on('change', scheduleFrequencyFields);
+		$('#remember-report-schedule-save').on('click', function () {
+			if (!state.reportId) {
+				notice(t('scheduleNeedSave', 'Save this report before scheduling it.'), 'error');
+				return;
+			}
+			var recipients = $('#remember-report-schedule-recipients').val() || [];
+			$('#remember-report-schedule-save').prop('disabled', true);
+			post('remember_report_schedule_save', {
+				report_id: state.reportId,
+				enabled: $('#remember-report-schedule-enabled').is(':checked') ? 1 : 0,
+				frequency: $('#remember-report-schedule-frequency').val(),
+				weekday: $('#remember-report-schedule-weekday').val(),
+				monthday: $('#remember-report-schedule-monthday').val(),
+				send_time: $('#remember-report-schedule-time').val(),
+				event_id: $('#remember-report-schedule-event').val() || 0,
+				skip_empty: $('#remember-report-schedule-skip').is(':checked') ? 1 : 0,
+				sensitive_opt_in: $('#remember-report-schedule-sensitive').is(':checked') ? 1 : 0,
+				recipient_ids: recipients
+			}).done(function (res) {
+				$('#remember-report-schedule-save').prop('disabled', false);
+				if (!res || !res.success) {
+					notice((res && res.data && res.data.message) || t('error', 'Could not run that report.'), 'error');
+					return;
+				}
+				notice(t('scheduleSaved', 'Schedule saved.'));
+				if (res.data && res.data.schedule && res.data.schedule.last_sent_at) {
+					$('#remember-report-schedule-last').text(t('lastSent', 'Last sent %s.').replace('%s', res.data.schedule.last_sent_at));
+				}
+			}).fail(function (xhr) {
+				$('#remember-report-schedule-save').prop('disabled', false);
+				var msg = t('error', 'Could not run that report.');
+				if (xhr.responseJSON && xhr.responseJSON.data && xhr.responseJSON.data.message) {
+					msg = xhr.responseJSON.data.message;
+				}
+				notice(msg, 'error');
+			});
 		});
 		$('#remember-report-copy-confirm').on('click', function () {
 			if (!state.reportId) {

@@ -89,6 +89,7 @@ class Remember_Database {
 			'profile_questions'              => 'create_profile_questions_table',
 			'profile_question_responses'     => 'create_profile_question_responses_table',
 			'saved_reports'                  => 'create_saved_reports_table',
+			'report_schedules'               => 'create_report_schedules_table',
 			'agreements'                     => 'create_agreements_table',
 			'agreement_revisions'            => 'create_agreement_revisions_table',
 			'event_agreements'               => 'create_event_agreements_table',
@@ -1099,6 +1100,35 @@ class Remember_Database {
 			PRIMARY KEY (report_id),
 			KEY owner_id (owner_id),
 			KEY owner_updated (owner_id, updated_at)
+		) $charset_collate;";
+
+		dbDelta( $sql );
+	}
+
+	/**
+	 * Optional email schedule for one saved report.
+	 */
+	public function create_report_schedules_table() {
+		$table_name      = $this->prefix . 'report_schedules';
+		$charset_collate = $this->wpdb->get_charset_collate();
+
+		$sql = "CREATE TABLE $table_name (
+			schedule_id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+			report_id BIGINT(20) UNSIGNED NOT NULL,
+			enabled TINYINT(1) NOT NULL DEFAULT 0,
+			frequency VARCHAR(20) NOT NULL DEFAULT 'weekly',
+			weekday TINYINT(3) UNSIGNED NOT NULL DEFAULT 1,
+			monthday TINYINT(3) UNSIGNED NOT NULL DEFAULT 1,
+			send_time CHAR(5) NOT NULL DEFAULT '08:00',
+			event_id BIGINT(20) UNSIGNED NOT NULL DEFAULT 0,
+			skip_empty TINYINT(1) NOT NULL DEFAULT 1,
+			sensitive_opt_in TINYINT(1) NOT NULL DEFAULT 0,
+			recipient_ids TEXT NOT NULL,
+			last_sent_at DATETIME DEFAULT NULL,
+			created_at DATETIME NOT NULL,
+			updated_at DATETIME NOT NULL,
+			PRIMARY KEY (schedule_id),
+			UNIQUE KEY report_id (report_id)
 		) $charset_collate;";
 
 		dbDelta( $sql );

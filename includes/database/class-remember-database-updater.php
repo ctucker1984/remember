@@ -1805,6 +1805,21 @@ class Remember_Database_Updater {
 			}
 		}
 
+		// Update to 2.3.9 (email a saved report on a schedule).
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '2.3.9', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '2.3.9' ) );
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-database.php';
+			$db = new Remember_Database();
+			$db->create_report_schedules_table();
+			$found = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->prefix . 'remember_report_schedules' ) );
+			if ( $found === $wpdb->prefix . 'remember_report_schedules' ) {
+				update_option( 'remember_db_version', '2.3.9' );
+				Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '2.3.9' ) );
+			} else {
+				Remember_Logger::error( 'Failed to add report schedule table', array( 'error' => $wpdb->last_error ) );
+			}
+		}
+
 		// Always re-ensure health catalogs (idempotent). Catches sites that stalled mid-migration
 		// or activated before catalog seed rows were added.
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-seeder.php';
