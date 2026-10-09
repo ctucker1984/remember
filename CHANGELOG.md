@@ -4,6 +4,7 @@ All notable changes to reMember are listed here. The current plugin version is i
 
 ## Unreleased
 
+- **Fix:** Member CSV imports and backup restores read the uploaded file in place. The file is no longer copied into the public uploads folder under its original name.
 - **Fix:** A member, event, or location import that does not save is counted as an error and includes the database message. An update that changes nothing is still a success.
 - **Fix:** Member import rejects a Status the member table cannot store before it creates a WordPress user. A blank Status still starts as pending vetting. `Vetted` is accepted as `vetted`.
 - **Fix:** Re-importing members leaves profile columns alone when those columns are not in the file. A blank cell still clears that field. A new member still gets the usual empty defaults.
