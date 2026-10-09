@@ -1764,6 +1764,47 @@ class Remember_Database_Updater {
 			}
 		}
 
+		// Update to 2.3.8 (optional door check-in on the existing admission ticket).
+		if ( version_compare( get_option( 'remember_db_version', '0.0.0' ), '2.3.8', '<' ) ) {
+			Remember_Logger::info( 'Updating database schema', array( 'from' => get_option( 'remember_db_version', '0.0.0' ), 'to' => '2.3.8' ) );
+			$events_table = $wpdb->prefix . 'remember_events';
+			$apps_table   = $wpdb->prefix . 'remember_event_applications';
+			$schema_ok    = true;
+			$event_col    = $wpdb->get_var( $wpdb->prepare( "SHOW COLUMNS FROM {$events_table} LIKE %s", 'checkin_enabled' ) );
+			if ( 'checkin_enabled' !== $event_col ) {
+				$added = $wpdb->query( "ALTER TABLE {$events_table} ADD COLUMN checkin_enabled TINYINT(1) NOT NULL DEFAULT 0 AFTER waitlist_mode" );
+				if ( false === $added ) {
+					$schema_ok = false;
+					Remember_Logger::error( 'Failed to add check-in column', array( 'error' => $wpdb->last_error ) );
+				}
+			}
+			foreach ( array( 'checked_in_at' => 'DATETIME NULL DEFAULT NULL', 'checked_in_by' => 'BIGINT(20) UNSIGNED NULL DEFAULT NULL' ) as $column_name => $definition ) {
+				$found = $wpdb->get_var( $wpdb->prepare( "SHOW COLUMNS FROM {$apps_table} LIKE %s", $column_name ) );
+				if ( $column_name === $found ) {
+					continue;
+				}
+				$added = $wpdb->query( "ALTER TABLE {$apps_table} ADD COLUMN {$column_name} {$definition}" );
+				if ( false === $added ) {
+					$schema_ok = false;
+					Remember_Logger::error( 'Failed to add check-in application column', array( 'column' => $column_name, 'error' => $wpdb->last_error ) );
+				}
+			}
+			if ( $schema_ok ) {
+				$admin = get_role( 'administrator' );
+				if ( $admin ) {
+					$admin->add_cap( 'remember_checkin_attendees' );
+				}
+				require_once plugin_dir_path( __FILE__ ) . '../models/class-role.php';
+				$role_model = new Remember_Role();
+				$event_admin = $wpdb->get_var( $wpdb->prepare( "SELECT role_id FROM {$wpdb->prefix}remember_roles WHERE role_name = %s", 'Event Administrator' ) );
+				if ( $event_admin ) {
+					$role_model->add_capability( (int) $event_admin, 'remember_checkin_attendees' );
+				}
+				update_option( 'remember_db_version', '2.3.8' );
+				Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '2.3.8' ) );
+			}
+		}
+
 		// Always re-ensure health catalogs (idempotent). Catches sites that stalled mid-migration
 		// or activated before catalog seed rows were added.
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-seeder.php';

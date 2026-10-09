@@ -124,6 +124,7 @@ class Remember {
 		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/utilities/class-remember-privacy.php';
 		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/utilities/class-remember-registration-guard.php';
 		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/utilities/class-remember-waitlist.php';
+		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/utilities/class-remember-checkin.php';
 		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/utilities/class-remember-logger.php';
 
 		$this->loader = new Remember_Loader();

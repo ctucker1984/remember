@@ -367,7 +367,27 @@ function remember_render_registration_window_fields( $event = null ) {
 			<p class="description"><?php esc_html_e( 'Runs when an accepted application is withdrawn or declined. Off leaves the waitlist for staff. Email tells accepted Event Administrators how many people are waiting for that role. The automatic choice moves the oldest waiting application for that role to pending while registration is open and the role has room. It does not accept the application or create an invoice.', 'remember' ); ?></p>
 		</td>
 	</tr>
+	<tr>
+		<th><label for="checkin_enabled"><?php esc_html_e( 'Door check-in', 'remember' ); ?></label></th>
+		<td>
+			<?php $checkin_enabled = $event && ! empty( $event->checkin_enabled ); ?>
+			<label>
+				<input type="checkbox" id="checkin_enabled" name="checkin_enabled" value="1" <?php checked( $checkin_enabled ); ?>>
+				<?php esc_html_e( 'Print a check-in code on the admission ticket', 'remember' ); ?>
+			</label>
+			<p class="description"><?php esc_html_e( 'Off leaves the printed ticket unchanged. On adds a code to that same ticket and lists the event on the Check-in screen. Staff can scan it, type it, or search by name.', 'remember' ); ?></p>
+		</td>
+	</tr>
 	<?php
+}
+
+/**
+ * Whether the event form turned door check-in on.
+ *
+ * @return int
+ */
+function remember_event_checkin_enabled() {
+	return ! empty( $_POST['checkin_enabled'] ) ? 1 : 0;
 }
 
 // Handle form submissions
@@ -390,6 +410,7 @@ if ( isset( $_POST['remember_event_action'] ) && check_admin_referer( 'remember_
 			'is_private'        => isset( $_POST['is_private'] ) ? 1 : 0,
 			'status'            => sanitize_text_field( wp_unslash( $_POST['status'] ) ),
 			'waitlist_mode'     => remember_event_waitlist_mode(),
+			'checkin_enabled'   => remember_event_checkin_enabled(),
 			'created_by'        => get_current_user_id(),
 		);
 		$event_id = 0;
@@ -433,6 +454,7 @@ if ( isset( $_POST['remember_event_action'] ) && check_admin_referer( 'remember_
 			'is_private'        => isset( $_POST['is_private'] ) ? 1 : 0,
 			'status'            => sanitize_text_field( wp_unslash( $_POST['status'] ) ),
 			'waitlist_mode'     => remember_event_waitlist_mode(),
+			'checkin_enabled'   => remember_event_checkin_enabled(),
 		);
 		$result = false;
 		if ( is_wp_error( $registration_fields ) ) {

@@ -1366,6 +1366,8 @@ class Remember_Import_Export {
 			'Applied At',
 			'Status',
 			'Ticket Voided',
+			'Checked In At',
+			'Checked In By',
 			'Ticket Ready Emailed At',
 			'User ID',
 			'Email',
@@ -1497,6 +1499,11 @@ class Remember_Import_Export {
 			}
 
 			$custom = Remember_Profile_Questions::get_responses_by_field_key( (int) $app->member_id );
+			$checked_in_by = '';
+			if ( ! empty( $app->checked_in_by ) ) {
+				$checker = get_user_by( 'id', (int) $app->checked_in_by );
+				$checked_in_by = $checker ? $checker->display_name : '';
+			}
 
 			$row = array(
 				(int) $app->application_id,
@@ -1506,6 +1513,8 @@ class Remember_Import_Export {
 				isset( $app->applied_at ) ? $app->applied_at : '',
 				'accepted',
 				! empty( $app->ticket_voided ) ? 'Yes' : 'No',
+				isset( $app->checked_in_at ) ? (string) $app->checked_in_at : '',
+				$checked_in_by,
 				isset( $app->ticket_ready_emailed_at ) ? (string) $app->ticket_ready_emailed_at : '',
 				(int) $app->member_id,
 				$user->user_email,

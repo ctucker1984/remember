@@ -70,6 +70,7 @@ class Remember_Capabilities {
 			'remember_print_confidential'       => __( 'Print Confidential Profile', 'remember' ),
 			'remember_print_event_card'         => __( 'Print Event Card', 'remember' ),
 			'remember_merge_profiles'           => __( 'Merge Duplicate Profiles', 'remember' ),
+			'remember_checkin_attendees'        => __( 'Check In Attendees', 'remember' ),
 		);
 	}
 

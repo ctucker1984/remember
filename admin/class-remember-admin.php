@@ -514,6 +514,18 @@ class Remember_Admin {
 			array( $this, 'display_waitlist_page' )
 		);
 
+		if ( current_user_can( 'manage_options' ) && ! current_user_can( 'remember_checkin_attendees' ) ) {
+			wp_get_current_user()->add_cap( 'remember_checkin_attendees' );
+		}
+		add_submenu_page(
+			'remember',
+			__( 'Check-in', 'remember' ),
+			__( 'Check-in', 'remember' ),
+			'remember_checkin_attendees',
+			'remember-checkin',
+			array( $this, 'display_checkin_page' )
+		);
+
 		// Vetting
 		add_submenu_page(
 			'remember',
@@ -832,6 +844,18 @@ class Remember_Admin {
 		
 		require_once plugin_dir_path( __FILE__ ) . '../includes/models/class-application.php';
 		include_once 'views/applications.php';
+	}
+
+	/**
+	 * Render the door check-in page.
+	 *
+	 * @since    2.2.0
+	 */
+	public function display_checkin_page() {
+		if ( ! current_user_can( 'remember_checkin_attendees' ) && ! current_user_can( 'manage_options' ) ) {
+			wp_die( __( 'You do not have sufficient permissions to access this page.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+		}
+		include_once 'views/checkin.php';
 	}
 
 	/**

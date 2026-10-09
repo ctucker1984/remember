@@ -218,6 +218,7 @@ class Remember_Seeder {
 				// Vetting (read only)
 				'remember_read_vetting',
 				'remember_view_reports',
+				'remember_checkin_attendees',
 			);
 			$role_model->set_capabilities( $event_admin_role_id, $event_admin_capabilities );
 		}

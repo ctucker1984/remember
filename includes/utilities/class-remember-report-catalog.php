@@ -537,6 +537,7 @@ class Remember_Report_Catalog {
 					'application.waitlisted_at'  => self::f( __( 'Waitlisted', 'remember' ), 'Application', 'datetime', 'a.waitlisted_at' ),
 					'application.processed_at'   => self::f( __( 'Processed', 'remember' ), 'Application', 'datetime', 'a.processed_at' ),
 					'application.ticket_voided'  => self::f( __( 'Ticket voided', 'remember' ), 'Application', 'enum', 'a.ticket_voided', null, false, array( '0', '1' ) ),
+					'application.checked_in_at'  => self::f( __( 'Checked in', 'remember' ), 'Application', 'datetime', 'a.checked_in_at' ),
 					'application.superseded_at'  => self::f( __( 'Superseded', 'remember' ), 'Application', 'datetime', 'a.superseded_at' ),
 					'member.status'              => self::f( __( 'Member status', 'remember' ), 'Member', 'enum', 'm.status', 'member', false, $member_status ),
 					'health.dietary'             => self::csv_list_field( __( 'Dietary restrictions', 'remember' ), 'Health', $dietary_sql, $dietary_opts, 'health' ),
