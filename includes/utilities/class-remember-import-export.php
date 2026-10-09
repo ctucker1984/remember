@@ -737,6 +737,18 @@ class Remember_Import_Export {
 				) );
 			} else {
 				$user_id = $user->ID;
+				if ( user_can( $user, 'manage_options' ) && ! current_user_can( 'manage_options' ) ) {
+					Remember_Logger::warning(
+						'Member import skipped a WordPress administrator',
+						array(
+							'row'     => $row_number,
+							'user_id' => $user_id,
+						)
+					);
+					$results['error']++;
+					$results['errors'][] = sprintf( __( 'Row %d: That email belongs to a WordPress administrator.', 'remember' ), $row_number );
+					continue;
+				}
 				// Sync WP name fields from CSV on re-import (clears Excel "0" placeholders).
 				$user_update = array( 'ID' => $user_id );
 				if ( ! empty( trim( (string) ( $row_data['Display Name'] ?? '' ) ) ) ) {
