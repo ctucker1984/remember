@@ -271,6 +271,8 @@ class Remember_Public {
 		require_once plugin_dir_path( __FILE__ ) . '../includes/models/class-member.php';
 		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-vetting-workflow.php';
 		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-logger.php';
+		// wp_delete_user() (used for cleanup below) is admin-only and not loaded on the front end.
+		require_once ABSPATH . 'wp-admin/includes/user.php';
 
 		$user_id = wp_create_user( $username, $password, $email );
 

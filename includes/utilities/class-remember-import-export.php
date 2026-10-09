@@ -654,7 +654,8 @@ class Remember_Import_Export {
 				continue;
 			}
 			
-			$row_data = array_combine( $headers, $data );
+			// Ignore extra trailing cells (e.g. a trailing comma from Excel).
+			$row_data = array_combine( $headers, array_slice( $data, 0, count( $headers ) ) );
 			
 			// Required fields
 			if ( empty( $row_data['Email'] ) ) {
@@ -877,7 +878,8 @@ class Remember_Import_Export {
 				continue;
 			}
 			
-			$row_data = array_combine( $headers, $data );
+			// Ignore extra trailing cells (e.g. a trailing comma from Excel).
+			$row_data = array_combine( $headers, array_slice( $data, 0, count( $headers ) ) );
 			
 			// Required fields
 			if ( empty( $row_data['Event Name'] ) ) {
@@ -992,7 +994,8 @@ class Remember_Import_Export {
 				continue;
 			}
 			
-			$row_data = array_combine( $headers, $data );
+			// Ignore extra trailing cells (e.g. a trailing comma from Excel).
+			$row_data = array_combine( $headers, array_slice( $data, 0, count( $headers ) ) );
 			
 			// Required fields
 			if ( empty( $row_data['Location Name'] ) ) {

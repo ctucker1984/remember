@@ -356,16 +356,15 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 		if ( ! empty( $_FILES['photo_file']['name'] ) ) {
 			// Get current member to check for existing photo
 			$current_member = $member_model->get( $member_id );
-			
-			// Delete old photo if exists
-			if ( $current_member && $current_member->photo_url ) {
-				Remember_Image_Uploader::delete_image( $current_member->photo_url );
-			}
-			
+
 			$upload_result = Remember_Image_Uploader::upload_square_image( $_FILES['photo_file'], $max_image_size );
 			if ( ! is_wp_error( $upload_result ) ) {
 				// Update member photo_url
 				$member_model->update_photo( $member_id, $upload_result['url'] );
+				// Delete the old photo only once the new one is saved.
+				if ( $current_member && $current_member->photo_url && $current_member->photo_url !== $upload_result['url'] ) {
+					Remember_Image_Uploader::delete_image( $current_member->photo_url );
+				}
 				Remember_Logger::info( 'Member photo updated', array( 'member_id' => $member_id ) );
 			} else {
 				Remember_Logger::error( 'Photo upload failed', array( 'error' => $upload_result->get_error_message() ) );

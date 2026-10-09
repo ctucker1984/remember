@@ -121,15 +121,16 @@ if ( isset( $_POST['remember_profile_action'] ) && check_admin_referer( 'remembe
 			);
 		} else {
 			$current_member = $member_model->get( $user->ID );
-			if ( $current_member && ! empty( $current_member->photo_url ) ) {
-				Remember_Image_Uploader::delete_image( $current_member->photo_url );
-			}
 
 			$upload_result = Remember_Image_Uploader::upload_square_image( $_FILES['photo_file'], $photo_max_dimensions );
 			if ( is_wp_error( $upload_result ) ) {
 				$photo_error = $upload_result->get_error_message();
 			} else {
 				$member_model->update_photo( $user->ID, $upload_result['url'] );
+				// Delete the old photo only once the new one is saved.
+				if ( $current_member && ! empty( $current_member->photo_url ) && $current_member->photo_url !== $upload_result['url'] ) {
+					Remember_Image_Uploader::delete_image( $current_member->photo_url );
+				}
 			}
 		}
 	} elseif ( isset( $_POST['delete_photo'] ) && '1' === (string) wp_unslash( $_POST['delete_photo'] ) ) {
