@@ -1,0 +1,19 @@
+---
+description: Write Fixes #N in the changelog and the pull request when an issue is closed
+alwaysApply: true
+---
+
+# Close an issue with Fixes #N
+
+When a change closes a GitHub issue, write `Fixes #N` in both places:
+
+- The changelog bullet for that change.
+- The body of the pull request that merges into `master`.
+
+Use the plain text `Fixes #125`. A changelog link such as `[#125](https://github.com/ctucker1984/remember/issues/125)` does not close the issue. GitHub closes it when that pull request merges.
+
+Leave `Fixes` off an issue this change does not close.
+
+```markdown
+- **Fix:** An admission ticket prints the member's legal first and last name. Fixes #125
+```
