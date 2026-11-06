@@ -130,7 +130,8 @@ if ( ! defined( 'WPINC' ) ) {
 						<input type="hidden" name="remember_vetting_action" value="assign">
 						<input type="hidden" name="vetting_id" value="<?php echo esc_attr( $viewing_vetting_id ); ?>">
 						<div class="remember-vetting-quick-actions__row">
-							<select name="primary_vetter_id" class="remember-vetting-quick-actions__select" required>
+							<label for="remember-vetting-assign-vetter" class="screen-reader-text"><?php esc_html_e( 'Assign vetter', 'remember' ); ?></label>
+							<select id="remember-vetting-assign-vetter" name="primary_vetter_id" class="remember-vetting-quick-actions__select" required>
 								<option value=""><?php esc_html_e( '-- Assign Vetter --', 'remember' ); ?></option>
 								<?php foreach ( $vetters as $v ) : ?>
 									<option value="<?php echo esc_attr( $v->ID ); ?>" <?php selected( $viewing_vetting->primary_vetter_id, $v->ID ); ?>>
@@ -157,8 +158,8 @@ if ( ! defined( 'WPINC' ) ) {
 						<input type="hidden" name="remember_vetting_action" value="schedule">
 						<input type="hidden" name="vetting_id" value="<?php echo esc_attr( $viewing_vetting_id ); ?>">
 						<div class="remember-vetting-quick-actions__row">
-							<input type="date" name="scheduled_date" value="<?php echo $viewing_vetting->scheduled_at ? esc_attr( date( 'Y-m-d', strtotime( $viewing_vetting->scheduled_at ) ) ) : ''; ?>" required>
-							<select name="scheduled_hour" class="remember-vetting-quick-actions__time" required>
+							<input type="date" name="scheduled_date" aria-label="<?php echo esc_attr__( 'Scheduled date', 'remember' ); ?>" value="<?php echo $viewing_vetting->scheduled_at ? esc_attr( date( 'Y-m-d', strtotime( $viewing_vetting->scheduled_at ) ) ) : ''; ?>" required>
+							<select name="scheduled_hour" aria-label="<?php echo esc_attr__( 'Scheduled hour', 'remember' ); ?>" class="remember-vetting-quick-actions__time" required>
 								<?php for ( $h = 1; $h <= 12; $h++ ) :
 									$selected_hour = $viewing_vetting->scheduled_at ? (int) date( 'g', strtotime( $viewing_vetting->scheduled_at ) ) : '';
 								?>
@@ -167,7 +168,7 @@ if ( ! defined( 'WPINC' ) ) {
 									</option>
 								<?php endfor; ?>
 							</select>
-							<select name="scheduled_minute" class="remember-vetting-quick-actions__time" required>
+							<select name="scheduled_minute" aria-label="<?php echo esc_attr__( 'Scheduled minute', 'remember' ); ?>" class="remember-vetting-quick-actions__time" required>
 								<?php
 								$selected_minute = $viewing_vetting->scheduled_at ? (int) date( 'i', strtotime( $viewing_vetting->scheduled_at ) ) : 0;
 								foreach ( array( 0, 15, 30, 45 ) as $min ) :
@@ -177,7 +178,7 @@ if ( ! defined( 'WPINC' ) ) {
 									</option>
 								<?php endforeach; ?>
 							</select>
-							<select name="scheduled_ampm" class="remember-vetting-quick-actions__time" required>
+							<select name="scheduled_ampm" aria-label="<?php echo esc_attr__( 'Scheduled AM or PM', 'remember' ); ?>" class="remember-vetting-quick-actions__time" required>
 								<?php $selected_ampm = $viewing_vetting->scheduled_at ? date( 'A', strtotime( $viewing_vetting->scheduled_at ) ) : 'AM'; ?>
 								<option value="AM" <?php selected( $selected_ampm, 'AM' ); ?>>AM</option>
 								<option value="PM" <?php selected( $selected_ampm, 'PM' ); ?>>PM</option>
@@ -210,7 +211,8 @@ if ( ! defined( 'WPINC' ) ) {
 						<input type="hidden" name="remember_vetting_action" value="complete">
 						<input type="hidden" name="vetting_id" value="<?php echo esc_attr( $viewing_vetting_id ); ?>">
 						<div class="remember-vetting-quick-actions__row">
-							<select name="decision" class="remember-vetting-quick-actions__select" data-remember-vetting-decision required>
+							<label for="remember-vetting-decision" class="screen-reader-text"><?php esc_html_e( 'Vetting decision', 'remember' ); ?></label>
+							<select id="remember-vetting-decision" name="decision" class="remember-vetting-quick-actions__select" data-remember-vetting-decision required>
 								<option value=""><?php esc_html_e( '-- Decision --', 'remember' ); ?></option>
 								<option value="accepted"><?php esc_html_e( 'Accepted', 'remember' ); ?></option>
 								<option value="rejected"><?php esc_html_e( 'Rejected', 'remember' ); ?></option>
@@ -381,7 +383,7 @@ if ( ! defined( 'WPINC' ) ) {
 						<input type="hidden" name="vetting_id" value="<?php echo esc_attr( $viewing_vetting_id ); ?>">
 						
 						<div class="remember-vetting-collaborator-add">
-							<select name="collaborator_id" required>
+							<select name="collaborator_id" aria-label="<?php echo esc_attr__( 'Add collaborator', 'remember' ); ?>" required>
 								<option value=""><?php esc_html_e( '-- Select --', 'remember' ); ?></option>
 								<?php foreach ( $vetters as $v ) : 
 									// Check if already a collaborator
