@@ -315,6 +315,12 @@ if ( isset( $_POST['remember_settings_action'] ) && check_admin_referer( 'rememb
 	if ( 'update' === $action ) {
 		$options = get_option( 'remember_options', array() );
 		
+		// Who may use the public registration form.
+		if ( isset( $_POST['registration_mode'] ) ) {
+			$registration_mode            = sanitize_key( wp_unslash( $_POST['registration_mode'] ) );
+			$options['registration_mode'] = in_array( $registration_mode, array( 'open', 'follow_wp' ), true ) ? $registration_mode : 'open';
+		}
+
 		// Update photo settings
 		if ( isset( $_POST['photo_max_size'] ) ) {
 			$options['photo_max_size'] = absint( $_POST['photo_max_size'] ) * 1024 * 1024; // Convert MB to bytes
@@ -788,6 +794,28 @@ $im_platforms = Remember_Im_Platforms::get_all();
 			<table class="form-table">
 				<tr>
 					<th scope="row">
+						<label for="registration_mode"><?php esc_html_e( 'Public Registration', 'remember' ); ?></label>
+					</th>
+					<td>
+						<?php $remember_registration_mode = isset( $options['registration_mode'] ) && 'follow_wp' === $options['registration_mode'] ? 'follow_wp' : 'open'; ?>
+						<select id="registration_mode" name="registration_mode">
+							<option value="open" <?php selected( $remember_registration_mode, 'open' ); ?>><?php esc_html_e( 'Visitors can register for reMember', 'remember' ); ?></option>
+							<option value="follow_wp" <?php selected( $remember_registration_mode, 'follow_wp' ); ?>><?php esc_html_e( 'Follow the WordPress "Anyone can register" setting', 'remember' ); ?></option>
+						</select>
+						<p class="description">
+							<?php
+							echo esc_html(
+								get_option( 'users_can_register' )
+									? __( 'WordPress "Anyone can register" is currently on.', 'remember' )
+									: __( 'WordPress "Anyone can register" is currently off.', 'remember' )
+							);
+							?>
+							<?php esc_html_e( 'The first choice keeps the reMember registration form open even when WordPress registration is off, so visitors cannot create ordinary WordPress accounts but can still join. New registrants must confirm their email address before they can log in.', 'remember' ); ?>
+						</p>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row">
 						<label for="photo_max_size"><?php esc_html_e( 'Photo Max Size', 'remember' ); ?></label>
 					</th>
 					<td>
@@ -1129,7 +1157,8 @@ $im_platforms = Remember_Im_Platforms::get_all();
 							<div class="remember-shortcode-section">
 								<h4 class="remember-settings-flush-top"><?php esc_html_e( 'Notes:', 'remember' ); ?></h4>
 								<ul class="remember-shortcode-list">
-									<li><?php esc_html_e( 'Creates a WordPress user and reMember member record; does not require “Anyone can register” in Settings → General.', 'remember' ); ?></li>
+									<li><?php esc_html_e( 'Creates a WordPress user and reMember member record. By default it does not require “Anyone can register” in Settings → General; change that under General → Public Registration.', 'remember' ); ?></li>
+									<li><?php esc_html_e( 'New registrants get an email with a confirmation link and cannot log in until they follow it. Registrations not confirmed within 7 days are deleted.', 'remember' ); ?></li>
 									<li><?php esc_html_e( 'Disable the form site-wide with the remember_allow_public_registration filter.', 'remember' ); ?></li>
 									<li><?php esc_html_e( 'Reject an email domain with the remember_registration_disposable_email filter, or stop account creation with remember_registration_pre_create.', 'remember' ); ?></li>
 								</ul>
