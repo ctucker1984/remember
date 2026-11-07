@@ -303,19 +303,18 @@ class Remember_Public {
 			$field_messages['password'] = $this->get_member_registration_error_message( 'weak_password' );
 			$banner_extras[] = $field_messages['password'];
 		}
-		if ( '' !== $username && validate_username( $username ) && username_exists( $username ) ) {
-			if ( ! in_array( 'username', $invalid_fields, true ) ) {
-				$invalid_fields[] = 'username';
+		// One neutral message for a taken username or email, shown on both fields, so the form
+		// cannot be used to learn which usernames or addresses already have accounts.
+		$identity_taken = ( '' !== $username && validate_username( $username ) && username_exists( $username ) )
+			|| ( '' !== $email && is_email( $email ) && email_exists( $email ) );
+		if ( $identity_taken ) {
+			foreach ( array( 'username', 'user_email' ) as $identity_field ) {
+				if ( ! in_array( $identity_field, $invalid_fields, true ) ) {
+					$invalid_fields[] = $identity_field;
+				}
+				$field_messages[ $identity_field ] = $this->get_member_registration_error_message( 'identity_taken' );
 			}
-			$field_messages['username'] = $this->get_member_registration_error_message( 'username_exists' );
 			$banner_extras[] = $field_messages['username'];
-		}
-		if ( '' !== $email && is_email( $email ) && email_exists( $email ) ) {
-			if ( ! in_array( 'user_email', $invalid_fields, true ) ) {
-				$invalid_fields[] = 'user_email';
-			}
-			$field_messages['user_email'] = $this->get_member_registration_error_message( 'email_exists' );
-			$banner_extras[] = $field_messages['user_email'];
 		}
 
 		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-registration-guard.php';
@@ -550,8 +549,7 @@ class Remember_Public {
 			'invalid_timezone' => __( 'Please select a valid time zone.', 'remember' ),
 			'weak_password'    => __( 'Please choose a stronger password (at least eight characters).', 'remember' ),
 			'password_mismatch' => __( 'Password and confirm password do not match.', 'remember' ),
-			'username_exists'  => __( 'That username is already taken.', 'remember' ),
-			'email_exists'     => __( 'That email address is already registered.', 'remember' ),
+			'identity_taken'   => __( 'That username or email address cannot be used. Please try a different one.', 'remember' ),
 			'create_failed'    => __( 'Could not create your account. Please try again or contact support.', 'remember' ),
 			'member_failed'    => __( 'Could not complete member setup. Please contact support.', 'remember' ),
 			'profile_failed'   => __( 'Could not save your profile. Please contact support.', 'remember' ),
