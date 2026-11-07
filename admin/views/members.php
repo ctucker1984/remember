@@ -872,8 +872,26 @@ if ( $view_member_id > 0 ) {
 		$view_payments = $payment_model->get_by_member( $view_member_id );
 	}
 	
-	// Get applications for context
-	$view_applications = $application_model->get_by_member( $view_member_id );
+	// Event applications for the profile history, earliest event first.
+	$view_event_history = array();
+	if ( current_user_can( 'remember_read_applications' ) ) {
+		$view_event_history = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT a.application_id, a.status, a.applied_at, a.processed_at, a.superseded_at,
+					e.event_id, e.event_name, e.start_date, e.end_date, r.role_name
+				FROM {$wpdb->prefix}remember_event_applications a
+				LEFT JOIN {$wpdb->prefix}remember_events e ON e.event_id = a.event_id
+				LEFT JOIN {$wpdb->prefix}remember_event_roles er ON er.event_role_id = a.event_role_id
+				LEFT JOIN {$wpdb->prefix}remember_roles r ON r.role_id = er.role_id
+				WHERE a.member_id = %d
+				ORDER BY e.start_date IS NULL, e.start_date ASC, a.applied_at ASC, a.application_id ASC",
+				$view_member_id
+			)
+		);
+		if ( ! is_array( $view_event_history ) ) {
+			$view_event_history = array();
+		}
+	}
 	
 	// Get all vetting cases for this member
 	$view_vetting_cases = $vetting_model->get_all_by_member( $view_member_id );

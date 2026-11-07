@@ -2285,6 +2285,34 @@
 		max-width: none;
 	}
 
+	/* WordPress list tables flex-wrap these rows and paint attr(data-colname), which these cells do not set, so the label column stays blank. */
+	.remember-member-detail table.wp-list-table.remember-responsive-table tr:not(.inline-edit-row):not(.no-items) td[data-label]:not(.check-column) {
+		display: flex;
+		justify-content: space-between;
+		align-items: baseline;
+		gap: 12px;
+		flex: 1 1 100%;
+		width: 100%;
+		max-width: 100%;
+		padding: 4px 0;
+		position: static;
+	}
+
+	.remember-member-detail table.wp-list-table.remember-responsive-table tr:not(.inline-edit-row):not(.no-items) td[data-label]:not(.check-column)::before {
+		content: attr(data-label);
+		display: block;
+		position: static;
+		width: auto;
+		flex: 0 0 auto;
+		overflow: visible;
+		margin: 0;
+		font-weight: 600;
+		line-height: 1.4;
+		color: #1d2327;
+		white-space: normal;
+		text-overflow: clip;
+	}
+
 	/* Compact list cards: title row, then a tight meta row. Desktop stays a table. */
 	.remember-list-cards tbody tr {
 		display: flex;
