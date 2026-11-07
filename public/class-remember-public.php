@@ -196,7 +196,7 @@ class Remember_Public {
 			$this->redirect_member_registration( 'invalid_nonce' );
 		}
 
-		if ( ! apply_filters( 'remember_allow_public_registration', true ) ) {
+		if ( ! self::is_public_registration_allowed() ) {
 			$this->redirect_member_registration( 'disabled' );
 		}
 
@@ -484,14 +484,26 @@ class Remember_Public {
 		Remember_Notifications::notify_member_registered( $user_id );
 		Remember_Notifications::notify_member_profile_saved( $user_id );
 
-		$registered_user = get_user_by( 'id', $user_id );
-		if ( $registered_user instanceof WP_User ) {
-			wp_set_current_user( $user_id );
-			wp_set_auth_cookie( $user_id, true, is_ssl() );
-			do_action( 'wp_login', $registered_user->user_login, $registered_user );
-		}
+		// The new account is not logged in. It stays locked until the emailed link is followed.
+		Remember_Registration_Verification::start( $user_id );
 
-		$this->redirect_member_registration( null, true );
+		$this->redirect_member_registration( null, 'verify' );
+	}
+
+	/**
+	 * Whether the public registration form may create accounts.
+	 *
+	 * The reMember setting decides the starting point: open (the default) or follow
+	 * WordPress "Anyone can register". The remember_allow_public_registration filter
+	 * can still override either.
+	 *
+	 * @return bool
+	 */
+	public static function is_public_registration_allowed() {
+		$options = get_option( 'remember_options', array() );
+		$mode    = isset( $options['registration_mode'] ) ? $options['registration_mode'] : 'open';
+		$allowed = ( 'follow_wp' === $mode ) ? (bool) get_option( 'users_can_register' ) : true;
+		return (bool) apply_filters( 'remember_allow_public_registration', $allowed );
 	}
 
 	/**
@@ -523,7 +535,7 @@ class Remember_Public {
 		$redirect = wp_validate_redirect( $redirect, home_url( '/' ) );
 
 		if ( $success ) {
-			wp_safe_redirect( add_query_arg( 'remember_registered', '1', $redirect ) );
+			wp_safe_redirect( add_query_arg( 'remember_registered', true === $success ? '1' : (string) $success, $redirect ) );
 			exit;
 		}
 
@@ -574,7 +586,13 @@ class Remember_Public {
 	 * @return string
 	 */
 	public function shortcode_register( $atts ) {
-		$remember_register_success = isset( $_GET['remember_registered'] ) && '1' === (string) wp_unslash( $_GET['remember_registered'] );
+		$registered_state = isset( $_GET['remember_registered'] ) ? sanitize_key( wp_unslash( $_GET['remember_registered'] ) ) : '';
+		if ( 'verify' === $registered_state ) {
+			return '<div class="remember-register-splash" role="status"><h2>' . esc_html__( 'Check your email.', 'remember' ) . '</h2><p>' .
+				esc_html__( 'Your profile was received. We sent you a link to confirm your email address. Open it, then log in. Until you do, you will not be able to log in.', 'remember' ) .
+				'</p></div>';
+		}
+		$remember_register_success = '1' === $registered_state;
 		if ( $remember_register_success ) {
 			require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-profile-audit.php';
 			$dashboard_url = Remember_Profile_Audit::get_dashboard_url();
@@ -602,6 +620,10 @@ class Remember_Public {
 					)
 				) .
 				'</p>';
+		}
+
+		if ( ! self::is_public_registration_allowed() ) {
+			return '<p class="remember-notice remember-info">' . esc_html( $this->get_member_registration_error_message( 'disabled' ) ) . '</p>';
 		}
 
 		$remember_register_success = isset( $_GET['remember_registered'] ) && '1' === $_GET['remember_registered'];

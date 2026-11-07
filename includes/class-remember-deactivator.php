@@ -43,6 +43,8 @@ class Remember_Deactivator {
 		Remember_Profile_Duplicates::unschedule();
 		require_once plugin_dir_path( __FILE__ ) . 'utilities/class-remember-event-invites.php';
 		Remember_Event_Invites::unschedule();
+		require_once plugin_dir_path( __FILE__ ) . 'utilities/class-remember-registration-verification.php';
+		Remember_Registration_Verification::unschedule();
 
 		// Flush rewrite rules
 		flush_rewrite_rules();
