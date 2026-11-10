@@ -683,9 +683,9 @@ if ( isset( $_POST['remember_event_action'] ) && check_admin_referer( 'remember_
 			$roles_saved  = $event_model->sync_event_role_configs( $event_id, $role_configs );
 
 			$addons       = remember_build_addons_from_post( $product_model );
-			$addons_saved = remember_sync_event_addons( $merchandise_model, $event_id, $addons );
-			Remember_Agreements::sync_event_pins( $event_id, Remember_Agreements::pins_from_request() );
-			$invites_saved = remember_save_event_invites( $event_id );
+			$addons_saved     = remember_sync_event_addons( $merchandise_model, $event_id, $addons );
+			$agreements_saved = Remember_Agreements::sync_event_pins( $event_id, Remember_Agreements::pins_from_request() );
+			$invites_saved    = remember_save_event_invites( $event_id );
 
 			Remember_Logger::info(
 				'Event created',
@@ -697,8 +697,8 @@ if ( isset( $_POST['remember_event_action'] ) && check_admin_referer( 'remember_
 				)
 			);
 			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Event created successfully.', 'remember' ) . '</p></div>';
-			if ( ! $roles_saved || ! $addons_saved || ! $invites_saved ) {
-				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Some of this event\'s roles, add-ons or invitees could not be saved. Open the event, check its roles, prices, add-ons and invitees, and save again.', 'remember' ) . '</p></div>';
+			if ( ! $roles_saved || ! $addons_saved || ! $agreements_saved || ! $invites_saved ) {
+				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Some of this event\'s roles, add-ons, agreements or invitees could not be saved. Open the event, check its roles, prices, add-ons, agreements and invitees, and save again.', 'remember' ) . '</p></div>';
 			}
 		} else {
 			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to create event.', 'remember' ) . '</p></div>';
@@ -742,9 +742,9 @@ if ( isset( $_POST['remember_event_action'] ) && check_admin_referer( 'remember_
 			$roles_saved  = $event_model->sync_event_role_configs( $event_id, $role_configs );
 
 			$addons       = remember_build_addons_from_post( $product_model );
-			$addons_saved = remember_sync_event_addons( $merchandise_model, $event_id, $addons );
-			Remember_Agreements::sync_event_pins( $event_id, Remember_Agreements::pins_from_request() );
-			$invites_saved = remember_save_event_invites( $event_id );
+			$addons_saved     = remember_sync_event_addons( $merchandise_model, $event_id, $addons );
+			$agreements_saved = Remember_Agreements::sync_event_pins( $event_id, Remember_Agreements::pins_from_request() );
+			$invites_saved    = remember_save_event_invites( $event_id );
 
 			Remember_Logger::info(
 				'Event updated',
@@ -756,8 +756,8 @@ if ( isset( $_POST['remember_event_action'] ) && check_admin_referer( 'remember_
 				)
 			);
 			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Event updated successfully.', 'remember' ) . '</p></div>';
-			if ( ! $roles_saved || ! $addons_saved || ! $invites_saved ) {
-				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Some of this event\'s roles, add-ons or invitees could not be saved. Check its roles, prices, add-ons and invitees below and save again.', 'remember' ) . '</p></div>';
+			if ( ! $roles_saved || ! $addons_saved || ! $agreements_saved || ! $invites_saved ) {
+				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Some of this event\'s roles, add-ons, agreements or invitees could not be saved. Check its roles, prices, add-ons, agreements and invitees below and save again.', 'remember' ) . '</p></div>';
 			}
 			remember_event_invoice_due_after_save( $event_before, $event_model->get( $event_id ) );
 			// Reload the event data to reflect changes

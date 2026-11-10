@@ -122,8 +122,11 @@ if ( ! is_array( $events ) ) {
 }
 
 if ( $can_edit && isset( $_GET['dismiss_merge_notice'] ) && isset( $_GET['_wpnonce'] ) && wp_verify_nonce( sanitize_text_field( wp_unslash( $_GET['_wpnonce'] ) ), 'remember_survey_merge_notice_dismiss' ) ) {
-	delete_option( 'remember_survey_merge_notice' );
-	Remember_Logger::info( 'Dismissed merged surveys notice', array( 'user_id' => get_current_user_id() ) );
+	if ( delete_option( 'remember_survey_merge_notice' ) ) {
+		Remember_Logger::info( 'Dismissed merged surveys notice', array( 'user_id' => get_current_user_id() ) );
+	} else {
+		Remember_Logger::debug( 'Merged surveys notice was already dismissed', array( 'user_id' => get_current_user_id() ) );
+	}
 }
 
 $merge_notice = $can_edit ? get_option( 'remember_survey_merge_notice', array() ) : array();

@@ -46,7 +46,7 @@ if ( isset( $_POST['remember_agreement_action'] ) && check_admin_referer( 'remem
 		if ( $new_id ) {
 			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Agreement created (revision 1).', 'remember' ) . '</p></div>';
 		} else {
-			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Could not create agreement. Title and body are required.', 'remember' ) . '</p></div>';
+			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Could not create agreement. Check that it has a title and body, then try again.', 'remember' ) . '</p></div>';
 		}
 	} elseif ( 'update_meta' === $action && isset( $_POST['agreement_id'] ) ) {
 		$aid = absint( $_POST['agreement_id'] );
@@ -65,7 +65,7 @@ if ( isset( $_POST['remember_agreement_action'] ) && check_admin_referer( 'remem
 			$revisions = Remember_Agreements::get_revisions_for_agreement( $aid );
 			$editing_id = $aid;
 		} else {
-			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Could not publish revision. Body is required.', 'remember' ) . '</p></div>';
+			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Could not publish revision. Check that it has a body, then try again.', 'remember' ) . '</p></div>';
 		}
 	}
 }

@@ -11,6 +11,8 @@ if ( ! defined( 'WPINC' ) ) {
 	die;
 }
 
+require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
+
 /**
  * Sends templated emails using notification_settings rows.
  */
@@ -22,8 +24,9 @@ class Remember_Notifications {
 	 * The outcome is logged here, where it is known: Info when the mail is sent,
 	 * Warning when it is not sent for an expected reason (template off or an
 	 * invalid address), and Error when wp_mail() itself fails. Only ids and the
-	 * result are logged — never the subject, body, names, or (except on Error,
-	 * so the line can be matched to the SMTP log) the recipient address.
+	 * result are logged at those levels — never the subject, body or names. The
+	 * recipient address and the send time are on a Debug line, so a failure can be
+	 * matched to the SMTP log once the level is raised.
 	 *
 	 * @param string $type    Notification type key.
 	 * @param array  $context Placeholder values (without braces).
@@ -92,14 +95,24 @@ class Remember_Notifications {
 		$body    = self::to_html_email( $body );
 
 		$headers = array( 'Content-Type: text/html; charset=UTF-8' );
+		$start   = Remember_Logger::start_timer();
 		$sent    = wp_mail( $to, $subject, $body, $headers );
 
+		Remember_Logger::debug(
+			'Notification email handed to wp_mail',
+			array_merge(
+				$log_ctx,
+				array(
+					'to'         => $to,
+					'sent'       => (bool) $sent,
+					'elapsed_ms' => Remember_Logger::elapsed_ms( $start ),
+				)
+			)
+		);
+
 		if ( ! $sent ) {
-			// A hard send failure always gets its own line, with the address so it can be matched to the SMTP log.
-			Remember_Logger::error(
-				'Notification email failed to send',
-				array_merge( $log_ctx, array( 'to' => $to ) )
-			);
+			// A hard send failure always gets its own line, even for quiet broadcasts.
+			Remember_Logger::error( 'Notification email failed to send', $log_ctx );
 			return new WP_Error( 'remember_notify_send_failed', __( 'Failed to send notification email.', 'remember' ) );
 		}
 
@@ -262,6 +275,7 @@ class Remember_Notifications {
 			}
 		}
 		if ( empty( $emails ) ) {
+			Remember_Logger::warning( 'No System Administrator has a valid email address; emailing WordPress administrators instead' );
 			$wp_admins = get_users(
 				array(
 					'role'   => 'administrator',
@@ -597,19 +611,42 @@ class Remember_Notifications {
 	 * Anyone else posting the fields is ignored.
 	 *
 	 * @param int $user_id Member user ID.
-	 * @return void
+	 * @return bool False only when a changed choice could not be saved.
 	 */
 	public static function save_staff_email_prefs_from_request( $user_id ) {
 		$user_id = absint( $user_id );
 		if ( $user_id < 1 || ! isset( $_POST['remember_notify_prefs_set'] ) || ! self::user_manages_staff_email_prefs( $user_id ) ) {
-			return;
+			return true;
 		}
 		$opt_out = self::staff_email_opt_outs_from_request();
-		if ( empty( $opt_out ) ) {
-			delete_user_meta( $user_id, 'remember_admin_notify_opt_out' );
-			return;
+		$before  = self::user_opted_out_types( $user_id );
+		sort( $opt_out );
+		sort( $before );
+		if ( $opt_out === $before ) {
+			Remember_Logger::debug( 'Staff email choices unchanged', array( 'user_id' => $user_id ) );
+			return true;
 		}
-		update_user_meta( $user_id, 'remember_admin_notify_opt_out', $opt_out );
+		$saved = empty( $opt_out )
+			? delete_user_meta( $user_id, 'remember_admin_notify_opt_out' )
+			: false !== update_user_meta( $user_id, 'remember_admin_notify_opt_out', $opt_out );
+		if ( ! $saved ) {
+			Remember_Logger::error(
+				'Staff email choices could not be saved',
+				array(
+					'user_id'    => $user_id,
+					'turned_off' => $opt_out,
+				)
+			);
+			return false;
+		}
+		Remember_Logger::info(
+			'Staff email choices saved',
+			array(
+				'user_id'    => $user_id,
+				'turned_off' => $opt_out,
+			)
+		);
+		return true;
 	}
 
 	/**
@@ -1013,11 +1050,24 @@ class Remember_Notifications {
 			esc_url_raw( admin_url( 'admin.php?page=remember-applications&view=' . absint( $application_id ) ) )
 		);
 
-		$sent = 0;
+		$start = Remember_Logger::start_timer();
+		$sent  = 0;
 		foreach ( $emails as $email ) {
 			if ( wp_mail( $email, $subject, $message ) ) {
 				++$sent;
 			}
+		}
+		$log_ctx = array(
+			'event_id'       => absint( $event_id ),
+			'application_id' => absint( $application_id ),
+			'sent'           => $sent,
+			'recipients'     => count( $emails ),
+		);
+		Remember_Logger::debug( 'Role clash emails sent', array_merge( $log_ctx, array( 'elapsed_ms' => Remember_Logger::elapsed_ms( $start ) ) ) );
+		if ( $sent < count( $emails ) ) {
+			Remember_Logger::warning( 'Some role clash emails to event administrators failed to send', $log_ctx );
+		} else {
+			Remember_Logger::info( 'Event administrators emailed about a role clash', $log_ctx );
 		}
 		return $sent;
 	}
@@ -1047,6 +1097,13 @@ class Remember_Notifications {
 		require_once plugin_dir_path( __FILE__ ) . '../models/class-vetting.php';
 		$case = ( new Remember_Vetting() )->get( $vetting_id );
 		if ( ! $case || empty( $case->member_id ) ) {
+			Remember_Logger::warning(
+				'Vetting email not sent: the case or its member was not found',
+				array(
+					'type'       => $type,
+					'vetting_id' => $vetting_id,
+				)
+			);
 			return;
 		}
 
@@ -1057,7 +1114,6 @@ class Remember_Notifications {
 			)
 		);
 		if ( empty( $emails ) ) {
-			require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
 			Remember_Logger::warning(
 				'Vetting email had no recipients',
 				array(
@@ -1083,13 +1139,13 @@ class Remember_Notifications {
 		}
 
 		$context = self::context_for_member( (int) $case->member_id, $extra );
+		$start   = Remember_Logger::start_timer();
 		$sent    = 0;
 		foreach ( $emails as $email ) {
 			if ( true === self::send( $type, $context, $email, array( 'quiet' => true ) ) ) {
 				++$sent;
 			}
 		}
-		require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
 		Remember_Logger::info(
 			'Vetting staff email sent',
 			array(
@@ -1098,6 +1154,7 @@ class Remember_Notifications {
 				'member_id'  => (int) $case->member_id,
 				'sent'       => $sent,
 				'recipients' => count( $emails ),
+				'elapsed_ms' => Remember_Logger::elapsed_ms( $start ),
 			)
 		);
 	}
@@ -1179,19 +1236,20 @@ class Remember_Notifications {
 		}
 
 		$context = self::context_for_member( $member_id );
+		$start   = Remember_Logger::start_timer();
 		$sent    = 0;
 		foreach ( $emails as $email ) {
 			if ( true === self::send( 'member_registered', $context, $email, array( 'quiet' => true ) ) ) {
 				++$sent;
 			}
 		}
-		require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
 		Remember_Logger::info(
 			'New member registration emailed to staff',
 			array(
 				'member_id'  => $member_id,
 				'sent'       => $sent,
 				'recipients' => count( $emails ),
+				'elapsed_ms' => Remember_Logger::elapsed_ms( $start ),
 			)
 		);
 	}
@@ -1239,11 +1297,10 @@ class Remember_Notifications {
 			return;
 		}
 
-		require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
 		$context = self::context_for_application( $application_id );
 		if ( is_wp_error( $context ) ) {
-			Remember_Logger::warning(
-				'Application email had no member context',
+			Remember_Logger::debug(
+				'Application submitted emails not sent',
 				array(
 					'application_id' => $application_id,
 					'error'          => $context->get_error_message(),
@@ -1270,7 +1327,8 @@ class Remember_Notifications {
 			return;
 		}
 
-		$sent = 0;
+		$start = Remember_Logger::start_timer();
+		$sent  = 0;
 		foreach ( $emails as $email ) {
 			if ( true === self::send( 'application_received', $context['placeholders'], $email, array( 'quiet' => true ) ) ) {
 				++$sent;
@@ -1282,6 +1340,7 @@ class Remember_Notifications {
 				'application_id' => $application_id,
 				'sent'           => $sent,
 				'recipients'     => count( $emails ),
+				'elapsed_ms'     => Remember_Logger::elapsed_ms( $start ),
 			)
 		);
 	}
@@ -1318,9 +1377,10 @@ class Remember_Notifications {
 				'vetting_url' => admin_url( 'admin.php?page=remember-vetting&member_id=' . $member_id ),
 			)
 		);
-		$sent = 0;
+		$start = Remember_Logger::start_timer();
+		$sent  = 0;
 		foreach ( $emails as $email ) {
-			// send() logs a hard failure per recipient (with address); we summarize the count.
+			// send() logs a hard failure per recipient; we summarize the count.
 			if ( true === self::send( 'vetting_case_failed', $context, $email, array( 'quiet' => true ) ) ) {
 				++$sent;
 			}
@@ -1331,6 +1391,7 @@ class Remember_Notifications {
 				'member_id'  => $member_id,
 				'sent'       => $sent,
 				'recipients' => count( $emails ),
+				'elapsed_ms' => Remember_Logger::elapsed_ms( $start ),
 			)
 		);
 	}
@@ -1352,6 +1413,14 @@ class Remember_Notifications {
 
 		$user = get_user_by( 'ID', $member_id );
 		if ( ! $user || ! is_email( $user->user_email ) ) {
+			Remember_Logger::warning(
+				'Vetting result email not sent: the member has no valid email address',
+				array(
+					'member_id'  => $member_id,
+					'vetting_id' => absint( $vetting_id ),
+					'decision'   => $decision,
+				)
+			);
 			return new WP_Error( 'remember_notify_no_email', __( 'Member has no valid email.', 'remember' ) );
 		}
 
@@ -1442,6 +1511,7 @@ class Remember_Notifications {
 
 		$payment_status = $context['placeholders']['payment_status'] ?? '';
 		if ( 'paid' === $payment_status ) {
+			Remember_Logger::debug( 'Balance-due email not sent: already paid in full', array( 'application_id' => absint( $application_id ) ) );
 			return new WP_Error( 'remember_notify_already_paid', __( 'Application is already paid in full.', 'remember' ) );
 		}
 
@@ -1460,6 +1530,7 @@ class Remember_Notifications {
 		global $wpdb;
 		$args     = wp_parse_args( $args, array( 'event_id' => 0 ) );
 		$event_id = absint( $args['event_id'] );
+		$start    = Remember_Logger::start_timer();
 
 		$sql = "SELECT a.application_id
 			FROM {$wpdb->prefix}remember_event_applications a
@@ -1488,6 +1559,18 @@ class Remember_Notifications {
 			'errors'  => 0,
 		);
 
+		if ( '' !== $wpdb->last_error ) {
+			Remember_Logger::error(
+				'Balance-due emails not sent: could not list the applications that owe',
+				array(
+					'event_id' => $event_id,
+					'error'    => $wpdb->last_error,
+				)
+			);
+			++$stats['errors'];
+			return $stats;
+		}
+
 		foreach ( (array) $rows as $application_id ) {
 			$result = self::send_balance_due( absint( $application_id ) );
 			if ( true === $result ) {
@@ -1498,6 +1581,18 @@ class Remember_Notifications {
 				$stats['errors']++;
 			}
 		}
+
+		Remember_Logger::info(
+			'Balance-due emails sent',
+			array_merge(
+				array(
+					'event_id'     => $event_id,
+					'applications' => count( (array) $rows ),
+					'elapsed_ms'   => Remember_Logger::elapsed_ms( $start ),
+				),
+				$stats
+			)
+		);
 
 		return $stats;
 	}
@@ -1520,9 +1615,8 @@ class Remember_Notifications {
 		}
 		$result = self::send_ticket_paid( (int) $payment->event_application_id );
 		if ( is_wp_error( $result ) ) {
-			require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
-			Remember_Logger::warning(
-				'Ticket paid email failed',
+			Remember_Logger::debug(
+				'Paid-ticket email not sent after the payment was marked paid',
 				array(
 					'application_id' => (int) $payment->event_application_id,
 					'error'          => $result->get_error_message(),
@@ -1539,17 +1633,28 @@ class Remember_Notifications {
 	 */
 	private static function context_for_application( $application_id ) {
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-ticket.php';
-		$data = Remember_Ticket::get_data( $application_id );
+		require_once plugin_dir_path( __FILE__ ) . '../models/class-application.php';
+		$application_id = absint( $application_id );
+		$application    = ( new Remember_Application() )->get( $application_id );
+		if ( ! $application ) {
+			Remember_Logger::warning( 'Application email not sent: application not found', array( 'application_id' => $application_id ) );
+			return new WP_Error( 'remember_ticket_not_found', __( 'Application not found.', 'remember' ) );
+		}
+		// Ticket data exists only for accepted or voided applications; others use the basic placeholders.
+		$data = Remember_Ticket::is_eligible( $application )
+			? Remember_Ticket::get_data( $application_id )
+			: new WP_Error( 'remember_ticket_not_eligible', '' );
 		if ( is_wp_error( $data ) ) {
-			// Accepted-or-voided required for ticket data; fall back for edge cases.
-			require_once plugin_dir_path( __FILE__ ) . '../models/class-application.php';
 			require_once plugin_dir_path( __FILE__ ) . '../models/class-event.php';
 			require_once plugin_dir_path( __FILE__ ) . '../models/class-payment.php';
-			$application_model = new Remember_Application();
-			$application       = $application_model->get( $application_id );
-			if ( ! $application ) {
-				return $data;
-			}
+			Remember_Logger::debug(
+				'Application email uses basic placeholders without ticket data',
+				array(
+					'application_id' => $application_id,
+					'status'         => (string) $application->status,
+					'reason'         => $data->get_error_code(),
+				)
+			);
 			$user  = get_user_by( 'ID', $application->member_id );
 			$event = ( new Remember_Event() )->get( $application->event_id );
 			$payment = ( new Remember_Payment() )->get_by_application( $application_id );
@@ -1570,6 +1675,13 @@ class Remember_Notifications {
 			);
 			$email = $user ? $user->user_email : '';
 			if ( ! is_email( $email ) ) {
+				Remember_Logger::warning(
+					'Application email not sent: the member has no valid email address',
+					array(
+						'application_id' => $application_id,
+						'member_id'      => (int) $application->member_id,
+					)
+				);
 				return new WP_Error( 'remember_notify_no_email', __( 'Member has no valid email.', 'remember' ) );
 			}
 			return array(
@@ -1580,6 +1692,13 @@ class Remember_Notifications {
 
 		$email = $data['member_email'];
 		if ( ! is_email( $email ) ) {
+			Remember_Logger::warning(
+				'Application email not sent: the member has no valid email address',
+				array(
+					'application_id' => $application_id,
+					'member_id'      => (int) $data['member_id'],
+				)
+			);
 			return new WP_Error( 'remember_notify_no_email', __( 'Member has no valid email.', 'remember' ) );
 		}
 
@@ -1661,13 +1780,22 @@ class Remember_Notifications {
 	 */
 	private static function mark_ticket_ready_emailed( $application_id ) {
 		global $wpdb;
-		$wpdb->update(
+		$updated = $wpdb->update(
 			$wpdb->prefix . 'remember_event_applications',
 			array( 'ticket_ready_emailed_at' => current_time( 'mysql' ) ),
 			array( 'application_id' => absint( $application_id ) ),
 			array( '%s' ),
 			array( '%d' )
 		);
+		if ( false === $updated ) {
+			Remember_Logger::warning(
+				'Ticket-ready email sent, but the time it was sent was not recorded',
+				array(
+					'application_id' => absint( $application_id ),
+					'error'          => $wpdb->last_error,
+				)
+			);
+		}
 	}
 
 	/**
@@ -1676,12 +1804,21 @@ class Remember_Notifications {
 	 */
 	private static function mark_ticket_paid_emailed( $application_id ) {
 		global $wpdb;
-		$wpdb->update(
+		$updated = $wpdb->update(
 			$wpdb->prefix . 'remember_payments',
 			array( 'ticket_paid_emailed_at' => current_time( 'mysql' ) ),
 			array( 'event_application_id' => absint( $application_id ) ),
 			array( '%s' ),
 			array( '%d' )
 		);
+		if ( false === $updated ) {
+			Remember_Logger::warning(
+				'Paid-ticket email sent, but the time it was sent was not recorded',
+				array(
+					'application_id' => absint( $application_id ),
+					'error'          => $wpdb->last_error,
+				)
+			);
+		}
 	}
 }

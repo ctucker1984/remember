@@ -272,8 +272,8 @@ if ( isset( $_POST['remember_application_action'] ) && check_admin_referer( 'rem
 				require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-notifications.php';
 				$notify_result = Remember_Notifications::send_ticket_ready( $application_id );
 				if ( is_wp_error( $notify_result ) ) {
-					Remember_Logger::warning(
-						'Ticket ready email failed after accept',
+					Remember_Logger::debug(
+						'Ticket-ready email not sent after accept',
 						array(
 							'application_id' => $application_id,
 							'error'          => $notify_result->get_error_message(),

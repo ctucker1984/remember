@@ -411,13 +411,16 @@ if ( isset( $_POST['remember_settings_action'] ) && check_admin_referer( 'rememb
 	// Handle notification settings update
 	if ( 'update_notifications' === $action ) {
 		if ( isset( $_POST['notification_settings'] ) && is_array( $_POST['notification_settings'] ) ) {
+			$failed_notification_types = array();
 			foreach ( $_POST['notification_settings'] as $notification_type => $settings ) {
 				$data = array(
 					'is_enabled' => isset( $settings['enabled'] ) ? 1 : 0,
 					'subject_template' => isset( $settings['subject'] ) ? sanitize_text_field( wp_unslash( $settings['subject'] ) ) : '',
 					'body_template'    => isset( $settings['body'] ) ? wp_kses_post( wp_unslash( $settings['body'] ) ) : '',
 				);
-				$notification_model->update_by_type( $notification_type, $data );
+				if ( false === $notification_model->update_by_type( $notification_type, $data ) ) {
+					$failed_notification_types[] = (string) $notification_type;
+				}
 			}
 			if ( isset( $_POST['admin_notify_roles_set'] ) && is_array( $_POST['admin_notify_roles_set'] ) ) {
 				require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-notifications.php';
@@ -449,8 +452,19 @@ if ( isset( $_POST['remember_settings_action'] ) && check_admin_referer( 'rememb
 				$options['admin_notify_roles'] = $role_map;
 				update_option( 'remember_options', $options );
 			}
-			Remember_Logger::info( 'Notification settings updated' );
-			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Notification settings saved successfully.', 'remember' ) . '</p></div>';
+			if ( empty( $failed_notification_types ) ) {
+				Remember_Logger::info( 'Notification settings updated', array( 'user_id' => get_current_user_id() ) );
+				echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Notification settings saved successfully.', 'remember' ) . '</p></div>';
+			} else {
+				$failed_notification_labels = array_map( array( 'Remember_Notification_Setting', 'get_type_label' ), $failed_notification_types );
+				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html(
+					sprintf(
+						/* translators: %s: comma-separated email names */
+						__( 'Some notification emails could not be saved: %s. Check them and save again.', 'remember' ),
+						implode( ', ', $failed_notification_labels )
+					)
+				) . '</p></div>';
+			}
 			if ( isset( $_POST['notification_category'] ) ) {
 				$remember_open_notification_category = sanitize_key( wp_unslash( $_POST['notification_category'] ) );
 			}

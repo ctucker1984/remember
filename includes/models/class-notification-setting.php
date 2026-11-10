@@ -12,6 +12,7 @@ if ( ! defined( 'WPINC' ) ) {
 }
 
 require_once plugin_dir_path( __FILE__ ) . 'class-remember-base-model.php';
+require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-logger.php';
 
 /**
  * Notification setting model class.
@@ -86,13 +87,23 @@ class Remember_Notification_Setting extends Remember_Base_Model {
 	public function update_by_type( $notification_type, $data ) {
 		global $wpdb;
 		$data['updated_at'] = current_time( 'mysql' );
-		return $wpdb->update(
+		$result             = $wpdb->update(
 			$this->get_table(),
 			$data,
 			array( 'notification_type' => $notification_type ),
 			array( '%d', '%s', '%s', '%s' ), // Format for is_enabled, subject_template, body_template, updated_at
 			array( '%s' ) // Format for notification_type in WHERE clause
 		);
+		if ( false === $result ) {
+			Remember_Logger::error(
+				'Notification template could not be saved',
+				array(
+					'notification_type' => (string) $notification_type,
+					'error'             => $wpdb->last_error,
+				)
+			);
+		}
+		return $result;
 	}
 
 	/**

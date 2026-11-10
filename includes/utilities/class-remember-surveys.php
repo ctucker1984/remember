@@ -11,6 +11,8 @@ if ( ! defined( 'WPINC' ) ) {
 	die;
 }
 
+require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
+
 /**
  * Survey storage, application rendering, and follow-up issuance.
  */
@@ -65,17 +67,28 @@ class Remember_Surveys {
 	 *
 	 * @param int   $question_id Question.
 	 * @param int[] $role_ids    Event role ids.
-	 * @return void
+	 * @return bool False when any role could not be saved.
 	 */
 	public static function set_question_roles( $question_id, $role_ids ) {
 		global $wpdb;
 		$question_id = absint( $question_id );
-		$wpdb->delete( self::question_roles_table(), array( 'question_id' => $question_id ), array( '%d' ) );
+		$cleared     = $wpdb->delete( self::question_roles_table(), array( 'question_id' => $question_id ), array( '%d' ) );
+		if ( false === $cleared ) {
+			Remember_Logger::error(
+				'Survey question roles not saved: the old ones could not be cleared',
+				array(
+					'question_id' => $question_id,
+					'error'       => $wpdb->last_error,
+				)
+			);
+			return false;
+		}
+		$failed = array();
 		foreach ( array_unique( array_map( 'absint', (array) $role_ids ) ) as $role_id ) {
 			if ( $role_id < 1 ) {
 				continue;
 			}
-			$wpdb->insert(
+			$ok = $wpdb->insert(
 				self::question_roles_table(),
 				array(
 					'question_id'   => $question_id,
@@ -83,7 +96,22 @@ class Remember_Surveys {
 				),
 				array( '%d', '%d' )
 			);
+			if ( ! $ok ) {
+				$failed[] = $role_id;
+			}
 		}
+		if ( $failed ) {
+			Remember_Logger::error(
+				'Survey question roles only partly saved; the question may be asked of every role',
+				array(
+					'question_id'    => $question_id,
+					'event_role_ids' => $failed,
+					'error'          => $wpdb->last_error,
+				)
+			);
+			return false;
+		}
+		return true;
 	}
 
 	/**
@@ -411,14 +439,14 @@ class Remember_Surveys {
 	 * @param int $event_id       Event.
 	 * @param int $member_id      Member.
 	 * @param int $event_role_id  Event role.
-	 * @return void
+	 * @return bool False when the answers could not be saved.
 	 */
 	public static function save_apply_response( $application_id, $event_id, $member_id, $event_role_id = 0 ) {
 		$set = self::apply_questions( $event_id, $event_role_id, $member_id );
 		if ( ! $set['survey'] || empty( $set['questions'] ) ) {
-			return;
+			return true;
 		}
-		self::save_response( $set['survey'], $member_id, $application_id, $set['questions'], $set['known'] );
+		return self::save_response( $set['survey'], $member_id, $application_id, $set['questions'], $set['known'] );
 	}
 
 	/**
@@ -545,9 +573,24 @@ class Remember_Surveys {
 	public static function render_followup_page( $survey_id, $member_id ) {
 		$survey = self::get( $survey_id );
 		if ( ! $survey || self::PLACEMENT_FOLLOWUP !== $survey->placement || 'issued' !== $survey->status ) {
+			Remember_Logger::debug(
+				'Follow-up survey refused: not open',
+				array(
+					'survey_id' => absint( $survey_id ),
+					'member_id' => absint( $member_id ),
+					'status'    => $survey ? (string) $survey->status : 'missing',
+				)
+			);
 			return '<p class="remember-notice remember-error">' . esc_html__( 'That survey is not open.', 'remember' ) . '</p>';
 		}
 		if ( ! self::member_is_accepted( $survey->event_id, $member_id ) ) {
+			Remember_Logger::debug(
+				'Follow-up survey refused: member not accepted to the event',
+				array(
+					'survey_id' => (int) $survey->survey_id,
+					'member_id' => absint( $member_id ),
+				)
+			);
 			return '<p class="remember-notice remember-error">' . esc_html__( 'This survey is for accepted participants of the event.', 'remember' ) . '</p>';
 		}
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-event-invites.php';
@@ -563,6 +606,13 @@ class Remember_Surveys {
 		}
 		$questions = self::followup_questions_for_member( $survey, $member_id );
 		if ( empty( $questions ) ) {
+			Remember_Logger::debug(
+				'Follow-up survey refused: no questions for the member\'s roles',
+				array(
+					'survey_id' => (int) $survey->survey_id,
+					'member_id' => absint( $member_id ),
+				)
+			);
 			return '<p class="remember-notice remember-error">' . esc_html__( 'This survey has no questions for your role.', 'remember' ) . '</p>';
 		}
 
@@ -574,9 +624,11 @@ class Remember_Surveys {
 				$notice = '<p class="remember-notice remember-error">' . esc_html( $error ) . '</p>';
 				// Keep what the member typed so a missed required question does not wipe the form.
 				$sticky = self::posted_answers_map( $questions );
-			} else {
-				self::save_response( $survey, $member_id, 0, $questions );
+			} elseif ( self::save_response( $survey, $member_id, 0, $questions ) ) {
 				$notice = '<p class="remember-notice remember-success">' . esc_html__( 'Your response was saved.', 'remember' ) . '</p>';
+			} else {
+				$notice = '<p class="remember-notice remember-error">' . esc_html__( 'Your response could not be saved. Please try again.', 'remember' ) . '</p>';
+				$sticky = self::posted_answers_map( $questions );
 			}
 		}
 
@@ -630,7 +682,6 @@ class Remember_Surveys {
 				if ( is_wp_error( $removed ) ) {
 					return $removed;
 				}
-				require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
 				Remember_Logger::info( 'Application survey removed', array( 'event_id' => $event_id, 'survey_id' => (int) $existing->survey_id ) );
 				return 0;
 			}
@@ -657,19 +708,28 @@ class Remember_Surveys {
 			if ( 'issued' === $current->status && self::response_count( $survey_id ) > 0 ) {
 				return new WP_Error( 'remember_survey_locked', __( 'This survey already has responses, so its questions stay as they were issued.', 'remember' ) );
 			}
-			$wpdb->update( self::surveys_table(), $data, array( 'survey_id' => $survey_id ) );
+			$saved = false !== $wpdb->update( self::surveys_table(), $data, array( 'survey_id' => $survey_id ) );
 		} else {
 			$data['status']     = self::PLACEMENT_APPLICATION === $placement ? 'open' : 'draft';
 			$data['created_by'] = get_current_user_id();
 			$data['created_at'] = $now;
-			$wpdb->insert( self::surveys_table(), $data );
-			$survey_id = (int) $wpdb->insert_id;
+			$saved              = (bool) $wpdb->insert( self::surveys_table(), $data );
+			$survey_id          = $saved ? (int) $wpdb->insert_id : 0;
 		}
-		if ( $survey_id < 1 ) {
+		if ( ! $saved || $survey_id < 1 ) {
+			Remember_Logger::error(
+				'Survey could not be saved',
+				array(
+					'survey_id' => $survey_id,
+					'event_id'  => $event_id,
+					'error'     => $wpdb->last_error,
+				)
+			);
 			return new WP_Error( 'remember_survey_save', __( 'The survey could not be saved.', 'remember' ) );
 		}
-		self::sync_questions( $survey_id, $rows );
-		require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
+		if ( ! self::sync_questions( $survey_id, $rows ) ) {
+			return new WP_Error( 'remember_survey_save', __( 'The survey was saved, but some of its questions were not. Check the questions and save again.', 'remember' ) );
+		}
 		Remember_Logger::info(
 			'Survey saved',
 			array(
@@ -733,10 +793,21 @@ class Remember_Surveys {
 				)
 			);
 		}
+		if ( '' !== $wpdb->last_error ) {
+			Remember_Logger::error(
+				'Survey not issued: could not list the accepted participants',
+				array(
+					'survey_id' => (int) $survey->survey_id,
+					'event_id'  => (int) $survey->event_id,
+					'error'     => $wpdb->last_error,
+				)
+			);
+			return new WP_Error( 'remember_survey_issue', __( 'The survey could not be issued, so no one was emailed. Try again.', 'remember' ) );
+		}
 		if ( ! is_array( $member_ids ) ) {
 			$member_ids = array();
 		}
-		$wpdb->update(
+		$issued = $wpdb->update(
 			self::surveys_table(),
 			array(
 				'status'     => 'issued',
@@ -745,7 +816,17 @@ class Remember_Surveys {
 			),
 			array( 'survey_id' => (int) $survey->survey_id )
 		);
-		require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
+		if ( false === $issued ) {
+			Remember_Logger::error(
+				'Survey not issued: its status could not be saved, so no one was emailed',
+				array(
+					'survey_id' => (int) $survey->survey_id,
+					'event_id'  => (int) $survey->event_id,
+					'error'     => $wpdb->last_error,
+				)
+			);
+			return new WP_Error( 'remember_survey_issue', __( 'The survey could not be issued, so no one was emailed. Try again.', 'remember' ) );
+		}
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-page-creator.php';
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-notifications.php';
 		Remember_Page_Creator::create_pages( array( 'survey' ) );
@@ -757,10 +838,21 @@ class Remember_Surveys {
 		$url        = self::response_url( $survey->survey_id );
 		$sent       = 0;
 		$barred     = 0;
+		$no_email   = 0;
+		$failed     = 0;
+		$start      = Remember_Logger::start_timer();
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-event-invites.php';
 		foreach ( $member_ids as $member_id ) {
 			$user = get_user_by( 'ID', absint( $member_id ) );
 			if ( ! $user || ! is_email( $user->user_email ) ) {
+				++$no_email;
+				Remember_Logger::warning(
+					'Survey email skipped: the member has no valid email address',
+					array(
+						'survey_id' => (int) $survey->survey_id,
+						'member_id' => (int) $member_id,
+					)
+				);
 				continue;
 			}
 			if ( Remember_Event_Invites::member_is_barred( (int) $member_id ) ) {
@@ -777,6 +869,8 @@ class Remember_Surveys {
 			$result = Remember_Notifications::send(
 				'survey_issued',
 				array(
+					'member_id'    => (int) $user->ID,
+					'event_id'     => (int) $survey->event_id,
 					'member_name'  => $user->display_name,
 					'event_name'   => (string) $event_name,
 					'survey_title' => (string) $survey->title,
@@ -787,24 +881,21 @@ class Remember_Surveys {
 			if ( true === $result ) {
 				++$sent;
 			} elseif ( is_wp_error( $result ) ) {
-				Remember_Logger::warning(
-					'Survey email failed',
-					array(
-						'survey_id' => (int) $survey->survey_id,
-						'user_id'   => (int) $user->ID,
-						'error'     => $result->get_error_message(),
-					)
-				);
+				++$failed;
 			}
 		}
 		Remember_Logger::info(
 			'Survey issued',
 			array(
-				'survey_id'      => (int) $survey->survey_id,
-				'event_id'       => (int) $survey->event_id,
-				'event_role_ids' => $role_ids,
-				'recipients'     => $sent,
-				'skipped_barred' => $barred,
+				'survey_id'        => (int) $survey->survey_id,
+				'event_id'         => (int) $survey->event_id,
+				'event_role_ids'   => $role_ids,
+				'members'          => count( $member_ids ),
+				'recipients'       => $sent,
+				'failed'           => $failed,
+				'skipped_barred'   => $barred,
+				'skipped_no_email' => $no_email,
+				'elapsed_ms'       => Remember_Logger::elapsed_ms( $start ),
 			)
 		);
 		return true;
@@ -836,19 +927,53 @@ class Remember_Surveys {
 	public static function delete_survey( $survey_id ) {
 		$survey_id = absint( $survey_id );
 		if ( self::response_count( $survey_id ) > 0 ) {
+			Remember_Logger::debug( 'Survey not deleted: it has responses', array( 'survey_id' => $survey_id ) );
 			return new WP_Error( 'remember_survey_locked', __( 'This survey has responses and cannot be deleted.', 'remember' ) );
 		}
 		global $wpdb;
 		$question_ids = $wpdb->get_col( $wpdb->prepare( 'SELECT question_id FROM ' . self::questions_table() . ' WHERE survey_id = %d', $survey_id ) );
+		$deleted      = $wpdb->delete( self::surveys_table(), array( 'survey_id' => $survey_id ), array( '%d' ) );
+		if ( ! $deleted ) {
+			Remember_Logger::error(
+				'Survey could not be deleted',
+				array(
+					'survey_id' => $survey_id,
+					'error'     => $wpdb->last_error,
+				)
+			);
+			return new WP_Error( 'remember_survey_delete', __( 'The survey could not be deleted.', 'remember' ) );
+		}
+		$leftovers = array();
 		if ( $question_ids ) {
 			$in = implode( ',', array_map( 'absint', $question_ids ) );
-			$wpdb->query( "DELETE FROM " . self::answers_table() . " WHERE question_id IN ({$in})" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-			$wpdb->query( 'DELETE FROM ' . self::question_roles_table() . " WHERE question_id IN ({$in})" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- integer list.
+			if ( false === $wpdb->query( "DELETE FROM " . self::answers_table() . " WHERE question_id IN ({$in})" ) ) { // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$leftovers[] = 'answers';
+			}
+			if ( false === $wpdb->query( 'DELETE FROM ' . self::question_roles_table() . " WHERE question_id IN ({$in})" ) ) { // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- integer list.
+				$leftovers[] = 'question roles';
+			}
 		}
-		$wpdb->delete( self::questions_table(), array( 'survey_id' => $survey_id ), array( '%d' ) );
-		$wpdb->delete( self::surveys_table(), array( 'survey_id' => $survey_id ), array( '%d' ) );
-		require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
-		Remember_Logger::info( 'Survey deleted', array( 'survey_id' => $survey_id ) );
+		if ( false === $wpdb->delete( self::questions_table(), array( 'survey_id' => $survey_id ), array( '%d' ) ) ) {
+			$leftovers[] = 'questions';
+		}
+		if ( $leftovers ) {
+			Remember_Logger::warning(
+				'Survey deleted, but some of its records were left behind',
+				array(
+					'survey_id' => $survey_id,
+					'left'      => $leftovers,
+					'error'     => $wpdb->last_error,
+				)
+			);
+		}
+		Remember_Logger::info(
+			'Survey deleted',
+			array(
+				'survey_id' => $survey_id,
+				'questions' => count( (array) $question_ids ),
+				'user_id'   => get_current_user_id(),
+			)
+		);
 		return true;
 	}
 
@@ -866,7 +991,7 @@ class Remember_Surveys {
 	 */
 	public static function copy_survey( $survey_id, $target_event_id ) {
 		global $wpdb;
-		require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
+		$start = Remember_Logger::start_timer();
 
 		$source          = self::get( $survey_id );
 		$target_event_id = absint( $target_event_id );
@@ -988,19 +1113,39 @@ class Remember_Surveys {
 				return new WP_Error( 'remember_survey_save', __( 'The survey could not be copied.', 'remember' ) );
 			}
 			$id_map[ (int) $question->question_id ] = (int) $wpdb->insert_id;
-			self::set_question_roles( (int) $wpdb->insert_id, $target_roles[ (int) $question->question_id ] );
+			if ( ! self::set_question_roles( (int) $wpdb->insert_id, $target_roles[ (int) $question->question_id ] ) ) {
+				$notes[] = sprintf(
+					/* translators: %s: question label */
+					__( 'The roles for “%s” could not be copied. Check its roles before using the survey.', 'remember' ),
+					(string) $question->label
+				);
+			}
 		}
+		$unlinked = array();
 		foreach ( $questions as $question ) {
 			$parent = (int) $question->show_if_question_id;
 			if ( $parent > 0 && isset( $id_map[ $parent ] ) ) {
-				$wpdb->update(
+				$linked = $wpdb->update(
 					self::questions_table(),
 					array( 'show_if_question_id' => $id_map[ $parent ] ),
 					array( 'question_id' => $id_map[ (int) $question->question_id ] ),
 					array( '%d' ),
 					array( '%d' )
 				);
+				if ( false === $linked ) {
+					$unlinked[] = $id_map[ (int) $question->question_id ];
+				}
 			}
+		}
+		if ( $unlinked ) {
+			Remember_Logger::warning(
+				'Survey copied, but some questions lost the earlier question that decides when they show',
+				array(
+					'survey_id'    => $copy_id,
+					'question_ids' => $unlinked,
+					'error'        => $wpdb->last_error,
+				)
+			);
 		}
 
 		Remember_Logger::info(
@@ -1014,6 +1159,8 @@ class Remember_Surveys {
 				'dropped_event_role_ids' => $dropped,
 				'widened_questions'      => count( $widened ),
 				'question_count'         => count( $id_map ),
+				'user_id'                => get_current_user_id(),
+				'elapsed_ms'             => Remember_Logger::elapsed_ms( $start ),
 			)
 		);
 
@@ -1095,7 +1242,6 @@ class Remember_Surveys {
 	 */
 	public static function save_question_from_admin( $event_id ) {
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-profile-questions.php';
-		require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
 
 		$event_id = absint( $event_id );
 		$survey   = self::existing_survey_for_question( $event_id );
@@ -1237,15 +1383,25 @@ class Remember_Surveys {
 			'show_if_value'       => '',
 		);
 		if ( $question_id > 0 ) {
-			$wpdb->update( self::questions_table(), $data, array( 'question_id' => $question_id ) );
+			$saved = false !== $wpdb->update( self::questions_table(), $data, array( 'question_id' => $question_id ) );
 		} else {
-			$wpdb->insert( self::questions_table(), $data );
-			$question_id = (int) $wpdb->insert_id;
+			$saved       = (bool) $wpdb->insert( self::questions_table(), $data );
+			$question_id = $saved ? (int) $wpdb->insert_id : 0;
 		}
-		if ( $question_id < 1 ) {
+		if ( ! $saved || $question_id < 1 ) {
+			Remember_Logger::error(
+				'Survey question could not be saved',
+				array(
+					'survey_id'   => (int) $survey->survey_id,
+					'question_id' => $question_id,
+					'error'       => $wpdb->last_error,
+				)
+			);
 			return new WP_Error( 'remember_survey_question', __( 'The question could not be saved.', 'remember' ) );
 		}
-		self::set_question_roles( $question_id, $role_ids );
+		if ( ! self::set_question_roles( $question_id, $role_ids ) ) {
+			return new WP_Error( 'remember_survey_question', __( 'The question was saved, but its roles were not. Check which roles it is asked of and save it again.', 'remember' ) );
+		}
 		Remember_Logger::info(
 			'Survey question saved',
 			array(
@@ -1276,18 +1432,46 @@ class Remember_Surveys {
 	public static function delete_question( $question_id ) {
 		$question = self::get_question( $question_id );
 		if ( ! $question ) {
+			Remember_Logger::debug( 'Survey question not deleted: not found', array( 'question_id' => absint( $question_id ) ) );
 			return new WP_Error( 'remember_survey_question', __( 'Question not found.', 'remember' ) );
 		}
 		global $wpdb;
-		$wpdb->delete( self::answers_table(), array( 'question_id' => (int) $question->question_id ), array( '%d' ) );
-		$wpdb->delete( self::question_roles_table(), array( 'question_id' => (int) $question->question_id ), array( '%d' ) );
-		$wpdb->delete( self::questions_table(), array( 'question_id' => (int) $question->question_id ), array( '%d' ) );
-		require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
+		$qid     = (int) $question->question_id;
+		$deleted = $wpdb->delete( self::questions_table(), array( 'question_id' => $qid ), array( '%d' ) );
+		if ( ! $deleted ) {
+			Remember_Logger::error(
+				'Survey question could not be deleted',
+				array(
+					'survey_id'   => (int) $question->survey_id,
+					'question_id' => $qid,
+					'error'       => $wpdb->last_error,
+				)
+			);
+			return new WP_Error( 'remember_survey_question', __( 'The question could not be deleted.', 'remember' ) );
+		}
+		$leftovers = array();
+		if ( false === $wpdb->delete( self::answers_table(), array( 'question_id' => $qid ), array( '%d' ) ) ) {
+			$leftovers[] = 'answers';
+		}
+		if ( false === $wpdb->delete( self::question_roles_table(), array( 'question_id' => $qid ), array( '%d' ) ) ) {
+			$leftovers[] = 'question roles';
+		}
+		if ( $leftovers ) {
+			Remember_Logger::warning(
+				'Survey question deleted, but some of its records were left behind',
+				array(
+					'question_id' => $qid,
+					'left'        => $leftovers,
+					'error'       => $wpdb->last_error,
+				)
+			);
+		}
 		Remember_Logger::info(
 			'Survey question deleted',
 			array(
 				'survey_id'   => (int) $question->survey_id,
-				'question_id' => (int) $question->question_id,
+				'question_id' => $qid,
+				'user_id'     => get_current_user_id(),
 			)
 		);
 		return true;
@@ -1417,16 +1601,22 @@ class Remember_Surveys {
 	 * @param int      $application_id Application, or 0.
 	 * @param object[] $questions      Questions that were on the form.
 	 * @param array    $known          Field key => earlier answer for questions not on the form.
-	 * @return void
+	 * @return bool False when the response or any answer could not be saved.
 	 */
 	private static function save_response( $survey, $member_id, $application_id, $questions, $known = array() ) {
 		global $wpdb;
 		$posted   = isset( $_POST['remember_survey'] ) && is_array( $_POST['remember_survey'] ) ? wp_unslash( $_POST['remember_survey'] ) : array();
 		$existing = self::response_for_member( $survey->survey_id, $member_id );
 		$now      = current_time( 'mysql' );
+		$log_ctx  = array(
+			'survey_id'      => (int) $survey->survey_id,
+			'event_id'       => (int) $survey->event_id,
+			'member_id'      => absint( $member_id ),
+			'application_id' => absint( $application_id ),
+		);
 		if ( $existing ) {
 			$response_id = (int) $existing->response_id;
-			$wpdb->update(
+			$saved       = false !== $wpdb->update(
 				self::responses_table(),
 				array(
 					'submitted_at'   => $now,
@@ -1435,7 +1625,7 @@ class Remember_Surveys {
 				array( 'response_id' => $response_id )
 			);
 		} else {
-			$wpdb->insert(
+			$saved       = (bool) $wpdb->insert(
 				self::responses_table(),
 				array(
 					'survey_id'      => (int) $survey->survey_id,
@@ -1445,17 +1635,19 @@ class Remember_Surveys {
 					'submitted_at'   => $now,
 				)
 			);
-			$response_id = (int) $wpdb->insert_id;
+			$response_id = $saved ? (int) $wpdb->insert_id : 0;
 		}
-		if ( $response_id < 1 ) {
-			return;
+		if ( ! $saved || $response_id < 1 ) {
+			Remember_Logger::error( 'Survey response could not be saved', array_merge( $log_ctx, array( 'error' => $wpdb->last_error ) ) );
+			return false;
 		}
 		$visible = self::visibility_map( $questions, $posted, $known );
+		$failed  = array();
 		foreach ( $questions as $question ) {
 			$qid   = (int) $question->question_id;
 			$show  = ! empty( $visible[ $qid ] );
 			$value = $show ? self::sanitize_answer( $question, isset( $posted[ $qid ] ) ? $posted[ $qid ] : '' ) : '';
-			$wpdb->query(
+			$ok    = $wpdb->query(
 				$wpdb->prepare(
 					'INSERT INTO ' . self::answers_table() . ' (response_id, question_id, value_text) VALUES (%d, %d, %s) ON DUPLICATE KEY UPDATE value_text = VALUES(value_text)',
 					$response_id,
@@ -1463,17 +1655,26 @@ class Remember_Surveys {
 					$value
 				)
 			);
+			if ( false === $ok ) {
+				$failed[] = $qid;
+			}
 		}
-		require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
-		Remember_Logger::info(
-			'Survey response saved',
-			array(
-				'survey_id'      => (int) $survey->survey_id,
-				'event_id'       => (int) $survey->event_id,
-				'member_id'      => absint( $member_id ),
-				'application_id' => absint( $application_id ),
-			)
-		);
+		$log_ctx['response_id'] = $response_id;
+		if ( $failed ) {
+			Remember_Logger::error(
+				'Survey response only partly saved',
+				array_merge(
+					$log_ctx,
+					array(
+						'question_ids' => $failed,
+						'error'        => $wpdb->last_error,
+					)
+				)
+			);
+			return false;
+		}
+		Remember_Logger::info( 'Survey response saved', $log_ctx );
+		return true;
 	}
 
 	/**
@@ -1512,7 +1713,7 @@ class Remember_Surveys {
 	/**
 	 * @param int   $survey_id Survey.
 	 * @param array $rows      Posted questions.
-	 * @return void
+	 * @return bool False when any question could not be saved or removed.
 	 */
 	private static function sync_questions( $survey_id, $rows ) {
 		global $wpdb;
@@ -1524,6 +1725,7 @@ class Remember_Surveys {
 		}
 		$ids_by_row = array();
 		$keep       = array();
+		$failed     = array();
 		foreach ( $rows as $index => $row ) {
 			$data = array(
 				'survey_id'    => $survey_id,
@@ -1534,19 +1736,26 @@ class Remember_Surveys {
 			);
 			$qid = (int) $row['question_id'];
 			if ( $qid > 0 && isset( $owned[ $qid ] ) ) {
-				$wpdb->update( $table, $data, array( 'question_id' => $qid ) );
+				if ( false === $wpdb->update( $table, $data, array( 'question_id' => $qid ) ) ) {
+					$failed[] = $qid;
+				}
 			} else {
-				$wpdb->insert( $table, $data );
-				$qid = (int) $wpdb->insert_id;
+				$qid = $wpdb->insert( $table, $data ) ? (int) $wpdb->insert_id : 0;
+				if ( $qid < 1 ) {
+					$failed[] = 'row ' . $index;
+				}
 			}
 			$ids_by_row[ $index ] = $qid;
 			$keep[]               = $qid;
 		}
 		foreach ( $rows as $index => $row ) {
+			if ( $ids_by_row[ $index ] < 1 ) {
+				continue;
+			}
 			$parent_row = (int) $row['show_if_row'];
 			$parent_id  = ( $parent_row >= 0 && $parent_row < $index && isset( $ids_by_row[ $parent_row ] ) ) ? $ids_by_row[ $parent_row ] : 0;
 			$value      = $parent_id > 0 ? $row['show_if_value'] : '';
-			$wpdb->update(
+			$linked     = $wpdb->update(
 				$table,
 				array(
 					'show_if_question_id' => $parent_id > 0 ? $parent_id : 0,
@@ -1554,15 +1763,33 @@ class Remember_Surveys {
 				),
 				array( 'question_id' => $ids_by_row[ $index ] )
 			);
+			if ( false === $linked ) {
+				$failed[] = $ids_by_row[ $index ];
+			}
 		}
 		foreach ( $existing as $question ) {
 			$qid = (int) $question->question_id;
 			if ( in_array( $qid, $keep, true ) ) {
 				continue;
 			}
+			if ( ! $wpdb->delete( $table, array( 'question_id' => $qid ), array( '%d' ) ) ) {
+				$failed[] = $qid;
+				continue;
+			}
 			$wpdb->delete( self::answers_table(), array( 'question_id' => $qid ), array( '%d' ) );
-			$wpdb->delete( $table, array( 'question_id' => $qid ), array( '%d' ) );
 		}
+		if ( $failed ) {
+			Remember_Logger::error(
+				'Survey questions only partly saved',
+				array(
+					'survey_id' => (int) $survey_id,
+					'questions' => array_values( array_unique( $failed ) ),
+					'error'     => $wpdb->last_error,
+				)
+			);
+			return false;
+		}
+		return true;
 	}
 
 	/**
@@ -1704,7 +1931,6 @@ class Remember_Surveys {
 	 * @return object|WP_Error Saved survey.
 	 */
 	public static function save_header_from_admin( $event_id ) {
-		require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
 		$event_id  = absint( $event_id );
 		$placement = ! empty( $_POST['on_application'] ) ? self::PLACEMENT_APPLICATION : self::PLACEMENT_FOLLOWUP;
 		$survey_id    = isset( $_POST['survey_id'] ) ? absint( $_POST['survey_id'] ) : 0;
@@ -1746,15 +1972,23 @@ class Remember_Surveys {
 			} elseif ( 'open' === $current->status ) {
 				$data['status'] = 'draft';
 			}
-			$wpdb->update( self::surveys_table(), $data, array( 'survey_id' => $survey_id ) );
+			$saved = false !== $wpdb->update( self::surveys_table(), $data, array( 'survey_id' => $survey_id ) );
 		} else {
 			$data['status']     = self::PLACEMENT_APPLICATION === $placement ? 'open' : 'draft';
 			$data['created_by'] = get_current_user_id();
 			$data['created_at'] = $now;
-			$wpdb->insert( self::surveys_table(), $data );
-			$survey_id = (int) $wpdb->insert_id;
+			$saved              = (bool) $wpdb->insert( self::surveys_table(), $data );
+			$survey_id          = $saved ? (int) $wpdb->insert_id : 0;
 		}
-		if ( $survey_id < 1 ) {
+		if ( ! $saved || $survey_id < 1 ) {
+			Remember_Logger::error(
+				'Survey could not be saved',
+				array(
+					'survey_id' => $survey_id,
+					'event_id'  => $event_id,
+					'error'     => $wpdb->last_error,
+				)
+			);
 			return new WP_Error( 'remember_survey_save', __( 'The survey could not be saved.', 'remember' ) );
 		}
 		Remember_Logger::info(
@@ -1763,6 +1997,7 @@ class Remember_Surveys {
 				'survey_id' => $survey_id,
 				'event_id'  => $event_id,
 				'placement' => $placement,
+				'user_id'   => get_current_user_id(),
 			)
 		);
 		$survey = self::get( $survey_id );
@@ -2103,6 +2338,7 @@ class Remember_Surveys {
 		if ( empty( $surveys ) ) {
 			return array();
 		}
+		$start = Remember_Logger::start_timer();
 
 		$response_counts = $wpdb->get_results(
 			$wpdb->prepare(
@@ -2200,6 +2436,15 @@ class Remember_Surveys {
 				'questions' => $questions,
 			);
 		}
+		Remember_Logger::debug(
+			'Survey results built',
+			array(
+				'event_id'   => $event_id,
+				'surveys'    => count( $out ),
+				'answers'    => is_array( $answers ) ? count( $answers ) : 0,
+				'elapsed_ms' => Remember_Logger::elapsed_ms( $start ),
+			)
+		);
 		return $out;
 	}
 

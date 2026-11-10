@@ -11,6 +11,8 @@ if ( ! defined( 'WPINC' ) ) {
 	die;
 }
 
+require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
+
 /**
  * Agreements helpers.
  */
@@ -149,6 +151,7 @@ class Remember_Agreements {
 		$title = sanitize_text_field( $title );
 		$body  = wp_kses_post( $body );
 		if ( '' === $title || '' === trim( wp_strip_all_tags( $body ) ) ) {
+			Remember_Logger::debug( 'Agreement not created: title or body is empty' );
 			return false;
 		}
 		$now = current_time( 'mysql' );
@@ -164,14 +167,32 @@ class Remember_Agreements {
 			array( '%s', '%d', '%d', '%s', '%s' )
 		);
 		if ( ! $ok ) {
+			Remember_Logger::error( 'Agreement could not be created', array( 'error' => $wpdb->last_error ) );
 			return false;
 		}
 		$agreement_id = (int) $wpdb->insert_id;
 		$rev_id       = self::add_revision( $agreement_id, $body );
 		if ( ! $rev_id ) {
-			$wpdb->delete( self::agreements_table(), array( 'agreement_id' => $agreement_id ), array( '%d' ) );
+			$removed = $wpdb->delete( self::agreements_table(), array( 'agreement_id' => $agreement_id ), array( '%d' ) );
+			if ( ! $removed ) {
+				Remember_Logger::warning(
+					'Agreement left without a revision: its first revision failed and the agreement could not be removed',
+					array(
+						'agreement_id' => $agreement_id,
+						'error'        => $wpdb->last_error,
+					)
+				);
+			}
 			return false;
 		}
+		Remember_Logger::info(
+			'Agreement created',
+			array(
+				'agreement_id' => $agreement_id,
+				'revision_id'  => (int) $rev_id,
+				'user_id'      => get_current_user_id(),
+			)
+		);
 		return $agreement_id;
 	}
 
@@ -189,9 +210,10 @@ class Remember_Agreements {
 		$agreement_id = absint( $agreement_id );
 		$title        = sanitize_text_field( $title );
 		if ( $agreement_id <= 0 || '' === $title ) {
+			Remember_Logger::debug( 'Agreement details not saved: missing agreement or title', array( 'agreement_id' => $agreement_id ) );
 			return false;
 		}
-		return false !== $wpdb->update(
+		$result = $wpdb->update(
 			self::agreements_table(),
 			array(
 				'title'      => $title,
@@ -203,6 +225,25 @@ class Remember_Agreements {
 			array( '%s', '%d', '%d', '%s' ),
 			array( '%d' )
 		);
+		if ( false === $result ) {
+			Remember_Logger::error(
+				'Agreement details could not be saved',
+				array(
+					'agreement_id' => $agreement_id,
+					'error'        => $wpdb->last_error,
+				)
+			);
+			return false;
+		}
+		Remember_Logger::info(
+			'Agreement details saved',
+			array(
+				'agreement_id' => $agreement_id,
+				'is_active'    => $active ? 1 : 0,
+				'user_id'      => get_current_user_id(),
+			)
+		);
+		return true;
 	}
 
 	/**
@@ -217,6 +258,7 @@ class Remember_Agreements {
 		$agreement_id = absint( $agreement_id );
 		$body         = wp_kses_post( $body );
 		if ( $agreement_id <= 0 || '' === trim( wp_strip_all_tags( $body ) ) ) {
+			Remember_Logger::debug( 'Agreement revision not published: missing agreement or body', array( 'agreement_id' => $agreement_id ) );
 			return false;
 		}
 		$next = (int) $wpdb->get_var(
@@ -237,16 +279,44 @@ class Remember_Agreements {
 			array( '%d', '%d', '%s', '%d', '%s' )
 		);
 		if ( ! $ok ) {
+			Remember_Logger::error(
+				'Agreement revision could not be published',
+				array(
+					'agreement_id'    => $agreement_id,
+					'revision_number' => $next,
+					'error'           => $wpdb->last_error,
+				)
+			);
 			return false;
 		}
-		$wpdb->update(
+		$revision_id = (int) $wpdb->insert_id;
+		$touched     = $wpdb->update(
 			self::agreements_table(),
 			array( 'updated_at' => current_time( 'mysql' ) ),
 			array( 'agreement_id' => $agreement_id ),
 			array( '%s' ),
 			array( '%d' )
 		);
-		return (int) $wpdb->insert_id;
+		if ( false === $touched ) {
+			Remember_Logger::warning(
+				'Agreement revision published, but the agreement\'s last-updated time was not changed',
+				array(
+					'agreement_id' => $agreement_id,
+					'revision_id'  => $revision_id,
+					'error'        => $wpdb->last_error,
+				)
+			);
+		}
+		Remember_Logger::info(
+			'Agreement revision published',
+			array(
+				'agreement_id'    => $agreement_id,
+				'revision_id'     => $revision_id,
+				'revision_number' => $next,
+				'user_id'         => get_current_user_id(),
+			)
+		);
+		return $revision_id;
 	}
 
 	/**
@@ -259,6 +329,7 @@ class Remember_Agreements {
 		global $wpdb;
 		$agreement_id = absint( $agreement_id );
 		if ( $agreement_id <= 0 ) {
+			Remember_Logger::debug( 'Agreement not deleted: no agreement given' );
 			return __( 'Invalid agreement.', 'remember' );
 		}
 		$in_use = (int) $wpdb->get_var(
@@ -268,6 +339,13 @@ class Remember_Agreements {
 			)
 		);
 		if ( $in_use > 0 ) {
+			Remember_Logger::debug(
+				'Agreement not deleted: attached to events',
+				array(
+					'agreement_id' => $agreement_id,
+					'events'       => $in_use,
+				)
+			);
 			return __( 'This agreement is attached to one or more events. Detach it first.', 'remember' );
 		}
 		$rev_ids = $wpdb->get_col(
@@ -286,11 +364,46 @@ class Remember_Agreements {
 				)
 			);
 			if ( $accepted > 0 ) {
+				Remember_Logger::debug(
+					'Agreement not deleted: members have accepted it',
+					array(
+						'agreement_id' => $agreement_id,
+						'acceptances'  => $accepted,
+					)
+				);
 				return __( 'This agreement has acceptance records. Deactivate it instead of deleting.', 'remember' );
 			}
 		}
-		$wpdb->delete( self::revisions_table(), array( 'agreement_id' => $agreement_id ), array( '%d' ) );
-		$wpdb->delete( self::agreements_table(), array( 'agreement_id' => $agreement_id ), array( '%d' ) );
+		$deleted = $wpdb->delete( self::agreements_table(), array( 'agreement_id' => $agreement_id ), array( '%d' ) );
+		if ( ! $deleted ) {
+			Remember_Logger::error(
+				'Agreement could not be deleted',
+				array(
+					'agreement_id' => $agreement_id,
+					'error'        => $wpdb->last_error,
+				)
+			);
+			return __( 'The agreement could not be deleted.', 'remember' );
+		}
+		$revisions_deleted = $wpdb->delete( self::revisions_table(), array( 'agreement_id' => $agreement_id ), array( '%d' ) );
+		if ( false === $revisions_deleted ) {
+			Remember_Logger::warning(
+				'Agreement deleted, but its revisions were left behind',
+				array(
+					'agreement_id' => $agreement_id,
+					'revisions'    => count( (array) $rev_ids ),
+					'error'        => $wpdb->last_error,
+				)
+			);
+		}
+		Remember_Logger::info(
+			'Agreement deleted',
+			array(
+				'agreement_id' => $agreement_id,
+				'revisions'    => count( (array) $rev_ids ),
+				'user_id'      => get_current_user_id(),
+			)
+		);
 		return true;
 	}
 
@@ -339,19 +452,32 @@ class Remember_Agreements {
 	 *
 	 * @param int                $event_id Event ID.
 	 * @param array<int, int>    $pins     agreement_id => revision_id.
-	 * @return void
+	 * @return bool False when any pin could not be saved.
 	 */
 	public static function sync_event_pins( $event_id, $pins ) {
 		global $wpdb;
 		$event_id = absint( $event_id );
 		if ( $event_id <= 0 ) {
-			return;
+			return true;
 		}
-		$wpdb->delete( self::event_agreements_table(), array( 'event_id' => $event_id ), array( '%d' ) );
+		$cleared = $wpdb->delete( self::event_agreements_table(), array( 'event_id' => $event_id ), array( '%d' ) );
+		if ( false === $cleared ) {
+			Remember_Logger::error(
+				'Event agreements not saved: the old ones could not be cleared',
+				array(
+					'event_id' => $event_id,
+					'error'    => $wpdb->last_error,
+				)
+			);
+			return false;
+		}
 		if ( empty( $pins ) || ! is_array( $pins ) ) {
-			return;
+			Remember_Logger::debug( 'Event agreements cleared', array( 'event_id' => $event_id ) );
+			return true;
 		}
-		$sort = 0;
+		$sort    = 0;
+		$failed  = array();
+		$skipped = array();
 		foreach ( $pins as $agreement_id => $revision_id ) {
 			$agreement_id = absint( $agreement_id );
 			$revision_id  = absint( $revision_id );
@@ -360,9 +486,10 @@ class Remember_Agreements {
 			}
 			$rev = self::get_revision( $revision_id );
 			if ( ! $rev || (int) $rev->agreement_id !== $agreement_id ) {
+				$skipped[] = $agreement_id;
 				continue;
 			}
-			$wpdb->insert(
+			$ok = $wpdb->insert(
 				self::event_agreements_table(),
 				array(
 					'event_id'     => $event_id,
@@ -372,8 +499,40 @@ class Remember_Agreements {
 				),
 				array( '%d', '%d', '%d', '%d' )
 			);
+			if ( ! $ok ) {
+				$failed[] = $agreement_id;
+				continue;
+			}
 			++$sort;
 		}
+		if ( $skipped ) {
+			Remember_Logger::warning(
+				'Event agreement skipped: the chosen revision does not belong to that agreement',
+				array(
+					'event_id'      => $event_id,
+					'agreement_ids' => $skipped,
+				)
+			);
+		}
+		if ( $failed ) {
+			Remember_Logger::error(
+				'Event agreements only partly saved; applicants will not be asked to accept the missing ones',
+				array(
+					'event_id'      => $event_id,
+					'agreement_ids' => $failed,
+					'error'         => $wpdb->last_error,
+				)
+			);
+			return false;
+		}
+		Remember_Logger::debug(
+			'Event agreements saved',
+			array(
+				'event_id'   => $event_id,
+				'agreements' => $sort,
+			)
+		);
+		return true;
 	}
 
 	/**
@@ -458,14 +617,18 @@ class Remember_Agreements {
 		$ua = isset( $_SERVER['HTTP_USER_AGENT'] ) ? substr( sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) ), 0, 500 ) : '';
 		$now = current_time( 'mysql' );
 
+		$saved   = array();
+		$failed  = array();
+		$missing = array();
 		foreach ( $pinned as $row ) {
 			$rid  = (int) $row->revision_id;
 			$ack  = isset( $acks[ $rid ] ) && is_array( $acks[ $rid ] ) ? $acks[ $rid ] : array();
 			$name = isset( $ack['legal_name'] ) ? trim( sanitize_text_field( (string) $ack['legal_name'] ) ) : '';
 			if ( '' === $name || empty( $ack['agree'] ) ) {
+				$missing[] = $rid;
 				continue;
 			}
-			$wpdb->replace(
+			$ok = $wpdb->replace(
 				self::acceptances_table(),
 				array(
 					'application_id'   => $application_id,
@@ -477,7 +640,41 @@ class Remember_Agreements {
 				),
 				array( '%d', '%d', '%s', '%s', '%s', '%s' )
 			);
+			if ( $ok ) {
+				$saved[] = $rid;
+			} else {
+				$failed[] = $rid;
+			}
 		}
+		if ( $missing ) {
+			Remember_Logger::warning(
+				'Application saved without an acceptance for some agreements: the box was not ticked or no name was typed',
+				array(
+					'application_id' => $application_id,
+					'event_id'       => $event_id,
+					'revision_ids'   => $missing,
+				)
+			);
+		}
+		if ( $failed ) {
+			Remember_Logger::error(
+				'Application submitted, but some agreement acceptances were not recorded',
+				array(
+					'application_id' => $application_id,
+					'event_id'       => $event_id,
+					'revision_ids'   => $failed,
+					'error'          => $wpdb->last_error,
+				)
+			);
+			return;
+		}
+		Remember_Logger::debug(
+			'Agreement acceptances recorded',
+			array(
+				'application_id' => $application_id,
+				'revision_ids'   => $saved,
+			)
+		);
 	}
 
 	/**
