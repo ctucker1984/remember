@@ -1016,7 +1016,8 @@
 						done();
 					}
 				},
-				error: function() {
+				error: function(xhr) {
+					console.error('reMember: event survey could not be loaded', xhr ? xhr.status : 0);
 					if (typeof done === 'function') {
 						done();
 					}

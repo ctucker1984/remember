@@ -848,6 +848,7 @@ class Remember_Public {
 		check_ajax_referer( 'remember_profile_currency_status', 'nonce' );
 
 		if ( ! is_user_logged_in() ) {
+			Remember_Logger::debug( 'Profile freshness check refused: not logged in' );
 			wp_send_json_error( array( 'message' => __( 'You must be logged in.', 'remember' ) ), 403 );
 		}
 

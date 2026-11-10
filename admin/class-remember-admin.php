@@ -253,6 +253,8 @@ class Remember_Admin {
 							'countStar'    => __( 'Rows', 'remember' ),
 							'rowsLabel'    => __( 'rows', 'remember' ),
 							'noneSaved'    => __( 'No saved reports yet.', 'remember' ),
+							'listError'    => __( 'Saved reports could not be loaded. Reload the page, or ask an administrator to check the reMember log.', 'remember' ),
+							'requestError' => __( 'The request could not be completed. Reload the page and try again.', 'remember' ),
 							'fieldLabel'   => __( 'Field', 'remember' ),
 							'operatorLabel'=> __( 'Operator', 'remember' ),
 							'valueLabel'   => __( 'Value', 'remember' ),

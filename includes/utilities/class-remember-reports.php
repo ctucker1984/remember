@@ -47,9 +47,37 @@ class Remember_Reports {
 	 */
 	private static function require_ajax() {
 		if ( ! current_user_can( self::CAP ) ) {
+			Remember_Logger::warning(
+				'Reports request refused: the user cannot view reports',
+				array(
+					'action'  => isset( $_REQUEST['action'] ) ? sanitize_key( wp_unslash( $_REQUEST['action'] ) ) : '',
+					'user_id' => get_current_user_id(),
+				)
+			);
 			wp_send_json_error( array( 'message' => __( 'You cannot view reports.', 'remember' ) ), 403 );
 		}
 		check_ajax_referer( 'remember_reports', 'nonce' );
+	}
+
+	/**
+	 * Record why a reports request was turned away. Refusals from the engine, saved reports and schedules are logged there.
+	 *
+	 * @param string $what    What was refused.
+	 * @param string $reason  Short reason.
+	 * @param array  $context Extra ids.
+	 * @return void
+	 */
+	private static function log_refused( $what, $reason, $context = array() ) {
+		Remember_Logger::debug(
+			$what,
+			array_merge(
+				array(
+					'reason'  => $reason,
+					'user_id' => get_current_user_id(),
+				),
+				$context
+			)
+		);
 	}
 
 	/**
@@ -90,7 +118,18 @@ class Remember_Reports {
 	public static function ajax_list() {
 		self::require_ajax();
 		require_once plugin_dir_path( __FILE__ ) . '../models/class-saved-report.php';
+		global $wpdb;
 		$rows = Remember_Saved_Report::list_for_owner( get_current_user_id() );
+		if ( '' !== $wpdb->last_error ) {
+			Remember_Logger::error(
+				'Saved reports could not be listed',
+				array(
+					'user_id'  => get_current_user_id(),
+					'db_error' => $wpdb->last_error,
+				)
+			);
+			wp_send_json_error( array( 'message' => __( 'Saved reports could not be loaded. Reload the page, or ask an administrator to check the reMember log.', 'remember' ) ), 500 );
+		}
 		$list = array();
 		foreach ( $rows as $row ) {
 			$list[] = array(
@@ -114,6 +153,7 @@ class Remember_Reports {
 		$id  = isset( $_POST['report_id'] ) ? absint( wp_unslash( $_POST['report_id'] ) ) : 0;
 		$row = Remember_Saved_Report::get_owned( $id, get_current_user_id() );
 		if ( ! $row ) {
+			self::log_refused( 'Saved report not opened', 'not found for this owner', array( 'report_id' => $id ) );
 			wp_send_json_error( array( 'message' => __( 'That report was not found.', 'remember' ) ), 404 );
 		}
 		$definition = json_decode( (string) $row->definition, true );
@@ -190,6 +230,7 @@ class Remember_Reports {
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-report-schedule.php';
 		$row = self::owned_from_request();
 		if ( ! $row ) {
+			self::log_refused( 'Report schedule not opened', 'report not saved or not owned' );
 			wp_send_json_error( array( 'message' => __( 'Save this report before scheduling it.', 'remember' ) ), 404 );
 		}
 		$definition = self::definition_from_row( $row );
@@ -214,6 +255,7 @@ class Remember_Reports {
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-report-schedule.php';
 		$row = self::owned_from_request();
 		if ( ! $row ) {
+			self::log_refused( 'Report schedule not saved', 'report not saved or not owned' );
 			wp_send_json_error( array( 'message' => __( 'Save this report before scheduling it.', 'remember' ) ), 404 );
 		}
 		$ids = array();
@@ -257,6 +299,7 @@ class Remember_Reports {
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-report-catalog.php';
 		$row = self::owned_from_request();
 		if ( ! $row ) {
+			self::log_refused( 'Report copy recipients not listed', 'report not saved or not owned' );
 			wp_send_json_error( array( 'message' => __( 'Save this report before copying it.', 'remember' ) ), 404 );
 		}
 		$definition = self::definition_from_row( $row );
@@ -278,6 +321,7 @@ class Remember_Reports {
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-report-catalog.php';
 		$row = self::owned_from_request();
 		if ( ! $row ) {
+			self::log_refused( 'Saved report not copied', 'report not saved or not owned' );
 			wp_send_json_error( array( 'message' => __( 'Save this report before copying it.', 'remember' ) ), 404 );
 		}
 		$recipient_id = isset( $_POST['user_id'] ) ? absint( wp_unslash( $_POST['user_id'] ) ) : 0;
@@ -327,6 +371,13 @@ class Remember_Reports {
 	 */
 	public static function handle_export() {
 		if ( ! current_user_can( self::CAP ) ) {
+			Remember_Logger::warning(
+				'Reports request refused: the user cannot view reports',
+				array(
+					'action'  => 'remember_report_export',
+					'user_id' => get_current_user_id(),
+				)
+			);
 			wp_die( esc_html__( 'You cannot view reports.', 'remember' ), esc_html__( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
 		}
 		check_admin_referer( 'remember_reports', 'nonce' );
