@@ -95,6 +95,7 @@ class Remember_Billing_Provider {
 			require_once plugin_dir_path( __FILE__ ) . '../integrations/class-remember-xero-oauth.php';
 			require_once plugin_dir_path( __FILE__ ) . '../integrations/class-remember-xero-sync.php';
 			if ( ! Remember_Xero_OAuth::is_connected() ) {
+				Remember_Logger::debug( 'Member billing re-check skipped: Xero not connected', array( 'member_id' => $member_id ) );
 				return $empty;
 			}
 			$results = Remember_Xero_Sync::sync_member_payments( $member_id );
@@ -103,6 +104,7 @@ class Remember_Billing_Provider {
 			require_once plugin_dir_path( __FILE__ ) . '../integrations/class-remember-quickbooks-sync.php';
 			$qb = Remember_QuickBooks_OAuth::get_settings();
 			if ( empty( $qb['access_token'] ) || empty( $qb['realm_id'] ) ) {
+				Remember_Logger::debug( 'Member billing re-check skipped: QuickBooks not connected', array( 'member_id' => $member_id ) );
 				return $empty;
 			}
 			$results = Remember_QuickBooks_Sync::sync_member_payments( $member_id );
@@ -149,6 +151,7 @@ class Remember_Billing_Provider {
 			require_once plugin_dir_path( __FILE__ ) . '../integrations/class-remember-xero-oauth.php';
 			require_once plugin_dir_path( __FILE__ ) . '../integrations/class-remember-xero-sync.php';
 			if ( ! Remember_Xero_OAuth::is_connected() ) {
+				Remember_Logger::debug( 'Billing re-check skipped: Xero not connected' );
 				return $empty;
 			}
 			$results = Remember_Xero_Sync::sync_all_payments();
@@ -157,6 +160,7 @@ class Remember_Billing_Provider {
 			require_once plugin_dir_path( __FILE__ ) . '../integrations/class-remember-quickbooks-sync.php';
 			$qb = Remember_QuickBooks_OAuth::get_settings();
 			if ( empty( $qb['access_token'] ) || empty( $qb['realm_id'] ) ) {
+				Remember_Logger::debug( 'Billing re-check skipped: QuickBooks not connected' );
 				return $empty;
 			}
 			$results = Remember_QuickBooks_Sync::sync_all_payments();
@@ -209,10 +213,33 @@ class Remember_Billing_Provider {
 	 */
 	public static function email_invoice_for_application( $application_id ) {
 		$application_id = absint( $application_id );
+		$result         = self::send_invoice_email( $application_id );
+		if ( is_wp_error( $result ) ) {
+			Remember_Logger::warning(
+				'Invoice email not sent',
+				array(
+					'application_id' => $application_id,
+					'provider'       => self::get(),
+					'code'           => $result->get_error_code(),
+					'error'          => $result->get_error_message(),
+				)
+			);
+		}
+		return $result;
+	}
+
+	/**
+	 * Send the active-provider invoice email; see email_invoice_for_application().
+	 *
+	 * @param int $application_id Event application ID.
+	 * @return true|null|WP_Error
+	 */
+	private static function send_invoice_email( $application_id ) {
 		if ( $application_id <= 0 ) {
 			return new WP_Error( 'email_invoice_bad_app', __( 'Invalid application.', 'remember' ) );
 		}
 		if ( ! self::should_email_invoice_on_accept() ) {
+			Remember_Logger::debug( 'Invoice email skipped: turned off in Settings', array( 'application_id' => $application_id ) );
 			return null;
 		}
 
@@ -227,6 +254,7 @@ class Remember_Billing_Provider {
 			require_once plugin_dir_path( __FILE__ ) . '../integrations/class-remember-xero-oauth.php';
 			require_once plugin_dir_path( __FILE__ ) . '../integrations/class-remember-xero-api.php';
 			if ( ! Remember_Xero_OAuth::is_connected() ) {
+				Remember_Logger::debug( 'Invoice email skipped: Xero not connected', array( 'application_id' => $application_id ) );
 				return null;
 			}
 			$invoice_id = ! empty( $payment->xero_invoice_id ) ? (string) $payment->xero_invoice_id : '';
@@ -241,17 +269,19 @@ class Remember_Billing_Provider {
 			require_once plugin_dir_path( __FILE__ ) . '../integrations/class-remember-quickbooks-api.php';
 			$qb = Remember_QuickBooks_OAuth::get_settings();
 			if ( empty( $qb['access_token'] ) || empty( $qb['realm_id'] ) ) {
+				Remember_Logger::debug( 'Invoice email skipped: QuickBooks not connected', array( 'application_id' => $application_id ) );
 				return null;
 			}
 			$invoice_id = ! empty( $payment->quickbooks_invoice_id ) ? (string) $payment->quickbooks_invoice_id : '';
 			if ( '' === $invoice_id ) {
 				return new WP_Error( 'email_invoice_no_id', __( 'Missing QuickBooks invoice ID.', 'remember' ) );
 			}
-			$member = get_userdata( (int) $payment->member_id );
+			$member  = get_userdata( (int) $payment->member_id );
 			$send_to = ( $member && ! empty( $member->user_email ) ) ? $member->user_email : null;
 			return Remember_QuickBooks_API::email_invoice( $invoice_id, $send_to );
 		}
 
+		Remember_Logger::debug( 'Invoice email skipped: no billing provider selected', array( 'application_id' => $application_id ) );
 		return null;
 	}
 }

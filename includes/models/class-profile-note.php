@@ -12,6 +12,7 @@ if ( ! defined( 'WPINC' ) ) {
 }
 
 require_once plugin_dir_path( __FILE__ ) . 'class-remember-base-model.php';
+require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-logger.php';
 
 /**
  * Notes attached to a member profile.
@@ -84,7 +85,18 @@ class Remember_Profile_Note extends Remember_Base_Model {
 			array( '%d', '%d', '%s', '%d', '%s' )
 		);
 
-		return $ok ? (int) $this->wpdb->insert_id : false;
+		if ( ! $ok ) {
+			Remember_Logger::error(
+				'Profile note not saved',
+				array(
+					'member_id' => $member_id,
+					'author_id' => $author_id,
+					'error'     => $this->wpdb->last_error,
+				)
+			);
+			return false;
+		}
+		return (int) $this->wpdb->insert_id;
 	}
 
 	/**
@@ -109,6 +121,17 @@ class Remember_Profile_Note extends Remember_Base_Model {
 			array( '%d' )
 		);
 
-		return false === $updated ? 0 : (int) $updated;
+		if ( false === $updated ) {
+			Remember_Logger::error(
+				'Profile notes not moved to the surviving member',
+				array(
+					'from_member_id' => $from_member_id,
+					'to_member_id'   => $to_member_id,
+					'error'          => $this->wpdb->last_error,
+				)
+			);
+			return 0;
+		}
+		return (int) $updated;
 	}
 }

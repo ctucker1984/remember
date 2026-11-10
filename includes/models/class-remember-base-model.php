@@ -57,6 +57,20 @@ abstract class Remember_Base_Model {
 	protected $columns_cache = null;
 
 	/**
+	 * Database error from the last failed write.
+	 *
+	 * @var string
+	 */
+	protected $last_error = '';
+
+	/**
+	 * Query from the last failed insert.
+	 *
+	 * @var string
+	 */
+	protected $last_query = '';
+
+	/**
 	 * Constructor.
 	 */
 	public function __construct() {
@@ -175,7 +189,36 @@ abstract class Remember_Base_Model {
 		// Store error for retrieval (capture immediately before any other DB operations)
 		$this->last_error = $this->wpdb->last_error;
 		$this->last_query = $this->wpdb->last_query;
+		$this->log_write_failure( 'insert', null, $data );
 		return false;
+	}
+
+	/**
+	 * Log a failed write with the ids needed to find the record. Column values are not logged.
+	 *
+	 * @param string   $operation insert|update|delete.
+	 * @param int|null $id        Primary key, when known.
+	 * @param array    $data      Data that was written.
+	 * @return void
+	 */
+	protected function log_write_failure( $operation, $id, $data = array() ) {
+		require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-logger.php';
+		$context = array(
+			'table' => $this->table_name,
+		);
+		if ( null !== $id ) {
+			$context[ $this->primary_key ] = is_numeric( $id ) ? (int) $id : (string) $id;
+		}
+		if ( ! empty( $data ) ) {
+			$context['columns'] = array_keys( $data );
+			foreach ( $data as $key => $value ) {
+				if ( '_id' === substr( (string) $key, -3 ) && is_numeric( $value ) && ! isset( $context[ $key ] ) ) {
+					$context[ $key ] = (int) $value;
+				}
+			}
+		}
+		$context['error'] = $this->last_error;
+		Remember_Logger::error( 'Database ' . $operation . ' failed', $context );
 	}
 
 	/**
@@ -204,11 +247,16 @@ abstract class Remember_Base_Model {
 	 * @return int|false The number of rows updated, or false on error.
 	 */
 	public function update( $id, $data ) {
-		return $this->wpdb->update(
+		$result = $this->wpdb->update(
 			$this->get_table(),
 			$data,
 			array( $this->primary_key => $id )
 		);
+		if ( false === $result ) {
+			$this->last_error = $this->wpdb->last_error;
+			$this->log_write_failure( 'update', $id, $data );
+		}
+		return $result;
 	}
 
 	/**
@@ -218,10 +266,15 @@ abstract class Remember_Base_Model {
 	 * @return int|false The number of rows deleted, or false on error.
 	 */
 	public function delete( $id ) {
-		return $this->wpdb->delete(
+		$result = $this->wpdb->delete(
 			$this->get_table(),
 			array( $this->primary_key => $id )
 		);
+		if ( false === $result ) {
+			$this->last_error = $this->wpdb->last_error;
+			$this->log_write_failure( 'delete', $id );
+		}
+		return $result;
 	}
 
 	/**

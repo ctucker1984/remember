@@ -42,6 +42,7 @@ class Remember_Activator {
 
 		require_once plugin_dir_path( __FILE__ ) . 'utilities/class-remember-logger.php';
 		Remember_Logger::mark_activation_start();
+		$started = Remember_Logger::start_timer();
 		Remember_Logger::activation_debug(
 			'activate: begin',
 			array(
@@ -133,8 +134,12 @@ class Remember_Activator {
 
 		// Schedule QuickBooks sync cron job
 		if ( ! wp_next_scheduled( 'remember_qb_sync' ) ) {
-			wp_schedule_event( time(), 'hourly', 'remember_qb_sync' );
-			Remember_Logger::debug( 'Scheduled QuickBooks sync cron job' );
+			$scheduled = wp_schedule_event( time(), 'hourly', 'remember_qb_sync', array(), true );
+			if ( is_wp_error( $scheduled ) ) {
+				Remember_Logger::warning( 'Failed to schedule the payment sync', array( 'error' => $scheduled->get_error_message() ) );
+			} else {
+				Remember_Logger::debug( 'Scheduled the hourly payment sync' );
+			}
 		}
 
 		require_once plugin_dir_path( __FILE__ ) . 'utilities/class-remember-profile-duplicates.php';
@@ -149,6 +154,15 @@ class Remember_Activator {
 		set_transient( 'remember_show_setup_wizard', true, 3600 ); // Show for 1 hour
 
 		Remember_Logger::activation_debug( 'activate: complete' );
-		Remember_Logger::info( 'Plugin activation completed successfully' );
+		global $wpdb;
+		Remember_Logger::info(
+			'Plugin activation completed successfully',
+			array(
+				'version'    => REMEMBER_VERSION,
+				'db_version' => get_option( 'remember_db_version', '0.0.0' ),
+				'elapsed_ms' => Remember_Logger::elapsed_ms( $started ),
+				'queries'    => (int) $wpdb->num_queries,
+			)
+		);
 	}
 }

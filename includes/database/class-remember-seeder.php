@@ -34,12 +34,83 @@ class Remember_Seeder {
 	private $prefix;
 
 	/**
+	 * Rows added per table since the last report_added() call.
+	 *
+	 * @var array<string,int>
+	 */
+	private $added = array();
+
+	/**
 	 * Constructor.
 	 */
 	public function __construct() {
 		global $wpdb;
 		$this->wpdb   = $wpdb;
 		$this->prefix = $wpdb->prefix . 'remember_';
+		require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-logger.php';
+	}
+
+	/**
+	 * Insert a default row, logging a failure and counting a success.
+	 *
+	 * @param string     $table   Full table name.
+	 * @param array      $row     Column values.
+	 * @param array|null $formats Optional formats for $wpdb->insert().
+	 * @return bool
+	 */
+	private function insert_default( $table, $row, $formats = null ) {
+		$ok = null === $formats ? $this->wpdb->insert( $table, $row ) : $this->wpdb->insert( $table, $row, $formats );
+		if ( false === $ok ) {
+			Remember_Logger::error(
+				'Failed to add a default row',
+				array(
+					'table' => $table,
+					'error' => $this->wpdb->last_error,
+				)
+			);
+			return false;
+		}
+		$this->added[ $table ] = ( $this->added[ $table ] ?? 0 ) + 1;
+		return true;
+	}
+
+	/**
+	 * Log a failed update of default rows.
+	 *
+	 * @param int|bool $result Return value of $wpdb->query() or update().
+	 * @param string   $what   What the update was for.
+	 * @return void
+	 */
+	private function check_update( $result, $what ) {
+		if ( false === $result ) {
+			Remember_Logger::error(
+				'Failed to update default rows',
+				array(
+					'step'  => $what,
+					'error' => $this->wpdb->last_error,
+				)
+			);
+		}
+	}
+
+	/**
+	 * Log one Info line for the rows added since the last report, then reset the count.
+	 *
+	 * @param string $step What ran (seed, or which ensure_ method).
+	 * @return void
+	 */
+	private function report_added( $step ) {
+		if ( empty( $this->added ) ) {
+			return;
+		}
+		Remember_Logger::info(
+			'Added default rows',
+			array(
+				'step' => $step,
+				'rows' => $this->added,
+			)
+		);
+		$this->added = array();
 	}
 
 	/**
@@ -48,7 +119,6 @@ class Remember_Seeder {
 	 * @since    1.0.0
 	 */
 	public function seed() {
-		require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-logger.php';
 		$steps = array(
 			'seed_default_location',
 			'seed_default_roles',
@@ -65,6 +135,7 @@ class Remember_Seeder {
 			Remember_Logger::activation_debug( 'seeder: ' . $method );
 			$this->{$method}();
 		}
+		$this->report_added( 'seed' );
 	}
 
 	/**
@@ -74,6 +145,7 @@ class Remember_Seeder {
 	 */
 	public function ensure_notification_settings() {
 		$this->seed_notification_settings();
+		$this->report_added( 'ensure_notification_settings' );
 	}
 
 	/**
@@ -83,6 +155,7 @@ class Remember_Seeder {
 	 */
 	public function ensure_clothing_size_options() {
 		$this->seed_clothing_size_options();
+		$this->report_added( 'ensure_clothing_size_options' );
 	}
 
 	/**
@@ -95,6 +168,7 @@ class Remember_Seeder {
 		$this->seed_allergies();
 		$this->seed_medical_accommodations();
 		$this->ensure_none_options_sort_first();
+		$this->report_added( 'ensure_health_catalog_options' );
 	}
 
 	/**
@@ -117,18 +191,24 @@ class Remember_Seeder {
 			$name_col = $catalog[1];
 
 			// Free sort_order 0 for None when another row already occupies it.
-			$this->wpdb->query(
-				"UPDATE {$table}
-				SET sort_order = sort_order + 1
-				WHERE {$name_col} <> 'None' AND sort_order <= 0"
+			$this->check_update(
+				$this->wpdb->query(
+					"UPDATE {$table}
+					SET sort_order = sort_order + 1
+					WHERE {$name_col} <> 'None' AND sort_order <= 0"
+				),
+				'move rows after None in ' . $catalog[0]
 			);
 
-			$this->wpdb->update(
-				$table,
-				array( 'sort_order' => 0 ),
-				array( $name_col => 'None' ),
-				array( '%d' ),
-				array( '%s' )
+			$this->check_update(
+				$this->wpdb->update(
+					$table,
+					array( 'sort_order' => 0 ),
+					array( $name_col => 'None' ),
+					array( '%d' ),
+					array( '%s' )
+				),
+				'put None first in ' . $catalog[0]
 			);
 		}
 	}
@@ -145,7 +225,7 @@ class Remember_Seeder {
 			return;
 		}
 
-		$this->wpdb->insert(
+		$this->insert_default(
 			$table_name,
 			array(
 				'location_name'  => __( 'Default Location', 'remember' ),
@@ -175,19 +255,19 @@ class Remember_Seeder {
 		
 		// Check if Event Administrator role exists
 		$event_admin_role_id = $this->wpdb->get_var( $this->wpdb->prepare( "SELECT role_id FROM $table_name WHERE role_name = %s", 'Event Administrator' ) );
-		if ( ! $event_admin_role_id ) {
-			$this->wpdb->insert(
-				$table_name,
-				array(
-					'role_name'    => 'Event Administrator',
-					'role_type'    => 'event',
-					'is_event_role' => 1,
-					'is_event_admin' => 1,
-					'description'  => __( 'Event Administrator role - assigned to members for specific events', 'remember' ),
-					'created_at'   => current_time( 'mysql' ),
-				)
-			);
+		if ( ! $event_admin_role_id && $this->insert_default(
+			$table_name,
+			array(
+				'role_name'    => 'Event Administrator',
+				'role_type'    => 'event',
+				'is_event_role' => 1,
+				'is_event_admin' => 1,
+				'description'  => __( 'Event Administrator role - assigned to members for specific events', 'remember' ),
+				'created_at'   => current_time( 'mysql' ),
+			)
+		) ) {
 			$event_admin_role_id = $this->wpdb->insert_id;
+			Remember_Logger::info( 'Created default role', array( 'role' => 'Event Administrator', 'role_id' => (int) $event_admin_role_id ) );
 			
 			// Assign default capabilities to Event Administrator
 			$event_admin_capabilities = array(
@@ -226,18 +306,18 @@ class Remember_Seeder {
 
 		// Check if Vetting role exists
 		$vetting_role_id = $this->wpdb->get_var( $this->wpdb->prepare( "SELECT role_id FROM $table_name WHERE role_name = %s", 'Vetting' ) );
-		if ( ! $vetting_role_id ) {
-			$this->wpdb->insert(
-				$table_name,
-				array(
-					'role_name'     => 'Vetting',
-					'role_type'     => 'system',
-					'is_event_role' => 0,
-					'description'   => __( 'Vetting team member role', 'remember' ),
-					'created_at'    => current_time( 'mysql' ),
-				)
-			);
+		if ( ! $vetting_role_id && $this->insert_default(
+			$table_name,
+			array(
+				'role_name'     => 'Vetting',
+				'role_type'     => 'system',
+				'is_event_role' => 0,
+				'description'   => __( 'Vetting team member role', 'remember' ),
+				'created_at'    => current_time( 'mysql' ),
+			)
+		) ) {
 			$vetting_role_id = $this->wpdb->insert_id;
+			Remember_Logger::info( 'Created default role', array( 'role' => 'Vetting', 'role_id' => (int) $vetting_role_id ) );
 			
 			// Assign default capabilities to Vetting
 			$vetting_capabilities = array(
@@ -264,18 +344,18 @@ class Remember_Seeder {
 
 		// Check if System Administrator role exists
 		$system_admin_role_id = $this->wpdb->get_var( $this->wpdb->prepare( "SELECT role_id FROM $table_name WHERE role_name = %s", 'System Administrator' ) );
-		if ( ! $system_admin_role_id ) {
-			$this->wpdb->insert(
-				$table_name,
-				array(
-					'role_name'     => 'System Administrator',
-					'role_type'     => 'system',
-					'is_event_role' => 0,
-					'description'   => __( 'System Administrator role - full access to all plugin features', 'remember' ),
-					'created_at'    => current_time( 'mysql' ),
-				)
-			);
+		if ( ! $system_admin_role_id && $this->insert_default(
+			$table_name,
+			array(
+				'role_name'     => 'System Administrator',
+				'role_type'     => 'system',
+				'is_event_role' => 0,
+				'description'   => __( 'System Administrator role - full access to all plugin features', 'remember' ),
+				'created_at'    => current_time( 'mysql' ),
+			)
+		) ) {
 			$system_admin_role_id = $this->wpdb->insert_id;
+			Remember_Logger::info( 'Created default role', array( 'role' => 'System Administrator', 'role_id' => (int) $system_admin_role_id ) );
 			
 			// Assign all capabilities to System Administrator
 			$all_capabilities = Remember_Capabilities::get_all_capabilities();
@@ -305,7 +385,7 @@ class Remember_Seeder {
 		foreach ( $platforms as $index => $platform_name ) {
 			$existing = $this->wpdb->get_var( $this->wpdb->prepare( "SELECT platform_id FROM $table_name WHERE platform_name = %s", $platform_name ) );
 			if ( ! $existing ) {
-				$this->wpdb->insert(
+				$this->insert_default(
 					$table_name,
 					array(
 						'platform_name' => $platform_name,
@@ -321,12 +401,15 @@ class Remember_Seeder {
 		$cols = $this->wpdb->get_col( "SHOW COLUMNS FROM {$table_name}", 0 );
 		if ( is_array( $cols ) && in_array( 'url_template', $cols, true ) ) {
 			foreach ( Remember_Platform_Handles::social_templates() as $name => $template ) {
-				$this->wpdb->query(
-					$this->wpdb->prepare(
-						"UPDATE {$table_name} SET url_template = %s WHERE platform_name = %s AND (url_template IS NULL OR url_template = '')",
-						$template,
-						$name
-					)
+				$this->check_update(
+					$this->wpdb->query(
+						$this->wpdb->prepare(
+							"UPDATE {$table_name} SET url_template = %s WHERE platform_name = %s AND (url_template IS NULL OR url_template = '')",
+							$template,
+							$name
+						)
+					),
+					'fill url_template for social platform ' . $name
 				);
 			}
 		}
@@ -373,10 +456,11 @@ class Remember_Seeder {
 					$row['show_at']      = ( 'telegram' === $key ) ? 1 : 0;
 					$formats             = array( '%s', '%s', '%d', '%d', '%s', '%s', '%d' );
 				}
-				$this->wpdb->insert( $table, $row, $formats );
+				$this->insert_default( $table, $row, $formats );
 			}
 			++$index;
 		}
+		$this->report_added( 'ensure_im_platforms' );
 	}
 
 	/**
@@ -413,7 +497,7 @@ class Remember_Seeder {
 		foreach ( $restrictions as $index => $restriction ) {
 			$existing = $this->wpdb->get_var( $this->wpdb->prepare( "SELECT restriction_id FROM $table_name WHERE restriction_name = %s", $restriction ) );
 			if ( ! $existing ) {
-				$this->wpdb->insert(
+				$this->insert_default(
 					$table_name,
 					array(
 						'restriction_name' => $restriction,
@@ -486,7 +570,7 @@ class Remember_Seeder {
 		foreach ( $allergies as $index => $allergy ) {
 			$existing = $this->wpdb->get_var( $this->wpdb->prepare( "SELECT allergy_id FROM $table_name WHERE allergy_name = %s", $allergy ) );
 			if ( ! $existing ) {
-				$this->wpdb->insert(
+				$this->insert_default(
 					$table_name,
 					array(
 						'allergy_name' => $allergy,
@@ -536,7 +620,7 @@ class Remember_Seeder {
 				if ( $has_issued ) {
 					$row['issued_size_code'] = $code;
 				}
-				$this->wpdb->insert( $table_name, $row );
+				$this->insert_default( $table_name, $row );
 			}
 		}
 	}
@@ -613,7 +697,7 @@ class Remember_Seeder {
 		foreach ( $accommodations as $index => $accommodation ) {
 			$existing = $this->wpdb->get_var( $this->wpdb->prepare( "SELECT accommodation_id FROM $table_name WHERE accommodation_name = %s", $accommodation['name'] ) );
 			if ( ! $existing ) {
-				$this->wpdb->insert(
+				$this->insert_default(
 					$table_name,
 					array(
 						'accommodation_name' => $accommodation['name'],
@@ -665,7 +749,7 @@ class Remember_Seeder {
 		foreach ( $notification_types as $type ) {
 			$existing = $this->wpdb->get_var( $this->wpdb->prepare( "SELECT setting_id FROM $table_name WHERE notification_type = %s", $type ) );
 			if ( ! $existing ) {
-				$this->wpdb->insert(
+				$this->insert_default(
 					$table_name,
 					array(
 						'notification_type' => $type,
@@ -689,7 +773,7 @@ class Remember_Seeder {
 		// Manual processor
 		$manual = $this->wpdb->get_var( $this->wpdb->prepare( "SELECT processor_id FROM $table_name WHERE processor_type = %s", 'manual' ) );
 		if ( ! $manual ) {
-			$this->wpdb->insert(
+			$this->insert_default(
 				$table_name,
 				array(
 					'processor_type' => 'manual',
@@ -705,7 +789,7 @@ class Remember_Seeder {
 		// QuickBooks processor (inactive by default)
 		$quickbooks = $this->wpdb->get_var( $this->wpdb->prepare( "SELECT processor_id FROM $table_name WHERE processor_type = %s", 'quickbooks' ) );
 		if ( ! $quickbooks ) {
-			$this->wpdb->insert(
+			$this->insert_default(
 				$table_name,
 				array(
 					'processor_type' => 'quickbooks',
@@ -721,7 +805,7 @@ class Remember_Seeder {
 		// Xero processor (inactive by default)
 		$xero = $this->wpdb->get_var( $this->wpdb->prepare( "SELECT processor_id FROM $table_name WHERE processor_type = %s", 'xero' ) );
 		if ( ! $xero ) {
-			$this->wpdb->insert(
+			$this->insert_default(
 				$table_name,
 				array(
 					'processor_type' => 'xero',

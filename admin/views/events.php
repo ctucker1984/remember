@@ -206,6 +206,7 @@ function remember_render_event_agreements_field( $event_id = 0 ) {
 }
 
 function remember_sync_event_addons( $merchandise_model, $event_id, $addons ) {
+	$ok       = true;
 	$existing = $merchandise_model->get_all_by_event( $event_id );
 	$existing_ids = array_map(
 		function( $item ) {
@@ -229,27 +230,38 @@ function remember_sync_event_addons( $merchandise_model, $event_id, $addons ) {
 		if ( ! empty( $addon['merchandise_id'] ) ) {
 			$merchandise_id = absint( $addon['merchandise_id'] );
 			$incoming_ids[] = $merchandise_id;
-			$merchandise_model->update( $merchandise_id, $data );
+			if ( false === $merchandise_model->update( $merchandise_id, $data ) ) {
+				$ok = false;
+			}
 		} else {
 			$new_id = $merchandise_model->create( $data );
 			if ( $new_id ) {
 				$merchandise_id = absint( $new_id );
 				$incoming_ids[] = $merchandise_id;
+			} else {
+				$ok = false;
 			}
 		}
 
 		if ( $merchandise_id > 0 ) {
 			$role_limits = isset( $addon['role_limits'] ) && is_array( $addon['role_limits'] ) ? $addon['role_limits'] : array();
-			Remember_Addon_Role_Limits::sync_for_merchandise( $event_id, $merchandise_id, $role_limits );
+			if ( ! Remember_Addon_Role_Limits::sync_for_merchandise( $event_id, $merchandise_id, $role_limits ) ) {
+				$ok = false;
+			}
 		}
 	}
 
 	foreach ( $existing_ids as $existing_id ) {
 		if ( ! in_array( $existing_id, $incoming_ids, true ) ) {
-			Remember_Addon_Role_Limits::delete_for_merchandise( $existing_id );
-			$merchandise_model->delete( $existing_id );
+			// Limits go only after the add-on itself is gone, so a failed delete leaves it as it was.
+			if ( false === $merchandise_model->delete( $existing_id ) ) {
+				$ok = false;
+			} else {
+				Remember_Addon_Role_Limits::delete_for_merchandise( $existing_id );
+			}
 		}
 	}
+	return $ok;
 }
 
 /**
@@ -332,8 +344,11 @@ function remember_render_registration_window_fields( $event = null ) {
 	<tr>
 		<th><label for="registration_opens_at"><?php esc_html_e( 'Registration Opens', 'remember' ); ?></label></th>
 		<td>
-			<input type="datetime-local" id="registration_opens_at" name="registration_opens_at" class="regular-text" value="<?php echo esc_attr( $opens ); ?>">
-			<p class="description">
+			<span class="remember-clearable-field">
+				<input type="datetime-local" id="registration_opens_at" name="registration_opens_at" class="regular-text" value="<?php echo esc_attr( $opens ); ?>" aria-describedby="registration_opens_at_hint">
+				<button type="button" class="button button-small remember-clear-field" data-remember-clear-field="registration_opens_at" aria-label="<?php echo esc_attr__( 'Clear registration opens date and time', 'remember' ); ?>"><?php esc_html_e( 'Clear', 'remember' ); ?></button>
+			</span>
+			<p class="description" id="registration_opens_at_hint">
 				<?php
 				echo esc_html(
 					sprintf(
@@ -349,8 +364,11 @@ function remember_render_registration_window_fields( $event = null ) {
 	<tr>
 		<th><label for="registration_closes_at"><?php esc_html_e( 'Registration Closes', 'remember' ); ?></label></th>
 		<td>
-			<input type="datetime-local" id="registration_closes_at" name="registration_closes_at" class="regular-text" value="<?php echo esc_attr( $closes ); ?>">
-			<p class="description"><?php esc_html_e( 'Optional. Leave blank to keep registration open until the event status changes.', 'remember' ); ?></p>
+			<span class="remember-clearable-field">
+				<input type="datetime-local" id="registration_closes_at" name="registration_closes_at" class="regular-text" value="<?php echo esc_attr( $closes ); ?>" aria-describedby="registration_closes_at_hint">
+				<button type="button" class="button button-small remember-clear-field" data-remember-clear-field="registration_closes_at" aria-label="<?php echo esc_attr__( 'Clear registration closes date and time', 'remember' ); ?>"><?php esc_html_e( 'Clear', 'remember' ); ?></button>
+			</span>
+			<p class="description" id="registration_closes_at_hint"><?php esc_html_e( 'Optional. Leave blank to keep registration open until the event status changes.', 'remember' ); ?></p>
 		</td>
 	</tr>
 	<tr>
@@ -410,15 +428,21 @@ function remember_render_invoice_due_fields( $event = null ) {
 	<tr>
 		<th><label for="invoice_due_days"><?php esc_html_e( 'Invoice due after', 'remember' ); ?></label></th>
 		<td>
-			<input type="number" id="invoice_due_days" name="invoice_due_days" class="small-text" min="0" max="<?php echo esc_attr( (string) Remember_Invoice_Due::MAX_DAYS ); ?>" step="1" value="<?php echo esc_attr( $days ); ?>">
-			<?php esc_html_e( 'days from the invoice date', 'remember' ); ?>
+			<span class="remember-clearable-field">
+				<input type="number" id="invoice_due_days" name="invoice_due_days" class="small-text" min="0" max="<?php echo esc_attr( (string) Remember_Invoice_Due::MAX_DAYS ); ?>" step="1" value="<?php echo esc_attr( $days ); ?>" aria-describedby="invoice_due_days_suffix invoice_due_hint">
+				<span id="invoice_due_days_suffix"><?php esc_html_e( 'days from the invoice date', 'remember' ); ?></span>
+				<button type="button" class="button button-small remember-clear-field" data-remember-clear-field="invoice_due_days" aria-label="<?php echo esc_attr__( 'Clear invoice due after days', 'remember' ); ?>"><?php esc_html_e( 'Clear', 'remember' ); ?></button>
+			</span>
 		</td>
 	</tr>
 	<tr>
 		<th><label for="invoice_due_by"><?php esc_html_e( 'Invoice due no later than', 'remember' ); ?></label></th>
 		<td>
-			<input type="date" id="invoice_due_by" name="invoice_due_by" value="<?php echo esc_attr( $by ); ?>">
-			<p class="description"><?php esc_html_e( 'Both optional. With both set, the invoice is due on whichever date comes first. An invoice created after the latest date is due on the day it is created. These dates override any terms set in the billing system.', 'remember' ); ?></p>
+			<span class="remember-clearable-field">
+				<input type="date" id="invoice_due_by" name="invoice_due_by" class="regular-text" value="<?php echo esc_attr( $by ); ?>" aria-describedby="invoice_due_hint">
+				<button type="button" class="button button-small remember-clear-field" data-remember-clear-field="invoice_due_by" aria-label="<?php echo esc_attr__( 'Clear invoice due no later than date', 'remember' ); ?>"><?php esc_html_e( 'Clear', 'remember' ); ?></button>
+			</span>
+			<p class="description" id="invoice_due_hint"><?php esc_html_e( 'Both optional. With both set, the invoice is due on whichever date comes first. An invoice created after the latest date is due on the day it is created. These dates override any terms set in the billing system.', 'remember' ); ?></p>
 			<p class="description">
 				<?php
 				echo esc_html( '' !== $current ? $current : Remember_Invoice_Due::provider_default_text() );
@@ -492,15 +516,15 @@ function remember_event_checkin_enabled() {
  * Save invitees and send due invitation emails.
  *
  * @param int $event_id Event ID.
- * @return void
+ * @return bool False when some invitees were not saved.
  */
 function remember_save_event_invites( $event_id ) {
 	$event_id = absint( $event_id );
 	if ( $event_id < 1 ) {
-		return;
+		return true;
 	}
-	Remember_Event_Invites::sync_from_request( $event_id );
-	$sent = Remember_Event_Invites::send_due_for_event( $event_id );
+	$saved = Remember_Event_Invites::sync_from_request( $event_id );
+	$sent  = Remember_Event_Invites::send_due_for_event( $event_id );
 	if ( $sent > 0 ) {
 		echo '<div class="notice notice-success is-dismissible"><p>';
 		echo esc_html(
@@ -512,6 +536,7 @@ function remember_save_event_invites( $event_id ) {
 		);
 		echo '</p></div>';
 	}
+	return $saved;
 }
 
 /**
@@ -521,7 +546,8 @@ function remember_save_event_invites( $event_id ) {
  * @return void
  */
 function remember_render_private_invite_fields( $event = null ) {
-	$is_private = $event && ! empty( $event->is_private );
+	$is_private  = $event && ! empty( $event->is_private );
+	$invitees_id = wp_unique_id( 'remember-event-invitees-' );
 	$selected   = array();
 	if ( $event && ! empty( $event->event_id ) ) {
 		$selected = Remember_Event_Invites::member_ids_for_event( (int) $event->event_id );
@@ -547,13 +573,13 @@ function remember_render_private_invite_fields( $event = null ) {
 		<th><label for="is_private"><?php esc_html_e( 'Private Event', 'remember' ); ?></label></th>
 		<td>
 			<label>
-				<input type="checkbox" id="is_private" name="is_private" value="1" class="remember-event-private-toggle" <?php checked( $is_private ); ?>>
+				<input type="checkbox" id="is_private" name="is_private" value="1" class="remember-event-private-toggle" aria-controls="<?php echo esc_attr( $invitees_id ); ?>" <?php checked( $is_private ); ?>>
 				<?php esc_html_e( 'This is a private event (invite only)', 'remember' ); ?>
 			</label>
 			<p class="description"><?php esc_html_e( 'Only invited members see this event. They still complete the usual application.', 'remember' ); ?></p>
 		</td>
 	</tr>
-	<tr class="remember-event-invitees-row"<?php echo $is_private ? '' : ' hidden'; ?>>
+	<tr id="<?php echo esc_attr( $invitees_id ); ?>" class="remember-event-invitees-row"<?php echo $is_private ? '' : ' hidden'; ?>>
 		<th><?php esc_html_e( 'Invitees', 'remember' ); ?></th>
 		<td>
 			<?php if ( empty( $candidates ) ) : ?>
@@ -654,17 +680,27 @@ if ( isset( $_POST['remember_event_action'] ) && check_admin_referer( 'remember_
 			// The validation notice above is the failure. Do not also report a database error.
 		} elseif ( $event_id ) {
 			$role_configs = remember_build_role_configs_from_post();
-			$event_model->sync_event_role_configs( $event_id, $role_configs );
+			$roles_saved  = $event_model->sync_event_role_configs( $event_id, $role_configs );
 
-			$addons = remember_build_addons_from_post( $product_model );
-			remember_sync_event_addons( $merchandise_model, $event_id, $addons );
-			Remember_Agreements::sync_event_pins( $event_id, Remember_Agreements::pins_from_request() );
-			remember_save_event_invites( $event_id );
+			$addons       = remember_build_addons_from_post( $product_model );
+			$addons_saved     = remember_sync_event_addons( $merchandise_model, $event_id, $addons );
+			$agreements_saved = Remember_Agreements::sync_event_pins( $event_id, Remember_Agreements::pins_from_request() );
+			$invites_saved    = remember_save_event_invites( $event_id );
 
-			Remember_Logger::info( 'Event created', array( 'event_id' => $event_id ) );
+			Remember_Logger::info(
+				'Event created',
+				array(
+					'event_id' => $event_id,
+					'roles'    => count( array_filter( wp_list_pluck( $role_configs, 'enabled' ) ) ),
+					'add_ons'  => count( $addons ),
+					'user_id'  => get_current_user_id(),
+				)
+			);
 			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Event created successfully.', 'remember' ) . '</p></div>';
+			if ( ! $roles_saved || ! $addons_saved || ! $agreements_saved || ! $invites_saved ) {
+				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Some of this event\'s roles, add-ons, agreements or invitees could not be saved. Open the event, check its roles, prices, add-ons, agreements and invitees, and save again.', 'remember' ) . '</p></div>';
+			}
 		} else {
-			Remember_Logger::error( 'Failed to create event' );
 			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to create event.', 'remember' ) . '</p></div>';
 		}
 	} elseif ( 'edit' === $action && isset( $_POST['event_id'] ) ) {
@@ -703,15 +739,26 @@ if ( isset( $_POST['remember_event_action'] ) && check_admin_referer( 'remember_
 			// The validation notice above is the failure. Do not also report a database error.
 		} elseif ( $result !== false ) {
 			$role_configs = remember_build_role_configs_from_post();
-			$event_model->sync_event_role_configs( $event_id, $role_configs );
+			$roles_saved  = $event_model->sync_event_role_configs( $event_id, $role_configs );
 
-			$addons = remember_build_addons_from_post( $product_model );
-			remember_sync_event_addons( $merchandise_model, $event_id, $addons );
-			Remember_Agreements::sync_event_pins( $event_id, Remember_Agreements::pins_from_request() );
-			remember_save_event_invites( $event_id );
+			$addons       = remember_build_addons_from_post( $product_model );
+			$addons_saved     = remember_sync_event_addons( $merchandise_model, $event_id, $addons );
+			$agreements_saved = Remember_Agreements::sync_event_pins( $event_id, Remember_Agreements::pins_from_request() );
+			$invites_saved    = remember_save_event_invites( $event_id );
 
-			Remember_Logger::info( 'Event updated', array( 'event_id' => $event_id, 'role_configs' => $role_configs ) );
+			Remember_Logger::info(
+				'Event updated',
+				array(
+					'event_id'     => $event_id,
+					'role_configs' => $role_configs,
+					'add_ons'      => count( $addons ),
+					'user_id'      => get_current_user_id(),
+				)
+			);
 			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Event updated successfully.', 'remember' ) . '</p></div>';
+			if ( ! $roles_saved || ! $addons_saved || ! $agreements_saved || ! $invites_saved ) {
+				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Some of this event\'s roles, add-ons, agreements or invitees could not be saved. Check its roles, prices, add-ons, agreements and invitees below and save again.', 'remember' ) . '</p></div>';
+			}
 			remember_event_invoice_due_after_save( $event_before, $event_model->get( $event_id ) );
 			// Reload the event data to reflect changes
 			$editing_event = $event_model->get( $event_id );
@@ -727,7 +774,6 @@ if ( isset( $_POST['remember_event_action'] ) && check_admin_referer( 'remember_
 				$editing_addons = $merchandise_model->get_all_by_event( $event_id );
 			}
 		} else {
-			Remember_Logger::error( 'Failed to update event', array( 'event_id' => $event_id ) );
 			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to update event.', 'remember' ) . '</p></div>';
 		}
 	} elseif ( 'delete' === $action && isset( $_GET['delete'] ) ) {
@@ -740,10 +786,15 @@ if ( isset( $_POST['remember_event_action'] ) && check_admin_referer( 'remember_
 		$result = $event_model->delete( $event_id );
 		if ( $result !== false ) {
 			Remember_Event_Invites::delete_for_event( $event_id );
-			Remember_Logger::info( 'Event deleted', array( 'event_id' => $event_id ) );
+			Remember_Logger::info(
+				'Event deleted',
+				array(
+					'event_id' => $event_id,
+					'user_id'  => get_current_user_id(),
+				)
+			);
 			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Event deleted successfully.', 'remember' ) . '</p></div>';
 		} else {
-			Remember_Logger::error( 'Failed to delete event', array( 'event_id' => $event_id ) );
 			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to delete event.', 'remember' ) . '</p></div>';
 		}
 	}
@@ -821,7 +872,7 @@ if ( isset( $_GET['view'] ) ) {
 				
 				<table class="form-table">
 					<tr>
-						<th><label for="event_name"><?php esc_html_e( 'Event Name', 'remember' ); ?> <span class="description">(required)</span></label></th>
+						<th><label for="event_name"><?php esc_html_e( 'Event Name', 'remember' ); ?> <span class="description"><?php esc_html_e( '(required)', 'remember' ); ?></span></label></th>
 						<td><input type="text" id="event_name" name="event_name" class="regular-text" value="<?php echo esc_attr( $editing_event->event_name ); ?>" required></td>
 					</tr>
 					<tr>
@@ -874,11 +925,11 @@ if ( isset( $_GET['view'] ) ) {
 						</td>
 					</tr>
 					<tr>
-						<th><label for="start_date"><?php esc_html_e( 'Start Date', 'remember' ); ?> <span class="description">(required)</span></label></th>
+						<th><label for="start_date"><?php esc_html_e( 'Start Date', 'remember' ); ?> <span class="description"><?php esc_html_e( '(required)', 'remember' ); ?></span></label></th>
 						<td><input type="date" id="start_date" name="start_date" class="regular-text" value="<?php echo esc_attr( $editing_event->start_date ); ?>" required></td>
 					</tr>
 					<tr>
-						<th><label for="end_date"><?php esc_html_e( 'End Date', 'remember' ); ?> <span class="description">(required)</span></label></th>
+						<th><label for="end_date"><?php esc_html_e( 'End Date', 'remember' ); ?> <span class="description"><?php esc_html_e( '(required)', 'remember' ); ?></span></label></th>
 						<td><input type="date" id="end_date" name="end_date" class="regular-text" value="<?php echo esc_attr( $editing_event->end_date ); ?>" required></td>
 					</tr>
 					<?php remember_render_registration_window_fields( $editing_event ); ?>
@@ -1014,7 +1065,7 @@ if ( isset( $_GET['view'] ) ) {
 				
 				<table class="form-table">
 					<tr>
-						<th><label for="event_name"><?php esc_html_e( 'Event Name', 'remember' ); ?> <span class="description">(required)</span></label></th>
+						<th><label for="event_name"><?php esc_html_e( 'Event Name', 'remember' ); ?> <span class="description"><?php esc_html_e( '(required)', 'remember' ); ?></span></label></th>
 						<td><input type="text" id="event_name" name="event_name" class="regular-text" required></td>
 					</tr>
 					<tr>
@@ -1067,11 +1118,11 @@ if ( isset( $_GET['view'] ) ) {
 						</td>
 					</tr>
 					<tr>
-						<th><label for="start_date"><?php esc_html_e( 'Start Date', 'remember' ); ?> <span class="description">(required)</span></label></th>
+						<th><label for="start_date"><?php esc_html_e( 'Start Date', 'remember' ); ?> <span class="description"><?php esc_html_e( '(required)', 'remember' ); ?></span></label></th>
 						<td><input type="date" id="start_date" name="start_date" class="regular-text" required></td>
 					</tr>
 					<tr>
-						<th><label for="end_date"><?php esc_html_e( 'End Date', 'remember' ); ?> <span class="description">(required)</span></label></th>
+						<th><label for="end_date"><?php esc_html_e( 'End Date', 'remember' ); ?> <span class="description"><?php esc_html_e( '(required)', 'remember' ); ?></span></label></th>
 						<td><input type="date" id="end_date" name="end_date" class="regular-text" required></td>
 					</tr>
 					<?php remember_render_registration_window_fields(); ?>
@@ -1235,7 +1286,7 @@ if ( isset( $_GET['view'] ) ) {
 								| <a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-events&edit=' . $event->event_id ) ); ?>"><?php esc_html_e( 'Edit', 'remember' ); ?></a>
 							<?php endif; ?>
 							<?php if ( current_user_can( 'remember_delete_events' ) ) : ?>
-								| <a href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin.php?page=remember-events&delete=' . $event->event_id ), 'remember_event_action', 'remember_event_nonce' ) ); ?>" onclick="return confirm('<?php echo esc_js( __( 'Are you sure you want to delete this event?', 'remember' ) ); ?>');"><?php esc_html_e( 'Delete', 'remember' ); ?></a>
+								| <a href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin.php?page=remember-events&delete=' . $event->event_id ), 'remember_event_action', 'remember_event_nonce' ) ); ?>" onclick="return confirm('<?php echo esc_js( __( 'Are you sure you want to delete this event?', 'remember' ) ); ?>');" aria-label="<?php echo esc_attr( sprintf( /* translators: %s: event name */ __( 'Delete %s', 'remember' ), $event->event_name ) ); ?>"><?php esc_html_e( 'Delete', 'remember' ); ?></a>
 							<?php endif; ?>
 						</td>
 					</tr>

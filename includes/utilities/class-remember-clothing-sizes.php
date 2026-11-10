@@ -11,6 +11,8 @@ if ( ! defined( 'WPINC' ) ) {
 	die;
 }
 
+require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
+
 /**
  * US men's clothing size helpers.
  */
@@ -339,8 +341,24 @@ class Remember_Clothing_Sizes {
 			array( '%s', '%s', '%d', '%s' )
 		);
 		if ( false === $ok ) {
+			Remember_Logger::error(
+				'Clothing stock size not added',
+				array(
+					'category' => $category,
+					'code'     => $code,
+					'error'    => $wpdb->last_error,
+				)
+			);
 			return new WP_Error( 'insert_failed', __( 'Could not add that stock size.', 'remember' ) );
 		}
+		Remember_Logger::info(
+			'Clothing stock size added',
+			array(
+				'stock_id' => (int) $wpdb->insert_id,
+				'category' => $category,
+				'code'     => $code,
+			)
+		);
 		return true;
 	}
 
@@ -391,7 +409,24 @@ class Remember_Clothing_Sizes {
 			);
 		}
 
-		$wpdb->delete( $stock_table, array( 'stock_id' => $stock_id ), array( '%d' ) );
+		if ( false === $wpdb->delete( $stock_table, array( 'stock_id' => $stock_id ), array( '%d' ) ) ) {
+			Remember_Logger::error(
+				'Clothing stock size not deleted',
+				array(
+					'stock_id' => $stock_id,
+					'error'    => $wpdb->last_error,
+				)
+			);
+			return new WP_Error( 'delete_failed', __( 'That stock size could not be deleted. Please try again.', 'remember' ) );
+		}
+		Remember_Logger::info(
+			'Clothing stock size deleted',
+			array(
+				'stock_id' => $stock_id,
+				'category' => $row->size_category,
+				'code'     => $row->size_code,
+			)
+		);
 		return true;
 	}
 
@@ -528,6 +563,11 @@ class Remember_Clothing_Sizes {
 		}
 
 		global $wpdb;
+		$failed_stock   = array();
+		$failed_options = array();
+		$error          = '';
+		$saved_options  = 0;
+		$saved_stock    = 0;
 
 		if ( self::has_stock_table() && is_array( $stock_posted ) ) {
 			$stock_table = self::stock_table_name();
@@ -537,13 +577,19 @@ class Remember_Clothing_Sizes {
 					continue;
 				}
 				$sort = is_array( $fields ) && isset( $fields['sort_order'] ) ? absint( $fields['sort_order'] ) : absint( $fields );
-				$wpdb->update(
+				$written = $wpdb->update(
 					$stock_table,
 					array( 'sort_order' => $sort ),
 					array( 'stock_id' => $stock_id ),
 					array( '%d' ),
 					array( '%d' )
 				);
+				if ( false === $written ) {
+					$failed_stock[] = $stock_id;
+					$error          = $wpdb->last_error;
+				} else {
+					++$saved_stock;
+				}
 			}
 		}
 
@@ -612,17 +658,41 @@ class Remember_Clothing_Sizes {
 					'sort_order'       => $row['sort_order'],
 				);
 				$formats = array( '%d', '%s', '%d' );
-				$wpdb->update(
+				$written = $wpdb->update(
 					$table,
 					$update,
 					array( 'option_id' => $option_id ),
 					$formats,
 					array( '%d' )
 				);
+				if ( false === $written ) {
+					$failed_options[] = $option_id;
+					$error            = $wpdb->last_error;
+				} else {
+					++$saved_options;
+				}
 			}
 		}
 
 		self::$has_mapping_columns = true;
+		if ( ! empty( $failed_stock ) || ! empty( $failed_options ) ) {
+			Remember_Logger::error(
+				'Clothing sizes partly saved; some rows were not updated',
+				array(
+					'stock_ids'  => $failed_stock,
+					'option_ids' => $failed_options,
+					'error'      => $error,
+				)
+			);
+			return new WP_Error( 'save_failed', __( 'Some clothing sizes could not be saved. Please check them and try again.', 'remember' ) );
+		}
+		Remember_Logger::info(
+			'Clothing sizes saved',
+			array(
+				'sizes'      => $saved_options,
+				'stock_rows' => $saved_stock,
+			)
+		);
 		return true;
 	}
 }

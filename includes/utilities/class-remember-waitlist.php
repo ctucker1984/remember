@@ -14,6 +14,8 @@ if ( ! defined( 'WPINC' ) ) {
 	die;
 }
 
+require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
+
 /**
  * Waitlist response when a spot is freed.
  */
@@ -70,10 +72,17 @@ class Remember_Waitlist {
 		require_once plugin_dir_path( __FILE__ ) . '../models/class-event.php';
 		$event = ( new Remember_Event() )->get( $event_id );
 		if ( ! $event ) {
+			Remember_Logger::warning( 'Waitlist not checked after a spot opened: event not found', array( 'event_id' => $event_id ) );
 			return;
 		}
 		$mode = self::sanitize_mode( isset( $event->waitlist_mode ) ? $event->waitlist_mode : 'off' );
+		$log  = array(
+			'event_id'      => $event_id,
+			'event_role_id' => $event_role_id,
+			'mode'          => $mode,
+		);
 		if ( 'off' === $mode ) {
+			Remember_Logger::debug( 'Spot opened; waitlist handling is off for this event', $log );
 			return;
 		}
 
@@ -84,6 +93,9 @@ class Remember_Waitlist {
 				self::$last_notice = 'promoted';
 				return;
 			}
+			Remember_Logger::debug( 'Spot opened; nobody was moved off the waitlist, so staff are emailed instead', $log );
+		} elseif ( 'auto' === $mode ) {
+			Remember_Logger::debug( 'Spot opened; automatic move skipped because registration is closed or the role is full, so staff are emailed instead', $log );
 		}
 
 		self::email_staff( $event_id, $context );
@@ -122,22 +134,45 @@ class Remember_Waitlist {
 	 */
 	private static function promote_next( $event_role_id, $context ) {
 		global $wpdb;
-		$next_id = (int) $wpdb->get_var(
+		$candidates = $wpdb->get_results(
 			$wpdb->prepare(
-				'SELECT application_id FROM ' . $wpdb->prefix . 'remember_event_applications WHERE event_role_id = %d AND status = %s AND superseded_at IS NULL ORDER BY COALESCE(waitlisted_at, applied_at) ASC, application_id ASC LIMIT 1',
+				'SELECT application_id, member_id FROM ' . $wpdb->prefix . 'remember_event_applications WHERE event_role_id = %d AND status = %s AND superseded_at IS NULL ORDER BY COALESCE(waitlisted_at, applied_at) ASC, application_id ASC LIMIT 25',
 				$event_role_id,
 				'waitlisted'
 			)
 		);
+		$next_id = 0;
+		$skipped = array();
+		foreach ( (array) $candidates as $candidate ) {
+			if ( get_user_by( 'id', (int) $candidate->member_id ) ) {
+				$next_id = (int) $candidate->application_id;
+				break;
+			}
+			$skipped[] = (int) $candidate->application_id;
+		}
+		if ( ! empty( $skipped ) ) {
+			Remember_Logger::debug(
+				'Waitlist auto-promote skipped applications whose member account was deleted',
+				array(
+					'event_role_id'   => (int) $event_role_id,
+					'application_ids' => $skipped,
+				)
+			);
+		}
 		if ( $next_id < 1 ) {
 			return false;
 		}
 
 		require_once plugin_dir_path( __FILE__ ) . '../models/class-application.php';
-		require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
 		$result = ( new Remember_Application() )->update_status( $next_id, 'pending' );
 		if ( false === $result ) {
-			Remember_Logger::warning( 'Waitlist auto-promote failed', array( 'application_id' => $next_id ) );
+			Remember_Logger::warning(
+				'Waitlist auto-promote failed; staff are emailed instead',
+				array(
+					'application_id' => $next_id,
+					'event_role_id'  => (int) $event_role_id,
+				)
+			);
 			return false;
 		}
 
@@ -167,9 +202,19 @@ class Remember_Waitlist {
 	 */
 	private static function email_staff( $event_id, $context ) {
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-notifications.php';
-		foreach ( Remember_Notifications::emails_for_staff_type( 'waitlist_spot_opened', array( 'event_id' => $event_id ) ) as $email ) {
+		$start      = Remember_Logger::start_timer();
+		$recipients = Remember_Notifications::emails_for_staff_type( 'waitlist_spot_opened', array( 'event_id' => $event_id ) );
+		foreach ( $recipients as $email ) {
 			Remember_Notifications::send( 'waitlist_spot_opened', $context, $email );
 		}
+		Remember_Logger::debug(
+			'Waitlist spot-opened emails finished',
+			array(
+				'event_id'   => (int) $event_id,
+				'recipients' => count( $recipients ),
+				'elapsed_ms' => Remember_Logger::elapsed_ms( $start ),
+			)
+		);
 	}
 
 	/**
@@ -199,6 +244,41 @@ class Remember_Waitlist {
 			'waitlist_count' => (string) $waiting,
 			'date'           => date_i18n( get_option( 'date_format' ) ),
 		);
+	}
+
+	/**
+	 * Email accepted event administrators a plain staff notice about this event.
+	 *
+	 * @param int    $event_id Event ID.
+	 * @param string $subject  Email subject.
+	 * @param string $message  Email body.
+	 * @return void
+	 */
+	public static function email_event_admins( $event_id, $subject, $message ) {
+		$event_id = absint( $event_id );
+		$emails   = self::accepted_event_administrator_emails( $event_id );
+		if ( empty( $emails ) ) {
+			Remember_Logger::debug( 'No accepted event administrators to notify', array( 'event_id' => $event_id ) );
+			return;
+		}
+
+		$start  = Remember_Logger::start_timer();
+		$failed = 0;
+		foreach ( $emails as $email ) {
+			if ( ! wp_mail( $email, $subject, $message ) ) {
+				++$failed;
+			}
+		}
+		$context = array(
+			'event_id'   => $event_id,
+			'recipients' => count( $emails ),
+			'failed'     => $failed,
+			'elapsed_ms' => Remember_Logger::elapsed_ms( $start ),
+		);
+		if ( $failed > 0 ) {
+			Remember_Logger::warning( 'Some event administrators were not emailed about a waitlist change', $context );
+		}
+		Remember_Logger::debug( 'Event administrator waitlist emails finished', $context );
 	}
 
 	/**

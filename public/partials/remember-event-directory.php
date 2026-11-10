@@ -11,6 +11,7 @@ if ( ! defined( 'WPINC' ) ) {
 	die;
 }
 
+require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-logger.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-event.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-application.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-member.php';
@@ -25,6 +26,7 @@ $member_model = new Remember_Member();
 $event = $event_model->get( $event_id );
 
 if ( ! $event ) {
+	Remember_Logger::debug( 'Attendee directory not shown: event not found', array( 'event_id' => $event_id ) );
 	echo '<p class="remember-notice remember-error">' . esc_html__( 'Event not found.', 'remember' ) . '</p>';
 	return;
 }
@@ -34,13 +36,19 @@ $current_user_id = get_current_user_id();
 $current_member = $member_model->get( $current_user_id );
 
 if ( ! $current_member ) {
+	Remember_Logger::debug(
+		'Attendee directory not shown: viewer has no member record',
+		array(
+			'event_id' => $event_id,
+			'user_id'  => $current_user_id,
+		)
+	);
 	echo '<p class="remember-notice remember-error">' . esc_html__( 'You must be registered as a member to view this directory.', 'remember' ) . '</p>';
 	return;
 }
 
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-vetting-workflow.php';
 if ( Remember_Vetting_Workflow::is_barred_by_rejection( $current_member ) ) {
-	require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-logger.php';
 	Remember_Logger::info(
 		'Attendee directory withheld from a member barred by rejection',
 		array(
@@ -53,6 +61,13 @@ if ( Remember_Vetting_Workflow::is_barred_by_rejection( $current_member ) ) {
 }
 
 if ( ! Remember_Member::is_vetted_member( $current_member ) ) {
+	Remember_Logger::debug(
+		'Attendee directory not shown: member is not vetted',
+		array(
+			'event_id'  => $event_id,
+			'member_id' => $current_user_id,
+		)
+	);
 	echo '<p class="remember-notice remember-warning">' . esc_html__( 'Member is not yet vetted.', 'remember' ) . '</p>';
 	return;
 }
@@ -68,6 +83,13 @@ foreach ( $applications as $app ) {
 }
 
 if ( ! $current_user_application ) {
+	Remember_Logger::debug(
+		'Attendee directory not shown: member is not accepted to this event',
+		array(
+			'event_id'  => $event_id,
+			'member_id' => $current_user_id,
+		)
+	);
 	echo '<p class="remember-notice remember-error">' . esc_html__( 'You must be accepted to this event to view other members.', 'remember' ) . '</p>';
 	return;
 }

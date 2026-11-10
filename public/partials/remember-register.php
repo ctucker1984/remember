@@ -59,18 +59,37 @@ $remember_reg_val = static function ( $key, $default = '' ) {
 };
 
 global $wpdb;
+$remember_reg_catalog_failed = array();
 $social_platforms = $wpdb->get_results(
 	"SELECT * FROM {$wpdb->prefix}remember_social_media_platforms WHERE is_active = 1 ORDER BY sort_order ASC, platform_name ASC"
 );
+if ( '' !== $wpdb->last_error ) {
+	$remember_reg_catalog_failed['social_media_platforms'] = $wpdb->last_error;
+}
 $dietary_restrictions = $wpdb->get_results(
 	"SELECT * FROM {$wpdb->prefix}remember_dietary_restrictions WHERE is_active = 1 ORDER BY CASE WHEN restriction_name = 'None' THEN 0 ELSE 1 END ASC, sort_order ASC, restriction_name ASC"
 );
+if ( '' !== $wpdb->last_error ) {
+	$remember_reg_catalog_failed['dietary_restrictions'] = $wpdb->last_error;
+}
 $medical_accommodations = $wpdb->get_results(
 	"SELECT * FROM {$wpdb->prefix}remember_medical_accommodations WHERE is_active = 1 ORDER BY CASE WHEN accommodation_name = 'None' THEN 0 ELSE 1 END ASC, sort_order ASC, accommodation_name ASC"
 );
+if ( '' !== $wpdb->last_error ) {
+	$remember_reg_catalog_failed['medical_accommodations'] = $wpdb->last_error;
+}
 $allergies = $wpdb->get_results(
 	"SELECT * FROM {$wpdb->prefix}remember_allergies WHERE is_active = 1 ORDER BY CASE WHEN allergy_name = 'None' THEN 0 ELSE 1 END ASC, sort_order ASC, allergy_name ASC"
 );
+if ( '' !== $wpdb->last_error ) {
+	$remember_reg_catalog_failed['allergies'] = $wpdb->last_error;
+}
+if ( ! empty( $remember_reg_catalog_failed ) ) {
+	Remember_Logger::error(
+		'Registration form lists could not be loaded; those choices are missing from the form',
+		array( 'lists' => $remember_reg_catalog_failed )
+	);
+}
 
 $remember_reg_timezone = $remember_reg_val( 'timezone', '' );
 $remember_reg_country  = $remember_reg_val( 'address_country', 'US' );

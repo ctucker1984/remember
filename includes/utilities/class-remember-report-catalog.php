@@ -10,6 +10,8 @@ if ( ! defined( 'WPINC' ) ) {
 	die;
 }
 
+require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
+
 /**
  * Subjects, fields, and join keys the query compiler may use.
  */
@@ -209,10 +211,20 @@ class Remember_Report_Catalog {
 	 */
 	public static function recipients_for_report( $subject, $definition, $exclude_id = 0, $owner_id = 0 ) {
 		global $wpdb;
+		$start      = Remember_Logger::start_timer();
 		$exclude_id = absint( $exclude_id );
 		$owner_id   = absint( $owner_id );
 		$ids        = array();
 		$member_ids = $wpdb->get_col( "SELECT DISTINCT member_id FROM {$wpdb->prefix}remember_member_roles" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		if ( '' !== (string) $wpdb->last_error ) {
+			Remember_Logger::error(
+				'Report recipients incomplete: staff with roles could not be listed',
+				array(
+					'subject' => $subject,
+					'error'   => $wpdb->last_error,
+				)
+			);
+		}
 		if ( is_array( $member_ids ) ) {
 			foreach ( $member_ids as $id ) {
 				$ids[] = (int) $id;
@@ -259,6 +271,15 @@ class Remember_Report_Catalog {
 				return strcasecmp( $a['label'], $b['label'] );
 			}
 		);
+		Remember_Logger::debug(
+			'Report recipients listed',
+			array(
+				'subject'    => $subject,
+				'checked'    => count( $ids ),
+				'recipients' => count( $out ),
+				'elapsed_ms' => Remember_Logger::elapsed_ms( $start ),
+			)
+		);
 		return $out;
 	}
 
@@ -296,6 +317,7 @@ class Remember_Report_Catalog {
 	 * @return array<string,mixed>
 	 */
 	public static function payload_for_current_user() {
+		$start    = Remember_Logger::start_timer();
 		$subjects = self::subjects_for_current_user();
 		$out      = array(
 			'subjects' => array(),
@@ -346,6 +368,15 @@ class Remember_Report_Catalog {
 			array( 'id' => 'max', 'label' => __( 'Max', 'remember' ) ),
 		);
 		$out['events'] = self::events_for_picker();
+		Remember_Logger::debug(
+			'Report builder catalog built',
+			array(
+				'user_id'    => get_current_user_id(),
+				'subjects'   => count( $out['subjects'] ),
+				'events'     => count( $out['events'] ),
+				'elapsed_ms' => Remember_Logger::elapsed_ms( $start ),
+			)
+		);
 		return $out;
 	}
 

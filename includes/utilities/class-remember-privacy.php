@@ -15,12 +15,21 @@ if ( ! defined( 'WPINC' ) ) {
 	die;
 }
 
+require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
+
 /**
  * Tools → Export Personal Data and Erase Personal Data.
  */
 class Remember_Privacy {
 
 	const PAGE_SIZE = 50;
+
+	/**
+	 * Steps whose query failed in the current export or erase, step => database error.
+	 *
+	 * @var array<string,string>
+	 */
+	private static $failed = array();
 
 	/**
 	 * Register exporters, erasers, and suggested privacy-policy text.
@@ -80,9 +89,15 @@ class Remember_Privacy {
 	 * @return array{data:array,done:bool}
 	 */
 	public static function export( $email, $page = 1 ) {
-		$page      = max( 1, (int) $page );
-		$member_id = self::member_id_for_email( $email );
+		$start        = Remember_Logger::start_timer();
+		self::$failed = array();
+		$page         = max( 1, (int) $page );
+		$member_id    = self::member_id_for_email( $email );
 		if ( $member_id < 1 ) {
+			if ( ! empty( self::$failed ) ) {
+				return self::export_failed( 0, $page, $start );
+			}
+			Remember_Logger::debug( 'Personal data export: no reMember member for that email', array( 'page' => $page ) );
 			return array(
 				'data' => array(),
 				'done' => true,
@@ -96,11 +111,69 @@ class Remember_Privacy {
 		$applications = self::application_group( $member_id, $page );
 		$payments     = self::payment_group( $member_id, $page );
 		$data         = array_merge( $data, $applications['items'], $payments['items'] );
+		$done         = $applications['done'] && $payments['done'];
+
+		if ( ! empty( self::$failed ) ) {
+			return self::export_failed( $member_id, $page, $start );
+		}
+
+		$context = array(
+			'member_id'  => $member_id,
+			'page'       => $page,
+			'items'      => count( $data ),
+			'done'       => $done,
+			'elapsed_ms' => Remember_Logger::elapsed_ms( $start ),
+		);
+		Remember_Logger::debug( 'Personal data export page built', $context );
+		if ( $done ) {
+			Remember_Logger::info( 'Personal data export finished', $context );
+		}
 
 		return array(
 			'data' => $data,
-			'done' => $applications['done'] && $payments['done'],
+			'done' => $done,
 		);
+	}
+
+	/**
+	 * Stop an export whose data could not all be read, so an incomplete copy is never sent.
+	 *
+	 * @param int   $member_id Member ID, or 0 before the member was found.
+	 * @param int   $page      Page.
+	 * @param float $start     Value from Remember_Logger::start_timer().
+	 * @return WP_Error
+	 */
+	private static function export_failed( $member_id, $page, $start ) {
+		Remember_Logger::error(
+			'Personal data export stopped: reMember data could not be read',
+			array(
+				'member_id'  => $member_id,
+				'page'       => $page,
+				'failed'     => self::$failed,
+				'elapsed_ms' => Remember_Logger::elapsed_ms( $start ),
+			)
+		);
+		return new WP_Error(
+			'remember_export_failed',
+			__( 'reMember data could not be read, so this export would be incomplete. Try again, or ask an administrator to check the reMember log.', 'remember' )
+		);
+	}
+
+	/**
+	 * Remember a failed query for the current export or erase.
+	 *
+	 * Call straight after the query, before any other database call.
+	 *
+	 * @param string $step Short name of what was being read or written.
+	 * @return bool Whether the last query failed.
+	 */
+	private static function query_failed( $step ) {
+		global $wpdb;
+		if ( '' === $wpdb->last_error ) {
+			return false;
+		}
+		self::$failed[ $step ] = $wpdb->last_error;
+		return true;
 	}
 
 	/**
@@ -112,8 +185,20 @@ class Remember_Privacy {
 	 */
 	public static function erase( $email, $page = 1 ) {
 		unset( $page );
-		$member_id = self::member_id_for_email( $email );
+		$start        = Remember_Logger::start_timer();
+		self::$failed = array();
+		$member_id    = self::member_id_for_email( $email );
 		if ( $member_id < 1 ) {
+			if ( ! empty( self::$failed ) ) {
+				Remember_Logger::error( 'Personal data erase stopped: the member could not be looked up', array( 'failed' => self::$failed ) );
+				return array(
+					'items_removed'  => false,
+					'items_retained' => true,
+					'messages'       => array( __( 'reMember data could not be checked for this person. Run the erase request again.', 'remember' ) ),
+					'done'           => true,
+				);
+			}
+			Remember_Logger::debug( 'Personal data erase: no reMember member for that email' );
 			return array(
 				'items_removed'  => false,
 				'items_retained' => false,
@@ -122,6 +207,89 @@ class Remember_Privacy {
 			);
 		}
 
+		$result   = self::erase_member( $member_id );
+		$removed  = $result['removed'];
+		$retained = $result['retained'];
+		$messages = $result['messages'];
+
+		$context = array(
+			'member_id'  => $member_id,
+			'removed'    => $removed,
+			'retained'   => $retained,
+			'elapsed_ms' => Remember_Logger::elapsed_ms( $start ),
+		);
+		if ( ! empty( self::$failed ) ) {
+			$retained   = true;
+			$messages[] = sprintf(
+				/* translators: %s: comma-separated list of what could not be erased */
+				__( 'Some reMember data could not be erased (%s). Run the erase request again.', 'remember' ),
+				implode( ', ', array_keys( self::$failed ) )
+			);
+			$context['retained'] = true;
+			$context['failed']   = self::$failed;
+			Remember_Logger::error( 'Personal data erase incomplete: some reMember data could not be erased', $context );
+		} else {
+			Remember_Logger::info( 'Personal data erased', $context );
+		}
+
+		return array(
+			'items_removed'  => $removed,
+			'items_retained' => $retained,
+			'messages'       => $messages,
+			'done'           => true,
+		);
+	}
+
+	/**
+	 * Remove a member's reMember data when their WordPress account is deleted.
+	 *
+	 * Follows erase(): payments, applications and agreement acceptances stay with their personal fields removed.
+	 * The profile, reMember roles, the member's vetting cases and any vetting cases they were invited to help on are deleted as well.
+	 * The member row itself is left to the caller.
+	 *
+	 * @param int $member_id Member ID, the same as the WordPress user ID.
+	 * @return bool Whether everything was removed.
+	 */
+	public static function remove_deleted_member( $member_id ) {
+		global $wpdb;
+		$member_id    = absint( $member_id );
+		$start        = Remember_Logger::start_timer();
+		self::$failed = array();
+
+		$result = self::erase_member( $member_id );
+
+		$collaborators = $wpdb->query(
+			$wpdb->prepare(
+				'DELETE c FROM ' . self::table( 'remember_vetting_collaborators' ) . ' c INNER JOIN ' . self::table( 'remember_vetting' ) . ' v ON v.vetting_id = c.vetting_id WHERE v.member_id = %d',
+				$member_id
+			)
+		);
+		if ( false === $collaborators ) {
+			self::query_failed( 'vetting collaborators' );
+		}
+		self::delete_member_rows( $member_id, array( 'remember_vetting', 'remember_vetting_collaborators', 'remember_member_roles', 'remember_member_profiles' ) );
+
+		$context = array(
+			'member_id'  => $member_id,
+			'retained'   => $result['retained'],
+			'elapsed_ms' => Remember_Logger::elapsed_ms( $start ),
+		);
+		if ( ! empty( self::$failed ) ) {
+			$context['failed'] = self::$failed;
+			Remember_Logger::error( 'reMember data for a deleted WordPress account could not all be removed', $context );
+			return false;
+		}
+		Remember_Logger::info( 'reMember data removed with the WordPress account', $context );
+		return true;
+	}
+
+	/**
+	 * Erase steps shared by a privacy erase request and account deletion. Failures are collected in self::$failed.
+	 *
+	 * @param int $member_id Member ID.
+	 * @return array{removed:bool,retained:bool,messages:string[]}
+	 */
+	private static function erase_member( $member_id ) {
 		$removed  = false;
 		$retained = false;
 		$messages = array();
@@ -132,7 +300,10 @@ class Remember_Privacy {
 		if ( self::blank_profile( $member_id ) ) {
 			$removed = true;
 		}
-		if ( self::delete_member_rows( $member_id, array( 'remember_member_dietary_restrictions', 'remember_member_allergies', 'remember_member_medical_accommodations', 'remember_member_social_media', 'remember_profile_question_responses', 'remember_profile_notes', 'remember_vetting_notes', 'remember_sensitive_access_log', 'remember_event_invites' ) ) ) {
+		if ( self::delete_member_rows( $member_id, array( 'remember_member_dietary_restrictions', 'remember_member_allergies', 'remember_member_medical_accommodations', 'remember_member_social_media', 'remember_profile_question_responses', 'remember_profile_notes', 'remember_sensitive_access_log', 'remember_event_invites' ) ) ) {
+			$removed = true;
+		}
+		if ( self::delete_vetting_notes_about( $member_id ) ) {
 			$removed = true;
 		}
 		if ( self::delete_survey_answers( $member_id ) ) {
@@ -167,10 +338,9 @@ class Remember_Privacy {
 		}
 
 		return array(
-			'items_removed'  => $removed,
-			'items_retained' => $retained,
-			'messages'       => $messages,
-			'done'           => true,
+			'removed'  => $removed,
+			'retained' => $retained,
+			'messages' => $messages,
 		);
 	}
 
@@ -187,6 +357,7 @@ class Remember_Privacy {
 		}
 		global $wpdb;
 		$found = $wpdb->get_var( $wpdb->prepare( 'SELECT member_id FROM ' . self::table( 'remember_members' ) . ' WHERE member_id = %d', (int) $user->ID ) );
+		self::query_failed( 'member' );
 		return $found ? (int) $found : 0;
 	}
 
@@ -200,7 +371,9 @@ class Remember_Privacy {
 		global $wpdb;
 		$groups = array();
 		$profile = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . self::table( 'remember_member_profiles' ) . ' WHERE member_id = %d', $member_id ), ARRAY_A );
-		$member  = $wpdb->get_row( $wpdb->prepare( 'SELECT photo_url, status FROM ' . self::table( 'remember_members' ) . ' WHERE member_id = %d', $member_id ), ARRAY_A );
+		self::query_failed( 'profile' );
+		$member = $wpdb->get_row( $wpdb->prepare( 'SELECT photo_url, status FROM ' . self::table( 'remember_members' ) . ' WHERE member_id = %d', $member_id ), ARRAY_A );
+		self::query_failed( 'member' );
 
 		$profile_fields = array(
 			'legal_first_name' => __( 'Legal first name', 'remember' ),
@@ -230,6 +403,7 @@ class Remember_Privacy {
 			self::add_value( $profile_data, __( 'Profile photo URL', 'remember' ), isset( $member['photo_url'] ) ? $member['photo_url'] : '' );
 		}
 		$handles = $wpdb->get_results( $wpdb->prepare( 'SELECT p.platform_name, m.handle FROM ' . self::table( 'remember_member_social_media' ) . ' m LEFT JOIN ' . self::table( 'remember_social_media_platforms' ) . ' p ON p.platform_id = m.platform_id WHERE m.member_id = %d', $member_id ) );
+		self::query_failed( 'social handles' );
 		if ( is_array( $handles ) ) {
 			foreach ( $handles as $handle ) {
 				self::add_value( $profile_data, $handle->platform_name ? $handle->platform_name : __( 'Social handle', 'remember' ), $handle->handle );
@@ -258,7 +432,8 @@ class Remember_Privacy {
 		}
 
 		$answers = $wpdb->get_results( $wpdb->prepare( 'SELECT q.label, r.value_text FROM ' . self::table( 'remember_profile_question_responses' ) . ' r INNER JOIN ' . self::table( 'remember_profile_questions' ) . ' q ON q.question_id = r.question_id WHERE r.member_id = %d', $member_id ) );
-		$custom  = array();
+		self::query_failed( 'custom answers' );
+		$custom = array();
 		if ( is_array( $answers ) ) {
 			foreach ( $answers as $answer ) {
 				self::add_value( $custom, $answer->label, $answer->value_text );
@@ -269,13 +444,15 @@ class Remember_Privacy {
 		}
 
 		$vetting = $wpdb->get_row( $wpdb->prepare( 'SELECT status, decision, decision_date FROM ' . self::table( 'remember_vetting' ) . ' WHERE member_id = %d ORDER BY vetting_id DESC LIMIT 1', $member_id ), ARRAY_A );
+		self::query_failed( 'vetting' );
 		$vetting_data = array();
 		if ( is_array( $vetting ) ) {
 			self::add_value( $vetting_data, __( 'Vetting status', 'remember' ), $vetting['status'] );
 			self::add_value( $vetting_data, __( 'Vetting decision', 'remember' ), $vetting['decision'] );
 			self::add_value( $vetting_data, __( 'Vetting decision date', 'remember' ), $vetting['decision_date'] );
 		}
-		$note_count = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . self::table( 'remember_vetting_notes' ) . ' WHERE member_id = %d', $member_id ) );
+		$note_count = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . self::table( 'remember_vetting_notes' ) . ' n INNER JOIN ' . self::table( 'remember_vetting' ) . ' v ON v.vetting_id = n.vetting_id WHERE v.member_id = %d', $member_id ) );
+		self::query_failed( 'vetting notes' );
 		if ( $note_count > 0 ) {
 			self::add_value( $vetting_data, __( 'Vetting notes', 'remember' ), sprintf( /* translators: %d: number of notes */ _n( '%d staff note. The text is not included.', '%d staff notes. The text is not included.', $note_count, 'remember' ), $note_count ) );
 		}
@@ -284,6 +461,7 @@ class Remember_Privacy {
 		}
 
 		$profile_notes = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . self::table( 'remember_profile_notes' ) . ' WHERE member_id = %d', $member_id ) );
+		self::query_failed( 'profile notes' );
 		if ( $profile_notes > 0 ) {
 			$groups[] = self::group(
 				'remember-notes',
@@ -299,6 +477,7 @@ class Remember_Privacy {
 		}
 
 		$surveys = $wpdb->get_results( $wpdb->prepare( 'SELECT s.title, q.label, a.value_text FROM ' . self::table( 'remember_survey_answers' ) . ' a INNER JOIN ' . self::table( 'remember_survey_responses' ) . ' r ON r.response_id = a.response_id INNER JOIN ' . self::table( 'remember_survey_questions' ) . ' q ON q.question_id = a.question_id INNER JOIN ' . self::table( 'remember_surveys' ) . ' s ON s.survey_id = r.survey_id WHERE r.member_id = %d', $member_id ) );
+		self::query_failed( 'survey answers' );
 		$survey_data = array();
 		if ( is_array( $surveys ) ) {
 			foreach ( $surveys as $row ) {
@@ -318,6 +497,7 @@ class Remember_Privacy {
 					$member_id
 				)
 			);
+			self::query_failed( 'event invitations' );
 		}
 		$invite_data = array();
 		if ( is_array( $invites ) ) {
@@ -349,6 +529,7 @@ class Remember_Privacy {
 				$offset
 			)
 		);
+		self::query_failed( 'applications' );
 		$items = array();
 		if ( is_array( $rows ) ) {
 			foreach ( $rows as $row ) {
@@ -383,6 +564,7 @@ class Remember_Privacy {
 				$offset
 			)
 		);
+		self::query_failed( 'payments' );
 		$items = array();
 		if ( is_array( $rows ) ) {
 			foreach ( $rows as $row ) {
@@ -411,12 +593,14 @@ class Remember_Privacy {
 	private static function erase_photo( $member_id ) {
 		global $wpdb;
 		$url = $wpdb->get_var( $wpdb->prepare( 'SELECT photo_url FROM ' . self::table( 'remember_members' ) . ' WHERE member_id = %d', $member_id ) );
-		if ( ! is_string( $url ) || '' === $url ) {
+		if ( self::query_failed( 'photo' ) || ! is_string( $url ) || '' === $url ) {
 			return false;
 		}
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-image-uploader.php';
 		Remember_Image_Uploader::delete_image( $url );
-		$wpdb->update( self::table( 'remember_members' ), array( 'photo_url' => '' ), array( 'member_id' => $member_id ), array( '%s' ), array( '%d' ) );
+		if ( false === $wpdb->update( self::table( 'remember_members' ), array( 'photo_url' => '' ), array( 'member_id' => $member_id ), array( '%s' ), array( '%d' ) ) ) {
+			self::query_failed( 'photo' );
+		}
 		return true;
 	}
 
@@ -451,7 +635,13 @@ class Remember_Privacy {
 			),
 			array( 'member_id' => $member_id )
 		);
+		if ( false === $result ) {
+			self::query_failed( 'profile' );
+		}
 		$cleared_number = $wpdb->query( $wpdb->prepare( 'UPDATE ' . self::table( 'remember_member_profiles' ) . ' SET member_number = NULL WHERE member_id = %d AND member_number IS NOT NULL', $member_id ) );
+		if ( false === $cleared_number ) {
+			self::query_failed( 'member number' );
+		}
 		return ( false !== $result && $result > 0 ) || ( false !== $cleared_number && $cleared_number > 0 );
 	}
 
@@ -465,11 +655,34 @@ class Remember_Privacy {
 		$removed = false;
 		foreach ( $suffixes as $suffix ) {
 			$deleted = $wpdb->delete( self::table( $suffix ), array( 'member_id' => $member_id ), array( '%d' ) );
-			if ( $deleted ) {
+			if ( false === $deleted ) {
+				self::query_failed( str_replace( array( 'remember_member_', 'remember_', '_' ), array( '', '', ' ' ), $suffix ) );
+			} elseif ( $deleted ) {
 				$removed = true;
 			}
 		}
 		return $removed;
+	}
+
+	/**
+	 * Staff notes on this member's own vetting cases. Notes the member wrote about others stay.
+	 *
+	 * @param int $member_id Member ID.
+	 * @return bool
+	 */
+	private static function delete_vetting_notes_about( $member_id ) {
+		global $wpdb;
+		$deleted = $wpdb->query(
+			$wpdb->prepare(
+				'DELETE n FROM ' . self::table( 'remember_vetting_notes' ) . ' n INNER JOIN ' . self::table( 'remember_vetting' ) . ' v ON v.vetting_id = n.vetting_id WHERE v.member_id = %d',
+				$member_id
+			)
+		);
+		if ( false === $deleted ) {
+			self::query_failed( 'vetting notes' );
+			return false;
+		}
+		return $deleted > 0;
 	}
 
 	/**
@@ -479,13 +692,17 @@ class Remember_Privacy {
 	private static function delete_survey_answers( $member_id ) {
 		global $wpdb;
 		$ids = $wpdb->get_col( $wpdb->prepare( 'SELECT response_id FROM ' . self::table( 'remember_survey_responses' ) . ' WHERE member_id = %d', $member_id ) );
-		if ( ! is_array( $ids ) || empty( $ids ) ) {
+		if ( self::query_failed( 'survey answers' ) || ! is_array( $ids ) || empty( $ids ) ) {
 			return false;
 		}
 		foreach ( $ids as $response_id ) {
-			$wpdb->delete( self::table( 'remember_survey_answers' ), array( 'response_id' => (int) $response_id ), array( '%d' ) );
+			if ( false === $wpdb->delete( self::table( 'remember_survey_answers' ), array( 'response_id' => (int) $response_id ), array( '%d' ) ) ) {
+				self::query_failed( 'survey answers' );
+			}
 		}
-		$wpdb->delete( self::table( 'remember_survey_responses' ), array( 'member_id' => $member_id ), array( '%d' ) );
+		if ( false === $wpdb->delete( self::table( 'remember_survey_responses' ), array( 'member_id' => $member_id ), array( '%d' ) ) ) {
+			self::query_failed( 'survey responses' );
+		}
 		return true;
 	}
 
@@ -496,6 +713,9 @@ class Remember_Privacy {
 	private static function blank_application_notes( $member_id ) {
 		global $wpdb;
 		$result = $wpdb->query( $wpdb->prepare( 'UPDATE ' . self::table( 'remember_event_applications' ) . ' SET notes = %s WHERE member_id = %d AND notes IS NOT NULL AND notes <> %s', '', $member_id, '' ) );
+		if ( false === $result ) {
+			self::query_failed( 'application notes' );
+		}
 		return false !== $result && $result > 0;
 	}
 
@@ -511,6 +731,7 @@ class Remember_Privacy {
 				$member_id
 			)
 		);
+		self::query_failed( 'agreement acceptances' );
 		if ( $count < 1 ) {
 			return array(
 				'removed'  => false,
@@ -524,6 +745,9 @@ class Remember_Privacy {
 				$member_id
 			)
 		);
+		if ( false === $result ) {
+			self::query_failed( 'agreement acceptances' );
+		}
 		return array(
 			'removed'  => false !== $result && $result > 0,
 			'retained' => true,
@@ -537,6 +761,7 @@ class Remember_Privacy {
 	private static function blank_payment_personal_fields( $member_id ) {
 		global $wpdb;
 		$count = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . self::table( 'remember_payments' ) . ' WHERE member_id = %d', $member_id ) );
+		self::query_failed( 'payment notes' );
 		if ( $count < 1 ) {
 			return array(
 				'removed'  => false,
@@ -551,6 +776,9 @@ class Remember_Privacy {
 				$member_id
 			)
 		);
+		if ( false === $result ) {
+			self::query_failed( 'payment notes' );
+		}
 		return array(
 			'removed'  => false !== $result && $result > 0,
 			'retained' => true,
@@ -564,6 +792,7 @@ class Remember_Privacy {
 	private static function blank_duplicate_snapshots( $member_id ) {
 		global $wpdb;
 		$count = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . self::table( 'remember_profile_duplicate_hits' ) . ' WHERE member_a_id = %d OR member_b_id = %d', $member_id, $member_id ) );
+		self::query_failed( 'duplicate-profile records' );
 		if ( $count < 1 ) {
 			return array(
 				'removed'  => false,
@@ -577,6 +806,9 @@ class Remember_Privacy {
 				$member_id
 			)
 		);
+		if ( false === $result ) {
+			self::query_failed( 'duplicate-profile records' );
+		}
 		return array(
 			'removed'  => false !== $result && $result > 0,
 			'retained' => true,
@@ -602,6 +834,7 @@ class Remember_Privacy {
 				$member_id
 			)
 		);
+		self::query_failed( str_replace( array( 'remember_member_', '_' ), array( '', ' ' ), $junction_suffix ) );
 		if ( ! is_array( $names ) ) {
 			return '';
 		}

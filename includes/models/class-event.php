@@ -12,6 +12,7 @@ if ( ! defined( 'WPINC' ) ) {
 }
 
 require_once plugin_dir_path( __FILE__ ) . 'class-remember-base-model.php';
+require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-logger.php';
 
 /**
  * Event model class.
@@ -289,15 +290,19 @@ class Remember_Event extends Remember_Base_Model {
 		global $wpdb;
 		$table_name = $wpdb->prefix . 'remember_event_roles';
 		
+		$failed     = array();
+
 		// Delete existing event roles
-		$wpdb->delete( $table_name, array( 'event_id' => $event_id ), array( '%d' ) );
-		
+		if ( false === $wpdb->delete( $table_name, array( 'event_id' => $event_id ), array( '%d' ) ) ) {
+			$failed['clear existing'] = $wpdb->last_error;
+		}
+
 		// Insert new event roles
 		if ( ! empty( $role_ids ) ) {
 			foreach ( $role_ids as $role_id ) {
 				$role_id = absint( $role_id );
 				if ( $role_id > 0 ) {
-					$wpdb->insert(
+					$inserted = $wpdb->insert(
 						$table_name,
 						array(
 							'event_id'    => $event_id,
@@ -308,11 +313,36 @@ class Remember_Event extends Remember_Base_Model {
 						),
 						array( '%d', '%d', '%f', '%d', '%s' )
 					);
+					if ( false === $inserted ) {
+						$failed[ $role_id ] = $wpdb->last_error;
+					}
 				}
 			}
 		}
-		
-		return true;
+
+		return $this->report_event_role_failures( $event_id, $failed );
+	}
+
+	/**
+	 * Log event-role rows that could not be saved.
+	 *
+	 * @param int                   $event_id Event ID.
+	 * @param array<string, string> $failed   Role ID (or step) => database error.
+	 * @return bool True when nothing failed.
+	 */
+	private function report_event_role_failures( $event_id, $failed ) {
+		if ( empty( $failed ) ) {
+			return true;
+		}
+		Remember_Logger::error(
+			'Event roles only partly saved; check the roles and prices on this event',
+			array(
+				'event_id' => (int) $event_id,
+				'role_ids' => array_keys( $failed ),
+				'error'    => implode( ' | ', array_unique( array_values( $failed ) ) ),
+			)
+		);
+		return false;
 	}
 
 	/**
@@ -327,6 +357,7 @@ class Remember_Event extends Remember_Base_Model {
 		$table_name = $wpdb->prefix . 'remember_event_roles';
 
 		$incoming_ids = array();
+		$failed       = array();
 		foreach ( $role_configs as $role_id => $config ) {
 			$role_id = absint( $role_id );
 			if ( $role_id <= 0 || empty( $config['enabled'] ) ) {
@@ -349,7 +380,7 @@ class Remember_Event extends Remember_Base_Model {
 			);
 
 			if ( $existing ) {
-				$wpdb->update(
+				$written = $wpdb->update(
 					$table_name,
 					array(
 						'cost'             => $cost,
@@ -364,7 +395,7 @@ class Remember_Event extends Remember_Base_Model {
 					array( '%d', '%d' )
 				);
 			} else {
-				$wpdb->insert(
+				$written = $wpdb->insert(
 					$table_name,
 					array(
 						'event_id'          => $event_id,
@@ -378,6 +409,9 @@ class Remember_Event extends Remember_Base_Model {
 					array( '%d', '%d', '%f', '%d', '%d', '%d', '%s' )
 				);
 			}
+			if ( false === $written ) {
+				$failed[ $role_id ] = $wpdb->last_error;
+			}
 		}
 
 		$existing_role_ids = $wpdb->get_col(
@@ -390,7 +424,7 @@ class Remember_Event extends Remember_Base_Model {
 		foreach ( $existing_role_ids as $existing_role_id ) {
 			$existing_role_id = absint( $existing_role_id );
 			if ( ! in_array( $existing_role_id, $incoming_ids, true ) ) {
-				$wpdb->delete(
+				$removed = $wpdb->delete(
 					$table_name,
 					array(
 						'event_id' => $event_id,
@@ -398,10 +432,13 @@ class Remember_Event extends Remember_Base_Model {
 					),
 					array( '%d', '%d' )
 				);
+				if ( false === $removed ) {
+					$failed[ $existing_role_id ] = $wpdb->last_error;
+				}
 			}
 		}
 
-		return true;
+		return $this->report_event_role_failures( $event_id, $failed );
 	}
 
 	/**

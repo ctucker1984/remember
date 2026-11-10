@@ -12,6 +12,8 @@ if ( ! defined( 'WPINC' ) ) {
 	die;
 }
 
+require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
+
 /**
  * Disaster-recovery dump of reMember data. Omits billing secrets, OAuth
  * tokens, encryption keys, and downloaded invoice ledgers. Keeps invoice and
@@ -60,11 +62,12 @@ class Remember_Backup {
 	 * @return array{users_matched:int,users_created:int,tables:int,rows:int}|\WP_Error
 	 */
 	public static function restore_from_file( $path ) {
+		$start = Remember_Logger::start_timer();
 		if ( ! self::current_user_can_backup() ) {
-			return new WP_Error( 'cap', __( 'You cannot restore a full reMember backup.', 'remember' ) );
+			return self::restore_refused( new WP_Error( 'cap', __( 'You cannot restore a full reMember backup.', 'remember' ) ) );
 		}
 		if ( ! is_readable( $path ) ) {
-			return new WP_Error( 'file', __( 'Could not read that backup file.', 'remember' ) );
+			return self::restore_refused( new WP_Error( 'file', __( 'Could not read that backup file.', 'remember' ) ) );
 		}
 
 		if ( function_exists( 'set_time_limit' ) ) {
@@ -73,29 +76,40 @@ class Remember_Backup {
 
 		$raw = file_get_contents( $path ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
 		if ( ! is_string( $raw ) || '' === $raw ) {
-			return new WP_Error( 'file', __( 'That backup file is empty.', 'remember' ) );
+			return self::restore_refused( new WP_Error( 'file', __( 'That backup file is empty.', 'remember' ) ) );
 		}
 
 		$data = json_decode( $raw, true );
 		if ( ! is_array( $data ) || self::FORMAT !== ( isset( $data['format'] ) ? $data['format'] : '' ) ) {
-			return new WP_Error( 'format', __( 'That file is not a reMember backup.', 'remember' ) );
+			return self::restore_refused( new WP_Error( 'format', __( 'That file is not a reMember backup.', 'remember' ) ) );
 		}
 		$version = isset( $data['format_version'] ) ? (int) $data['format_version'] : 0;
 		if ( $version < 1 || $version > self::FORMAT_VERSION ) {
-			return new WP_Error( 'format', __( 'That backup format is not supported by this plugin version.', 'remember' ) );
+			return self::restore_refused( new WP_Error( 'format', __( 'That backup format is not supported by this plugin version.', 'remember' ) ) );
 		}
 
 		$compat = self::restore_version_error( $data );
 		if ( is_wp_error( $compat ) ) {
-			return $compat;
+			return self::restore_refused( $compat );
 		}
 
 		$tables = isset( $data['tables'] ) && is_array( $data['tables'] ) ? $data['tables'] : array();
 		$users  = isset( $data['users'] ) && is_array( $data['users'] ) ? $data['users'] : array();
 		$options = isset( $data['options'] ) && is_array( $data['options'] ) ? $data['options'] : array();
 
-		require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-capabilities.php';
+
+		Remember_Logger::debug(
+			'Backup restore started',
+			array(
+				'user_id'        => get_current_user_id(),
+				'tables'         => count( $tables ),
+				'users'          => count( $users ),
+				'options'        => count( $options ),
+				'plugin_version' => isset( $data['plugin_version'] ) ? (string) $data['plugin_version'] : '',
+				'db_version'     => isset( $data['db_version'] ) ? (string) $data['db_version'] : '',
+			)
+		);
 
 		$privilege_guard = null;
 		if ( ! current_user_can( 'manage_options' ) ) {
@@ -113,12 +127,18 @@ class Remember_Backup {
 
 		$local_tables = self::table_names();
 		foreach ( $local_tables as $table ) {
-			$wpdb->query( 'DELETE FROM `' . esc_sql( $table ) . '`' ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- table names from SHOW TABLES.
+			$cleared = $wpdb->query( 'DELETE FROM `' . esc_sql( $table ) . '`' ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- table names from SHOW TABLES.
+			if ( false === $cleared ) {
+				$suffix = substr( $table, strlen( self::table_prefix() ) );
+				return self::restore_rolled_back( 'clear', $suffix, $wpdb->last_error, $map, $start );
+			}
 		}
 
-		$rows_in = 0;
-		$tables_in = 0;
-		$prefix = self::table_prefix();
+		$rows_in        = 0;
+		$tables_in      = 0;
+		$skipped_tables = array();
+		$skipped_rows   = array();
+		$prefix         = self::table_prefix();
 		foreach ( $tables as $suffix => $rows ) {
 			$suffix = sanitize_key( (string) $suffix );
 			if ( '' === $suffix || ! is_array( $rows ) ) {
@@ -126,10 +146,12 @@ class Remember_Backup {
 			}
 			$table = $prefix . $suffix;
 			if ( ! in_array( $table, $local_tables, true ) ) {
+				$skipped_tables[] = $suffix;
 				continue;
 			}
 			$columns = self::table_columns( $table );
 			if ( empty( $columns ) ) {
+				$skipped_tables[] = $suffix;
 				continue;
 			}
 			$inserted = false;
@@ -139,20 +161,11 @@ class Remember_Backup {
 				}
 				$prepared = self::prepare_row( $row, $columns, $map['ids'], $suffix );
 				if ( empty( $prepared ) ) {
+					$skipped_rows[ $suffix ] = isset( $skipped_rows[ $suffix ] ) ? $skipped_rows[ $suffix ] + 1 : 1;
 					continue;
 				}
 				if ( false === self::insert_row( $table, $prepared ) ) {
-					$wpdb->query( 'ROLLBACK' );
-					$wpdb->query( 'SET FOREIGN_KEY_CHECKS=1' );
-					self::delete_created_users( isset( $map['created_ids'] ) ? $map['created_ids'] : array() );
-					return new WP_Error(
-						'insert',
-						sprintf(
-							/* translators: %s: table suffix */
-							__( 'Could not restore table %s.', 'remember' ),
-							$suffix
-						)
-					);
+					return self::restore_rolled_back( 'insert', $suffix, $wpdb->last_error, $map, $start, $rows_in );
 				}
 				$rows_in++;
 				$inserted = true;
@@ -162,10 +175,40 @@ class Remember_Backup {
 			}
 		}
 
-		$wpdb->query( 'COMMIT' );
+		if ( false === $wpdb->query( 'COMMIT' ) ) {
+			return self::restore_rolled_back( 'commit', '', $wpdb->last_error, $map, $start, $rows_in );
+		}
 		$wpdb->query( 'SET FOREIGN_KEY_CHECKS=1' );
 
-		self::restore_options( $options );
+		if ( $skipped_tables ) {
+			Remember_Logger::warning(
+				'Backup restore skipped tables this site does not have',
+				array(
+					'user_id' => get_current_user_id(),
+					'tables'  => $skipped_tables,
+				)
+			);
+		}
+		if ( $skipped_rows ) {
+			Remember_Logger::warning(
+				'Backup restore skipped rows whose member could not be matched to a WordPress user',
+				array(
+					'user_id' => get_current_user_id(),
+					'rows'    => $skipped_rows,
+				)
+			);
+		}
+
+		$failed_options = self::restore_options( $options );
+		if ( $failed_options ) {
+			Remember_Logger::warning(
+				'Backup restore could not write some settings',
+				array(
+					'user_id' => get_current_user_id(),
+					'options' => $failed_options,
+				)
+			);
+		}
 		self::restore_billing_customer_ids( $users, $map['ids'] );
 
 		$backup_db = self::normalize_version( isset( $data['db_version'] ) ? $data['db_version'] : '' );
@@ -195,11 +238,14 @@ class Remember_Backup {
 		Remember_Logger::info(
 			'Full plugin backup restored',
 			array(
-				'user_id'       => get_current_user_id(),
-				'users_matched' => $map['matched'],
-				'users_created' => $map['created'],
-				'tables'        => $tables_in,
-				'rows'          => $rows_in,
+				'user_id'        => get_current_user_id(),
+				'users_matched'  => $map['matched'],
+				'users_created'  => $map['created'],
+				'tables'         => $tables_in,
+				'rows'           => $rows_in,
+				'skipped_tables' => count( $skipped_tables ),
+				'skipped_rows'   => array_sum( $skipped_rows ),
+				'elapsed_ms'     => Remember_Logger::elapsed_ms( $start ),
 			)
 		);
 
@@ -208,6 +254,64 @@ class Remember_Backup {
 			'users_created' => $map['created'],
 			'tables'        => $tables_in,
 			'rows'          => $rows_in,
+		);
+	}
+
+	/**
+	 * Log a restore refused before any data changed.
+	 *
+	 * @param \WP_Error $error Why.
+	 * @return \WP_Error The same error.
+	 */
+	private static function restore_refused( $error ) {
+		Remember_Logger::warning(
+			'Backup restore refused; nothing was changed',
+			array(
+				'user_id' => get_current_user_id(),
+				'code'    => $error->get_error_code(),
+				'reason'  => $error->get_error_message(),
+			)
+		);
+		return $error;
+	}
+
+	/**
+	 * Roll back a restore that failed part way and remove users it created.
+	 *
+	 * @param string $step     clear|insert|commit.
+	 * @param string $suffix   Table suffix, or empty.
+	 * @param string $db_error Database error.
+	 * @param array  $map      User map from reconcile_users().
+	 * @param float  $start    Timer from Remember_Logger::start_timer().
+	 * @param int    $rows_in  Rows inserted before the failure.
+	 * @return \WP_Error
+	 */
+	private static function restore_rolled_back( $step, $suffix, $db_error, $map, $start, $rows_in = 0 ) {
+		global $wpdb;
+		$wpdb->query( 'ROLLBACK' );
+		$wpdb->query( 'SET FOREIGN_KEY_CHECKS=1' );
+		Remember_Logger::error(
+			'Backup restore failed and was rolled back; current data was kept',
+			array(
+				'user_id'    => get_current_user_id(),
+				'step'       => $step,
+				'table'      => $suffix,
+				'rows_in'    => (int) $rows_in,
+				'error'      => $db_error,
+				'elapsed_ms' => Remember_Logger::elapsed_ms( $start ),
+			)
+		);
+		self::delete_created_users( isset( $map['created_ids'] ) ? $map['created_ids'] : array() );
+		if ( '' === $suffix ) {
+			return new WP_Error( $step, __( 'The restore could not be saved, so nothing was changed. Try again.', 'remember' ) );
+		}
+		return new WP_Error(
+			$step,
+			sprintf(
+				/* translators: %s: table suffix */
+				__( 'Could not restore table %s.', 'remember' ),
+				$suffix
+			)
 		);
 	}
 
@@ -307,12 +411,17 @@ class Remember_Backup {
 
 		// Event administration flags are settled first so the role checks below use this site's flags.
 		// Roles flagged before the restore stay flagged; only someone who may flag roles keeps new flags.
-		$flag_names = isset( $guard['event_admin_names'] ) && is_array( $guard['event_admin_names'] ) ? $guard['event_admin_names'] : array();
+		$flag_names   = isset( $guard['event_admin_names'] ) && is_array( $guard['event_admin_names'] ) ? $guard['event_admin_names'] : array();
+		$write_errors = array();
 		if ( empty( $guard['can_flag'] ) ) {
-			$wpdb->query( "UPDATE `{$roles_table}` SET is_event_admin = 0" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			if ( false === $wpdb->query( "UPDATE `{$roles_table}` SET is_event_admin = 0" ) ) { // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				$write_errors[] = 'clear event administration flags: ' . $wpdb->last_error;
+			}
 		}
 		foreach ( $flag_names as $flag_name ) {
-			$wpdb->update( $roles_table, array( 'is_event_admin' => 1 ), array( 'role_name' => $flag_name ), array( '%d' ), array( '%s' ) );
+			if ( false === $wpdb->update( $roles_table, array( 'is_event_admin' => 1 ), array( 'role_name' => $flag_name ), array( '%d' ), array( '%s' ) ) ) {
+				$write_errors[] = 'restore an event administration flag: ' . $wpdb->last_error;
+			}
 		}
 		Remember_Logger::debug(
 			'Backup restore kept this site\'s event administration roles',
@@ -324,7 +433,7 @@ class Remember_Backup {
 		);
 
 		$dropped_caps = 0;
-		$roles        = $wpdb->get_results( "SELECT role_id, role_name FROM `{$roles_table}`" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$roles        = $wpdb->get_results( "SELECT role_id, role_name, is_event_role FROM `{$roles_table}`" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		if ( is_array( $roles ) ) {
 			foreach ( $roles as $role ) {
 				$role_id = (int) $role->role_id;
@@ -338,6 +447,8 @@ class Remember_Backup {
 				$posted  = is_array( $posted ) ? $posted : array();
 				$before  = isset( $existing[ $name ] ) ? $existing[ $name ] : array();
 				$merged  = Remember_Capabilities::merge_role_capabilities( $before, $posted );
+				// Event roles without the event administration flag keep only the read capabilities.
+				$merged  = Remember_Capabilities::restrict_capabilities_for_role( $merged, ! empty( $role->is_event_role ), Remember_Capabilities::is_event_admin_role( $role_id ) );
 				$posted_sorted = $posted;
 				$merged_sorted = $merged;
 				sort( $posted_sorted );
@@ -345,10 +456,13 @@ class Remember_Backup {
 				if ( $posted_sorted === $merged_sorted ) {
 					continue;
 				}
-				$wpdb->delete( $caps_table, array( 'role_id' => $role_id ), array( '%d' ) );
+				if ( false === $wpdb->delete( $caps_table, array( 'role_id' => $role_id ), array( '%d' ) ) ) {
+					$write_errors[] = 'clear capabilities for role ' . $role_id . ': ' . $wpdb->last_error;
+					continue;
+				}
 				$now = current_time( 'mysql' );
 				foreach ( $merged as $cap ) {
-					$wpdb->insert(
+					$inserted = $wpdb->insert(
 						$caps_table,
 						array(
 							'role_id'    => $role_id,
@@ -357,6 +471,9 @@ class Remember_Backup {
 						),
 						array( '%d', '%s', '%s' )
 					);
+					if ( false === $inserted ) {
+						$write_errors[] = 'restore capability ' . $cap . ' for role ' . $role_id . ': ' . $wpdb->last_error;
+					}
 				}
 				$dropped_caps += count( array_diff( $posted, $merged ) );
 			}
@@ -376,9 +493,22 @@ class Remember_Backup {
 				if ( Remember_Capabilities::current_user_can_assign_role( (int) $row->role_id ) ) {
 					continue;
 				}
-				$wpdb->delete( $join_table, array( 'member_role_id' => (int) $row->member_role_id ), array( '%d' ) );
+				if ( false === $wpdb->delete( $join_table, array( 'member_role_id' => (int) $row->member_role_id ), array( '%d' ) ) ) {
+					$write_errors[] = 'remove role assignment ' . (int) $row->member_role_id . ': ' . $wpdb->last_error;
+					continue;
+				}
 				$dropped_roles++;
 			}
+		}
+
+		if ( $write_errors ) {
+			Remember_Logger::error(
+				'Backup restore could not fully limit access to what the restorer may grant; check roles and capabilities',
+				array(
+					'user_id' => get_current_user_id(),
+					'failed'  => $write_errors,
+				)
+			);
 		}
 
 		if ( $dropped_caps > 0 || $dropped_roles > 0 ) {
@@ -470,10 +600,17 @@ class Remember_Backup {
 			wp_die( esc_html__( 'You cannot download a full reMember backup.', 'remember' ), esc_html__( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
 		}
 
-		require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-access-log.php';
-		Remember_Logger::info( 'Full plugin backup downloaded', array( 'user_id' => get_current_user_id() ) );
-		Remember_Access_Log::record( 0, 'backup', __( 'Full backup', 'remember' ) );
+		$start        = Remember_Logger::start_timer();
+		$member_count = self::member_count();
+		Remember_Logger::info(
+			'Full plugin backup downloaded',
+			array(
+				'user_id' => get_current_user_id(),
+				'members' => $member_count,
+			)
+		);
+		Remember_Access_Log::record( 0, 'backup', __( 'Full backup', 'remember' ), $member_count );
 
 		$filename = 'remember-backup-' . gmdate( 'Y-m-d-H-i-s' ) . '.json';
 		nocache_headers();
@@ -481,10 +618,18 @@ class Remember_Backup {
 		header( 'Content-Disposition: attachment; filename=' . $filename );
 
 		$out = fopen( 'php://output', 'w' );
-		self::stream_document( $out );
+		$ok  = self::stream_document( $out );
 		if ( is_resource( $out ) ) {
 			fclose( $out );
 		}
+		Remember_Logger::debug(
+			'Full plugin backup download finished',
+			array(
+				'user_id'    => get_current_user_id(),
+				'complete'   => $ok,
+				'elapsed_ms' => Remember_Logger::elapsed_ms( $start ),
+			)
+		);
 		exit;
 	}
 
@@ -496,30 +641,83 @@ class Remember_Backup {
 	 */
 	public static function write_to_path( $path ) {
 		if ( ! self::current_user_can_backup() ) {
+			Remember_Logger::warning( 'Backup file not written: user may not take a full backup', array( 'user_id' => get_current_user_id() ) );
 			return new WP_Error( 'cap', __( 'You cannot download a full reMember backup.', 'remember' ) );
 		}
 		$path = (string) $path;
 		if ( '' === $path || ! wp_is_writable( dirname( $path ) ) ) {
+			Remember_Logger::error(
+				'Backup file not written: the folder is not writable',
+				array(
+					'user_id' => get_current_user_id(),
+					'file'    => basename( $path ),
+				)
+			);
 			return new WP_Error( 'file', __( 'Could not write that backup file.', 'remember' ) );
 		}
 
-		require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-access-log.php';
 
-		$out = fopen( $path, 'w' );
+		$start = Remember_Logger::start_timer();
+		$out   = fopen( $path, 'w' );
 		if ( ! is_resource( $out ) ) {
+			Remember_Logger::error(
+				'Backup file not written: it could not be opened',
+				array(
+					'user_id' => get_current_user_id(),
+					'file'    => basename( $path ),
+				)
+			);
 			return new WP_Error( 'file', __( 'Could not write that backup file.', 'remember' ) );
 		}
-		$ok = self::stream_document( $out );
+		$member_count = self::member_count();
+		$ok           = self::stream_document( $out );
 		fclose( $out );
 		if ( ! $ok ) {
 			wp_delete_file( $path );
+			Remember_Logger::error(
+				'Backup file not written: the backup was incomplete, so the partial file was deleted',
+				array(
+					'user_id'    => get_current_user_id(),
+					'file'       => basename( $path ),
+					'elapsed_ms' => Remember_Logger::elapsed_ms( $start ),
+				)
+			);
 			return new WP_Error( 'file', __( 'Could not write that backup file.', 'remember' ) );
 		}
 
-		Remember_Logger::info( 'Full plugin backup downloaded', array( 'user_id' => get_current_user_id() ) );
-		Remember_Access_Log::record( 0, 'backup', __( 'Full backup', 'remember' ) );
+		Remember_Logger::info(
+			'Full plugin backup downloaded',
+			array(
+				'user_id'    => get_current_user_id(),
+				'members'    => $member_count,
+				'file'       => basename( $path ),
+				'bytes'      => (int) filesize( $path ),
+				'elapsed_ms' => Remember_Logger::elapsed_ms( $start ),
+			)
+		);
+		Remember_Access_Log::record( 0, 'backup', __( 'Full backup', 'remember' ), $member_count );
 		return true;
+	}
+
+	/**
+	 * Members a backup includes, for the sensitive access log.
+	 *
+	 * @return int
+	 */
+	private static function member_count() {
+		global $wpdb;
+		$table = self::table_prefix() . 'members';
+		if ( ! in_array( $table, self::table_names(), true ) ) {
+			Remember_Logger::warning( 'Backup member count unavailable: members table not found', array( 'table' => $table ) );
+			return 0;
+		}
+		$count = $wpdb->get_var( "SELECT COUNT(*) FROM `{$table}`" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- prefixed table name.
+		if ( null === $count ) {
+			Remember_Logger::warning( 'Backup member count unavailable', array( 'error' => $wpdb->last_error ) );
+			return 0;
+		}
+		return (int) $count;
 	}
 
 	/**
@@ -556,6 +754,9 @@ class Remember_Backup {
 
 		$ok            = ! self::$stream_failed;
 		self::$stream  = null;
+		if ( ! $ok ) {
+			Remember_Logger::error( 'Full plugin backup is incomplete: part of it could not be read or written', array( 'user_id' => get_current_user_id() ) );
+		}
 		return $ok;
 	}
 
@@ -571,6 +772,9 @@ class Remember_Backup {
 			return;
 		}
 		if ( false === fwrite( self::$stream, $text ) ) {
+			if ( ! self::$stream_failed ) {
+				Remember_Logger::error( 'Backup could not be written to its output', array( 'bytes' => strlen( $text ) ) );
+			}
 			self::$stream_failed = true;
 		}
 	}
@@ -743,6 +947,18 @@ class Remember_Backup {
 				),
 				ARRAY_A
 			);
+			if ( '' !== (string) $wpdb->last_error ) {
+				self::$stream_failed = true;
+				Remember_Logger::error(
+					'Backup could not read a table; that table is incomplete in the backup',
+					array(
+						'table'  => $suffix,
+						'offset' => $offset,
+						'error'  => $wpdb->last_error,
+					)
+				);
+				break;
+			}
 			if ( ! is_array( $rows ) || empty( $rows ) ) {
 				break;
 			}
@@ -786,11 +1002,13 @@ class Remember_Backup {
 	 * @return array{ids:array<int,int>,matched:int,created:int,created_ids:int[]}|\WP_Error
 	 */
 	private static function reconcile_users( $users ) {
+		$start       = Remember_Logger::start_timer();
 		$map         = array();
 		$matched     = 0;
 		$created     = 0;
 		$created_ids = array();
 		$used_emails = array();
+		$unmatched   = 0;
 
 		foreach ( $users as $row ) {
 			if ( ! is_array( $row ) ) {
@@ -804,6 +1022,7 @@ class Remember_Backup {
 			$login = isset( $row['login'] ) ? sanitize_user( (string) $row['login'], true ) : '';
 			$name  = isset( $row['display_name'] ) ? sanitize_text_field( $row['display_name'] ) : '';
 			if ( ! empty( $row['missing'] ) && '' === $email && '' === $login ) {
+				++$unmatched;
 				continue;
 			}
 
@@ -819,12 +1038,21 @@ class Remember_Backup {
 				$new_id = (int) $existing->ID;
 				if ( $name && $name !== $existing->display_name ) {
 					if ( Remember_Capabilities::current_user_can_administer_account( $new_id ) ) {
-						wp_update_user(
+						$renamed = wp_update_user(
 							array(
 								'ID'           => $new_id,
 								'display_name' => $name,
 							)
 						);
+						if ( is_wp_error( $renamed ) ) {
+							Remember_Logger::warning(
+								'Restore matched a WordPress user but could not update their display name',
+								array(
+									'user_id' => $new_id,
+									'error'   => $renamed->get_error_message(),
+								)
+							);
+						}
 					} else {
 						Remember_Logger::warning(
 							'Restore kept the display name of a privileged WordPress account',
@@ -842,6 +1070,7 @@ class Remember_Backup {
 			}
 
 			if ( ! is_email( $email ) ) {
+				++$unmatched;
 				continue;
 			}
 			$email_key = strtolower( $email );
@@ -853,6 +1082,7 @@ class Remember_Backup {
 
 			$email = self::unique_email( $email );
 			if ( ! is_email( $email ) ) {
+				++$unmatched;
 				continue;
 			}
 			$email_key = strtolower( $email );
@@ -875,6 +1105,15 @@ class Remember_Backup {
 				)
 			);
 			if ( is_wp_error( $new_id ) ) {
+				Remember_Logger::error(
+					'Backup restore stopped: a WordPress user could not be created; nothing was restored',
+					array(
+						'user_id'        => get_current_user_id(),
+						'backup_user_id' => $old_id,
+						'created_so_far' => $created,
+						'error'          => $new_id->get_error_message(),
+					)
+				);
 				self::delete_created_users( $created_ids );
 				return new WP_Error(
 					'user',
@@ -891,6 +1130,25 @@ class Remember_Backup {
 			$created_ids[] = (int) $new_id;
 			$created++;
 		}
+
+		if ( $unmatched > 0 ) {
+			Remember_Logger::warning(
+				'Backup restore could not match or create some users; rows that belong to them will be skipped or reassigned',
+				array(
+					'user_id'   => get_current_user_id(),
+					'unmatched' => $unmatched,
+				)
+			);
+		}
+		Remember_Logger::debug(
+			'Backup restore matched users',
+			array(
+				'matched'    => $matched,
+				'created'    => $created,
+				'unmatched'  => $unmatched,
+				'elapsed_ms' => Remember_Logger::elapsed_ms( $start ),
+			)
+		);
 
 		return array(
 			'ids'         => $map,
@@ -1248,7 +1506,7 @@ class Remember_Backup {
 	 * Replace plugin options from the backup.
 	 *
 	 * @param array $options Name => value.
-	 * @return void
+	 * @return string[] Option names that could not be written.
 	 */
 	private static function restore_options( $options ) {
 		global $wpdb;
@@ -1273,19 +1531,25 @@ class Remember_Backup {
 			}
 		}
 
+		$failed = array();
 		foreach ( $options as $name => $value ) {
 			$name = (string) $name;
 			if ( 0 !== strpos( $name, 'remember_' ) || in_array( $name, $skip, true ) ) {
 				continue;
 			}
-			update_option( $name, $value, false );
+			if ( ! update_option( $name, $value, false ) && maybe_serialize( get_option( $name ) ) !== maybe_serialize( $value ) ) {
+				$failed[] = $name;
+			}
 		}
 
 		foreach ( $keep as $name => $value ) {
 			if ( null === $value || false === $value ) {
 				continue;
 			}
-			update_option( $name, $value, false );
+			if ( ! update_option( $name, $value, false ) && maybe_serialize( get_option( $name ) ) !== maybe_serialize( $value ) ) {
+				$failed[] = $name;
+			}
 		}
+		return $failed;
 	}
 }

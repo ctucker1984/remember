@@ -39,16 +39,7 @@ $subtotal_disclaimer = Remember_Billing_Messaging::get_subtotal_disclaimer();
  */
 function remember_notify_event_admins( $event_id, $subject, $message ) {
 	require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-waitlist.php';
-	$emails = Remember_Waitlist::accepted_event_administrator_emails( $event_id );
-
-	if ( empty( $emails ) ) {
-		Remember_Logger::debug( 'No accepted event administrators to notify', array( 'event_id' => absint( $event_id ) ) );
-		return;
-	}
-
-	foreach ( $emails as $email ) {
-		wp_mail( $email, $subject, $message );
-	}
+	Remember_Waitlist::email_event_admins( $event_id, $subject, $message );
 }
 
 // Handle form submissions
@@ -90,12 +81,20 @@ if ( isset( $_POST['remember_application_action'] ) && check_admin_referer( 'rem
 					// A member who already has a vetting case is left alone. A first application opens a case only when they have none.
 					Remember_Vetting_Workflow::open_automatic_case( $member_id, 'first_application', $is_first );
 					
-					Remember_Logger::info( 'Application created', array( 'application_id' => $new_application_id ) );
+					Remember_Logger::info(
+						'Application created by staff',
+						array(
+							'application_id' => $new_application_id,
+							'event_id'       => $event_id,
+							'member_id'      => $member_id,
+							'status'         => $status,
+							'user_id'        => get_current_user_id(),
+						)
+					);
 					require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-notifications.php';
 					Remember_Notifications::notify_application_submitted( $new_application_id );
 					echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Application created successfully.', 'remember' ) . '</p></div>';
 				} else {
-					Remember_Logger::error( 'Failed to create application' );
 					echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to create application.', 'remember' ) . '</p></div>';
 				}
 			}
@@ -150,10 +149,21 @@ if ( isset( $_POST['remember_application_action'] ) && check_admin_referer( 'rem
 				if ( $is_full ) {
 					$result = $application_model->update_status( $application_id, 'waitlisted', get_current_user_id() );
 					if ( false !== $result ) {
+						Remember_Logger::info(
+							'Application waitlisted instead of accepted: the role is full',
+							array(
+								'application_id'   => $application_id,
+								'event_id'         => (int) $application->event_id,
+								'event_role_id'    => (int) $application->event_role_id,
+								'accepted'         => (int) $accepted_count,
+								'max_participants' => (int) $event_role->max_participants,
+								'user_id'          => get_current_user_id(),
+							)
+						);
 						$event = $event_model->get( $application->event_id );
 						$member = $member_model->get( $application->member_id );
 						$user = $member ? get_user_by( 'ID', $member->member_id ) : null;
-						$member_name = $user ? $user->display_name : __( 'Unknown Member', 'remember' );
+						$member_name = $user ? $user->display_name : __( 'Deleted member', 'remember' );
 						$event_name = $event ? $event->event_name : __( 'Unknown Event', 'remember' );
 						$role_name = $event_role && ! empty( $event_role->role_name ) ? $event_role->role_name : __( 'Event Role', 'remember' );
 
@@ -175,7 +185,16 @@ if ( isset( $_POST['remember_application_action'] ) && check_admin_referer( 'rem
 				} else {
 					$result = $application_model->update_status( $application_id, 'accepted', get_current_user_id() );
 					if ( $result !== false ) {
-				Remember_Logger::info( 'Application accepted', array( 'application_id' => $application_id ) );
+				Remember_Logger::info(
+					'Application accepted',
+					array(
+						'application_id' => $application_id,
+						'event_id'       => (int) $application->event_id,
+						'member_id'      => (int) $application->member_id,
+						'previous'       => (string) $application->status,
+						'user_id'        => get_current_user_id(),
+					)
+				);
 
 				require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-provider.php';
 				$invoice_notice_shown = false;
@@ -200,13 +219,6 @@ if ( isset( $_POST['remember_application_action'] ) && check_admin_referer( 'rem
 							echo Remember_Xero_Sync::credit_apply_admin_notices(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- notices are escaped in the helper.
 							$email_invoice = Remember_Xero_Sync::invoice_email_held() ? null : Remember_Billing_Provider::email_invoice_for_application( $application_id );
 							if ( is_wp_error( $email_invoice ) ) {
-								Remember_Logger::warning(
-									'Xero invoice email failed after accept',
-									array(
-										'application_id' => $application_id,
-										'error'          => $email_invoice->get_error_message(),
-									)
-								);
 								echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html__( 'Invoice created, but Xero could not email it to the customer: ', 'remember' ) . esc_html( $email_invoice->get_error_message() ) . '</p></div>';
 							} elseif ( true === $email_invoice ) {
 								echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Xero invoice emailed to the customer.', 'remember' ) . '</p></div>';
@@ -230,13 +242,6 @@ if ( isset( $_POST['remember_application_action'] ) && check_admin_referer( 'rem
 							echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Application accepted and QuickBooks invoice created successfully.', 'remember' ) . '</p></div>';
 							$email_invoice = Remember_Billing_Provider::email_invoice_for_application( $application_id );
 							if ( is_wp_error( $email_invoice ) ) {
-								Remember_Logger::warning(
-									'QuickBooks invoice email failed after accept',
-									array(
-										'application_id' => $application_id,
-										'error'          => $email_invoice->get_error_message(),
-									)
-								);
 								echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html__( 'Invoice created, but QuickBooks could not email it to the customer: ', 'remember' ) . esc_html( $email_invoice->get_error_message() ) . '</p></div>';
 							} elseif ( true === $email_invoice ) {
 								echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'QuickBooks invoice emailed to the customer.', 'remember' ) . '</p></div>';
@@ -267,8 +272,8 @@ if ( isset( $_POST['remember_application_action'] ) && check_admin_referer( 'rem
 				require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-notifications.php';
 				$notify_result = Remember_Notifications::send_ticket_ready( $application_id );
 				if ( is_wp_error( $notify_result ) ) {
-					Remember_Logger::warning(
-						'Ticket ready email failed after accept',
+					Remember_Logger::debug(
+						'Ticket-ready email not sent after accept',
 						array(
 							'application_id' => $application_id,
 							'error'          => $notify_result->get_error_message(),
@@ -279,7 +284,6 @@ if ( isset( $_POST['remember_application_action'] ) && check_admin_referer( 'rem
 					echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Ticket email sent to the member.', 'remember' ) . '</p></div>';
 				}
 					} else {
-						Remember_Logger::error( 'Failed to accept application', array( 'application_id' => $application_id ) );
 						echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to accept application.', 'remember' ) . '</p></div>';
 					}
 				}
@@ -308,6 +312,8 @@ if ( isset( $_POST['remember_application_action'] ) && check_admin_referer( 'rem
 							'application_id' => $application_id,
 							'billing_action' => $billing_action,
 							'previous'       => $previous_status,
+							'event_id'       => (int) $application->event_id,
+							'user_id'        => get_current_user_id(),
 						)
 					);
 
@@ -354,14 +360,19 @@ if ( isset( $_POST['remember_application_action'] ) && check_admin_referer( 'rem
 							$member_user->user_email
 						);
 						if ( is_wp_error( $notify ) ) {
-							Remember_Logger::warning( 'Decline email failed', array( 'error' => $notify->get_error_message() ) );
+							Remember_Logger::warning(
+								'Decline email failed',
+								array(
+									'application_id' => $application_id,
+									'error'          => $notify->get_error_message(),
+								)
+							);
 						}
 					}
 
 					echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Application declined (admin). Ticket marked VOID.', 'remember' ) . '</p></div>';
 					echo Remember_Billing_Unwind::admin_notice_html( $unwind, $billing_action ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in helper.
 				} else {
-					Remember_Logger::error( 'Failed to decline application', array( 'application_id' => $application_id ) );
 					echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to decline application.', 'remember' ) . '</p></div>';
 				}
 			}
@@ -375,7 +386,14 @@ if ( isset( $_POST['remember_application_action'] ) && check_admin_referer( 'rem
 			$previous_status = $application ? $application->status : '';
 			$result = $application_model->update_status( $application_id, 'waitlisted', get_current_user_id() );
 			if ( $result !== false ) {
-				Remember_Logger::info( 'Application waitlisted', array( 'application_id' => $application_id ) );
+				Remember_Logger::info(
+					'Application waitlisted',
+					array(
+						'application_id' => $application_id,
+						'previous'       => $previous_status,
+						'user_id'        => get_current_user_id(),
+					)
+				);
 				if ( $application ) {
 					$event = $event_model->get( $application->event_id );
 					$event_name = $event ? $event->event_name : __( 'Unknown Event', 'remember' );
@@ -390,7 +408,6 @@ if ( isset( $_POST['remember_application_action'] ) && check_admin_referer( 'rem
 				}
 				echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Application moved to waitlist.', 'remember' ) . '</p></div>';
 			} else {
-				Remember_Logger::error( 'Failed to waitlist application', array( 'application_id' => $application_id ) );
 				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to waitlist application.', 'remember' ) . '</p></div>';
 			}
 		} elseif ( 'reopen_pending' === $action ) {
@@ -401,6 +418,13 @@ if ( isset( $_POST['remember_application_action'] ) && check_admin_referer( 'rem
 
 			$result = $application_model->update_status( $application_id, 'pending', get_current_user_id() );
 			if ( false !== $result ) {
+				Remember_Logger::info(
+					'Application moved back to pending',
+					array(
+						'application_id' => $application_id,
+						'user_id'        => get_current_user_id(),
+					)
+				);
 				echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Application moved back to pending.', 'remember' ) . '</p></div>';
 			} else {
 				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to move application back to pending.', 'remember' ) . '</p></div>';
@@ -411,7 +435,13 @@ if ( isset( $_POST['remember_application_action'] ) && check_admin_referer( 'rem
 			}
 			$result = $application_model->allow_reapply( $application_id );
 			if ( true === $result ) {
-				Remember_Logger::info( 'Application superseded for reapply', array( 'application_id' => $application_id ) );
+				Remember_Logger::info(
+					'Application superseded for reapply',
+					array(
+						'application_id' => $application_id,
+						'user_id'        => get_current_user_id(),
+					)
+				);
 				echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Reapply allowed. The member can submit a new application for this event and role (including agreements). This record is kept for history.', 'remember' ) . '</p></div>';
 			} else {
 				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html( $result ) . '</p></div>';
@@ -785,7 +815,7 @@ $status_tones = array(
 			
 			<table class="form-table">
 				<tr>
-					<th><label for="event_id"><?php esc_html_e( 'Event', 'remember' ); ?> <span class="description">(required)</span></label></th>
+					<th><label for="event_id"><?php esc_html_e( 'Event', 'remember' ); ?> <span class="description"><?php esc_html_e( '(required)', 'remember' ); ?></span></label></th>
 					<td>
 						<select id="event_id" name="event_id" class="regular-text" required>
 							<option value=""><?php esc_html_e( '-- Select Event --', 'remember' ); ?></option>
@@ -796,7 +826,7 @@ $status_tones = array(
 					</td>
 				</tr>
 				<tr>
-					<th><label for="member_id"><?php esc_html_e( 'Member', 'remember' ); ?> <span class="description">(required)</span></label></th>
+					<th><label for="member_id"><?php esc_html_e( 'Member', 'remember' ); ?> <span class="description"><?php esc_html_e( '(required)', 'remember' ); ?></span></label></th>
 					<td>
 						<select id="member_id" name="member_id" class="regular-text" required>
 							<option value=""><?php esc_html_e( '-- Select Member --', 'remember' ); ?></option>
@@ -810,7 +840,7 @@ $status_tones = array(
 					</td>
 				</tr>
 				<tr>
-					<th><label for="event_role_id"><?php esc_html_e( 'Event Role', 'remember' ); ?> <span class="description">(required)</span></label></th>
+					<th><label for="event_role_id"><?php esc_html_e( 'Event Role', 'remember' ); ?> <span class="description"><?php esc_html_e( '(required)', 'remember' ); ?></span></label></th>
 					<td>
 						<select id="event_role_id" name="event_role_id" class="regular-text" required disabled>
 							<option value=""><?php esc_html_e( '-- Select Event First --', 'remember' ); ?></option>
@@ -948,6 +978,7 @@ $status_tones = array(
 					$event      = isset( $app_events[ (int) $application->event_id ] ) ? $app_events[ (int) $application->event_id ] : null;
 					$user       = isset( $app_users[ (int) $application->member_id ] ) ? $app_users[ (int) $application->member_id ] : null;
 					$event_role = isset( $app_roles[ (int) $application->event_role_id ] ) ? $app_roles[ (int) $application->event_role_id ] : null;
+					$row_member_name = $user ? $user->display_name : __( 'Deleted member', 'remember' );
 					$application_payment = $payment_model->get_by_application( $application->application_id );
 					$billing_label = __( 'Not invoiced', 'remember' );
 					$billing_tone  = 'muted';
@@ -1014,7 +1045,7 @@ $status_tones = array(
 									<?php wp_nonce_field( 'remember_application_action', 'remember_application_nonce' ); ?>
 									<input type="hidden" name="remember_application_action" value="accept">
 									<input type="hidden" name="application_id" value="<?php echo esc_attr( $application->application_id ); ?>">
-									<input type="submit" class="button button-small" value="<?php esc_attr_e( 'Accept', 'remember' ); ?>" onclick="return confirm('<?php echo esc_js( __( 'Accept this application?', 'remember' ) ); ?>');">
+									<input type="submit" class="button button-small" value="<?php esc_attr_e( 'Accept', 'remember' ); ?>" aria-label="<?php echo esc_attr( sprintf( /* translators: %s: member name */ __( 'Accept application from %s', 'remember' ), $row_member_name ) ); ?>" onclick="return confirm('<?php echo esc_js( __( 'Accept this application?', 'remember' ) ); ?>');">
 								</form>
 								
 								<form method="post" action="">
@@ -1022,7 +1053,7 @@ $status_tones = array(
 									<input type="hidden" name="remember_application_action" value="decline">
 									<input type="hidden" name="application_id" value="<?php echo esc_attr( $application->application_id ); ?>">
 									<input type="hidden" name="billing_action" value="leave">
-									<input type="submit" class="button button-small remember-button-danger" value="<?php esc_attr_e( 'Decline', 'remember' ); ?>" onclick="return confirm('<?php echo esc_js( __( 'Decline this application? Invoice will be left unaltered. Open the application detail to void or refund.', 'remember' ) ); ?>');">
+									<input type="submit" class="button button-small remember-button-danger" value="<?php esc_attr_e( 'Decline', 'remember' ); ?>" aria-label="<?php echo esc_attr( sprintf( /* translators: %s: member name */ __( 'Decline application from %s', 'remember' ), $row_member_name ) ); ?>" onclick="return confirm('<?php echo esc_js( __( 'Decline this application? Invoice will be left unaltered. Open the application detail to void or refund.', 'remember' ) ); ?>');">
 								</form>
 								
 								<?php if ( 'pending' === $application->status ) : ?>
@@ -1030,17 +1061,17 @@ $status_tones = array(
 										<?php wp_nonce_field( 'remember_application_action', 'remember_application_nonce' ); ?>
 										<input type="hidden" name="remember_application_action" value="waitlist">
 										<input type="hidden" name="application_id" value="<?php echo esc_attr( $application->application_id ); ?>">
-										<input type="submit" class="button button-small" value="<?php esc_attr_e( 'Waitlist', 'remember' ); ?>">
+										<input type="submit" class="button button-small" value="<?php esc_attr_e( 'Waitlist', 'remember' ); ?>" aria-label="<?php echo esc_attr( sprintf( /* translators: %s: member name */ __( 'Waitlist application from %s', 'remember' ), $row_member_name ) ); ?>">
 									</form>
 								<?php endif; ?>
 							<?php elseif ( current_user_can( 'remember_update_applications' ) ) : ?>
 								<?php if ( 'accepted' === $application->status ) : ?>
-									<a class="button-link-delete" href="<?php echo esc_url( admin_url( 'admin.php?page=remember-applications&view=' . $application->application_id ) ); ?>"><?php esc_html_e( 'Decline…', 'remember' ); ?></a>
+									<a class="button-link-delete" href="<?php echo esc_url( admin_url( 'admin.php?page=remember-applications&view=' . $application->application_id ) ); ?>" aria-label="<?php echo esc_attr( sprintf( /* translators: %s: member name */ __( 'Decline… application from %s', 'remember' ), $row_member_name ) ); ?>"><?php esc_html_e( 'Decline…', 'remember' ); ?></a>
 									<form method="post" action="">
 										<?php wp_nonce_field( 'remember_application_action', 'remember_application_nonce' ); ?>
 										<input type="hidden" name="remember_application_action" value="reopen_pending">
 										<input type="hidden" name="application_id" value="<?php echo esc_attr( $application->application_id ); ?>">
-										<input type="submit" class="button button-small" value="<?php esc_attr_e( 'Move to Pending', 'remember' ); ?>" onclick="return confirm('<?php echo esc_js( __( 'Move this accepted application back to pending?', 'remember' ) ); ?>');">
+										<input type="submit" class="button button-small" value="<?php esc_attr_e( 'Move to Pending', 'remember' ); ?>" aria-label="<?php echo esc_attr( sprintf( /* translators: %s: member name */ __( 'Move to Pending: application from %s', 'remember' ), $row_member_name ) ); ?>" onclick="return confirm('<?php echo esc_js( __( 'Move this accepted application back to pending?', 'remember' ) ); ?>');">
 									</form>
 									<?php if ( current_user_can( 'remember_create_billing' ) ) : ?>
 									<form method="post" action="">

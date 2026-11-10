@@ -209,16 +209,39 @@ class Remember_QuickBooks_API {
 			$args['body']                    = wp_json_encode( $data );
 		}
 
+		$started  = Remember_Logger::start_timer();
 		$response = wp_remote_request( $url, $args );
+
+		// A query endpoint carries its search, which can include a member's email.
+		$endpoint_path = explode( '?', (string) $endpoint, 2 )[0];
+		if ( 'query' === $endpoint_path && preg_match( '/\bFROM\s+(\w+)/i', rawurldecode( (string) $endpoint ), $entity_match ) ) {
+			$endpoint_path = 'query ' . $entity_match[1];
+		}
+		$elapsed = Remember_Logger::external_call_done(
+			'QuickBooks API ' . $method,
+			$started,
+			array(
+				'endpoint' => $endpoint_path,
+				'status'   => is_wp_error( $response ) ? 0 : (int) wp_remote_retrieve_response_code( $response ),
+			)
+		);
 
 		if ( is_wp_error( $response ) ) {
 			Remember_Logger::error(
 				'QuickBooks API: HTTP transport error',
 				array(
+					'method'     => $method,
+					'endpoint'   => $endpoint_path,
+					'elapsed_ms' => $elapsed,
+					'code'       => $response->get_error_code(),
+					'message'    => $response->get_error_message(),
+				)
+			);
+			Remember_Logger::debug(
+				'QuickBooks API: HTTP transport error',
+				array(
 					'method'   => $method,
 					'endpoint' => $endpoint,
-					'code'     => $response->get_error_code(),
-					'message'  => $response->get_error_message(),
 				)
 			);
 			return $response;
@@ -240,14 +263,22 @@ class Remember_QuickBooks_API {
 			Remember_Logger::error(
 				'QuickBooks API: error response',
 				array(
+					'method'      => $method,
+					'endpoint'    => $endpoint_path,
+					'status'      => $status_code,
+					'qb_message'  => $error_message,
+					'environment' => $qb_env,
+					'api_base'    => self::get_api_base(),
+					'realm_id'    => substr( (string) $company_id, 0, 6 ) . '…',
+				)
+			);
+			Remember_Logger::debug(
+				'QuickBooks API: error response',
+				array(
 					'method'        => $method,
 					'endpoint'      => $endpoint,
 					'status'        => $status_code,
-					'qb_message'    => $error_message,
 					'response_body' => $encoded,
-					'environment'   => $qb_env,
-					'api_base'      => self::get_api_base(),
-					'realm_id'      => substr( (string) $company_id, 0, 6 ) . '…',
 				)
 			);
 
@@ -347,10 +378,11 @@ class Remember_QuickBooks_API {
 	/**
 	 * Find customers whose PrimaryEmailAddr matches (first match wins).
 	 *
-	 * @param string $email Email address.
-	 * @return array|null Customer row or null if none.
+	 * @param string $email         Email address.
+	 * @param bool   $return_errors Return the WP_Error when the search fails instead of null.
+	 * @return array|WP_Error|null Customer row, null if none, or the search error when $return_errors is true.
 	 */
-	public static function find_customer_by_primary_email( $email ) {
+	public static function find_customer_by_primary_email( $email, $return_errors = false ) {
 		$email = trim( (string) $email );
 		if ( '' === $email || ! is_email( $email ) ) {
 			return null;
@@ -363,7 +395,7 @@ class Remember_QuickBooks_API {
 			: 'PrimaryEmailAddr LIKE ' . self::qb_quote( '%' . substr( $email, $apostrophe + 1 ) );
 		$response   = self::api_request( 'GET', 'query?query=' . rawurlencode( 'SELECT * FROM Customer WHERE ' . $condition ) );
 		if ( is_wp_error( $response ) ) {
-			return null;
+			return $return_errors ? $response : null;
 		}
 		foreach ( self::normalize_customer_query_response( $response ) as $row ) {
 			$found = isset( $row['PrimaryEmailAddr']['Address'] ) ? (string) $row['PrimaryEmailAddr']['Address'] : '';
@@ -606,6 +638,7 @@ class Remember_QuickBooks_API {
 			return $invoice;
 		}
 		if ( empty( $invoice['Id'] ) || ! isset( $invoice['SyncToken'] ) ) {
+			Remember_Logger::error( 'Could not void the QuickBooks invoice: QuickBooks returned it without an Id or SyncToken', array( 'invoice_id' => (string) $invoice_id ) );
 			return new WP_Error( 'qb_void_missing_token', __( 'QuickBooks invoice is missing Id/SyncToken for void.', 'remember' ) );
 		}
 
@@ -703,6 +736,13 @@ class Remember_QuickBooks_API {
 		if ( isset( $response['Invoice'] ) && is_array( $response['Invoice'] ) ) {
 			return $response['Invoice'];
 		}
+		Remember_Logger::warning(
+			'QuickBooks answered an invoice read without the invoice',
+			array(
+				'invoice_id'    => (string) $invoice_id,
+				'response_keys' => array_keys( (array) $response ),
+			)
+		);
 		return new WP_Error( 'qb_invoice_unreadable', __( 'QuickBooks did not return the invoice.', 'remember' ) );
 	}
 
@@ -1551,6 +1591,13 @@ class Remember_QuickBooks_API {
 		$query    = 'SELECT COUNT(*) FROM Invoice WHERE CustomerRef = ' . self::qb_quote( $customer_id );
 		$response = self::api_request( 'GET', 'query?query=' . rawurlencode( $query ) );
 		if ( is_wp_error( $response ) ) {
+			Remember_Logger::warning(
+				'Could not count the QuickBooks customer\'s invoices; an unlinked refund will not be matched to this invoice',
+				array(
+					'qb_customer_id' => (string) $customer_id,
+					'error'          => $response->get_error_message(),
+				)
+			);
 			return 0;
 		}
 		return isset( $response['QueryResponse']['totalCount'] ) ? (int) $response['QueryResponse']['totalCount'] : 0;

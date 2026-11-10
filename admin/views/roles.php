@@ -38,18 +38,36 @@ if ( isset( $_GET['delete'] ) && isset( $_GET['remember_role_nonce'] ) && check_
 				$role_id
 			)
 		);
-		$wpdb->delete( $wpdb->prefix . 'remember_role_capabilities', array( 'role_id' => $role_id ), array( '%d' ) );
+		// Permissions go only after the role itself is gone, so a failed delete leaves its holders' access intact.
 		$result = $role_model->delete( $role_id );
 		if ( $result !== false ) {
+			if ( false === $wpdb->delete( $wpdb->prefix . 'remember_role_capabilities', array( 'role_id' => $role_id ), array( '%d' ) ) ) {
+				Remember_Logger::warning(
+					'Role deleted, but its permission rows were not removed',
+					array(
+						'role_id' => $role_id,
+						'error'   => $wpdb->last_error,
+					)
+				);
+			}
 			Remember_Capabilities::sync_users( is_array( $member_ids ) ? $member_ids : array() );
-			Remember_Logger::info( 'Role deleted', array( 'role_id' => $role_id ) );
+			Remember_Logger::info(
+				'Role deleted',
+				array(
+					'role_id'   => $role_id,
+					'role_name' => $role_to_delete ? $role_to_delete->role_name : '',
+					'members'   => is_array( $member_ids ) ? count( $member_ids ) : 0,
+					'user_id'   => get_current_user_id(),
+				)
+			);
 			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Role deleted successfully.', 'remember' ) . '</p></div>';
 		} else {
-			Remember_Logger::error( 'Failed to delete role', array( 'role_id' => $role_id ) );
 			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to delete role.', 'remember' ) . '</p></div>';
 		}
 	}
 }
+
+$remember_restricted_notice = __( 'Only the read capabilities for members, events and attendees were kept: an event role needs the Event Administration flag to carry other capabilities.', 'remember' );
 
 // Handle form submissions (POST requests)
 if ( isset( $_POST['remember_role_action'] ) && check_admin_referer( 'remember_role_action', 'remember_role_nonce' ) ) {
@@ -82,12 +100,25 @@ if ( isset( $_POST['remember_role_action'] ) && check_admin_referer( 'remember_r
 			// Set capabilities if provided — only caps the actor can grant.
 			if ( isset( $_POST['capabilities'] ) && is_array( $_POST['capabilities'] ) ) {
 				$capabilities = Remember_Capabilities::filter_grantable_capabilities( $_POST['capabilities'] );
-				$role_model->set_capabilities( $role_id, $capabilities );
+				$restricted   = Remember_Capabilities::restrict_capabilities_for_role( $capabilities, (bool) $data['is_event_role'], ! empty( $data['is_event_admin'] ) );
+				if ( ! $role_model->set_capabilities( $role_id, $restricted ) ) {
+					echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'The role was created, but some of its capabilities could not be saved. Check them below and save again.', 'remember' ) . '</p></div>';
+				}
+				if ( count( $restricted ) < count( $capabilities ) ) {
+					echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html( $remember_restricted_notice ) . '</p></div>';
+				}
 			}
-			Remember_Logger::info( 'Role created', array( 'role_id' => $role_id ) );
+			Remember_Logger::info(
+				'Role created',
+				array(
+					'role_id'   => $role_id,
+					'role_name' => $data['role_name'],
+					'role_type' => $data['role_type'],
+					'user_id'   => get_current_user_id(),
+				)
+			);
 			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Role created successfully.', 'remember' ) . '</p></div>';
 		} else {
-			Remember_Logger::error( 'Failed to create role' );
 			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to create role.', 'remember' ) . '</p></div>';
 		}
 	} elseif ( 'update_role' === $action && isset( $_POST['role_id'] ) ) {
@@ -109,15 +140,20 @@ if ( isset( $_POST['remember_role_action'] ) && check_admin_referer( 'remember_r
 				$role_name = 'System Administrator';
 			}
 
+			// The protected role stays a system role whatever is posted.
+			$posted_type = Remember_Capabilities::is_protected_system_role( $existing_role ) || ! isset( $_POST['role_type'] )
+				? $existing_role->role_type
+				: sanitize_text_field( $_POST['role_type'] );
+
 			// Update role details
 			$data = array(
 				'role_name'        => $role_name,
-				'role_type'        => sanitize_text_field( $_POST['role_type'] ),
-				'is_event_role'    => ( 'event' === $_POST['role_type'] ) ? 1 : 0,
+				'role_type'        => Remember_Capabilities::is_protected_system_role( $existing_role ) ? 'system' : $posted_type,
+				'is_event_role'    => ( 'event' === $posted_type && ! Remember_Capabilities::is_protected_system_role( $existing_role ) ) ? 1 : 0,
 				'show_in_frontend' => isset( $_POST['show_in_frontend'] ) && $_POST['show_in_frontend'] ? 1 : 0,
 				'description'      => isset( $_POST['description'] ) ? sanitize_textarea_field( wp_unslash( $_POST['description'] ) ) : '',
 			);
-			$was_event_admin  = ! empty( $existing_role->is_event_admin );
+			$was_event_admin  = Remember_Capabilities::is_event_admin_role( $role_id );
 			$want_event_admin = ! empty( $_POST['is_event_admin'] );
 			if ( isset( $_POST['is_event_admin_shown'] ) && $want_event_admin !== $was_event_admin ) {
 				if ( Remember_Capabilities::current_user_can_flag_event_admin_roles() ) {
@@ -149,15 +185,27 @@ if ( isset( $_POST['remember_role_action'] ) && check_admin_referer( 'remember_r
 				$role_model->get_capabilities( $role_id ),
 				$posted_caps
 			);
-			$capabilities_result = $role_model->set_capabilities( $role_id, $capabilities );
+			// The rule overrides the merge: a restricted role keeps only the read capabilities.
+			$is_event_admin_now  = isset( $data['is_event_admin'] ) ? (bool) $data['is_event_admin'] : $was_event_admin;
+			$restricted          = Remember_Capabilities::restrict_capabilities_for_role( $capabilities, (bool) $data['is_event_role'], $is_event_admin_now );
+			$capabilities_result = $role_model->set_capabilities( $role_id, $restricted );
+			if ( count( $restricted ) < count( $capabilities ) ) {
+				echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html( $remember_restricted_notice ) . '</p></div>';
+			}
 			
 			if ( $update_result !== false && $capabilities_result ) {
-				Remember_Logger::info( 'Role updated', array( 'role_id' => $role_id ) );
+				Remember_Logger::info(
+					'Role updated',
+					array(
+						'role_id'      => $role_id,
+						'capabilities' => count( $restricted ),
+						'user_id'      => get_current_user_id(),
+					)
+				);
 				echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Role updated successfully.', 'remember' ) . '</p></div>';
 				// Refresh the role data
 				$editing_role = $role_model->get( $role_id );
 			} else {
-				Remember_Logger::error( 'Failed to update role', array( 'role_id' => $role_id ) );
 				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to update role.', 'remember' ) . '</p></div>';
 			}
 		}
@@ -167,7 +215,9 @@ if ( isset( $_POST['remember_role_action'] ) && check_admin_referer( 'remember_r
 		}
 		$role_id = absint( $_POST['role_id'] );
 		$existing_role = $role_model->get( $role_id );
-		if ( Remember_Capabilities::is_protected_system_role( $existing_role ) && ! current_user_can( 'manage_options' ) ) {
+		if ( ! $existing_role ) {
+			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Role not found.', 'remember' ) . '</p></div>';
+		} elseif ( Remember_Capabilities::is_protected_system_role( $existing_role ) && ! current_user_can( 'manage_options' ) ) {
 			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Only a WordPress administrator can edit the System Administrator role.', 'remember' ) . '</p></div>';
 		} else {
 			$posted_caps = isset( $_POST['capabilities'] ) && is_array( $_POST['capabilities'] )
@@ -177,12 +227,26 @@ if ( isset( $_POST['remember_role_action'] ) && check_admin_referer( 'remember_r
 				$role_model->get_capabilities( $role_id ),
 				$posted_caps
 			);
-			$result = $role_model->set_capabilities( $role_id, $capabilities );
+			$restricted = Remember_Capabilities::restrict_capabilities_for_role(
+				$capabilities,
+				! empty( $existing_role->is_event_role ),
+				Remember_Capabilities::is_event_admin_role( $role_id )
+			);
+			$result     = $role_model->set_capabilities( $role_id, $restricted );
+			if ( count( $restricted ) < count( $capabilities ) ) {
+				echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html( $remember_restricted_notice ) . '</p></div>';
+			}
 			if ( $result ) {
-				Remember_Logger::info( 'Role capabilities updated', array( 'role_id' => $role_id ) );
+				Remember_Logger::info(
+					'Role capabilities updated',
+					array(
+						'role_id'      => $role_id,
+						'capabilities' => count( $restricted ),
+						'user_id'      => get_current_user_id(),
+					)
+				);
 				echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Capabilities updated successfully.', 'remember' ) . '</p></div>';
 			} else {
-				Remember_Logger::error( 'Failed to update capabilities', array( 'role_id' => $role_id ) );
 				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to update capabilities.', 'remember' ) . '</p></div>';
 			}
 		}
@@ -245,6 +309,7 @@ $remember_render_capability_matrix = function ( $selected = array() ) use ( $cap
 									value="<?php echo esc_attr( $cap ); ?>"
 									<?php checked( in_array( $cap, $selected, true ) ); ?>
 									<?php disabled( ! $can_grant ); ?>
+									data-cannot-grant="<?php echo $can_grant ? '0' : '1'; ?>"
 								>
 							</td>
 						<?php endforeach; ?>
@@ -271,6 +336,7 @@ $remember_render_capability_matrix = function ( $selected = array() ) use ( $cap
 									value="<?php echo esc_attr( $cap ); ?>"
 									<?php checked( in_array( $cap, $selected, true ) ); ?>
 									<?php disabled( ! $can_grant ); ?>
+									data-cannot-grant="<?php echo $can_grant ? '0' : '1'; ?>"
 								>
 								<?php echo esc_html( $label ); ?>
 							</label>
@@ -314,13 +380,13 @@ if ( $editing_role ) {
 		<?php if ( current_user_can( 'remember_create_roles' ) ) : ?>
 		<div id="remember-add-role" hidden style="margin: 20px 0; padding: 20px; background: #fff; border: 1px solid #ccd0d4; border-radius: 4px;">
 			<h2><?php esc_html_e( 'Add New Role', 'remember' ); ?></h2>
-			<form method="post" action="">
+			<form method="post" action="" class="remember-role-form" data-event-admin="0">
 				<?php wp_nonce_field( 'remember_role_action', 'remember_role_nonce' ); ?>
 				<input type="hidden" name="remember_role_action" value="add">
 				
 				<table class="form-table">
 					<tr>
-						<th><label for="role_name"><?php esc_html_e( 'Role Name', 'remember' ); ?> <span class="description">(required)</span></label></th>
+						<th><label for="role_name"><?php esc_html_e( 'Role Name', 'remember' ); ?> <span class="description"><?php esc_html_e( '(required)', 'remember' ); ?></span></label></th>
 						<td><input type="text" id="role_name" name="role_name" class="regular-text" required></td>
 					</tr>
 					<tr>
@@ -366,6 +432,7 @@ if ( $editing_role ) {
 						<th><label><?php esc_html_e( 'Capabilities', 'remember' ); ?></label></th>
 						<td>
 							<p class="description"><?php esc_html_e( 'Select capabilities for this role. You can only grant capabilities you already hold.', 'remember' ); ?></p>
+							<p class="description remember-cap-restriction-note" hidden><?php esc_html_e( 'Event roles can only have the Read capabilities for Members, Events and Attendees unless they are marked as an event administration role.', 'remember' ); ?></p>
 							<?php $remember_render_capability_matrix( array() ); ?>
 						</td>
 					</tr>
@@ -436,7 +503,7 @@ if ( $editing_role ) {
 									|
 								<?php endif; ?>
 								<?php if ( current_user_can( 'remember_delete_roles' ) ) : ?>
-									<a href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin.php?page=remember-roles&delete=' . $role->role_id ), 'remember_role_action', 'remember_role_nonce' ) ); ?>" onclick="return confirm('<?php echo esc_js( __( 'Are you sure you want to delete this role?', 'remember' ) ); ?>');"><?php esc_html_e( 'Delete', 'remember' ); ?></a>
+									<a href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin.php?page=remember-roles&delete=' . $role->role_id ), 'remember_role_action', 'remember_role_nonce' ) ); ?>" onclick="return confirm('<?php echo esc_js( __( 'Are you sure you want to delete this role?', 'remember' ) ); ?>');" aria-label="<?php echo esc_attr( sprintf( /* translators: %s: role name */ __( 'Delete %s', 'remember' ), $role->role_name ) ); ?>"><?php esc_html_e( 'Delete', 'remember' ); ?></a>
 								<?php endif; ?>
 							</td>
 						</tr>
@@ -509,7 +576,7 @@ if ( $editing_role ) {
 								<?php endif; ?>
 								<?php if ( current_user_can( 'remember_delete_roles' ) && ! $is_protected ) : ?>
 									|
-									<a href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin.php?page=remember-roles&delete=' . $role->role_id ), 'remember_role_action', 'remember_role_nonce' ) ); ?>" onclick="return confirm('<?php echo esc_js( __( 'Are you sure you want to delete this role?', 'remember' ) ); ?>');"><?php esc_html_e( 'Delete', 'remember' ); ?></a>
+									<a href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin.php?page=remember-roles&delete=' . $role->role_id ), 'remember_role_action', 'remember_role_nonce' ) ); ?>" onclick="return confirm('<?php echo esc_js( __( 'Are you sure you want to delete this role?', 'remember' ) ); ?>');" aria-label="<?php echo esc_attr( sprintf( /* translators: %s: role name */ __( 'Delete %s', 'remember' ), $role->role_name ) ); ?>"><?php esc_html_e( 'Delete', 'remember' ); ?></a>
 								<?php endif; ?>
 							</td>
 						</tr>
@@ -524,14 +591,14 @@ if ( $editing_role ) {
 		<div style="margin: 20px 0; padding: 20px; background: #fff; border: 1px solid #ccd0d4; border-radius: 4px;">
 			<h2><?php echo esc_html( sprintf( __( 'Edit Role: %s', 'remember' ), $editing_role->role_name ) ); ?></h2>
 			
-			<form method="post" action="">
+			<form method="post" action="" class="remember-role-form" data-event-admin="<?php echo ! empty( $editing_role->is_event_admin ) ? '1' : '0'; ?>">
 				<?php wp_nonce_field( 'remember_role_action', 'remember_role_nonce' ); ?>
 				<input type="hidden" name="remember_role_action" value="update_role">
 				<input type="hidden" name="role_id" value="<?php echo esc_attr( $editing_role_id ); ?>">
 				
 				<table class="form-table">
 					<tr>
-						<th><label for="role_name"><?php esc_html_e( 'Role Name', 'remember' ); ?> <span class="description">(required)</span></label></th>
+						<th><label for="role_name"><?php esc_html_e( 'Role Name', 'remember' ); ?> <span class="description"><?php esc_html_e( '(required)', 'remember' ); ?></span></label></th>
 						<td>
 							<input type="text" id="role_name" name="role_name" class="regular-text" value="<?php echo esc_attr( $editing_role->role_name ); ?>" required<?php echo Remember_Capabilities::is_protected_system_role( $editing_role ) ? ' readonly' : ''; ?>>
 						</td>
@@ -539,7 +606,11 @@ if ( $editing_role ) {
 					<tr>
 						<th><label for="role_type"><?php esc_html_e( 'Role Type', 'remember' ); ?></label></th>
 						<td>
-							<select id="role_type" name="role_type" class="regular-text">
+							<?php $role_type_locked = Remember_Capabilities::is_protected_system_role( $editing_role ); ?>
+							<?php if ( $role_type_locked ) : ?>
+								<input type="hidden" name="role_type" value="system">
+							<?php endif; ?>
+							<select id="role_type" <?php echo $role_type_locked ? 'disabled' : 'name="role_type"'; ?> class="regular-text">
 								<option value="event" <?php selected( $editing_role->role_type, 'event' ); ?>><?php esc_html_e( 'Event Role', 'remember' ); ?></option>
 								<option value="system" <?php selected( $editing_role->role_type, 'system' ); ?>><?php esc_html_e( 'System Role', 'remember' ); ?></option>
 							</select>
@@ -583,6 +654,7 @@ if ( $editing_role ) {
 						<th><label><?php esc_html_e( 'Capabilities', 'remember' ); ?></label></th>
 						<td>
 							<p class="description"><?php esc_html_e( 'Select the capabilities this role should have. You can only change capabilities you already hold; others stay as they are.', 'remember' ); ?></p>
+							<p class="description remember-cap-restriction-note" hidden><?php esc_html_e( 'Event roles can only have the Read capabilities for Members, Events and Attendees unless they are marked as an event administration role.', 'remember' ); ?></p>
 							<?php $remember_render_capability_matrix( $editing_role_capabilities ); ?>
 						</td>
 					</tr>
@@ -599,6 +671,45 @@ if ( $editing_role ) {
 
 <script>
 jQuery(document).ready(function($) {
+	var readOnlyCaps = <?php echo wp_json_encode( Remember_Capabilities::event_role_allowed_capabilities() ); ?>;
+
+	// Event roles without the event administration flag may only carry the read capabilities.
+	// The server enforces the same rule on save; this keeps the form in step with it.
+	function syncCapabilityRestriction($form) {
+		var isEventRole = 'event' === $form.find('select[name="role_type"]').val();
+		var $flag       = $form.find('input[name="is_event_admin"]');
+		var isAdmin     = $flag.length ? $flag.is(':checked') : '1' === String($form.attr('data-event-admin'));
+		var restricted  = isEventRole && !isAdmin;
+
+		$form.find('.remember-cap-matrix-wrap input[type="checkbox"]').each(function() {
+			var $box = $(this);
+			if (readOnlyCaps.indexOf($box.val()) !== -1) {
+				return;
+			}
+			if (restricted) {
+				if (undefined === $box.data('wasChecked')) {
+					$box.data('wasChecked', $box.prop('checked'));
+				}
+				$box.prop('checked', false).prop('disabled', true);
+			} else {
+				if (undefined !== $box.data('wasChecked')) {
+					$box.prop('checked', $box.data('wasChecked'));
+					$box.removeData('wasChecked');
+				}
+				$box.prop('disabled', '1' === String($box.attr('data-cannot-grant')));
+			}
+		});
+		$form.find('.remember-cap-restriction-note').prop('hidden', !restricted);
+	}
+
+	$('.remember-role-form').each(function() {
+		var $form = $(this);
+		$form.on('change', 'select[name="role_type"], input[name="is_event_admin"]', function() {
+			syncCapabilityRestriction($form);
+		});
+		syncCapabilityRestriction($form);
+	});
+
 	$('.remember-toggle-capabilities').on('click', function(e) {
 		e.preventDefault();
 		var $link = $(this);

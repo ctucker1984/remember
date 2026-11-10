@@ -106,33 +106,42 @@ class Remember_Platform_Handles {
 		}
 
 		$im = $wpdb->prefix . 'remember_im_platforms';
-		$wpdb->query(
+		$ok = $wpdb->query(
 			$wpdb->prepare(
 				"UPDATE {$im} SET url_template = %s, show_at = 1 WHERE platform_key = %s AND (url_template IS NULL OR url_template = '')",
 				'https://t.me/{handle}',
 				'telegram'
 			)
 		);
+		if ( false === $ok ) {
+			return false;
+		}
 
 		$social = $wpdb->prefix . 'remember_social_media_platforms';
 		foreach ( self::social_templates() as $name => $template ) {
-			$wpdb->query(
+			$ok = $wpdb->query(
 				$wpdb->prepare(
 					"UPDATE {$social} SET url_template = %s WHERE platform_name = %s AND (url_template IS NULL OR url_template = '')",
 					$template,
 					$name
 				)
 			);
+			if ( false === $ok ) {
+				return false;
+			}
 		}
 
 		$profiles = $wpdb->prefix . 'remember_member_profiles';
-		$wpdb->query(
+		$ok       = $wpdb->query(
 			$wpdb->prepare(
 				"UPDATE {$profiles} SET im_handle = TRIM(LEADING '@' FROM im_handle) WHERE im_type = %s AND im_handle LIKE %s",
 				'telegram',
 				'@%'
 			)
 		);
+		if ( false === $ok ) {
+			return false;
+		}
 
 		return true;
 	}

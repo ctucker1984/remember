@@ -11,6 +11,8 @@ if ( ! defined( 'WPINC' ) ) {
 	die;
 }
 
+require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
+
 /**
  * event_merchandise × event_roles → max_qty (0 = hide).
  */
@@ -164,14 +166,14 @@ class Remember_Addon_Role_Limits {
 	 * @param int                $event_id       Event ID.
 	 * @param int                $merchandise_id Merchandise ID.
 	 * @param array<int,int|string> $role_limits  role_id => max_qty.
-	 * @return void
+	 * @return bool False when some limits were not saved.
 	 */
 	public static function sync_for_merchandise( $event_id, $merchandise_id, array $role_limits ) {
 		global $wpdb;
 		$event_id       = absint( $event_id );
 		$merchandise_id = absint( $merchandise_id );
 		if ( $event_id < 1 || $merchandise_id < 1 ) {
-			return;
+			return true;
 		}
 
 		$roles_table = $wpdb->prefix . 'remember_event_roles';
@@ -186,17 +188,22 @@ class Remember_Addon_Role_Limits {
 			$role_id_to_event_role[ absint( $er->role_id ) ] = absint( $er->event_role_id );
 		}
 
-		$table = self::table();
+		$table  = self::table();
+		$failed = array();
+		$error  = '';
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		$wpdb->delete( $table, array( 'merchandise_id' => $merchandise_id ), array( '%d' ) );
+		if ( false === $wpdb->delete( $table, array( 'merchandise_id' => $merchandise_id ), array( '%d' ) ) ) {
+			$failed[] = 'clear existing';
+			$error    = $wpdb->last_error;
+		}
 
 		foreach ( $role_limits as $role_id => $max_qty ) {
 			$role_id = absint( $role_id );
 			if ( $role_id < 1 || ! isset( $role_id_to_event_role[ $role_id ] ) ) {
 				continue;
 			}
-			$max_qty = max( 0, absint( $max_qty ) );
-			$wpdb->insert(
+			$max_qty  = max( 0, absint( $max_qty ) );
+			$inserted = $wpdb->insert(
 				$table,
 				array(
 					'merchandise_id' => $merchandise_id,
@@ -207,7 +214,25 @@ class Remember_Addon_Role_Limits {
 				),
 				array( '%d', '%d', '%d', '%s', '%s' )
 			);
+			if ( false === $inserted ) {
+				$failed[] = $role_id;
+				$error    = $wpdb->last_error;
+			}
 		}
+
+		if ( ! empty( $failed ) ) {
+			Remember_Logger::error(
+				'Add-on role limits only partly saved; members in these roles may not see the add-on',
+				array(
+					'event_id'       => $event_id,
+					'merchandise_id' => $merchandise_id,
+					'failed'         => $failed,
+					'error'          => $error,
+				)
+			);
+			return false;
+		}
+		return true;
 	}
 
 	/**
@@ -222,7 +247,15 @@ class Remember_Addon_Role_Limits {
 		if ( $merchandise_id < 1 ) {
 			return;
 		}
-		$wpdb->delete( self::table(), array( 'merchandise_id' => $merchandise_id ), array( '%d' ) );
+		if ( false === $wpdb->delete( self::table(), array( 'merchandise_id' => $merchandise_id ), array( '%d' ) ) ) {
+			Remember_Logger::warning(
+				'Add-on removed, but its role limits were not cleared',
+				array(
+					'merchandise_id' => $merchandise_id,
+					'error'          => $wpdb->last_error,
+				)
+			);
+		}
 	}
 
 	/**

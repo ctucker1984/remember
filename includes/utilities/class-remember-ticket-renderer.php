@@ -29,13 +29,6 @@ class Remember_Ticket_Renderer {
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
 		$data = Remember_Ticket::get_data( $application_id );
 		if ( is_wp_error( $data ) ) {
-			Remember_Logger::error(
-				'Ticket could not be built',
-				array(
-					'application_id' => (int) $application_id,
-					'error'          => $data->get_error_code(),
-				)
-			);
 			status_header( 404 );
 			wp_die( esc_html( $data->get_error_message() ), esc_html__( 'Ticket', 'remember' ), array( 'response' => 404 ) );
 		}

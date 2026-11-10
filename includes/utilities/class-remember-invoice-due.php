@@ -487,8 +487,10 @@ class Remember_Invoice_Due {
 			)
 		);
 
-		$stop  = 'xero' === $job['provider'] ? self::run_xero_chunk( $event, $job ) : self::run_quickbooks_chunk( $event, $job );
-		$delay = self::RUN_GAP;
+		$started = Remember_Logger::start_timer();
+		$stop    = 'xero' === $job['provider'] ? self::run_xero_chunk( $event, $job ) : self::run_quickbooks_chunk( $event, $job );
+		$delay   = self::RUN_GAP;
+		$run_ms  = Remember_Logger::elapsed_ms( $started );
 
 		if ( is_wp_error( $stop ) ) {
 			$job['last_error'] = $stop->get_error_message();
@@ -535,6 +537,8 @@ class Remember_Invoice_Due {
 				'unchanged' => $job['unchanged'],
 				'skipped'   => $job['skipped'],
 				'failed'    => $job['failed'],
+				'run_ms'    => $run_ms,
+				'total_sec' => max( 0, strtotime( $job['finished_at'] ) - strtotime( $job['started_at'] ) ),
 			);
 			if ( $job['failed'] > 0 ) {
 				$summary['last_error'] = $job['last_error'];
@@ -553,6 +557,7 @@ class Remember_Invoice_Due {
 				'event_id'      => $event_id,
 				'remaining'     => $remaining,
 				'resume_in_sec' => $delay,
+				'run_ms'        => $run_ms,
 			)
 		);
 	}

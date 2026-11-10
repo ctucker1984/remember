@@ -11,10 +11,34 @@ if ( ! defined( 'WPINC' ) ) {
 	die;
 }
 
+require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
+
 /**
  * Cron scan, admin review, merge, and lockout for duplicate member profiles.
  */
 class Remember_Profile_Duplicates {
+
+	/**
+	 * Merge or undo steps that failed during this request, step => error.
+	 *
+	 * @var array<string,string>
+	 */
+	private static $failed_steps = array();
+
+	/**
+	 * Record a failed write so the merge or undo can report it in one log line.
+	 *
+	 * @param mixed  $result Result of a $wpdb write or wp_update_user().
+	 * @param string $step   Short name of the step.
+	 * @return mixed The result, unchanged.
+	 */
+	private static function check( $result, $step ) {
+		global $wpdb;
+		if ( false === $result || is_wp_error( $result ) ) {
+			self::$failed_steps[ $step ] = is_wp_error( $result ) ? $result->get_error_message() : $wpdb->last_error;
+		}
+		return $result;
+	}
 
 	const PASSWORD_META = 'remember_password_updated_at';
 	const MERGED_META   = 'remember_merged_into';
@@ -436,12 +460,14 @@ class Remember_Profile_Duplicates {
 	 */
 	public static function scan() {
 		global $wpdb;
+		$started = Remember_Logger::start_timer();
 		if ( function_exists( 'set_time_limit' ) ) {
 			@set_time_limit( 120 );
 		}
 		$table = self::table_name();
 		$exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
 		if ( $exists !== $table ) {
+			Remember_Logger::warning( 'Duplicate profile scan skipped: its table is missing; deactivate and reactivate reMember to create it', array( 'table' => $table ) );
 			return 0;
 		}
 
@@ -454,6 +480,7 @@ class Remember_Profile_Duplicates {
 			WHERE m.status IS NULL OR m.status != 'merged'"
 		);
 		if ( empty( $members ) ) {
+			Remember_Logger::debug( 'Duplicate profile scan found no members to compare' );
 			return 0;
 		}
 
@@ -484,8 +511,10 @@ class Remember_Profile_Duplicates {
 			}
 		}
 
-		$created = 0;
-		$count   = count( $members );
+		$created  = 0;
+		$failed   = 0;
+		$compared = 0;
+		$count    = count( $members );
 		for ( $i = 0; $i < $count; $i++ ) {
 			for ( $j = $i + 1; $j < $count; $j++ ) {
 				$a = $members[ $i ];
@@ -503,6 +532,7 @@ class Remember_Profile_Duplicates {
 				if ( isset( $known[ $key ] ) ) {
 					continue;
 				}
+				++$compared;
 				$reasons = self::match_reasons( $a, $b, isset( $social[ $id_a ] ) ? $social[ $id_a ] : array(), isset( $social[ $id_b ] ) ? $social[ $id_b ] : array() );
 				if ( empty( $reasons ) ) {
 					continue;
@@ -522,8 +552,31 @@ class Remember_Profile_Duplicates {
 					$known[ $key ] = 'pending';
 					++$created;
 					self::notify_new_hit( (int) $wpdb->insert_id, $id_a, $id_b, $reasons );
+				} else {
+					++$failed;
+					Remember_Logger::error(
+						'Possible duplicate profiles found but not saved for review',
+						array(
+							'member_a_id' => $id_a,
+							'member_b_id' => $id_b,
+							'error'       => $wpdb->last_error,
+						)
+					);
 				}
 			}
+		}
+
+		$summary = array(
+			'members'    => $count,
+			'compared'   => $compared,
+			'new_hits'   => $created,
+			'failed'     => $failed,
+			'elapsed_ms' => Remember_Logger::elapsed_ms( $started ),
+		);
+		if ( $failed > 0 ) {
+			Remember_Logger::warning( 'Duplicate profile scan finished with errors', $summary );
+		} else {
+			Remember_Logger::info( 'Duplicate profile scan finished', $summary );
 		}
 
 		return $created;
@@ -662,13 +715,22 @@ class Remember_Profile_Duplicates {
 		}
 
 		global $wpdb;
-		$wpdb->update(
+		$stamped = $wpdb->update(
 			self::table_name(),
 			array( 'notified_at' => current_time( 'mysql' ) ),
 			array( 'hit_id' => absint( $hit_id ) ),
 			array( '%s' ),
 			array( '%d' )
 		);
+		if ( false === $stamped ) {
+			Remember_Logger::warning(
+				'Duplicate review email sent but not marked as sent',
+				array(
+					'hit_id' => absint( $hit_id ),
+					'error'  => $wpdb->last_error,
+				)
+			);
+		}
 	}
 
 	/**
@@ -683,7 +745,7 @@ class Remember_Profile_Duplicates {
 			return new WP_Error( 'invalid_hit', __( 'That duplicate review is not pending.', 'remember' ) );
 		}
 		global $wpdb;
-		$wpdb->update(
+		$dismissed = $wpdb->update(
 			self::table_name(),
 			array(
 				'status'      => 'dismissed',
@@ -693,6 +755,25 @@ class Remember_Profile_Duplicates {
 			array( 'hit_id' => (int) $hit->hit_id ),
 			array( '%s', '%d', '%s' ),
 			array( '%d' )
+		);
+		if ( false === $dismissed ) {
+			Remember_Logger::error(
+				'Duplicate review not dismissed',
+				array(
+					'hit_id' => (int) $hit->hit_id,
+					'error'  => $wpdb->last_error,
+				)
+			);
+			return new WP_Error( 'dismiss_failed', __( 'The duplicate review could not be dismissed. Please try again.', 'remember' ) );
+		}
+		Remember_Logger::info(
+			'Duplicate review dismissed',
+			array(
+				'hit_id'      => (int) $hit->hit_id,
+				'member_a_id' => (int) $hit->member_a_id,
+				'member_b_id' => (int) $hit->member_b_id,
+				'user_id'     => get_current_user_id(),
+			)
 		);
 		return true;
 	}
@@ -801,14 +882,26 @@ class Remember_Profile_Duplicates {
 		}
 		$locked_id = $survivor_id === (int) $hit->member_a_id ? (int) $hit->member_b_id : (int) $hit->member_a_id;
 
+		require_once plugin_dir_path( __FILE__ ) . 'class-remember-capabilities.php';
 		// Merging copies the password hash and email onto the survivor, so the current
 		// user must be allowed to administer both accounts: non-admins may merge members
 		// but not administrators.
 		if ( ! Remember_Capabilities::current_user_can_administer_account( $survivor_id )
 			|| ! Remember_Capabilities::current_user_can_administer_account( $locked_id ) ) {
+			Remember_Logger::warning(
+				'Profile merge refused: the user may not administer both accounts',
+				array(
+					'hit_id'      => (int) $hit->hit_id,
+					'survivor_id' => $survivor_id,
+					'locked_id'   => $locked_id,
+					'user_id'     => get_current_user_id(),
+				)
+			);
 			return new WP_Error( 'cannot_merge_privileged', __( 'You do not have permission to merge these accounts.', 'remember' ) );
 		}
 
+		$started            = Remember_Logger::start_timer();
+		self::$failed_steps = array();
 		$snap_a    = self::snapshot( (int) $hit->member_a_id );
 		$snap_b    = self::snapshot( (int) $hit->member_b_id );
 		$by_side   = array(
@@ -857,19 +950,25 @@ class Remember_Profile_Duplicates {
 
 		if ( ! empty( $profile_data ) ) {
 			if ( array_key_exists( 'member_number', $profile_data ) ) {
-				$wpdb->query(
-					$wpdb->prepare(
-						"UPDATE {$wpdb->prefix}remember_member_profiles SET member_number = NULL WHERE member_id = %d",
-						$locked_id
-					)
+				self::check(
+					$wpdb->query(
+						$wpdb->prepare(
+							"UPDATE {$wpdb->prefix}remember_member_profiles SET member_number = NULL WHERE member_id = %d",
+							$locked_id
+						)
+					),
+					'free member number'
 				);
 			}
 			$profile_data['updated_at'] = current_time( 'mysql' );
 			$profile_data['updated_by'] = get_current_user_id();
-			$wpdb->update(
-				$wpdb->prefix . 'remember_member_profiles',
-				$profile_data,
-				array( 'member_id' => $survivor_id )
+			self::check(
+				$wpdb->update(
+					$wpdb->prefix . 'remember_member_profiles',
+					$profile_data,
+					array( 'member_id' => $survivor_id )
+				),
+				'survivor profile'
 			);
 			if ( ! empty( $profile_data['timezone'] ) ) {
 				update_user_meta( $survivor_id, 'timezone_string', $profile_data['timezone'] );
@@ -879,11 +978,14 @@ class Remember_Profile_Duplicates {
 		if ( ! empty( $choices['display_name'] ) && isset( $by_side[ $choices['display_name'] ]['user'] ) ) {
 			$from_user = $by_side[ $choices['display_name'] ]['user'];
 			if ( $from_user ) {
-				wp_update_user(
-					array(
-						'ID'           => $survivor_id,
-						'display_name' => $from_user->display_name,
-					)
+				self::check(
+					wp_update_user(
+						array(
+							'ID'           => $survivor_id,
+							'display_name' => $from_user->display_name,
+						)
+					),
+					'display name'
 				);
 			}
 		}
@@ -892,18 +994,24 @@ class Remember_Profile_Duplicates {
 			if ( $from_user && is_email( $from_user->user_email ) ) {
 				$desired = $from_user->user_email;
 				if ( (int) $from_user->ID !== $survivor_id ) {
-					wp_update_user(
-						array(
-							'ID'         => $locked_id,
-							'user_email' => sprintf( 'merged-%d-%s@example.com', $locked_id, wp_generate_password( 6, false ) ),
-						)
+					self::check(
+						wp_update_user(
+							array(
+								'ID'         => $locked_id,
+								'user_email' => sprintf( 'merged-%d-%s@example.com', $locked_id, wp_generate_password( 6, false ) ),
+							)
+						),
+						'release locked email'
 					);
 				}
-				wp_update_user(
-					array(
-						'ID'         => $survivor_id,
-						'user_email' => $desired,
-					)
+				self::check(
+					wp_update_user(
+						array(
+							'ID'         => $survivor_id,
+							'user_email' => $desired,
+						)
+					),
+					'survivor email'
 				);
 			}
 		}
@@ -921,10 +1029,13 @@ class Remember_Profile_Duplicates {
 				$member_patch['status'] = $from_member->status;
 			}
 		}
-		$wpdb->update(
-			$wpdb->prefix . 'remember_members',
-			$member_patch,
-			array( 'member_id' => $survivor_id )
+		self::check(
+			$wpdb->update(
+				$wpdb->prefix . 'remember_members',
+				$member_patch,
+				array( 'member_id' => $survivor_id )
+			),
+			'survivor member row'
 		);
 
 		$pass_a = strtotime( self::password_updated_at( (int) $hit->member_a_id ) );
@@ -933,12 +1044,15 @@ class Remember_Profile_Duplicates {
 		if ( $pass_from !== $survivor_id ) {
 			$src = get_userdata( $pass_from );
 			if ( $src && ! empty( $src->user_pass ) ) {
-				$wpdb->update(
-					$wpdb->users,
-					array( 'user_pass' => $src->user_pass ),
-					array( 'ID' => $survivor_id ),
-					array( '%s' ),
-					array( '%d' )
+				self::check(
+					$wpdb->update(
+						$wpdb->users,
+						array( 'user_pass' => $src->user_pass ),
+						array( 'ID' => $survivor_id ),
+						array( '%s' ),
+						array( '%d' )
+					),
+					'password'
 				);
 				update_user_meta( $survivor_id, self::PASSWORD_META, self::password_updated_at( $pass_from ) );
 			}
@@ -947,52 +1061,75 @@ class Remember_Profile_Duplicates {
 		self::reassign_rows( $locked_id, $survivor_id );
 		self::apply_surviving_roles( $survivor_id, $locked_id, $keep_role_ids );
 
-		$wpdb->update(
-			$wpdb->prefix . 'remember_members',
-			array(
-				'status'     => 'merged',
-				'updated_at' => current_time( 'mysql' ),
+		self::check(
+			$wpdb->update(
+				$wpdb->prefix . 'remember_members',
+				array(
+					'status'     => 'merged',
+					'updated_at' => current_time( 'mysql' ),
+				),
+				array( 'member_id' => $locked_id )
 			),
-			array( 'member_id' => $locked_id )
+			'lock discarded profile'
 		);
 		update_user_meta( $locked_id, self::MERGED_META, $survivor_id );
 		if ( class_exists( 'WP_Session_Tokens' ) ) {
 			$sessions = WP_Session_Tokens::get_instance( $locked_id );
 			$sessions->destroy_all();
 		}
-		$wpdb->query(
-			$wpdb->prepare(
-				"UPDATE {$wpdb->prefix}remember_member_profiles SET member_number = NULL WHERE member_id = %d",
-				$locked_id
-			)
+		self::check(
+			$wpdb->query(
+				$wpdb->prepare(
+					"UPDATE {$wpdb->prefix}remember_member_profiles SET member_number = NULL WHERE member_id = %d",
+					$locked_id
+				)
+			),
+			'clear discarded member number'
 		);
 
 		$closed = self::close_stale_hits( $locked_id, (int) $hit->hit_id );
 		$undo_payload['closed_hit_ids'] = $closed;
 
-		$wpdb->update(
-			self::table_name(),
-			array(
-				'status'        => 'merged',
-				'survivor_id'   => $survivor_id,
-				'locked_id'     => $locked_id,
-				'reviewed_by'   => get_current_user_id(),
-				'reviewed_at'   => current_time( 'mysql' ),
-				'undo_snapshot' => wp_json_encode( $undo_payload ),
+		self::check(
+			$wpdb->update(
+				self::table_name(),
+				array(
+					'status'        => 'merged',
+					'survivor_id'   => $survivor_id,
+					'locked_id'     => $locked_id,
+					'reviewed_by'   => get_current_user_id(),
+					'reviewed_at'   => current_time( 'mysql' ),
+					'undo_snapshot' => wp_json_encode( $undo_payload ),
+				),
+				array( 'hit_id' => (int) $hit->hit_id ),
+				array( '%s', '%d', '%d', '%d', '%s', '%s' ),
+				array( '%d' )
 			),
-			array( 'hit_id' => (int) $hit->hit_id ),
-			array( '%s', '%d', '%d', '%d', '%s', '%s' ),
-			array( '%d' )
+			'save review and undo snapshot'
 		);
 
 		self::notify_merged( $survivor_id, $locked_id, $lock_notify_email );
-		require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
+		if ( ! empty( self::$failed_steps ) ) {
+			Remember_Logger::error(
+				'Profiles merged, but some steps failed; check both profiles' . ( isset( self::$failed_steps['save review and undo snapshot'] ) ? ' (this merge cannot be undone automatically)' : '' ),
+				array(
+					'hit_id'      => (int) $hit->hit_id,
+					'survivor_id' => $survivor_id,
+					'locked_id'   => $locked_id,
+					'steps'       => array_keys( self::$failed_steps ),
+					'error'       => implode( ' | ', array_unique( array_values( self::$failed_steps ) ) ),
+				)
+			);
+		}
 		Remember_Logger::info(
 			'Profiles merged',
 			array(
 				'hit_id'       => (int) $hit->hit_id,
 				'survivor_id'  => $survivor_id,
 				'locked_id'    => $locked_id,
+				'closed_hits'  => count( $closed ),
+				'user_id'      => get_current_user_id(),
+				'elapsed_ms'   => Remember_Logger::elapsed_ms( $started ),
 			)
 		);
 		return true;
@@ -1021,14 +1158,17 @@ class Remember_Profile_Duplicates {
 			return array();
 		}
 		$in = implode( ',', array_map( 'absint', $ids ) );
-		$wpdb->query(
-			$wpdb->prepare(
-				"UPDATE {$table} SET status = %s, reviewed_by = %d, reviewed_at = %s WHERE hit_id IN ({$in})",
-				'closed',
-				get_current_user_id(),
-				current_time( 'mysql' )
-			)
-		); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		self::check(
+			$wpdb->query(
+				$wpdb->prepare(
+					"UPDATE {$table} SET status = %s, reviewed_by = %d, reviewed_at = %s WHERE hit_id IN ({$in})",
+					'closed',
+					get_current_user_id(),
+					current_time( 'mysql' )
+				)
+			), // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			'close other reviews'
+		);
 		return array_map( 'absint', $ids );
 	}
 
@@ -1068,17 +1208,20 @@ class Remember_Profile_Duplicates {
 			}
 		}
 
-		$wpdb->delete( $wpdb->prefix . 'remember_member_roles', array( 'member_id' => $survivor_id ) );
-		$wpdb->delete( $wpdb->prefix . 'remember_member_roles', array( 'member_id' => $locked_id ) );
+		self::check( $wpdb->delete( $wpdb->prefix . 'remember_member_roles', array( 'member_id' => $survivor_id ) ), 'roles' );
+		self::check( $wpdb->delete( $wpdb->prefix . 'remember_member_roles', array( 'member_id' => $locked_id ) ), 'roles' );
 		foreach ( $keep as $role_id ) {
-			$wpdb->insert(
-				$wpdb->prefix . 'remember_member_roles',
-				array(
-					'member_id'  => $survivor_id,
-					'role_id'    => $role_id,
-					'created_at' => current_time( 'mysql' ),
+			self::check(
+				$wpdb->insert(
+					$wpdb->prefix . 'remember_member_roles',
+					array(
+						'member_id'  => $survivor_id,
+						'role_id'    => $role_id,
+						'created_at' => current_time( 'mysql' ),
+					),
+					array( '%d', '%d', '%s' )
 				),
-				array( '%d', '%d', '%s' )
+				'roles'
 			);
 		}
 		Remember_Capabilities::sync_user_capabilities_from_roles( $survivor_id );
@@ -1136,7 +1279,7 @@ class Remember_Profile_Duplicates {
 		}
 
 		if ( ! empty( $state['user_pass'] ) ) {
-			$wpdb->update( $wpdb->users, array( 'user_pass' => $state['user_pass'] ), array( 'ID' => $member_id ), array( '%s' ), array( '%d' ) );
+			self::check( $wpdb->update( $wpdb->users, array( 'user_pass' => $state['user_pass'] ), array( 'ID' => $member_id ), array( '%s' ), array( '%d' ) ), 'restore password' );
 		}
 		$user_update = array( 'ID' => $member_id );
 		if ( ! empty( $state['display_name'] ) ) {
@@ -1146,7 +1289,7 @@ class Remember_Profile_Duplicates {
 			$user_update['user_email'] = $state['user_email'];
 		}
 		if ( count( $user_update ) > 1 ) {
-			wp_update_user( $user_update );
+			self::check( wp_update_user( $user_update ), 'restore account' );
 		}
 		if ( array_key_exists( 'password_meta', $state ) ) {
 			if ( '' === (string) $state['password_meta'] ) {
@@ -1164,103 +1307,109 @@ class Remember_Profile_Duplicates {
 			$row = $state['member'];
 			unset( $row['member_id'] );
 			if ( ! empty( $row ) ) {
-				$wpdb->update( $wpdb->prefix . 'remember_members', $row, array( 'member_id' => $member_id ) );
+				self::check( $wpdb->update( $wpdb->prefix . 'remember_members', $row, array( 'member_id' => $member_id ) ), 'restore member row' );
 			}
 		}
 		if ( ! empty( $state['profile'] ) && is_array( $state['profile'] ) ) {
 			$row = $state['profile'];
 			unset( $row['profile_id'], $row['member_id'] );
-			$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}remember_member_profiles SET member_number = NULL WHERE member_id = %d", $member_id ) );
+			self::check( $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}remember_member_profiles SET member_number = NULL WHERE member_id = %d", $member_id ) ), 'restore profile' );
 			if ( ! empty( $row ) ) {
-				$wpdb->update( $wpdb->prefix . 'remember_member_profiles', $row, array( 'member_id' => $member_id ) );
+				self::check( $wpdb->update( $wpdb->prefix . 'remember_member_profiles', $row, array( 'member_id' => $member_id ) ), 'restore profile' );
 			}
 		}
 
-		$wpdb->delete( $wpdb->prefix . 'remember_member_roles', array( 'member_id' => $member_id ) );
+		self::check( $wpdb->delete( $wpdb->prefix . 'remember_member_roles', array( 'member_id' => $member_id ) ), 'restore roles' );
 		foreach ( isset( $state['role_ids'] ) ? (array) $state['role_ids'] : array() as $role_id ) {
 			$role_id = absint( $role_id );
 			if ( $role_id > 0 ) {
-				$wpdb->insert( $wpdb->prefix . 'remember_member_roles', array( 'member_id' => $member_id, 'role_id' => $role_id, 'created_at' => current_time( 'mysql' ) ), array( '%d', '%d', '%s' ) );
+				self::check( $wpdb->insert( $wpdb->prefix . 'remember_member_roles', array( 'member_id' => $member_id, 'role_id' => $role_id, 'created_at' => current_time( 'mysql' ) ), array( '%d', '%d', '%s' ) ), 'restore roles' );
 			}
 		}
 
-		$wpdb->delete( $wpdb->prefix . 'remember_member_social_media', array( 'member_id' => $member_id ) );
+		self::check( $wpdb->delete( $wpdb->prefix . 'remember_member_social_media', array( 'member_id' => $member_id ) ), 'restore social handles' );
 		foreach ( isset( $state['social'] ) ? (array) $state['social'] : array() as $social ) {
 			if ( empty( $social['platform_id'] ) ) {
 				continue;
 			}
-			$wpdb->insert(
-				$wpdb->prefix . 'remember_member_social_media',
-				array(
-					'member_id'   => $member_id,
-					'platform_id' => absint( $social['platform_id'] ),
-					'handle'      => isset( $social['handle'] ) ? $social['handle'] : '',
-					'created_at'  => current_time( 'mysql' ),
-				)
+			self::check(
+				$wpdb->insert(
+					$wpdb->prefix . 'remember_member_social_media',
+					array(
+						'member_id'   => $member_id,
+						'platform_id' => absint( $social['platform_id'] ),
+						'handle'      => isset( $social['handle'] ) ? $social['handle'] : '',
+						'created_at'  => current_time( 'mysql' ),
+					)
+				),
+				'restore social handles'
 			);
 		}
 
-		$wpdb->delete( $wpdb->prefix . 'remember_member_dietary_restrictions', array( 'member_id' => $member_id ) );
+		self::check( $wpdb->delete( $wpdb->prefix . 'remember_member_dietary_restrictions', array( 'member_id' => $member_id ) ), 'restore dietary' );
 		foreach ( isset( $state['dietary'] ) ? (array) $state['dietary'] : array() as $id ) {
 			$id = absint( $id );
 			if ( $id > 0 ) {
-				$wpdb->insert( $wpdb->prefix . 'remember_member_dietary_restrictions', array( 'member_id' => $member_id, 'restriction_id' => $id ), array( '%d', '%d' ) );
+				self::check( $wpdb->insert( $wpdb->prefix . 'remember_member_dietary_restrictions', array( 'member_id' => $member_id, 'restriction_id' => $id ), array( '%d', '%d' ) ), 'restore dietary' );
 			}
 		}
-		$wpdb->delete( $wpdb->prefix . 'remember_member_allergies', array( 'member_id' => $member_id ) );
+		self::check( $wpdb->delete( $wpdb->prefix . 'remember_member_allergies', array( 'member_id' => $member_id ) ), 'restore allergies' );
 		foreach ( isset( $state['allergies'] ) ? (array) $state['allergies'] : array() as $id ) {
 			$id = absint( $id );
 			if ( $id > 0 ) {
-				$wpdb->insert( $wpdb->prefix . 'remember_member_allergies', array( 'member_id' => $member_id, 'allergy_id' => $id ), array( '%d', '%d' ) );
+				self::check( $wpdb->insert( $wpdb->prefix . 'remember_member_allergies', array( 'member_id' => $member_id, 'allergy_id' => $id ), array( '%d', '%d' ) ), 'restore allergies' );
 			}
 		}
-		$wpdb->delete( $wpdb->prefix . 'remember_member_medical_accommodations', array( 'member_id' => $member_id ) );
+		self::check( $wpdb->delete( $wpdb->prefix . 'remember_member_medical_accommodations', array( 'member_id' => $member_id ) ), 'restore medical' );
 		foreach ( isset( $state['medical'] ) ? (array) $state['medical'] : array() as $id ) {
 			$id = absint( $id );
 			if ( $id > 0 ) {
-				$wpdb->insert( $wpdb->prefix . 'remember_member_medical_accommodations', array( 'member_id' => $member_id, 'accommodation_id' => $id ), array( '%d', '%d' ) );
+				self::check( $wpdb->insert( $wpdb->prefix . 'remember_member_medical_accommodations', array( 'member_id' => $member_id, 'accommodation_id' => $id ), array( '%d', '%d' ) ), 'restore medical' );
 			}
 		}
 
-		$wpdb->delete( $wpdb->prefix . 'remember_profile_question_responses', array( 'member_id' => $member_id ) );
+		self::check( $wpdb->delete( $wpdb->prefix . 'remember_profile_question_responses', array( 'member_id' => $member_id ) ), 'restore profile answers' );
 		foreach ( isset( $state['pq'] ) ? (array) $state['pq'] : array() as $pq ) {
 			if ( empty( $pq['question_id'] ) ) {
 				continue;
 			}
-			$wpdb->insert(
-				$wpdb->prefix . 'remember_profile_question_responses',
-				array(
-					'member_id'   => $member_id,
-					'question_id' => absint( $pq['question_id'] ),
-					'value_text'  => isset( $pq['value_text'] ) ? $pq['value_text'] : '',
-					'created_at'  => current_time( 'mysql' ),
-					'updated_at'  => current_time( 'mysql' ),
-				)
+			self::check(
+				$wpdb->insert(
+					$wpdb->prefix . 'remember_profile_question_responses',
+					array(
+						'member_id'   => $member_id,
+						'question_id' => absint( $pq['question_id'] ),
+						'value_text'  => isset( $pq['value_text'] ) ? $pq['value_text'] : '',
+						'created_at'  => current_time( 'mysql' ),
+						'updated_at'  => current_time( 'mysql' ),
+					)
+				),
+				'restore profile answers'
 			);
 		}
 
 		foreach ( isset( $state['application_ids'] ) ? (array) $state['application_ids'] : array() as $id ) {
 			$id = absint( $id );
 			if ( $id > 0 ) {
-				$wpdb->update( $wpdb->prefix . 'remember_event_applications', array( 'member_id' => $member_id ), array( 'application_id' => $id ) );
+				self::check( $wpdb->update( $wpdb->prefix . 'remember_event_applications', array( 'member_id' => $member_id ), array( 'application_id' => $id ) ), 'restore applications' );
 			}
 		}
 		foreach ( isset( $state['payment_ids'] ) ? (array) $state['payment_ids'] : array() as $id ) {
 			$id = absint( $id );
 			if ( $id > 0 ) {
-				$wpdb->update( $wpdb->prefix . 'remember_payments', array( 'member_id' => $member_id ), array( 'payment_id' => $id ) );
+				self::check( $wpdb->update( $wpdb->prefix . 'remember_payments', array( 'member_id' => $member_id ), array( 'payment_id' => $id ) ), 'restore payments' );
 			}
 		}
 		foreach ( isset( $state['vetting_ids'] ) ? (array) $state['vetting_ids'] : array() as $id ) {
 			$id = absint( $id );
 			if ( $id > 0 ) {
-				$wpdb->update( $wpdb->prefix . 'remember_vetting', array( 'member_id' => $member_id ), array( 'vetting_id' => $id ) );
+				self::check( $wpdb->update( $wpdb->prefix . 'remember_vetting', array( 'member_id' => $member_id ), array( 'vetting_id' => $id ) ), 'restore vetting cases' );
 			}
 		}
 		foreach ( isset( $state['note_ids'] ) ? (array) $state['note_ids'] : array() as $id ) {
 			$id = absint( $id );
 			if ( $id > 0 ) {
-				$wpdb->update( $wpdb->prefix . 'remember_profile_notes', array( 'member_id' => $member_id ), array( 'note_id' => $id ) );
+				self::check( $wpdb->update( $wpdb->prefix . 'remember_profile_notes', array( 'member_id' => $member_id ), array( 'note_id' => $id ) ), 'restore notes' );
 			}
 		}
 
@@ -1287,12 +1436,14 @@ class Remember_Profile_Duplicates {
 			}
 		}
 		if ( empty( $payload['a'] ) || empty( $payload['b'] ) ) {
+			Remember_Logger::warning( 'Profile merge undo refused: no undo snapshot was saved for this merge', array( 'hit_id' => (int) $hit->hit_id ) );
 			return new WP_Error( 'no_snapshot', __( 'This merge was done before undo snapshots existed, so it cannot be reversed automatically.', 'remember' ) );
 		}
 
 		$a_id = absint( $payload['a']['member_id'] );
 		$b_id = absint( $payload['b']['member_id'] );
 		if ( $a_id < 1 || $b_id < 1 ) {
+			Remember_Logger::warning( 'Profile merge undo refused: the undo snapshot is incomplete', array( 'hit_id' => (int) $hit->hit_id ) );
 			return new WP_Error( 'no_snapshot', __( 'The stored merge snapshot is incomplete.', 'remember' ) );
 		}
 
@@ -1300,16 +1451,27 @@ class Remember_Profile_Duplicates {
 		// snapshot, so apply the same account-administration boundary as merge().
 		if ( ! Remember_Capabilities::current_user_can_administer_account( $a_id )
 			|| ! Remember_Capabilities::current_user_can_administer_account( $b_id ) ) {
+			Remember_Logger::warning(
+				'Profile merge undo refused: the user may not administer both accounts',
+				array(
+					'hit_id'  => (int) $hit->hit_id,
+					'a'       => $a_id,
+					'b'       => $b_id,
+					'user_id' => get_current_user_id(),
+				)
+			);
 			return new WP_Error( 'cannot_merge_privileged', __( 'You do not have permission to undo a merge involving these accounts.', 'remember' ) );
 		}
 
 		global $wpdb;
+		$started            = Remember_Logger::start_timer();
+		self::$failed_steps = array();
 		$table = self::table_name();
 		$tmp_a = sprintf( 'undo-%d-a-%s@example.com', $a_id, wp_generate_password( 6, false ) );
 		$tmp_b = sprintf( 'undo-%d-b-%s@example.com', $b_id, wp_generate_password( 6, false ) );
-		wp_update_user( array( 'ID' => $a_id, 'user_email' => $tmp_a ) );
-		wp_update_user( array( 'ID' => $b_id, 'user_email' => $tmp_b ) );
-		$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}remember_member_profiles SET member_number = NULL WHERE member_id IN (%d, %d)", $a_id, $b_id ) );
+		self::check( wp_update_user( array( 'ID' => $a_id, 'user_email' => $tmp_a ) ), 'free emails' );
+		self::check( wp_update_user( array( 'ID' => $b_id, 'user_email' => $tmp_b ) ), 'free emails' );
+		self::check( $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->prefix}remember_member_profiles SET member_number = NULL WHERE member_id IN (%d, %d)", $a_id, $b_id ) ), 'free member numbers' );
 
 		self::restore_member_state( $payload['a'] );
 		self::restore_member_state( $payload['b'] );
@@ -1317,27 +1479,43 @@ class Remember_Profile_Duplicates {
 		if ( ! empty( $payload['closed_hit_ids'] ) && is_array( $payload['closed_hit_ids'] ) ) {
 			$in = implode( ',', array_map( 'absint', $payload['closed_hit_ids'] ) );
 			if ( '' !== $in ) {
-				$wpdb->query( "UPDATE {$table} SET status = 'pending', reviewed_by = NULL, reviewed_at = NULL WHERE hit_id IN ({$in}) AND status = 'closed'" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				self::check( $wpdb->query( "UPDATE {$table} SET status = 'pending', reviewed_by = NULL, reviewed_at = NULL WHERE hit_id IN ({$in}) AND status = 'closed'" ), 'reopen other reviews' ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			}
 		}
 
-		$wpdb->query(
-			$wpdb->prepare(
-				"UPDATE {$table} SET status = %s, survivor_id = NULL, locked_id = NULL, reviewed_by = %d, reviewed_at = %s, undo_snapshot = NULL WHERE hit_id = %d",
-				'pending',
-				get_current_user_id(),
-				current_time( 'mysql' ),
-				(int) $hit->hit_id
-			)
-		); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		self::check(
+			$wpdb->query(
+				$wpdb->prepare(
+					"UPDATE {$table} SET status = %s, survivor_id = NULL, locked_id = NULL, reviewed_by = %d, reviewed_at = %s, undo_snapshot = NULL WHERE hit_id = %d",
+					'pending',
+					get_current_user_id(),
+					current_time( 'mysql' ),
+					(int) $hit->hit_id
+				)
+			), // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			'reopen review'
+		);
 
-		require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
+		if ( ! empty( self::$failed_steps ) ) {
+			Remember_Logger::error(
+				'Profile merge undone, but some steps failed; check both profiles',
+				array(
+					'hit_id' => (int) $hit->hit_id,
+					'a'      => $a_id,
+					'b'      => $b_id,
+					'steps'  => array_keys( self::$failed_steps ),
+					'error'  => implode( ' | ', array_unique( array_values( self::$failed_steps ) ) ),
+				)
+			);
+		}
 		Remember_Logger::info(
 			'Profile merge undone',
 			array(
-				'hit_id' => (int) $hit->hit_id,
-				'a'      => $a_id,
-				'b'      => $b_id,
+				'hit_id'     => (int) $hit->hit_id,
+				'a'          => $a_id,
+				'b'          => $b_id,
+				'user_id'    => get_current_user_id(),
+				'elapsed_ms' => Remember_Logger::elapsed_ms( $started ),
 			)
 		);
 		return true;
@@ -1366,9 +1544,9 @@ class Remember_Profile_Duplicates {
 			$keep_ids   = $wpdb->get_col( $wpdb->prepare( "SELECT {$key_col} FROM {$table} WHERE {$member_col} = %d", $to_id ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			if ( ! empty( $keep_ids ) ) {
 				$in = implode( ',', array_map( 'absint', $keep_ids ) );
-				$wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE {$member_col} = %d AND {$key_col} IN ({$in})", $from_id ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				self::check( $wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE {$member_col} = %d AND {$key_col} IN ({$in})", $from_id ) ), 'move ' . $key_col ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			}
-			$wpdb->update( $table, array( $member_col => $to_id ), array( $member_col => $from_id ) );
+			self::check( $wpdb->update( $table, array( $member_col => $to_id ), array( $member_col => $from_id ) ), 'move ' . $key_col );
 		}
 
 		$social_from = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$wpdb->prefix}remember_member_social_media WHERE member_id = %d", $from_id ) );
@@ -1382,12 +1560,15 @@ class Remember_Profile_Duplicates {
 					)
 				);
 				if ( $exists ) {
-					$wpdb->delete( $wpdb->prefix . 'remember_member_social_media', array( 'social_media_id' => (int) $row->social_media_id ) );
+					self::check( $wpdb->delete( $wpdb->prefix . 'remember_member_social_media', array( 'social_media_id' => (int) $row->social_media_id ) ), 'move social handles' );
 				} else {
-					$wpdb->update(
-						$wpdb->prefix . 'remember_member_social_media',
-						array( 'member_id' => $to_id ),
-						array( 'social_media_id' => (int) $row->social_media_id )
+					self::check(
+						$wpdb->update(
+							$wpdb->prefix . 'remember_member_social_media',
+							array( 'member_id' => $to_id ),
+							array( 'social_media_id' => (int) $row->social_media_id )
+						),
+						'move social handles'
 					);
 				}
 			}
@@ -1404,12 +1585,15 @@ class Remember_Profile_Duplicates {
 					)
 				);
 				if ( $exists ) {
-					$wpdb->delete( $wpdb->prefix . 'remember_profile_question_responses', array( 'response_id' => (int) $row->response_id ) );
+					self::check( $wpdb->delete( $wpdb->prefix . 'remember_profile_question_responses', array( 'response_id' => (int) $row->response_id ) ), 'move profile answers' );
 				} else {
-					$wpdb->update(
-						$wpdb->prefix . 'remember_profile_question_responses',
-						array( 'member_id' => $to_id ),
-						array( 'response_id' => (int) $row->response_id )
+					self::check(
+						$wpdb->update(
+							$wpdb->prefix . 'remember_profile_question_responses',
+							array( 'member_id' => $to_id ),
+							array( 'response_id' => (int) $row->response_id )
+						),
+						'move profile answers'
 					);
 				}
 			}
@@ -1429,16 +1613,19 @@ class Remember_Profile_Duplicates {
 				if ( $exists ) {
 					continue;
 				}
-				$wpdb->update(
-					$wpdb->prefix . 'remember_event_applications',
-					array( 'member_id' => $to_id ),
-					array( 'application_id' => (int) $app->application_id )
+				self::check(
+					$wpdb->update(
+						$wpdb->prefix . 'remember_event_applications',
+						array( 'member_id' => $to_id ),
+						array( 'application_id' => (int) $app->application_id )
+					),
+					'move applications'
 				);
 			}
 		}
 
-		$wpdb->update( $wpdb->prefix . 'remember_payments', array( 'member_id' => $to_id ), array( 'member_id' => $from_id ) );
-		$wpdb->update( $wpdb->prefix . 'remember_vetting', array( 'member_id' => $to_id ), array( 'member_id' => $from_id ) );
+		self::check( $wpdb->update( $wpdb->prefix . 'remember_payments', array( 'member_id' => $to_id ), array( 'member_id' => $from_id ) ), 'move payments' );
+		self::check( $wpdb->update( $wpdb->prefix . 'remember_vetting', array( 'member_id' => $to_id ), array( 'member_id' => $from_id ) ), 'move vetting cases' );
 
 		require_once plugin_dir_path( __FILE__ ) . '../models/class-profile-note.php';
 		( new Remember_Profile_Note() )->reassign_member( $from_id, $to_id );

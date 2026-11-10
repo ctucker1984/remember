@@ -143,12 +143,21 @@ class Remember_Sensitive_Profile {
 			wp_send_json_error( array( 'message' => __( 'You do not have permission to open this section.', 'remember' ) ), 403 );
 		}
 		if ( 'edit' === $mode && ! current_user_can( 'remember_update_members' ) ) {
+			Remember_Logger::warning(
+				'Sensitive profile section refused for editing: the user cannot edit members',
+				array(
+					'member_id' => $member_id,
+					'topic'     => $topic,
+					'user_id'   => get_current_user_id(),
+				)
+			);
 			wp_send_json_error( array( 'message' => __( 'You do not have permission to edit members.', 'remember' ) ), 403 );
 		}
 
 		require_once plugin_dir_path( __FILE__ ) . '../models/class-member.php';
 		$member_model = new Remember_Member();
 		if ( ! $member_model->get( $member_id ) ) {
+			Remember_Logger::debug( 'Sensitive profile section not opened: member not found', array( 'member_id' => $member_id ) );
 			wp_send_json_error( array( 'message' => __( 'Member not found.', 'remember' ) ), 404 );
 		}
 
@@ -200,6 +209,7 @@ class Remember_Sensitive_Profile {
 		require_once plugin_dir_path( __FILE__ ) . '../models/class-member.php';
 		$member_model = new Remember_Member();
 		if ( ! $member_model->get( $member_id ) ) {
+			Remember_Logger::debug( 'Confidential print not opened: member not found', array( 'member_id' => $member_id ) );
 			wp_send_json_error( array( 'message' => __( 'Member not found.', 'remember' ) ), 404 );
 		}
 

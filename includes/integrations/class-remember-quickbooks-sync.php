@@ -111,6 +111,7 @@ class Remember_QuickBooks_Sync {
 		}
 
 		// Prefer stored QuickBooks Customer Id; otherwise match by WordPress email (second best).
+		$linked         = null;
 		$qb_customer_id = (string) get_user_meta( $member_id, 'remember_qb_customer_id', true );
 		if ( '' !== $qb_customer_id ) {
 			// Only a lookup that says the customer is gone (other company, wrong sandbox) drops
@@ -144,13 +145,30 @@ class Remember_QuickBooks_Sync {
 			}
 		}
 		if ( '' === $qb_customer_id ) {
-			$qb_customer_id = self::link_customer_by_email( $member_id, $user->user_email );
+			$linked = self::link_customer_by_email( $member_id, $user->user_email );
+			if ( is_wp_error( $linked ) ) {
+				return $linked;
+			}
+			$qb_customer_id = is_array( $linked ) ? (string) $linked['Id'] : '';
 		}
 		if ( '' !== $qb_customer_id ) {
 			$customer_data['qb_customer_id'] = $qb_customer_id;
 		}
 
-		$result = self::save_customer( $customer_data, $user->user_email );
+		require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-billing-contact-name.php';
+		$current_name                  = ( is_array( $linked ) && isset( $linked['DisplayName'] ) ) ? (string) $linked['DisplayName'] : '';
+		$customer_data['display_name'] = Remember_Billing_Contact_Name::preferred( $full_name, $member_id, $current_name );
+		if ( $customer_data['display_name'] !== $full_name ) {
+			Remember_Logger::debug(
+				'Keeping the member number on the QuickBooks customer name',
+				array(
+					'member_id'      => $member_id,
+					'qb_customer_id' => $qb_customer_id,
+				)
+			);
+		}
+
+		$result = self::save_customer( $customer_data, $full_name, $member_id );
 
 		if ( is_wp_error( $result ) ) {
 			Remember_Logger::error(
@@ -181,14 +199,27 @@ class Remember_QuickBooks_Sync {
 	/**
 	 * Link a member to an existing QuickBooks customer with the same primary email.
 	 *
+	 * A failed search returns the error so the caller does not create a duplicate customer.
+	 *
 	 * @param int    $member_id Member ID.
 	 * @param string $email     Member email.
-	 * @return string Customer Id, or '' when none matches.
+	 * @return array|WP_Error|null Matched customer, the search error, or null when none matches.
 	 */
 	private static function link_customer_by_email( $member_id, $email ) {
-		$match = Remember_QuickBooks_API::find_customer_by_primary_email( $email );
+		$match = Remember_QuickBooks_API::find_customer_by_primary_email( $email, true );
+		if ( is_wp_error( $match ) ) {
+			Remember_Logger::warning(
+				'QuickBooks customer email lookup failed; not creating a customer',
+				array(
+					'member_id' => $member_id,
+					'error'     => $match->get_error_message(),
+				)
+			);
+			return $match;
+		}
 		if ( ! is_array( $match ) || empty( $match['Id'] ) ) {
-			return '';
+			Remember_Logger::debug( 'No QuickBooks customer has this member\'s email; a new customer will be created', array( 'member_id' => $member_id ) );
+			return null;
 		}
 		update_user_meta( $member_id, 'remember_qb_customer_id', (string) $match['Id'] );
 		update_user_meta( $member_id, 'remember_qb_sync_token', isset( $match['SyncToken'] ) ? $match['SyncToken'] : '' );
@@ -199,30 +230,63 @@ class Remember_QuickBooks_Sync {
 				'qb_customer_id' => (string) $match['Id'],
 			)
 		);
-		return (string) $match['Id'];
+		return $match;
 	}
 
 	/**
-	 * Create or update the customer, retrying with the email appended when the name is taken.
+	 * Create or update the customer, adding the member number when the name is taken.
 	 *
 	 * QBO display names must be unique across customers, vendors and employees, inactive included.
 	 *
 	 * @param array  $customer_data Data for Remember_QuickBooks_API::create_customer().
-	 * @param string $email         Member email, used to make the name unique.
+	 * @param string $full_name     Plain legal name.
+	 * @param int    $member_id     Member ID.
 	 * @return array|WP_Error Customer entity or error.
 	 */
-	private static function save_customer( $customer_data, $email ) {
-		$result = Remember_QuickBooks_API::create_customer( $customer_data );
-		if ( ! is_wp_error( $result ) || ! self::is_qb_duplicate_name_error( $result ) || '' === trim( (string) $email ) ) {
+	private static function save_customer( $customer_data, $full_name, $member_id ) {
+		$result   = Remember_QuickBooks_API::create_customer( $customer_data );
+		$numbered = Remember_Billing_Contact_Name::with_member_number( $full_name, $member_id );
+		if ( ! is_wp_error( $result ) || ! self::is_qb_duplicate_name_error( $result ) ) {
+			return $result;
+		}
+		if ( $customer_data['display_name'] === $numbered ) {
+			Remember_Logger::debug(
+				'QuickBooks customer name with the member number is already in use; not retrying',
+				array(
+					'member_id'      => $member_id,
+					'qb_customer_id' => $customer_data['qb_customer_id'] ?? '',
+				)
+			);
 			return $result;
 		}
 
 		Remember_Logger::info(
-			'QuickBooks customer name already in use; retrying with email added',
-			array( 'qb_customer_id' => $customer_data['qb_customer_id'] ?? '' )
+			'QuickBooks customer name already in use; saving it with the member number',
+			array(
+				'member_id'      => $member_id,
+				'qb_customer_id' => $customer_data['qb_customer_id'] ?? '',
+			)
 		);
-		$customer_data['display_name'] = $customer_data['display_name'] . ' (' . $email . ')';
-		return Remember_QuickBooks_API::create_customer( $customer_data );
+		Remember_Logger::debug(
+			'QuickBooks customer name already in use',
+			array(
+				'member_id' => $member_id,
+				'tried'     => $customer_data['display_name'],
+				'saving_as' => $numbered,
+			)
+		);
+		$customer_data['display_name'] = $numbered;
+		$result                         = Remember_QuickBooks_API::create_customer( $customer_data );
+		if ( is_wp_error( $result ) ) {
+			Remember_Logger::warning(
+				'QuickBooks customer save with the member number also failed',
+				array(
+					'member_id' => $member_id,
+					'error'     => $result->get_error_message(),
+				)
+			);
+		}
+		return $result;
 	}
 
 	/**
@@ -491,8 +555,22 @@ class Remember_QuickBooks_Sync {
 		$payment = $payment_model->get( $payment_id );
 
 		if ( ! $payment || empty( $payment->quickbooks_invoice_id ) ) {
+			Remember_Logger::debug( 'QuickBooks payment re-check skipped: no invoice linked', array( 'payment_id' => $payment_id ) );
 			return new WP_Error( 'no_invoice', __( 'No QuickBooks invoice ID found for this payment.', 'remember' ) );
 		}
+
+		$failed = static function ( $step, $error ) use ( $payment_id, $payment ) {
+			Remember_Logger::warning(
+				'QuickBooks payment re-check failed; the payment was left as it was',
+				array(
+					'payment_id'            => $payment_id,
+					'quickbooks_invoice_id' => $payment->quickbooks_invoice_id,
+					'step'                  => $step,
+					'error'                 => $error->get_error_message(),
+				)
+			);
+			return $error;
+		};
 
 		// Get invoice from QuickBooks
 		$invoice = Remember_QuickBooks_API::get_invoice( $payment->quickbooks_invoice_id );
@@ -509,7 +587,7 @@ class Remember_QuickBooks_Sync {
 				self::mark_qb_invoice_gone( $payment_id, true );
 				return true;
 			}
-			return $invoice;
+			return $failed( 'read invoice', $invoice );
 		}
 
 		if ( Remember_QuickBooks_API::is_invoice_voided( $invoice ) ) {
@@ -530,7 +608,7 @@ class Remember_QuickBooks_Sync {
 
 		if ( is_wp_error( $detail_lines ) ) {
 			// Bubble up API/query errors so manual sync UI can report them.
-			return $detail_lines;
+			return $failed( 'read payments', $detail_lines );
 		}
 
 		$total_paid = 0;
@@ -561,7 +639,7 @@ class Remember_QuickBooks_Sync {
 
 		$refund_lines = Remember_QuickBooks_API::get_invoice_refund_lines( $payment->quickbooks_invoice_id, $qb_customer_id );
 		if ( is_wp_error( $refund_lines ) ) {
-			return $refund_lines;
+			return $failed( 'read refunds', $refund_lines );
 		}
 
 		Remember_Logger::dev_log(
@@ -656,14 +734,26 @@ class Remember_QuickBooks_Sync {
 		if ( isset( $invoice['DocNumber'] ) ) {
 			$update_data['quickbooks_invoice_number'] = sanitize_text_field( (string) $invoice['DocNumber'] );
 		}
-		$payment_model->update( $payment_id, $update_data );
+		if ( false === $payment_model->update( $payment_id, $update_data ) ) {
+			return new WP_Error( 'qb_payment_save_failed', __( 'The payment could not be saved after reading it from QuickBooks.', 'remember' ) );
+		}
 
-		Remember_Logger::info( 'Payment status synced from QuickBooks', array(
-			'payment_id'       => $payment_id,
-			'amount_paid'      => $amount_paid_out,
-			'total_refunded'   => $total_refunded,
-			'payment_status'   => $payment_status,
-		) );
+		$changed = (string) $payment->payment_status !== $payment_status
+			|| abs( floatval( $payment->amount_paid ) - $amount_paid_out ) > 0.001
+			|| abs( floatval( $payment->amount_due ) - $amount_due ) > 0.001
+			|| abs( floatval( $payment->total_amount ) - $total_amt ) > 0.001;
+		$context = array(
+			'payment_id'     => $payment_id,
+			'amount_paid'    => $amount_paid_out,
+			'amount_due'     => $amount_due,
+			'total_refunded' => $total_refunded,
+			'payment_status' => $payment_status,
+		);
+		if ( $changed ) {
+			Remember_Logger::info( 'Payment updated from QuickBooks', $context );
+		} else {
+			Remember_Logger::debug( 'Payment unchanged in QuickBooks', $context );
+		}
 
 		return true;
 	}
@@ -675,7 +765,8 @@ class Remember_QuickBooks_Sync {
 	 */
 	public static function sync_all_payments() {
 		global $wpdb;
-		
+		$started = Remember_Logger::start_timer();
+
 		// Reconcile every row that references a QBO invoice (pending, partial, or paid) so
 		// deleted/voided invoices in QuickBooks are detected and cleared on the reMember side.
 		$payments = $wpdb->get_results(
@@ -691,7 +782,7 @@ class Remember_QuickBooks_Sync {
 			'errors'  => array(),
 		);
 
-		foreach ( $payments as $payment ) {
+		foreach ( (array) $payments as $payment ) {
 			$result = self::sync_payment_status( $payment->payment_id );
 			if ( is_wp_error( $result ) ) {
 				$results['error']++;
@@ -705,13 +796,28 @@ class Remember_QuickBooks_Sync {
 		}
 
 		// Update last sync time
-		$wpdb->update(
+		$stamped = $wpdb->update(
 			$wpdb->prefix . 'remember_payment_processors',
 			array( 'last_sync_at' => current_time( 'mysql' ) ),
 			array( 'processor_type' => 'quickbooks' ),
 			array( '%s' ),
 			array( '%s' )
 		);
+		if ( false === $stamped ) {
+			Remember_Logger::warning( 'Could not save the QuickBooks last sync time; the next scheduled run will sync again', array( 'error' => $wpdb->last_error ) );
+		}
+
+		$summary = array(
+			'rows'       => count( (array) $payments ),
+			'synced'     => $results['success'],
+			'errors'     => $results['error'],
+			'elapsed_ms' => Remember_Logger::elapsed_ms( $started ),
+		);
+		if ( $results['error'] > 0 ) {
+			Remember_Logger::warning( 'QuickBooks payment re-check finished with errors', $summary );
+		} else {
+			Remember_Logger::info( 'QuickBooks payment re-check finished', $summary );
+		}
 
 		return $results;
 	}
@@ -733,9 +839,10 @@ class Remember_QuickBooks_Sync {
 			return $results;
 		}
 
+		$started       = Remember_Logger::start_timer();
 		$payment_model = new Remember_Payment();
 		$payments      = $payment_model->get_by_member( $member_id );
-		foreach ( $payments as $payment ) {
+		foreach ( (array) $payments as $payment ) {
 			if ( empty( $payment->quickbooks_invoice_id ) ) {
 				continue;
 			}
@@ -750,6 +857,16 @@ class Remember_QuickBooks_Sync {
 				$results['success']++;
 			}
 		}
+
+		Remember_Logger::debug(
+			'QuickBooks payment re-check for one member finished',
+			array(
+				'member_id'  => $member_id,
+				'synced'     => $results['success'],
+				'errors'     => $results['error'],
+				'elapsed_ms' => Remember_Logger::elapsed_ms( $started ),
+			)
+		);
 
 		return $results;
 	}
@@ -827,6 +944,7 @@ class Remember_QuickBooks_Sync {
 		$product_model = new Remember_Product();
 		$catalog       = $product_model->get_by_name( $merchandise_name );
 		if ( ! $catalog || (int) $catalog->is_active !== 1 ) {
+			Remember_Logger::warning( 'Add-on is not an active catalog product; no QuickBooks item to invoice', array( 'name' => $merchandise_name ) );
 			return new WP_Error(
 				'catalog_product_missing',
 				sprintf(
@@ -854,13 +972,52 @@ class Remember_QuickBooks_Sync {
 			return $row->quickbooks_product_id;
 		}
 
-		$qb_items = Remember_QuickBooks_API::query_items( 'Name = ' . Remember_QuickBooks_API::qb_quote( $fallback_name ) );
+		$not_mapped = new WP_Error(
+			'qb_item_not_mapped',
+			sprintf(
+				/* translators: %s: role or product name */
+				__( 'QuickBooks has no mapping for "%s". Set it under Settings → QuickBooks (Event roles + Products).', 'remember' ),
+				$fallback_name
+			)
+		);
 
-		if ( ! is_wp_error( $qb_items ) && ! empty( $qb_items ) ) {
+		$qb_items = Remember_QuickBooks_API::query_items( 'Name = ' . Remember_QuickBooks_API::qb_quote( $fallback_name ) );
+		if ( is_wp_error( $qb_items ) ) {
+			Remember_Logger::warning(
+				'QuickBooks Item not mapped and the search by name failed',
+				array(
+					'entity_type' => $entity_type,
+					'entity_id'   => $entity_id,
+					'name'        => $fallback_name,
+					'error'       => $qb_items->get_error_message(),
+				)
+			);
+			return $not_mapped;
+		}
+
+		if ( ! empty( $qb_items ) ) {
 			$qb_product    = $qb_items[0];
 			$qb_product_id = $qb_product['Id'];
 			$qb_name       = $qb_product['Name'] ?? $fallback_name;
-			$mapping_model->upsert( $entity_type, $entity_id, $qb_product_id, $qb_name );
+			if ( $mapping_model->upsert( $entity_type, $entity_id, $qb_product_id, $qb_name ) ) {
+				Remember_Logger::info(
+					'Mapped to a QuickBooks item with the same name',
+					array(
+						'entity_type'   => $entity_type,
+						'entity_id'     => $entity_id,
+						'qb_product_id' => $qb_product_id,
+					)
+				);
+			} else {
+				Remember_Logger::warning(
+					'Found a QuickBooks item with the same name but could not save the mapping; it will be searched again next time',
+					array(
+						'entity_type'   => $entity_type,
+						'entity_id'     => $entity_id,
+						'qb_product_id' => $qb_product_id,
+					)
+				);
+			}
 			return $qb_product_id;
 		}
 
@@ -873,13 +1030,6 @@ class Remember_QuickBooks_Sync {
 			)
 		);
 
-		return new WP_Error(
-			'qb_item_not_mapped',
-			sprintf(
-				/* translators: %s: role or product name */
-				__( 'QuickBooks has no mapping for "%s". Set it under Settings → QuickBooks (Event roles + Products).', 'remember' ),
-				$fallback_name
-			)
-		);
+		return $not_mapped;
 	}
 }

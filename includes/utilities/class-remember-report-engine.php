@@ -10,6 +10,8 @@ if ( ! defined( 'WPINC' ) ) {
 	die;
 }
 
+require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
+
 /**
  * Cap-aware report runner.
  */
@@ -33,20 +35,35 @@ class Remember_Report_Engine {
 
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-report-catalog.php';
 
+		$start    = Remember_Logger::start_timer();
 		$event_id = Remember_Report_Catalog::sanitize_event_id( $event_id );
 		$compiled = self::compile( $definition, $event_id );
 		if ( is_wp_error( $compiled ) ) {
+			Remember_Logger::debug(
+				'Report not run: definition refused',
+				array(
+					'user_id' => get_current_user_id(),
+					'subject' => is_array( $definition ) && isset( $definition['subject'] ) ? sanitize_key( (string) $definition['subject'] ) : '',
+					'code'    => $compiled->get_error_code(),
+				)
+			);
 			return $compiled;
 		}
 
 		if ( 'surveys' === $compiled['subject'] && 'detail' === $compiled['mode'] ) {
-			return self::run_survey_grid( $compiled, $page, $per_page, $export, $event_id );
+			$result = self::run_survey_grid( $compiled, $page, $per_page, $export, $event_id );
+			self::log_run_finished( $result, $compiled, $export, $start );
+			return $result;
 		}
 
 		$count_sql = $compiled['count_sql'];
 		$count     = empty( $compiled['count_params'] )
 			? (int) $wpdb->get_var( $count_sql ) // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 			: (int) $wpdb->get_var( $wpdb->prepare( $count_sql, ...$compiled['count_params'] ) );
+		$failed = self::query_failed( 'count', $compiled['subject'] );
+		if ( $failed ) {
+			return $failed;
+		}
 
 		$page     = max( 1, absint( $page ) );
 		$per_page = min( 100, max( 1, absint( $per_page ) ) );
@@ -64,6 +81,10 @@ class Remember_Report_Engine {
 		}
 
 		$rows = $wpdb->get_results( $wpdb->prepare( $sql, ...$params ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$failed = self::query_failed( 'rows', $compiled['subject'] );
+		if ( $failed ) {
+			return $failed;
+		}
 		if ( ! is_array( $rows ) ) {
 			$rows = array();
 		}
@@ -78,7 +99,7 @@ class Remember_Report_Engine {
 			$out_rows[] = $line;
 		}
 
-		return array(
+		$result = array(
 			'columns' => $compiled['columns'],
 			'rows'    => $out_rows,
 			'total'   => $count,
@@ -88,6 +109,63 @@ class Remember_Report_Engine {
 			'subject' => $compiled['subject'],
 			'event_id'    => $event_id,
 			'event_label' => $event_id ? Remember_Report_Catalog::event_label( $event_id ) : '',
+		);
+		self::log_run_finished( $result, $compiled, $export, $start );
+		return $result;
+	}
+
+	/**
+	 * Log a failed report query and turn it into an error for the caller.
+	 *
+	 * A failed query must not look like a report with no rows.
+	 *
+	 * @param string $step    Which query ran.
+	 * @param string $subject Report subject.
+	 * @return \WP_Error|null Null when the last query succeeded.
+	 */
+	private static function query_failed( $step, $subject ) {
+		global $wpdb;
+		if ( '' === (string) $wpdb->last_error ) {
+			return null;
+		}
+		Remember_Logger::error(
+			'Report query failed',
+			array(
+				'user_id' => get_current_user_id(),
+				'subject' => $subject,
+				'step'    => $step,
+				'error'   => $wpdb->last_error,
+			)
+		);
+		return new WP_Error( 'query', __( 'The report could not be run. Try again, or ask an administrator to check the reMember log.', 'remember' ) );
+	}
+
+	/**
+	 * Debug timing for a finished report run.
+	 *
+	 * @param array|\WP_Error $result   Run result.
+	 * @param array           $compiled Compiled definition.
+	 * @param bool            $export   Full export.
+	 * @param float           $start    Timer from Remember_Logger::start_timer().
+	 * @return void
+	 */
+	private static function log_run_finished( $result, $compiled, $export, $start ) {
+		if ( is_wp_error( $result ) ) {
+			return;
+		}
+		Remember_Logger::debug(
+			'Report run finished',
+			array(
+				'user_id'    => get_current_user_id(),
+				'subject'    => $compiled['subject'],
+				'mode'       => $compiled['mode'],
+				'export'     => (bool) $export,
+				'page'       => isset( $result['page'] ) ? (int) $result['page'] : 1,
+				'rows'       => isset( $result['rows'] ) ? count( $result['rows'] ) : 0,
+				'total'      => isset( $result['total'] ) ? (int) $result['total'] : 0,
+				'event_id'   => isset( $result['event_id'] ) ? (int) $result['event_id'] : 0,
+				'elapsed_ms' => Remember_Logger::elapsed_ms( $start ),
+			)
 		);
 	}
 
@@ -366,6 +444,10 @@ class Remember_Report_Engine {
 		$count     = empty( $params )
 			? (int) $wpdb->get_var( $count_sql ) // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 			: (int) $wpdb->get_var( $wpdb->prepare( $count_sql, ...$params ) );
+		$failed = self::query_failed( 'survey count', 'surveys' );
+		if ( $failed ) {
+			return $failed;
+		}
 
 		$page     = max( 1, absint( $page ) );
 		$per_page = min( 100, max( 1, absint( $per_page ) ) );
@@ -380,6 +462,10 @@ class Remember_Report_Engine {
 			$id_params[] = $offset;
 		}
 		$response_ids = $wpdb->get_col( $wpdb->prepare( $id_sql, ...$id_params ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		$failed       = self::query_failed( 'survey responses', 'surveys' );
+		if ( $failed ) {
+			return $failed;
+		}
 		$response_ids = self::int_list( $response_ids );
 
 		$questions = array();
@@ -388,9 +474,17 @@ class Remember_Report_Engine {
 			$survey_ids = empty( $params )
 				? $wpdb->get_col( $survey_sql ) // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 				: $wpdb->get_col( $wpdb->prepare( $survey_sql, ...$params ) );
+			$failed = self::query_failed( 'survey ids', 'surveys' );
+			if ( $failed ) {
+				return $failed;
+			}
 			$survey_ids = self::int_list( $survey_ids );
 			if ( $survey_ids ) {
 				$questions = self::survey_grid_questions( $survey_ids );
+				$failed    = self::query_failed( 'survey questions', 'surveys' );
+				if ( $failed ) {
+					return $failed;
+				}
 			}
 		}
 
@@ -417,6 +511,10 @@ class Remember_Report_Engine {
 			$in         = implode( ',', array_fill( 0, count( $response_ids ), '%d' ) );
 			$detail_sql = 'SELECT ' . implode( ', ', $select ) . ' ' . $from . ' ' . $joins . $where_sql . " AND resp.response_id IN ({$in}) GROUP BY resp.response_id";
 			$detail     = $wpdb->get_results( $wpdb->prepare( $detail_sql, ...array_merge( $params, $response_ids ) ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			$failed     = self::query_failed( 'survey rows', 'surveys' );
+			if ( $failed ) {
+				return $failed;
+			}
 			$by_id      = array();
 			if ( is_array( $detail ) ) {
 				foreach ( $detail as $detail_row ) {
@@ -424,6 +522,10 @@ class Remember_Report_Engine {
 				}
 			}
 			$answers = self::survey_grid_answers( $response_ids );
+			$failed  = self::query_failed( 'survey answers', 'surveys' );
+			if ( $failed ) {
+				return $failed;
+			}
 			foreach ( $response_ids as $response_id ) {
 				$source = isset( $by_id[ $response_id ] ) ? $by_id[ $response_id ] : array();
 				$line   = array();

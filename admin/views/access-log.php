@@ -27,6 +27,8 @@ $base_args     = array(
 	<p><?php esc_html_e( 'Who opened or exported health information or emergency contacts. The log does not store those values.', 'remember' ); ?></p>
 	<?php if ( isset( $_GET['updated'] ) ) : // phpcs:ignore WordPress.Security.NonceVerification.Recommended ?>
 		<div class="notice notice-success is-dismissible"><p><?php esc_html_e( 'Retention updated.', 'remember' ); ?></p></div>
+	<?php elseif ( isset( $_GET['retention_error'] ) ) : // phpcs:ignore WordPress.Security.NonceVerification.Recommended ?>
+		<div class="notice notice-error is-dismissible"><p><?php esc_html_e( 'Retention could not be saved. Try again.', 'remember' ); ?></p></div>
 	<?php endif; ?>
 
 	<form method="get" action="<?php echo esc_url( admin_url( 'admin.php' ) ); ?>" style="margin: 1em 0;">
@@ -64,6 +66,14 @@ $base_args     = array(
 					if ( (int) $row->member_id > 0 ) {
 						$member = get_userdata( (int) $row->member_id );
 						$member_name = $member ? $member->display_name : sprintf( /* translators: %d: member ID */ __( 'Member %d', 'remember' ), (int) $row->member_id );
+					} elseif ( 'backup' === $row->access_what ) {
+						$member_name = (int) $row->row_count > 0
+							? sprintf(
+								/* translators: %d: number of members in the backup */
+								_n( 'Full backup (%d member)', 'Full backup (%d members)', (int) $row->row_count, 'remember' ),
+								(int) $row->row_count
+							)
+							: __( 'Full backup', 'remember' );
 					} else {
 						$member_name = sprintf(
 							/* translators: %d: number of rows exported */

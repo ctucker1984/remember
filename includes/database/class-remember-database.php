@@ -105,10 +105,79 @@ class Remember_Database {
 			'plugin_version'                 => 'create_plugin_version_table',
 		);
 
+		$started = Remember_Logger::start_timer();
 		foreach ( $tables as $label => $method ) {
 			Remember_Logger::activation_debug( 'dbDelta: ' . $label );
 			$this->{$method}();
 		}
+		Remember_Logger::info(
+			'Database tables created or checked',
+			array(
+				'tables'     => count( $tables ),
+				'elapsed_ms' => Remember_Logger::elapsed_ms( $started ),
+			)
+		);
+	}
+
+	/**
+	 * Run dbDelta for one table and log an Error when the table is still missing.
+	 *
+	 * dbDelta() returns no error, so the table is checked afterwards.
+	 *
+	 * @param string $table_name Full table name.
+	 * @param string $sql        CREATE TABLE statement.
+	 * @return bool Whether the table exists afterwards.
+	 */
+	private function run_dbdelta( $table_name, $sql ) {
+		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+		require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-logger.php';
+
+		$changes    = dbDelta( $sql );
+		$last_error = $this->wpdb->last_error;
+		$exists     = $this->wpdb->get_var( $this->wpdb->prepare( 'SHOW TABLES LIKE %s', $table_name ) ) === $table_name;
+		if ( ! $exists ) {
+			Remember_Logger::error(
+				'Database table could not be created',
+				array(
+					'table' => $table_name,
+					'error' => $last_error,
+				)
+			);
+			return false;
+		}
+		if ( ! empty( $changes ) ) {
+			Remember_Logger::debug(
+				'Database table created or changed',
+				array(
+					'table'   => $table_name,
+					'changes' => array_values( (array) $changes ),
+				)
+			);
+		}
+		return true;
+	}
+
+	/**
+	 * Run a schema change on an existing table and log the result.
+	 *
+	 * @param string $sql  ALTER TABLE statement.
+	 * @param string $what What the change does.
+	 * @return bool
+	 */
+	private function run_alter( $sql, $what ) {
+		require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-logger.php';
+		if ( false === $this->wpdb->query( $sql ) ) {
+			Remember_Logger::error(
+				'Database table change failed',
+				array(
+					'change' => $what,
+					'error'  => $this->wpdb->last_error,
+				)
+			);
+			return false;
+		}
+		Remember_Logger::info( 'Database table changed', array( 'change' => $what ) );
+		return true;
 	}
 
 	/**
@@ -140,7 +209,7 @@ class Remember_Database {
 		) $charset_collate;";
 
 		Remember_Logger::activation_debug( 'create_members_table: dbDelta( members ) start' );
-		dbDelta( $sql );
+		$this->run_dbdelta( $table_name, $sql );
 		Remember_Logger::activation_debug( 'create_members_table: dbDelta( members ) end' );
 	}
 
@@ -190,7 +259,7 @@ class Remember_Database {
 			KEY updated_by (updated_by)
 		) $charset_collate;";
 
-		dbDelta( $sql );
+		$this->run_dbdelta( $table_name, $sql );
 	}
 
 	/**
@@ -212,7 +281,7 @@ class Remember_Database {
 			UNIQUE KEY platform_name (platform_name)
 		) $charset_collate;";
 
-		dbDelta( $sql );
+		$this->run_dbdelta( $table_name, $sql );
 	}
 
 	/**
@@ -235,7 +304,7 @@ class Remember_Database {
 			UNIQUE KEY platform_key (platform_key)
 		) $charset_collate;";
 
-		dbDelta( $sql );
+		$this->run_dbdelta( $table_name, $sql );
 	}
 
 	/**
@@ -256,7 +325,7 @@ class Remember_Database {
 			KEY platform_id (platform_id)
 		) $charset_collate;";
 
-		dbDelta( $sql );
+		$this->run_dbdelta( $table_name, $sql );
 	}
 
 	/**
@@ -276,7 +345,7 @@ class Remember_Database {
 			UNIQUE KEY restriction_name (restriction_name)
 		) $charset_collate;";
 
-		dbDelta( $sql );
+		$this->run_dbdelta( $table_name, $sql );
 	}
 
 	/**
@@ -293,7 +362,7 @@ class Remember_Database {
 			KEY restriction_id (restriction_id)
 		) $charset_collate;";
 
-		dbDelta( $sql );
+		$this->run_dbdelta( $table_name, $sql );
 	}
 
 	/**
@@ -317,7 +386,7 @@ class Remember_Database {
 			KEY size_category (size_category)
 		) $charset_collate;";
 
-		dbDelta( $sql );
+		$this->run_dbdelta( $table_name, $sql );
 	}
 
 	/**
@@ -338,7 +407,7 @@ class Remember_Database {
 			KEY size_category (size_category)
 		) $charset_collate;";
 
-		dbDelta( $sql );
+		$this->run_dbdelta( $table_name, $sql );
 	}
 
 	/**
@@ -358,7 +427,7 @@ class Remember_Database {
 			UNIQUE KEY allergy_name (allergy_name)
 		) $charset_collate;";
 
-		dbDelta( $sql );
+		$this->run_dbdelta( $table_name, $sql );
 	}
 
 	/**
@@ -375,7 +444,7 @@ class Remember_Database {
 			KEY allergy_id (allergy_id)
 		) $charset_collate;";
 
-		dbDelta( $sql );
+		$this->run_dbdelta( $table_name, $sql );
 	}
 
 	/**
@@ -396,7 +465,7 @@ class Remember_Database {
 			UNIQUE KEY accommodation_name (accommodation_name)
 		) $charset_collate;";
 
-		dbDelta( $sql );
+		$this->run_dbdelta( $table_name, $sql );
 	}
 
 	/**
@@ -413,7 +482,7 @@ class Remember_Database {
 			KEY accommodation_id (accommodation_id)
 		) $charset_collate;";
 
-		dbDelta( $sql );
+		$this->run_dbdelta( $table_name, $sql );
 	}
 
 	/**
@@ -436,7 +505,7 @@ class Remember_Database {
 			UNIQUE KEY role_name (role_name)
 		) $charset_collate;";
 
-		dbDelta( $sql );
+		$this->run_dbdelta( $table_name, $sql );
 	}
 
 	/**
@@ -459,7 +528,7 @@ class Remember_Database {
 			KEY role_id (role_id)
 		) $charset_collate;";
 
-		dbDelta( $sql );
+		$this->run_dbdelta( $table_name, $sql );
 	}
 
 	/**
@@ -480,7 +549,7 @@ class Remember_Database {
 			KEY capability (capability)
 		) $charset_collate;";
 
-		dbDelta( $sql );
+		$this->run_dbdelta( $table_name, $sql );
 	}
 
 	/**
@@ -509,7 +578,7 @@ class Remember_Database {
 			KEY address_country (address_country)
 		) $charset_collate;";
 
-		dbDelta( $sql );
+		$this->run_dbdelta( $table_name, $sql );
 	}
 
 	/**
@@ -544,7 +613,7 @@ class Remember_Database {
 			KEY start_date (start_date)
 		) $charset_collate;";
 
-		dbDelta( $sql );
+		$this->run_dbdelta( $table_name, $sql );
 	}
 
 	/**
@@ -569,7 +638,7 @@ class Remember_Database {
 			KEY invited_emailed_at (invited_emailed_at)
 		) $charset_collate;";
 
-		dbDelta( $sql );
+		$this->run_dbdelta( $table_name, $sql );
 	}
 
 	/**
@@ -593,7 +662,7 @@ class Remember_Database {
 			KEY role_id (role_id)
 		) $charset_collate;";
 
-		dbDelta( $sql );
+		$this->run_dbdelta( $table_name, $sql );
 	}
 
 	/**
@@ -619,7 +688,7 @@ class Remember_Database {
 			KEY event_id (event_id)
 		) $charset_collate;";
 
-		dbDelta( $sql );
+		$this->run_dbdelta( $table_name, $sql );
 	}
 
 	/**
@@ -641,7 +710,7 @@ class Remember_Database {
 			KEY event_role_id (event_role_id)
 		) $charset_collate;";
 
-		dbDelta( $sql );
+		$this->run_dbdelta( $table_name, $sql );
 	}
 
 	/**
@@ -677,7 +746,7 @@ class Remember_Database {
 			KEY status (status)
 		) $charset_collate;";
 
-		dbDelta( $sql );
+		$this->run_dbdelta( $table_name, $sql );
 	}
 
 	/**
@@ -700,7 +769,7 @@ class Remember_Database {
 			KEY merchandise_id (merchandise_id)
 		) $charset_collate;";
 
-		dbDelta( $sql );
+		$this->run_dbdelta( $table_name, $sql );
 	}
 
 	/**
@@ -723,7 +792,7 @@ class Remember_Database {
 			UNIQUE KEY product_name (product_name)
 		) $charset_collate;";
 
-		dbDelta( $sql );
+		$this->run_dbdelta( $table_name, $sql );
 	}
 
 	/**
@@ -749,7 +818,7 @@ class Remember_Database {
 			KEY idx_quickbooks_product_id (quickbooks_product_id)
 		) $charset_collate;";
 
-		dbDelta( $sql );
+		$this->run_dbdelta( $table_name, $sql );
 	}
 
 	/**
@@ -775,7 +844,7 @@ class Remember_Database {
 			KEY idx_xero_item_id (xero_item_id)
 		) $charset_collate;";
 
-		dbDelta( $sql );
+		$this->run_dbdelta( $table_name, $sql );
 	}
 
 	/**
@@ -798,7 +867,7 @@ class Remember_Database {
 			UNIQUE KEY processor_type (processor_type)
 		) $charset_collate;";
 
-		dbDelta( $sql );
+		$this->run_dbdelta( $table_name, $sql );
 	}
 
 	/**
@@ -845,7 +914,7 @@ class Remember_Database {
 			KEY payment_status (payment_status)
 		) $charset_collate;";
 
-		dbDelta( $sql );
+		$this->run_dbdelta( $table_name, $sql );
 	}
 
 	/**
@@ -872,7 +941,7 @@ class Remember_Database {
 			KEY status (status)
 		) $charset_collate;";
 
-		dbDelta( $sql );
+		$this->run_dbdelta( $table_name, $sql );
 	}
 
 	/**
@@ -895,7 +964,7 @@ class Remember_Database {
 			KEY member_id (member_id)
 		) $charset_collate;";
 
-		dbDelta( $sql );
+		$this->run_dbdelta( $table_name, $sql );
 	}
 
 	/**
@@ -917,7 +986,7 @@ class Remember_Database {
 			KEY member_id (member_id)
 		) $charset_collate;";
 
-		dbDelta( $sql );
+		$this->run_dbdelta( $table_name, $sql );
 	}
 
 	/**
@@ -939,7 +1008,7 @@ class Remember_Database {
 			KEY author_id (author_id)
 		) $charset_collate;";
 
-		dbDelta( $sql );
+		$this->run_dbdelta( $table_name, $sql );
 	}
 
 	/**
@@ -969,7 +1038,7 @@ class Remember_Database {
 			KEY member_b_id (member_b_id)
 		) $charset_collate;";
 
-		dbDelta( $sql );
+		$this->run_dbdelta( $table_name, $sql );
 	}
 
 	/**
@@ -979,8 +1048,9 @@ class Remember_Database {
 	 */
 	public function add_merged_member_status() {
 		$table_name = $this->prefix . 'members';
-		$this->wpdb->query(
-			"ALTER TABLE {$table_name} MODIFY COLUMN status ENUM('pending_vetting', 'unvetted', 'in_vetting', 'vetted', 'rejected', 'inactive', 'merged') DEFAULT 'pending_vetting'"
+		$this->run_alter(
+			"ALTER TABLE {$table_name} MODIFY COLUMN status ENUM('pending_vetting', 'unvetted', 'in_vetting', 'vetted', 'rejected', 'inactive', 'merged') DEFAULT 'pending_vetting'",
+			'add merged to remember_members.status'
 		);
 	}
 
@@ -995,8 +1065,9 @@ class Remember_Database {
 		if ( $exists !== $table_name ) {
 			return;
 		}
-		$this->wpdb->query(
-			"ALTER TABLE {$table_name} MODIFY COLUMN status ENUM('pending', 'dismissed', 'merged', 'closed') DEFAULT 'pending'"
+		$this->run_alter(
+			"ALTER TABLE {$table_name} MODIFY COLUMN status ENUM('pending', 'dismissed', 'merged', 'closed') DEFAULT 'pending'",
+			'add closed to remember_profile_duplicate_hits.status'
 		);
 	}
 
@@ -1015,7 +1086,7 @@ class Remember_Database {
 		if ( $col ) {
 			return;
 		}
-		$this->wpdb->query( "ALTER TABLE {$table_name} ADD COLUMN undo_snapshot LONGTEXT DEFAULT NULL AFTER locked_id" );
+		$this->run_alter( "ALTER TABLE {$table_name} ADD COLUMN undo_snapshot LONGTEXT DEFAULT NULL AFTER locked_id", 'add undo_snapshot to remember_profile_duplicate_hits' );
 	}
 
 	/**
@@ -1037,7 +1108,7 @@ class Remember_Database {
 			UNIQUE KEY notification_type (notification_type)
 		) $charset_collate;";
 
-		dbDelta( $sql );
+		$this->run_dbdelta( $table_name, $sql );
 	}
 
 	/**
@@ -1065,7 +1136,7 @@ class Remember_Database {
 			KEY is_active_sort (is_active, sort_order)
 		) $charset_collate;";
 
-		dbDelta( $sql );
+		$this->run_dbdelta( $table_name, $sql );
 	}
 
 	/**
@@ -1087,7 +1158,7 @@ class Remember_Database {
 			KEY member_id (member_id)
 		) $charset_collate;";
 
-		dbDelta( $sql );
+		$this->run_dbdelta( $table_name, $sql );
 	}
 
 	/**
@@ -1114,7 +1185,7 @@ class Remember_Database {
 			KEY created_at (created_at)
 		) $charset_collate;";
 
-		dbDelta( $sql );
+		$this->run_dbdelta( $table_name, $sql );
 	}
 
 	/**
@@ -1139,7 +1210,7 @@ class Remember_Database {
 			KEY owner_updated (owner_id, updated_at)
 		) $charset_collate;";
 
-		dbDelta( $sql );
+		$this->run_dbdelta( $table_name, $sql );
 	}
 
 	/**
@@ -1168,7 +1239,7 @@ class Remember_Database {
 			UNIQUE KEY report_id (report_id)
 		) $charset_collate;";
 
-		dbDelta( $sql );
+		$this->run_dbdelta( $table_name, $sql );
 	}
 
 	/**
@@ -1189,7 +1260,7 @@ class Remember_Database {
 			KEY is_active_sort (is_active, sort_order)
 		) $charset_collate;";
 
-		dbDelta( $sql );
+		$this->run_dbdelta( $table_name, $sql );
 	}
 
 	/**
@@ -1211,7 +1282,7 @@ class Remember_Database {
 			KEY agreement_id (agreement_id)
 		) $charset_collate;";
 
-		dbDelta( $sql );
+		$this->run_dbdelta( $table_name, $sql );
 	}
 
 	/**
@@ -1233,7 +1304,7 @@ class Remember_Database {
 			KEY revision_id (revision_id)
 		) $charset_collate;";
 
-		dbDelta( $sql );
+		$this->run_dbdelta( $table_name, $sql );
 	}
 
 	/**
@@ -1257,7 +1328,7 @@ class Remember_Database {
 			KEY revision_id (revision_id)
 		) $charset_collate;";
 
-		dbDelta( $sql );
+		$this->run_dbdelta( $table_name, $sql );
 	}
 
 	/**
@@ -1286,7 +1357,7 @@ class Remember_Database {
 			KEY event_role (event_id, event_role_id, placement)
 		) $charset_collate;";
 
-		dbDelta( $sql );
+		$this->run_dbdelta( $table_name, $sql );
 	}
 
 	/**
@@ -1305,7 +1376,7 @@ class Remember_Database {
 			KEY event_role_id (event_role_id)
 		) $charset_collate;";
 
-		dbDelta( $sql );
+		$this->run_dbdelta( $table_name, $sql );
 	}
 
 	/**
@@ -1331,7 +1402,7 @@ class Remember_Database {
 			KEY survey_id (survey_id)
 		) $charset_collate;";
 
-		dbDelta( $sql );
+		$this->run_dbdelta( $table_name, $sql );
 	}
 
 	/**
@@ -1350,7 +1421,7 @@ class Remember_Database {
 			KEY event_role_id (event_role_id)
 		) $charset_collate;";
 
-		dbDelta( $sql );
+		$this->run_dbdelta( $table_name, $sql );
 	}
 
 	/**
@@ -1373,7 +1444,7 @@ class Remember_Database {
 			KEY application_id (application_id)
 		) $charset_collate;";
 
-		dbDelta( $sql );
+		$this->run_dbdelta( $table_name, $sql );
 	}
 
 	/**
@@ -1393,7 +1464,7 @@ class Remember_Database {
 			KEY question_id (question_id)
 		) $charset_collate;";
 
-		dbDelta( $sql );
+		$this->run_dbdelta( $table_name, $sql );
 	}
 
 	/**
@@ -1409,6 +1480,6 @@ class Remember_Database {
 			PRIMARY KEY (version)
 		) $charset_collate;";
 
-		dbDelta( $sql );
+		$this->run_dbdelta( $table_name, $sql );
 	}
 }

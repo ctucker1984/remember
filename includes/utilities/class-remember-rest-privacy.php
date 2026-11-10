@@ -79,6 +79,14 @@ class Remember_Rest_Privacy {
 			}
 		}
 
+		require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
+		Remember_Logger::debug(
+			'REST user lookup refused: the visitor may not list users',
+			array(
+				'route'   => $route,
+				'user_id' => get_current_user_id(),
+			)
+		);
 		return new WP_Error(
 			'rest_user_cannot_view',
 			__( 'Sorry, you are not allowed to list users.', 'remember' ),

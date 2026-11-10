@@ -172,6 +172,14 @@ class Remember_Import_Export {
 			$output = fopen( $path, 'w' );
 		}
 		if ( ! is_resource( $output ) ) {
+			Remember_Logger::error(
+				'CSV export not written: the output could not be opened',
+				array(
+					'user_id'  => get_current_user_id(),
+					'filename' => $filename,
+					'download' => '' === $path,
+				)
+			);
 			return false;
 		}
 		fprintf( $output, chr( 0xEF ) . chr( 0xBB ) . chr( 0xBF ) );
@@ -183,14 +191,88 @@ class Remember_Import_Export {
 	 *
 	 * @param resource $output Handle.
 	 * @param string   $path   Empty when this is a download.
+	 * @param string   $type   What was exported, for the log.
+	 * @param int      $rows   Rows written.
+	 * @param float    $start  Timer from Remember_Logger::start_timer().
 	 * @return bool
 	 */
-	private static function finish_csv_export( $output, $path ) {
+	private static function finish_csv_export( $output, $path, $type, $rows, $start ) {
 		fclose( $output );
+		self::log_export_finished( $type, $rows, $start, '' === (string) $path );
 		if ( '' === (string) $path ) {
 			exit;
 		}
 		return true;
+	}
+
+	/**
+	 * Info line for a finished CSV export.
+	 *
+	 * @param string $type     What was exported.
+	 * @param int    $rows     Rows written.
+	 * @param float  $start    Timer from Remember_Logger::start_timer().
+	 * @param bool   $download True for a browser download.
+	 * @param array  $extra    More ids for the log.
+	 * @return void
+	 */
+	private static function log_export_finished( $type, $rows, $start, $download = true, $extra = array() ) {
+		Remember_Logger::info(
+			'CSV export finished',
+			array_merge(
+				array(
+					'type'       => $type,
+					'user_id'    => get_current_user_id(),
+					'rows'       => (int) $rows,
+					'download'   => (bool) $download,
+					'elapsed_ms' => Remember_Logger::elapsed_ms( $start ),
+				),
+				$extra
+			)
+		);
+	}
+
+	/**
+	 * Warning for a CSV import that could not start.
+	 *
+	 * @param string $type   What was being imported.
+	 * @param string $reason Why it stopped.
+	 * @return void
+	 */
+	private static function log_import_not_started( $type, $reason ) {
+		Remember_Logger::warning(
+			'CSV import not started',
+			array(
+				'type'    => $type,
+				'user_id' => get_current_user_id(),
+				'reason'  => $reason,
+			)
+		);
+	}
+
+	/**
+	 * Info line for a finished CSV import.
+	 *
+	 * @param string $type    What was imported.
+	 * @param array  $results Import results.
+	 * @param bool   $dry_run Validation only.
+	 * @param int    $rows    Data rows read.
+	 * @param float  $start   Timer from Remember_Logger::start_timer().
+	 * @return void
+	 */
+	private static function log_import_finished( $type, $results, $dry_run, $rows, $start ) {
+		Remember_Logger::info(
+			'CSV import finished',
+			array(
+				'type'       => $type,
+				'user_id'    => get_current_user_id(),
+				'dry_run'    => (bool) $dry_run,
+				'rows'       => (int) $rows,
+				'imported'   => (int) $results['success'],
+				'failed'     => (int) $results['error'],
+				'notes'      => count( $results['errors'] ),
+				'elapsed_ms' => Remember_Logger::elapsed_ms( $start ),
+			)
+		);
 	}
 
 	/**
@@ -204,6 +286,7 @@ class Remember_Import_Export {
 			wp_die( __( 'You do not have sufficient permissions to export members.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
 		}
 
+		$start        = Remember_Logger::start_timer();
 		$member_model = new Remember_Member();
 		$has_members_access   = current_user_can( 'remember_read_members' );
 		$has_attendees_access = current_user_can( 'remember_read_attendees' );
@@ -236,9 +319,11 @@ class Remember_Import_Export {
 		self::write_csv_line( $output, $headers );
 		
 		// Data rows
+		$written = 0;
 		foreach ( $members as $member ) {
 			$user = get_user_by( 'ID', $member->member_id );
 			if ( ! $user ) {
+				Remember_Logger::warning( 'Member export skipped a member with no WordPress user', array( 'member_id' => (int) $member->member_id ) );
 				continue;
 			}
 			
@@ -300,9 +385,10 @@ class Remember_Import_Export {
 				$row[] = isset( $custom[ $fkey ] ) ? $custom[ $fkey ] : '';
 			}
 			self::write_csv_line( $output, $row );
+			++$written;
 		}
 		
-		return self::finish_csv_export( $output, $path );
+		return self::finish_csv_export( $output, $path, 'members', $written, $start );
 	}
 
 	/**
@@ -360,6 +446,7 @@ class Remember_Import_Export {
 	 * @return bool True when a file was written.
 	 */
 	public static function export_events( $path = '' ) {
+		$start       = Remember_Logger::start_timer();
 		$event_model = new Remember_Event();
 		$events = $event_model->get_all();
 		
@@ -404,7 +491,7 @@ class Remember_Import_Export {
 			) );
 		}
 
-		return self::finish_csv_export( $output, $path );
+		return self::finish_csv_export( $output, $path, 'events', is_array( $events ) ? count( $events ) : 0, $start );
 	}
 
 	/**
@@ -462,6 +549,7 @@ class Remember_Import_Export {
 	 * @return bool True when a file was written.
 	 */
 	public static function export_locations( $path = '' ) {
+		$start          = Remember_Logger::start_timer();
 		$location_model = new Remember_Location();
 		$locations = $location_model->get_all();
 		
@@ -499,7 +587,7 @@ class Remember_Import_Export {
 			) );
 		}
 
-		return self::finish_csv_export( $output, $path );
+		return self::finish_csv_export( $output, $path, 'locations', is_array( $locations ) ? count( $locations ) : 0, $start );
 	}
 
 	/**
@@ -670,6 +758,7 @@ class Remember_Import_Export {
 	 * @return array Results array with success/error counts.
 	 */
 	public static function import_members( $file_path, $dry_run = false ) {
+		$start   = Remember_Logger::start_timer();
 		$results = array(
 			'success' => 0,
 			'error'   => 0,
@@ -677,12 +766,14 @@ class Remember_Import_Export {
 		);
 		
 		if ( ! file_exists( $file_path ) ) {
+			self::log_import_not_started( 'members', 'file not found' );
 			$results['errors'][] = __( 'File not found.', 'remember' );
 			return $results;
 		}
 		
 		$handle = fopen( $file_path, 'r' );
 		if ( false === $handle ) {
+			self::log_import_not_started( 'members', 'file could not be opened' );
 			$results['errors'][] = __( 'Could not open file for reading.', 'remember' );
 			return $results;
 		}
@@ -697,6 +788,7 @@ class Remember_Import_Export {
 		$headers = self::read_csv_line( $handle );
 		if ( false === $headers ) {
 			fclose( $handle );
+			self::log_import_not_started( 'members', 'headers could not be read' );
 			$results['errors'][] = __( 'Could not read CSV headers.', 'remember' );
 			return $results;
 		}
@@ -766,12 +858,22 @@ class Remember_Import_Export {
 				$created_user = true;
 				
 				// Update user data (do not store Excel "0" placeholders in user meta).
-				wp_update_user( array(
+				$user_updated = wp_update_user( array(
 					'ID'           => $user_id,
 					'display_name' => $display_name,
 					'first_name'   => self::member_import_normalize_csv_name( $row_data['First Name'] ?? '' ),
 					'last_name'    => self::member_import_normalize_csv_name( $row_data['Last Name'] ?? '' ),
 				) );
+				if ( is_wp_error( $user_updated ) ) {
+					Remember_Logger::warning(
+						'Member import created a user but could not set their names',
+						array(
+							'row'     => $row_number,
+							'user_id' => $user_id,
+							'error'   => $user_updated->get_error_message(),
+						)
+					);
+				}
 			} else {
 				$user_id = $user->ID;
 				if ( ! Remember_Capabilities::current_user_can_administer_account( $user_id ) ) {
@@ -803,7 +905,17 @@ class Remember_Import_Export {
 					$user_update['last_name'] = self::member_import_normalize_csv_name( $row_data['Last Name'] );
 				}
 				if ( count( $user_update ) > 1 ) {
-					wp_update_user( $user_update );
+					$user_updated = wp_update_user( $user_update );
+					if ( is_wp_error( $user_updated ) ) {
+						Remember_Logger::warning(
+							'Member import could not update a user\'s names',
+							array(
+								'row'     => $row_number,
+								'user_id' => $user_id,
+								'error'   => $user_updated->get_error_message(),
+							)
+						);
+					}
 				}
 			}
 			
@@ -956,15 +1068,16 @@ class Remember_Import_Export {
 				continue;
 			}
 
+			$lists_saved = true;
 			if ( current_user_can( 'remember_access_health' ) ) {
 				if ( array_key_exists( 'Dietary Restrictions', $row_data ) ) {
-					self::sync_member_list_from_csv( (int) $user_id, 'dietary', (string) $row_data['Dietary Restrictions'] );
+					$lists_saved = self::sync_member_list_from_csv( (int) $user_id, 'dietary', (string) $row_data['Dietary Restrictions'] ) && $lists_saved;
 				}
 				if ( array_key_exists( 'Allergies', $row_data ) ) {
-					self::sync_member_list_from_csv( (int) $user_id, 'allergies', (string) $row_data['Allergies'] );
+					$lists_saved = self::sync_member_list_from_csv( (int) $user_id, 'allergies', (string) $row_data['Allergies'] ) && $lists_saved;
 				}
 				if ( array_key_exists( 'Medical Accommodations', $row_data ) ) {
-					self::sync_member_list_from_csv( (int) $user_id, 'medical', (string) $row_data['Medical Accommodations'] );
+					$lists_saved = self::sync_member_list_from_csv( (int) $user_id, 'medical', (string) $row_data['Medical Accommodations'] ) && $lists_saved;
 				}
 			}
 
@@ -979,11 +1092,22 @@ class Remember_Import_Export {
 				}
 				Remember_Profile_Questions::save_by_field_key( (int) $user_id, $fkey, $raw );
 			}
+
+			if ( ! $lists_saved ) {
+				$results['error']++;
+				$results['errors'][] = sprintf(
+					/* translators: %d: CSV row number */
+					__( 'Row %d: The profile was saved, but dietary restrictions, allergies or medical accommodations could not all be saved.', 'remember' ),
+					$row_number
+				);
+				continue;
+			}
 			
 			$results['success']++;
 		}
 		
 		fclose( $handle );
+		self::log_import_finished( 'members', $results, $dry_run, $row_number - 1, $start );
 		return $results;
 	}
 
@@ -995,6 +1119,7 @@ class Remember_Import_Export {
 	 * @return array Results array with success/error counts.
 	 */
 	public static function import_events( $file_path, $dry_run = false ) {
+		$start   = Remember_Logger::start_timer();
 		$results = array(
 			'success' => 0,
 			'error'   => 0,
@@ -1002,12 +1127,14 @@ class Remember_Import_Export {
 		);
 		
 		if ( ! file_exists( $file_path ) ) {
+			self::log_import_not_started( 'events', 'file not found' );
 			$results['errors'][] = __( 'File not found.', 'remember' );
 			return $results;
 		}
 		
 		$handle = fopen( $file_path, 'r' );
 		if ( false === $handle ) {
+			self::log_import_not_started( 'events', 'file could not be opened' );
 			$results['errors'][] = __( 'Could not open file for reading.', 'remember' );
 			return $results;
 		}
@@ -1022,6 +1149,7 @@ class Remember_Import_Export {
 		$headers = self::read_csv_line( $handle );
 		if ( false === $headers ) {
 			fclose( $handle );
+			self::log_import_not_started( 'events', 'headers could not be read' );
 			$results['errors'][] = __( 'Could not read CSV headers.', 'remember' );
 			return $results;
 		}
@@ -1115,6 +1243,7 @@ class Remember_Import_Export {
 		}
 		
 		fclose( $handle );
+		self::log_import_finished( 'events', $results, $dry_run, $row_number - 1, $start );
 		return $results;
 	}
 
@@ -1126,6 +1255,7 @@ class Remember_Import_Export {
 	 * @return array Results array with success/error counts.
 	 */
 	public static function import_locations( $file_path, $dry_run = false ) {
+		$start   = Remember_Logger::start_timer();
 		$results = array(
 			'success' => 0,
 			'error'   => 0,
@@ -1133,12 +1263,14 @@ class Remember_Import_Export {
 		);
 		
 		if ( ! file_exists( $file_path ) ) {
+			self::log_import_not_started( 'locations', 'file not found' );
 			$results['errors'][] = __( 'File not found.', 'remember' );
 			return $results;
 		}
 		
 		$handle = fopen( $file_path, 'r' );
 		if ( false === $handle ) {
+			self::log_import_not_started( 'locations', 'file could not be opened' );
 			$results['errors'][] = __( 'Could not open file for reading.', 'remember' );
 			return $results;
 		}
@@ -1153,6 +1285,7 @@ class Remember_Import_Export {
 		$headers = self::read_csv_line( $handle );
 		if ( false === $headers ) {
 			fclose( $handle );
+			self::log_import_not_started( 'locations', 'headers could not be read' );
 			$results['errors'][] = __( 'Could not read CSV headers.', 'remember' );
 			return $results;
 		}
@@ -1224,6 +1357,7 @@ class Remember_Import_Export {
 		}
 		
 		fclose( $handle );
+		self::log_import_finished( 'locations', $results, $dry_run, $row_number - 1, $start );
 		return $results;
 	}
 
@@ -1371,6 +1505,7 @@ class Remember_Import_Export {
 
 		$event_id = absint( $event_id );
 		if ( $event_id <= 0 ) {
+			Remember_Logger::debug( 'Participant export refused: no event chosen', array( 'user_id' => get_current_user_id() ) );
 			return;
 		}
 
@@ -1378,9 +1513,17 @@ class Remember_Import_Export {
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-profile-questions.php';
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-clothing-sizes.php';
 
+		$start       = Remember_Logger::start_timer();
 		$event_model = new Remember_Event();
 		$event       = $event_model->get( $event_id );
 		if ( ! $event ) {
+			Remember_Logger::warning(
+				'Participant export not run: event not found',
+				array(
+					'user_id'  => get_current_user_id(),
+					'event_id' => $event_id,
+				)
+			);
 			return;
 		}
 
@@ -1480,6 +1623,17 @@ class Remember_Import_Export {
 				$event_id
 			)
 		);
+		if ( '' !== (string) $wpdb->last_error ) {
+			Remember_Logger::error(
+				'Participant export not run: accepted applications could not be read',
+				array(
+					'user_id'  => get_current_user_id(),
+					'event_id' => $event_id,
+					'error'    => $wpdb->last_error,
+				)
+			);
+			return;
+		}
 		if ( ! is_array( $applications ) ) {
 			$applications = array();
 		}
@@ -1510,9 +1664,18 @@ class Remember_Import_Export {
 		fprintf( $output, chr( 0xEF ) . chr( 0xBB ) . chr( 0xBF ) );
 		self::write_csv_line( $output, $headers );
 
+		$written = 0;
 		foreach ( $applications as $app ) {
 			$user = get_user_by( 'ID', (int) $app->member_id );
 			if ( ! $user ) {
+				Remember_Logger::warning(
+					'Participant export skipped an applicant with no WordPress user',
+					array(
+						'event_id'       => $event_id,
+						'application_id' => (int) $app->application_id,
+						'member_id'      => (int) $app->member_id,
+					)
+				);
 				continue;
 			}
 
@@ -1609,9 +1772,11 @@ class Remember_Import_Export {
 			$row[] = implode( '; ', $summary_parts );
 
 			self::write_csv_line( $output, $row );
+			++$written;
 		}
 
 		fclose( $output );
+		self::log_export_finished( 'event_participants', $written, $start, true, array( 'event_id' => $event_id ) );
 		exit;
 	}
 
@@ -1673,6 +1838,7 @@ class Remember_Import_Export {
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-profile-questions.php';
 		require_once plugin_dir_path( __FILE__ ) . '../models/class-profile-question.php';
 
+		$start = Remember_Logger::start_timer();
 		$model = new Remember_Profile_Question();
 		$rows  = $model->get_all_ordered();
 		if ( ! is_array( $rows ) ) {
@@ -1708,6 +1874,7 @@ class Remember_Import_Export {
 			);
 		}
 		fclose( $output );
+		self::log_export_finished( 'custom_fields', count( $rows ), $start );
 		exit;
 	}
 
@@ -1719,6 +1886,7 @@ class Remember_Import_Export {
 	 * @return array{success:int,error:int,errors:string[]}
 	 */
 	public static function import_profile_questions( $file_path, $dry_run = false ) {
+		$start   = Remember_Logger::start_timer();
 		$results = array(
 			'success' => 0,
 			'error'   => 0,
@@ -1726,12 +1894,14 @@ class Remember_Import_Export {
 		);
 
 		if ( ! file_exists( $file_path ) ) {
+			self::log_import_not_started( 'custom_fields', 'file not found' );
 			$results['errors'][] = __( 'File not found.', 'remember' );
 			return $results;
 		}
 
 		$handle = fopen( $file_path, 'r' );
 		if ( false === $handle ) {
+			self::log_import_not_started( 'custom_fields', 'file could not be opened' );
 			$results['errors'][] = __( 'Could not open file for reading.', 'remember' );
 			return $results;
 		}
@@ -1744,6 +1914,7 @@ class Remember_Import_Export {
 		$headers = self::read_csv_line( $handle );
 		if ( false === $headers ) {
 			fclose( $handle );
+			self::log_import_not_started( 'custom_fields', 'headers could not be read' );
 			$results['errors'][] = __( 'Could not read CSV headers.', 'remember' );
 			return $results;
 		}
@@ -1862,6 +2033,7 @@ class Remember_Import_Export {
 		}
 
 		fclose( $handle );
+		self::log_import_finished( 'custom_fields', $results, $dry_run, $row_number - 1, $start );
 		return $results;
 	}
 
@@ -1886,13 +2058,13 @@ class Remember_Import_Export {
 	 * @param int    $member_id Member ID.
 	 * @param string $type      dietary|allergies|medical.
 	 * @param string $csv       Labels.
-	 * @return void
+	 * @return bool False when a database write failed.
 	 */
 	private static function sync_member_list_from_csv( $member_id, $type, $csv ) {
 		global $wpdb;
 		$member_id = absint( $member_id );
 		if ( $member_id <= 0 ) {
-			return;
+			return true;
 		}
 
 		$labels = array();
@@ -1920,7 +2092,21 @@ class Remember_Import_Export {
 			$name_col = 'accommodation_name';
 		}
 
-		$wpdb->delete( $junction, array( 'member_id' => $member_id ), array( '%d' ) );
+		$cleared = $wpdb->delete( $junction, array( 'member_id' => $member_id ), array( '%d' ) );
+		if ( false === $cleared ) {
+			Remember_Logger::error(
+				'Member import could not clear health choices before saving new ones',
+				array(
+					'member_id' => $member_id,
+					'type'      => $type,
+					'error'     => $wpdb->last_error,
+				)
+			);
+			return false;
+		}
+		$unknown    = 0;
+		$failed     = 0;
+		$last_error = '';
 		foreach ( $labels as $label ) {
 			$id = $wpdb->get_var(
 				$wpdb->prepare(
@@ -1929,9 +2115,10 @@ class Remember_Import_Export {
 				)
 			);
 			if ( ! $id ) {
+				++$unknown;
 				continue;
 			}
-			$wpdb->insert(
+			$inserted = $wpdb->insert(
 				$junction,
 				array(
 					'member_id' => $member_id,
@@ -1939,7 +2126,34 @@ class Remember_Import_Export {
 				),
 				array( '%d', '%d' )
 			);
+			if ( false === $inserted ) {
+				++$failed;
+				$last_error = $wpdb->last_error;
+			}
 		}
+		if ( $unknown > 0 ) {
+			Remember_Logger::warning(
+				'Member import skipped health choices that are not in the catalog',
+				array(
+					'member_id' => $member_id,
+					'type'      => $type,
+					'skipped'   => $unknown,
+				)
+			);
+		}
+		if ( $failed > 0 ) {
+			Remember_Logger::error(
+				'Member import could not save some health choices',
+				array(
+					'member_id' => $member_id,
+					'type'      => $type,
+					'failed'    => $failed,
+					'error'     => $last_error,
+				)
+			);
+			return false;
+		}
+		return true;
 	}
 
 	/**

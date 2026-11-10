@@ -29,6 +29,13 @@ class Remember_Billing_Crypto {
 	private static $migrating = false;
 
 	/**
+	 * Processors whose decrypt failure was already logged this request.
+	 *
+	 * @var array<string,bool>
+	 */
+	private static $open_failures_logged = array();
+
+	/**
 	 * Encrypt a secret with the site key. Does not write a database key.
 	 *
 	 * @param string $plain Secret.
@@ -44,7 +51,8 @@ class Remember_Billing_Crypto {
 			$boxed = sodium_crypto_secretbox( $plain, $nonce, self::key_bytes() );
 			return self::PREFIX . base64_encode( $nonce . $boxed );
 		} catch ( Exception $e ) {
-			unset( $e );
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
+			Remember_Logger::error( 'Could not encrypt a secret with the site key', array( 'error' => $e->getMessage() ) );
 			return false;
 		}
 	}
@@ -77,7 +85,8 @@ class Remember_Billing_Crypto {
 				$boxed = sodium_crypto_secretbox( $plain, $nonce, self::key_bytes() );
 				return self::PREFIX . base64_encode( $nonce . $boxed );
 			} catch ( Exception $e ) {
-				unset( $e );
+				require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
+				Remember_Logger::warning( 'Could not encrypt a billing secret with the site key; using the fallback', array( 'error' => $e->getMessage() ) );
 			}
 		}
 		return self::legacy_seal( $plain, $legacy_option );
@@ -92,10 +101,43 @@ class Remember_Billing_Crypto {
 	 */
 	public static function open( $payload, $legacy_option ) {
 		$payload = (string) $payload;
-		if ( self::is_current( $payload ) ) {
-			return self::open_current( $payload );
+		$current = self::is_current( $payload );
+		$plain   = $current ? self::open_current( $payload ) : self::legacy_open( $payload, $legacy_option );
+		if ( false === $plain && '' !== $payload ) {
+			self::log_open_failure( $legacy_option, $current );
 		}
-		return self::legacy_open( $payload, $legacy_option );
+		return $plain;
+	}
+
+	/**
+	 * Log once per request per processor that a stored secret could not be decrypted.
+	 *
+	 * @param string $legacy_option Option that holds the old AES key for this processor.
+	 * @param bool   $current       Whether the value used the current (secretbox) format.
+	 * @return void
+	 */
+	private static function log_open_failure( $legacy_option, $current ) {
+		if ( isset( self::$open_failures_logged[ $legacy_option ] ) ) {
+			return;
+		}
+		self::$open_failures_logged[ $legacy_option ] = true;
+		$processor = (string) $legacy_option;
+		foreach ( array( 'quickbooks', 'xero' ) as $type ) {
+			if ( self::legacy_option_name( $type ) === $legacy_option ) {
+				$processor = $type;
+			}
+		}
+		require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
+		Remember_Logger::error(
+			'A stored billing secret could not be decrypted; reconnect the billing provider in Settings',
+			array(
+				'processor' => $processor,
+				'format'    => $current ? 'current' : 'legacy',
+				'likely'    => $current
+					? ( self::can_seal() ? 'AUTH_KEY or REMEMBER_ENCRYPTION_KEY changed since it was saved' : 'sodium or the site key is missing on this server' )
+					: 'the old database key option is missing or changed',
+			)
+		);
 	}
 
 	/**
@@ -154,7 +196,12 @@ class Remember_Billing_Crypto {
 			$saved = Remember_Xero_OAuth::save_settings( $settings );
 		}
 		self::$migrating = false;
+		require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
 		if ( ! $saved ) {
+			Remember_Logger::warning(
+				'Billing secrets still use the old database key; saving the re-encrypted copy failed and will be retried',
+				array( 'processor' => $processor_type )
+			);
 			return;
 		}
 
@@ -162,6 +209,13 @@ class Remember_Billing_Crypto {
 		$decoded = is_string( $raw ) ? json_decode( $raw, true ) : null;
 		if ( ! is_array( $decoded ) ) {
 			self::restore_settings( $table, $processor_type, $previous );
+			Remember_Logger::error(
+				'Billing secret re-encrypt rolled back',
+				array(
+					'processor' => $processor_type,
+					'reason'    => 'saved settings could not be read back',
+				)
+			);
 			return;
 		}
 
@@ -170,17 +224,19 @@ class Remember_Billing_Crypto {
 			$opened = is_string( $stored ) ? self::open( $stored, $option ) : false;
 			if ( ! is_string( $opened ) || $opened !== $plain ) {
 				self::restore_settings( $table, $processor_type, $previous );
-				require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
 				Remember_Logger::error(
 					'Billing secret re-encrypt rolled back',
-					array( 'processor' => $processor_type )
+					array(
+						'processor' => $processor_type,
+						'reason'    => 're-encrypted value did not decrypt to the same secret',
+						'field'     => $field,
+					)
 				);
 				return;
 			}
 		}
 
 		delete_option( $option );
-		require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
 		Remember_Logger::info(
 			'Billing secrets re-encrypted without the database key',
 			array( 'processor' => $processor_type )
@@ -403,7 +459,7 @@ class Remember_Billing_Crypto {
 	 */
 	private static function restore_settings( $table, $processor_type, $settings ) {
 		global $wpdb;
-		$wpdb->update(
+		$restored = $wpdb->update(
 			$table,
 			array(
 				'settings'   => $settings,
@@ -413,5 +469,14 @@ class Remember_Billing_Crypto {
 			array( '%s', '%s' ),
 			array( '%s' )
 		);
+		if ( false === $restored ) {
+			Remember_Logger::error(
+				'Could not restore billing settings after a failed re-encrypt; the provider may need reconnecting',
+				array(
+					'processor' => $processor_type,
+					'error'     => $wpdb->last_error,
+				)
+			);
+		}
 	}
 }

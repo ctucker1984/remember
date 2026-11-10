@@ -10,6 +10,8 @@ if ( ! defined( 'WPINC' ) ) {
 	die;
 }
 
+require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
+
 /**
  * One schedule per saved report. The hourly cron sends due reports as the owner.
  */
@@ -34,7 +36,15 @@ class Remember_Report_Schedule {
 	 */
 	public static function maybe_schedule() {
 		if ( ! wp_next_scheduled( self::CRON_HOOK ) ) {
-			wp_schedule_event( time() + HOUR_IN_SECONDS, 'hourly', self::CRON_HOOK );
+			$scheduled = wp_schedule_event( time() + HOUR_IN_SECONDS, 'hourly', self::CRON_HOOK, array(), true );
+			if ( is_wp_error( $scheduled ) ) {
+				Remember_Logger::warning(
+					'Scheduled report sender could not be scheduled; no scheduled reports will send until it is',
+					array( 'error' => $scheduled->get_error_message() )
+				);
+			} else {
+				Remember_Logger::debug( 'Scheduled report sender scheduled', array( 'hook' => self::CRON_HOOK ) );
+			}
 		}
 	}
 
@@ -75,6 +85,14 @@ class Remember_Report_Schedule {
 		$definition = self::definition_of( $report );
 		$clean      = self::sanitize_input( $input, $report->subject, $definition );
 		if ( is_wp_error( $clean ) ) {
+			Remember_Logger::debug(
+				'Report schedule refused',
+				array(
+					'user_id'   => get_current_user_id(),
+					'report_id' => (int) $report->report_id,
+					'code'      => $clean->get_error_code(),
+				)
+			);
 			return $clean;
 		}
 
@@ -102,6 +120,14 @@ class Remember_Report_Schedule {
 				array( '%d' )
 			);
 			if ( false === $updated ) {
+				Remember_Logger::error(
+					'Report schedule could not be updated',
+					array(
+						'user_id'   => get_current_user_id(),
+						'report_id' => (int) $report->report_id,
+						'error'     => $wpdb->last_error,
+					)
+				);
 				return new WP_Error( 'save', __( 'Could not save that schedule.', 'remember' ) );
 			}
 		} else {
@@ -113,10 +139,27 @@ class Remember_Report_Schedule {
 				array( '%d', '%s', '%d', '%d', '%s', '%d', '%d', '%d', '%s', '%s', '%d', '%s' )
 			);
 			if ( ! $inserted ) {
+				Remember_Logger::error(
+					'Report schedule could not be created',
+					array(
+						'user_id'   => get_current_user_id(),
+						'report_id' => (int) $report->report_id,
+						'error'     => $wpdb->last_error,
+					)
+				);
 				return new WP_Error( 'save', __( 'Could not save that schedule.', 'remember' ) );
 			}
 		}
-		Remember_Logger::info( 'Report schedule saved', array( 'report_id' => (int) $report->report_id, 'enabled' => (int) $clean['enabled'] ) );
+		Remember_Logger::info(
+			'Report schedule saved',
+			array(
+				'user_id'    => get_current_user_id(),
+				'report_id'  => (int) $report->report_id,
+				'enabled'    => (int) $clean['enabled'],
+				'frequency'  => $clean['frequency'],
+				'recipients' => count( $clean['recipient_ids'] ),
+			)
+		);
 		return self::for_report( $report->report_id );
 	}
 
@@ -124,11 +167,25 @@ class Remember_Report_Schedule {
 	 * Remove a schedule when its report is deleted.
 	 *
 	 * @param int $report_id Report ID.
-	 * @return void
+	 * @return bool False when the schedule row could not be deleted.
 	 */
 	public static function delete_for_report( $report_id ) {
 		global $wpdb;
-		$wpdb->delete( self::table_name(), array( 'report_id' => absint( $report_id ) ), array( '%d' ) );
+		$deleted = $wpdb->delete( self::table_name(), array( 'report_id' => absint( $report_id ) ), array( '%d' ) );
+		if ( false === $deleted ) {
+			Remember_Logger::warning(
+				'Report deleted, but its email schedule row could not be removed',
+				array(
+					'report_id' => absint( $report_id ),
+					'error'     => $wpdb->last_error,
+				)
+			);
+			return false;
+		}
+		if ( $deleted > 0 ) {
+			Remember_Logger::debug( 'Report email schedule removed with its report', array( 'report_id' => absint( $report_id ) ) );
+		}
+		return true;
 	}
 
 	/**
@@ -138,6 +195,7 @@ class Remember_Report_Schedule {
 	 */
 	public static function dispatch() {
 		global $wpdb;
+		$start = Remember_Logger::start_timer();
 		self::delete_stale_files();
 		require_once plugin_dir_path( __FILE__ ) . '../models/class-saved-report.php';
 		$table = self::table_name();
@@ -148,15 +206,41 @@ class Remember_Report_Schedule {
 			INNER JOIN {$reports} r ON r.report_id = s.report_id
 			WHERE s.enabled = 1"
 		); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		if ( ! is_array( $rows ) ) {
+		if ( '' !== (string) $wpdb->last_error || ! is_array( $rows ) ) {
+			Remember_Logger::error(
+				'Scheduled reports not sent: the schedules could not be read',
+				array(
+					'error'      => $wpdb->last_error,
+					'elapsed_ms' => Remember_Logger::elapsed_ms( $start ),
+				)
+			);
 			return;
 		}
-		$now = new DateTimeImmutable( 'now', wp_timezone() );
+		$now     = new DateTimeImmutable( 'now', wp_timezone() );
+		$summary = array(
+			'enabled' => count( $rows ),
+			'due'     => 0,
+			'sent'    => 0,
+			'skipped' => 0,
+			'failed'  => 0,
+		);
 		foreach ( $rows as $row ) {
 			if ( ! self::is_due( $row, $now ) ) {
 				continue;
 			}
-			self::deliver( $row, $now );
+			++$summary['due'];
+			$outcome = self::deliver( $row, $now );
+			if ( isset( $summary[ $outcome ] ) ) {
+				++$summary[ $outcome ];
+			}
+		}
+		$summary['elapsed_ms'] = Remember_Logger::elapsed_ms( $start );
+		if ( $summary['due'] < 1 ) {
+			Remember_Logger::debug( 'Scheduled reports checked; none were due', $summary );
+		} elseif ( $summary['failed'] > 0 ) {
+			Remember_Logger::warning( 'Scheduled reports finished with failures', $summary );
+		} else {
+			Remember_Logger::info( 'Scheduled reports finished', $summary );
 		}
 	}
 
@@ -193,7 +277,7 @@ class Remember_Report_Schedule {
 	 *
 	 * @param object             $row Schedule joined to its report.
 	 * @param DateTimeImmutable $now Now.
-	 * @return void
+	 * @return string sent|skipped|failed
 	 */
 	private static function deliver( $row, $now ) {
 		require_once plugin_dir_path( __FILE__ ) . '../models/class-saved-report.php';
@@ -201,11 +285,12 @@ class Remember_Report_Schedule {
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-report-engine.php';
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-access-log.php';
 
+		$start = Remember_Logger::start_timer();
 		$owner = get_userdata( (int) $row->owner_id );
 		if ( ! $owner ) {
 			Remember_Logger::warning( 'Scheduled report owner is missing', array( 'report_id' => (int) $row->report_id ) );
 			self::mark_sent( $row->report_id );
-			return;
+			return 'skipped';
 		}
 
 		$definition = json_decode( (string) $row->definition, true );
@@ -220,7 +305,7 @@ class Remember_Report_Schedule {
 				array( 'report_id' => (int) $row->report_id )
 			);
 			self::mark_sent( $row->report_id );
-			return;
+			return 'skipped';
 		}
 
 		$previous = get_current_user_id();
@@ -244,42 +329,62 @@ class Remember_Report_Schedule {
 		wp_set_current_user( $previous );
 
 		if ( is_wp_error( $result ) ) {
-			Remember_Logger::warning(
-				'Scheduled report did not run',
+			Remember_Logger::error(
+				'Scheduled report did not run; it will be tried again next hour',
 				array(
 					'report_id' => (int) $row->report_id,
+					'owner_id'  => (int) $row->owner_id,
 					'code'      => $result->get_error_code(),
+					'error'     => $result->get_error_message(),
 				)
 			);
-			return;
+			return 'failed';
 		}
 
 		if ( ! empty( $row->skip_empty ) && (int) $result['total'] < 1 ) {
 			Remember_Logger::info( 'Scheduled report skipped with no rows', array( 'report_id' => (int) $row->report_id ) );
 			self::mark_sent( $row->report_id );
-			return;
+			return 'skipped';
 		}
 
 		$path = self::write_csv( $result, (int) $row->report_id );
 		if ( ! $path ) {
-			Remember_Logger::error( 'Scheduled report CSV was not written', array( 'report_id' => (int) $row->report_id ) );
-			return;
+			return 'failed';
 		}
 
-		$sent     = 0;
-		$eligible = 0;
-		$ids      = self::recipient_ids_from_json( $row->recipient_ids );
+		$sent        = 0;
+		$eligible    = 0;
+		$cannot_run  = 0;
+		$no_email    = 0;
+		$ids         = self::recipient_ids_from_json( $row->recipient_ids );
 		try {
 			foreach ( $ids as $user_id ) {
 				if ( ! Remember_Report_Catalog::user_can_receive_report( $user_id, $row->subject, $definition ) ) {
+					++$cannot_run;
+					Remember_Logger::debug(
+						'Scheduled report recipient skipped: can no longer run this report',
+						array(
+							'report_id' => (int) $row->report_id,
+							'user_id'   => $user_id,
+						)
+					);
 					continue;
 				}
 				$user = get_userdata( $user_id );
 				if ( ! $user || ! is_email( $user->user_email ) ) {
+					++$no_email;
+					Remember_Logger::warning(
+						'Scheduled report recipient skipped: no valid email address',
+						array(
+							'report_id' => (int) $row->report_id,
+							'user_id'   => $user_id,
+						)
+					);
 					continue;
 				}
 				++$eligible;
-				$ok = wp_mail(
+				$mail_start = Remember_Logger::start_timer();
+				$ok         = wp_mail(
 					$user->user_email,
 					sprintf(
 						/* translators: %s: report name */
@@ -290,6 +395,15 @@ class Remember_Report_Schedule {
 					array( 'Content-Type: text/plain; charset=UTF-8' ),
 					array( $path )
 				);
+				Remember_Logger::debug(
+					'Scheduled report email handed to wp_mail',
+					array(
+						'report_id'  => (int) $row->report_id,
+						'user_id'    => $user_id,
+						'sent'       => (bool) $ok,
+						'elapsed_ms' => Remember_Logger::elapsed_ms( $mail_start ),
+					)
+				);
 				if ( $ok ) {
 					++$sent;
 				}
@@ -298,23 +412,31 @@ class Remember_Report_Schedule {
 			wp_delete_file( $path );
 		}
 
+		$context = array(
+			'report_id'           => (int) $row->report_id,
+			'recipients'          => $sent,
+			'failed'              => $eligible - $sent,
+			'skipped_cannot_run'  => $cannot_run,
+			'skipped_no_email'    => $no_email,
+			'rows'                => (int) $result['total'],
+			'elapsed_ms'          => Remember_Logger::elapsed_ms( $start ),
+		);
 		if ( $eligible > 0 && $sent < 1 ) {
-			Remember_Logger::error( 'Scheduled report email was not accepted', array( 'report_id' => (int) $row->report_id ) );
-			return;
+			Remember_Logger::error( 'Scheduled report email was not accepted; it will be tried again next hour', $context );
+			return 'failed';
 		}
 		if ( $sent < 1 ) {
-			Remember_Logger::warning( 'Scheduled report had no recipient who can still run it', array( 'report_id' => (int) $row->report_id ) );
+			Remember_Logger::warning( 'Scheduled report had no recipient who can still run it', $context );
+			self::mark_sent( $row->report_id );
+			return 'skipped';
+		}
+		if ( $sent < $eligible ) {
+			Remember_Logger::warning( 'Scheduled report emailed to only some recipients', $context );
 		} else {
-			Remember_Logger::info(
-				'Scheduled report emailed',
-				array(
-					'report_id'  => (int) $row->report_id,
-					'recipients' => $sent,
-					'rows'       => (int) $result['total'],
-				)
-			);
+			Remember_Logger::info( 'Scheduled report emailed', $context );
 		}
 		self::mark_sent( $row->report_id );
+		return 'sent';
 	}
 
 	/**
@@ -356,14 +478,23 @@ class Remember_Report_Schedule {
 	 */
 	private static function write_csv( $result, $report_id ) {
 		require_once ABSPATH . 'wp-admin/includes/file.php';
-		$temp = wp_tempnam( 'remember-report-' . absint( $report_id ) );
+		$start = Remember_Logger::start_timer();
+		$temp  = wp_tempnam( 'remember-report-' . absint( $report_id ) );
 		if ( ! $temp ) {
+			Remember_Logger::error( 'Scheduled report CSV was not written: no temporary file name', array( 'report_id' => absint( $report_id ) ) );
 			return false;
 		}
 		$path = $temp . '.csv';
 		wp_delete_file( $temp );
 		$out = fopen( $path, 'x' );
 		if ( ! $out ) {
+			Remember_Logger::error(
+				'Scheduled report CSV was not written: the temporary file could not be created',
+				array(
+					'report_id' => absint( $report_id ),
+					'file'      => basename( $path ),
+				)
+			);
 			return false;
 		}
 		if ( ! chmod( $path, 0600 ) ) {
@@ -393,8 +524,17 @@ class Remember_Report_Schedule {
 			fclose( $out );
 			if ( ! $written ) {
 				wp_delete_file( $path );
+				Remember_Logger::error( 'Scheduled report CSV was not written: writing the rows stopped part way', array( 'report_id' => absint( $report_id ) ) );
 			}
 		}
+		Remember_Logger::debug(
+			'Scheduled report CSV written',
+			array(
+				'report_id'  => absint( $report_id ),
+				'rows'       => count( $result['rows'] ),
+				'elapsed_ms' => Remember_Logger::elapsed_ms( $start ),
+			)
+		);
 		return $path;
 	}
 
@@ -434,11 +574,11 @@ class Remember_Report_Schedule {
 	 * Record that this slot was handled.
 	 *
 	 * @param int $report_id Report ID.
-	 * @return void
+	 * @return bool False when the send time could not be stored.
 	 */
 	private static function mark_sent( $report_id ) {
 		global $wpdb;
-		$wpdb->update(
+		$updated = $wpdb->update(
 			self::table_name(),
 			array(
 				'last_sent_at' => current_time( 'mysql' ),
@@ -448,6 +588,17 @@ class Remember_Report_Schedule {
 			array( '%s', '%s' ),
 			array( '%d' )
 		);
+		if ( false === $updated ) {
+			Remember_Logger::error(
+				'Scheduled report send time could not be recorded; it will send again next hour',
+				array(
+					'report_id' => absint( $report_id ),
+					'error'     => $wpdb->last_error,
+				)
+			);
+			return false;
+		}
+		return true;
 	}
 
 	/**

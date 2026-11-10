@@ -89,6 +89,8 @@ if ( isset( $_POST['remember_vetting_action'] ) && check_admin_referer( 'remembe
 					Remember_Logger::info( 'Vetter assigned', array( 'vetting_id' => $vetting_id, 'vetter_id' => $vetter_id ) );
 					Remember_Notifications::notify_vetting_staff( 'vetting_assigned', $vetting_id );
 					echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Vetter assigned successfully.', 'remember' ) . '</p></div>';
+				} else {
+					echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'The vetter could not be assigned. Please try again.', 'remember' ) . '</p></div>';
 				}
 			}
 		} elseif ( 'schedule' === $action ) {
@@ -129,6 +131,8 @@ if ( isset( $_POST['remember_vetting_action'] ) && check_admin_referer( 'remembe
 					Remember_Logger::info( 'Vetting scheduled', array( 'vetting_id' => $vetting_id, 'scheduled_at' => $scheduled_at ) );
 					Remember_Notifications::notify_vetting_staff( 'vetting_scheduled', $vetting_id );
 					echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Vetting scheduled successfully.', 'remember' ) . '</p></div>';
+				} else {
+					echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'The vetting could not be scheduled. Please try again.', 'remember' ) . '</p></div>';
 				}
 			}
 		} elseif ( 'complete' === $action ) {
@@ -168,7 +172,15 @@ if ( isset( $_POST['remember_vetting_action'] ) && check_admin_referer( 'remembe
 					);
 					$vetting_model->add_note( $vetting_id, get_current_user_id(), $system_note, true );
 					
-					Remember_Logger::info( 'Vetting completed', array( 'vetting_id' => $vetting_id, 'decision' => $decision ) );
+					Remember_Logger::info(
+						'Vetting completed',
+						array(
+							'vetting_id' => $vetting_id,
+							'member_id'  => $vetting ? (int) $vetting->member_id : 0,
+							'decision'   => $decision,
+							'user_id'    => get_current_user_id(),
+						)
+					);
 					echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Vetting decision recorded successfully.', 'remember' );
 					if ( $award && ! empty( $award['awarded'] ) ) {
 						/* translators: %s: comma-separated role names */
@@ -196,6 +208,8 @@ if ( isset( $_POST['remember_vetting_action'] ) && check_admin_referer( 'remembe
 					if ( $award && ( ! empty( $award['failed'] ) || ! empty( $award['refused'] ) ) ) {
 						echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Some event roles could not be awarded. Add them from the member\'s profile, and check the log if this keeps happening.', 'remember' ) . '</p></div>';
 					}
+				} else {
+					echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'The vetting decision could not be recorded. Please try again.', 'remember' ) . '</p></div>';
 				}
 			}
 		} elseif ( 'add_note' === $action ) {
@@ -206,6 +220,8 @@ if ( isset( $_POST['remember_vetting_action'] ) && check_admin_referer( 'remembe
 				if ( $note_id ) {
 					Remember_Logger::info( 'Vetting note added', array( 'vetting_id' => $vetting_id, 'note_id' => $note_id ) );
 					echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Note added successfully.', 'remember' ) . '</p></div>';
+				} else {
+					echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'The note could not be saved. Please try again.', 'remember' ) . '</p></div>';
 				}
 			}
 		} elseif ( 'add_collaborator' === $action ) {
@@ -269,8 +285,17 @@ if ( isset( $_POST['remember_vetting_action'] ) && check_admin_referer( 'remembe
 					);
 					$vetting_model->add_note( $vetting_id, get_current_user_id(), $system_note, true );
 					
-					Remember_Logger::info( 'Vetting status updated', array( 'vetting_id' => $vetting_id, 'status' => $new_status ) );
+					Remember_Logger::info(
+						'Vetting status updated',
+						array(
+							'vetting_id' => $vetting_id,
+							'from'       => $old_status,
+							'status'     => $new_status,
+						)
+					);
 					echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Status updated successfully.', 'remember' ) . '</p></div>';
+				} elseif ( false === $result ) {
+					echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'The status could not be updated. Please try again.', 'remember' ) . '</p></div>';
 				}
 			}
 		}
@@ -329,7 +354,6 @@ if ( isset( $_POST['remember_vetting_action'] ) && check_admin_referer( 'remembe
 				echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Vetting case created successfully.', 'remember' ) . ' <a href="' . esc_url( admin_url( 'admin.php?page=remember-vetting&view=' . $vetting_id ) ) . '">' . esc_html__( 'View case', 'remember' ) . '</a></p></div>';
 			} else {
 				$db_error = $vetting_model->get_last_error();
-				Remember_Logger::error( 'Failed to create vetting case', array( 'member_id' => $member_id, 'db_error' => $db_error ) );
 				$error_message = __( 'Failed to create vetting case.', 'remember' );
 				if ( ! empty( $db_error ) ) {
 					$error_message .= ' ' . sprintf( __( 'Database error: %s', 'remember' ), esc_html( $db_error ) );
@@ -441,7 +465,7 @@ $decision_labels = array(
 			
 			<table class="form-table">
 				<tr>
-					<th><label for="member_id"><?php esc_html_e( 'Member', 'remember' ); ?> <span class="description">(required)</span></label></th>
+					<th><label for="member_id"><?php esc_html_e( 'Member', 'remember' ); ?> <span class="description"><?php esc_html_e( '(required)', 'remember' ); ?></span></label></th>
 					<td>
 						<select id="member_id" name="member_id" class="regular-text" required>
 							<option value=""><?php esc_html_e( '-- Select Member --', 'remember' ); ?></option>

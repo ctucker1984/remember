@@ -11,6 +11,7 @@ if ( ! defined( 'WPINC' ) ) {
 	die;
 }
 
+require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-logger.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-event.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-application.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-location.php';
@@ -26,7 +27,6 @@ $member_model = new Remember_Member();
 $event = $event_model->get( $event_id );
 
 if ( ! $event || ! Remember_Event_Invites::member_can_see( $event, get_current_user_id() ) ) {
-	require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-logger.php';
 	Remember_Logger::debug(
 		'Event page withheld from the viewer',
 		array(

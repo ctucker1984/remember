@@ -11,18 +11,30 @@ if ( ! defined( 'WPINC' ) ) {
 	die;
 }
 
+require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
+
 /**
  * Counts, attention items, upcoming events, and recent activity for staff.
  */
 class Remember_Admin_Dashboard {
 
 	/**
+	 * Dashboard sections whose query failed in this collect(), section => database error.
+	 *
+	 * @var array<string,string>
+	 */
+	private static $failed = array();
+
+	/**
 	 * Everything the dashboard and the WordPress widget need, limited by capability.
 	 *
-	 * @return array{stats:array,attention:array,upcoming:array,activity:array,show_events:bool,show_activity:bool}
+	 * @return array{stats:array,attention:array,upcoming:array,activity:array,show_events:bool,show_activity:bool,failed:bool}
 	 */
 	public static function collect() {
 		global $wpdb;
+
+		$start        = Remember_Logger::start_timer();
+		self::$failed = array();
 
 		$can_members      = current_user_can( 'remember_read_members' ) || current_user_can( 'remember_read_attendees' );
 		$can_vetting      = current_user_can( 'remember_read_vetting' );
@@ -43,22 +55,26 @@ class Remember_Admin_Dashboard {
 				INNER JOIN {$wpdb->users} u ON m.member_id = u.ID
 				WHERE m.status IS NULL OR m.status != 'merged'"
 			);
+			self::query_failed( 'member_count' );
 			$stats[] = self::stat( $member_count, __( 'Members', 'remember' ), admin_url( 'admin.php?page=remember-members' ), 'members' );
 		}
 
 		if ( $can_vetting ) {
 			$open_vetting = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$vetting_table} WHERE status != 'completed'" );
-			$stats[]      = self::stat( $open_vetting, __( 'Open vetting', 'remember' ), admin_url( 'admin.php?page=remember-vetting' ), 'vetting' );
+			self::query_failed( 'open_vetting' );
+			$stats[] = self::stat( $open_vetting, __( 'Open vetting', 'remember' ), admin_url( 'admin.php?page=remember-vetting' ), 'vetting' );
 		}
 
 		if ( $can_applications ) {
 			$pending_apps = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$apps_table} WHERE status = 'pending'" );
-			$stats[]      = self::stat( $pending_apps, __( 'Pending applications', 'remember' ), admin_url( 'admin.php?page=remember-applications' ), 'applications' );
+			self::query_failed( 'pending_applications' );
+			$stats[] = self::stat( $pending_apps, __( 'Pending applications', 'remember' ), admin_url( 'admin.php?page=remember-applications' ), 'applications' );
 		}
 
 		if ( $can_events ) {
 			$open_events = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$events_table} WHERE status = 'open'" );
-			$stats[]     = self::stat( $open_events, __( 'Open events', 'remember' ), admin_url( 'admin.php?page=remember-events' ), 'events' );
+			self::query_failed( 'open_events' );
+			$stats[] = self::stat( $open_events, __( 'Open events', 'remember' ), admin_url( 'admin.php?page=remember-events' ), 'events' );
 		}
 
 		$attention = array();
@@ -69,6 +85,7 @@ class Remember_Admin_Dashboard {
 				WHERE status IN ('pending', 'scheduled', 'in_progress')
 				AND (primary_vetter_id IS NULL OR primary_vetter_id = 0)"
 			);
+			self::query_failed( 'unassigned_vetting' );
 			if ( $unassigned > 0 ) {
 				$attention[] = array(
 					'tone'   => 'soon',
@@ -88,6 +105,7 @@ class Remember_Admin_Dashboard {
 			$pending_apps = isset( $pending_apps ) ? $pending_apps : (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$apps_table} WHERE status = 'pending'" );
 			if ( $pending_apps > 0 ) {
 				$oldest = $wpdb->get_var( "SELECT MIN(applied_at) FROM {$apps_table} WHERE status = 'pending'" );
+				self::query_failed( 'oldest_pending_application' );
 				$detail = '';
 				if ( is_string( $oldest ) && '' !== $oldest ) {
 					$detail = sprintf(
@@ -141,16 +159,52 @@ class Remember_Admin_Dashboard {
 			);
 		}
 
+		$people   = $can_members ? self::recent_people() : array();
+		$upcoming = $can_events ? self::upcoming_events() : array();
+		$activity = self::recent_activity( $can_vetting, $can_applications );
+
+		$context = array(
+			'user_id'    => get_current_user_id(),
+			'stats'      => count( $stats ),
+			'attention'  => count( $attention ),
+			'people'     => count( $people ),
+			'upcoming'   => count( $upcoming ),
+			'activity'   => count( $activity ),
+			'elapsed_ms' => Remember_Logger::elapsed_ms( $start ),
+		);
+		if ( ! empty( self::$failed ) ) {
+			$context['failed'] = self::$failed;
+			Remember_Logger::error( 'Dashboard figures could not all be loaded', $context );
+		} else {
+			Remember_Logger::debug( 'Dashboard figures collected', $context );
+		}
+
 		return array(
 			'stats'       => $stats,
 			'summary'     => $summary,
 			'attention'   => $attention,
-			'people'      => $can_members ? self::recent_people() : array(),
-			'upcoming'    => $can_events ? self::upcoming_events() : array(),
-			'activity'    => self::recent_activity( $can_vetting, $can_applications ),
+			'people'      => $people,
+			'upcoming'    => $upcoming,
+			'activity'    => $activity,
 			'show_people' => $can_members,
 			'show_events' => $can_events,
+			'failed'      => ! empty( self::$failed ),
 		);
+	}
+
+	/**
+	 * Remember a failed dashboard query.
+	 *
+	 * Call straight after the query, before any other database call.
+	 *
+	 * @param string $section Which figure or list was being read.
+	 * @return void
+	 */
+	private static function query_failed( $section ) {
+		global $wpdb;
+		if ( '' !== $wpdb->last_error ) {
+			self::$failed[ $section ] = $wpdb->last_error;
+		}
 	}
 
 	/**
@@ -188,6 +242,7 @@ class Remember_Admin_Dashboard {
 			ORDER BY m.updated_at DESC
 			LIMIT 6"
 		);
+		self::query_failed( 'recent_people' );
 		if ( ! is_array( $rows ) || empty( $rows ) ) {
 			return array();
 		}
@@ -207,6 +262,7 @@ class Remember_Admin_Dashboard {
 				$ids
 			)
 		);
+		self::query_failed( 'recent_people_roles' );
 		$roles_by_member = array();
 		foreach ( (array) $role_rows as $role_row ) {
 			$roles_by_member[ (int) $role_row->member_id ][] = $role_row->role_name;
@@ -227,7 +283,7 @@ class Remember_Admin_Dashboard {
 			$status    = isset( $statuses[ $row->status ] ) ? $statuses[ $row->status ] : $row->status;
 			$roles     = isset( $roles_by_member[ $member_id ] ) ? $roles_by_member[ $member_id ] : array();
 			$people[]  = array(
-				'title'  => $row->display_name ? $row->display_name : __( 'Unknown Member', 'remember' ),
+				'title'  => self::member_name( $row->display_name ),
 				'detail' => implode( ', ', $roles ),
 				'meta'   => $status,
 				'url'    => admin_url( 'admin.php?page=remember-members&view=' . $member_id ),
@@ -286,7 +342,7 @@ class Remember_Admin_Dashboard {
 
 		foreach ( $vetting_model->get_by_vetter( $user_id ) as $vetting ) {
 			$member_user = get_user_by( 'id', $vetting->member_id );
-			$name        = $member_user ? $member_user->display_name : __( 'Unknown Member', 'remember' );
+			$name        = $member_user ? $member_user->display_name : __( 'Deleted member', 'remember' );
 			$add( $vetting, sprintf( __( 'Review vetting: %s', 'remember' ), $name ) );
 		}
 
@@ -301,13 +357,14 @@ class Remember_Admin_Dashboard {
 				$user_id
 			)
 		);
-		foreach ( $collaborator_ids as $vetting_id ) {
+		self::query_failed( 'your_collaborations' );
+		foreach ( (array) $collaborator_ids as $vetting_id ) {
 			$vetting = $vetting_model->get( $vetting_id );
 			if ( ! $vetting ) {
 				continue;
 			}
 			$member_user = get_user_by( 'id', $vetting->member_id );
-			$name        = $member_user ? $member_user->display_name : __( 'Unknown Member', 'remember' );
+			$name        = $member_user ? $member_user->display_name : __( 'Deleted member', 'remember' );
 			$add( $vetting, sprintf( __( 'Collaborate on vetting: %s', 'remember' ), $name ) );
 		}
 
@@ -351,6 +408,7 @@ class Remember_Admin_Dashboard {
 				$until->format( 'Y-m-d H:i:s' )
 			)
 		);
+		self::query_failed( 'registration_closing_soon' );
 		if ( ! is_array( $rows ) ) {
 			return array();
 		}
@@ -402,6 +460,7 @@ class Remember_Admin_Dashboard {
 				$today
 			)
 		);
+		self::query_failed( 'upcoming_events' );
 		if ( ! is_array( $rows ) ) {
 			return array();
 		}
@@ -472,9 +531,10 @@ class Remember_Admin_Dashboard {
 				ORDER BY v.created_at DESC
 				LIMIT 8"
 			);
+			self::query_failed( 'activity_vetting_opened' );
 			foreach ( (array) $opened as $row ) {
 				$url        = admin_url( 'admin.php?page=remember-vetting&view=' . absint( $row->vetting_id ) );
-				$name       = $row->display_name ? $row->display_name : __( 'Unknown Member', 'remember' );
+				$name       = self::member_name( $row->display_name );
 				$activity[] = array(
 					'type'      => 'vetting',
 					'timestamp' => $row->created_at,
@@ -495,9 +555,10 @@ class Remember_Admin_Dashboard {
 				ORDER BY v.completed_at DESC
 				LIMIT 8"
 			);
+			self::query_failed( 'activity_vetting_completed' );
 			foreach ( (array) $completed as $row ) {
 				$url        = admin_url( 'admin.php?page=remember-vetting&view=' . absint( $row->vetting_id ) );
-				$name       = $row->display_name ? $row->display_name : __( 'Unknown Member', 'remember' );
+				$name       = self::member_name( $row->display_name );
 				$activity[] = array(
 					'type'      => 'vetting',
 					'timestamp' => $row->completed_at,
@@ -522,6 +583,7 @@ class Remember_Admin_Dashboard {
 				ORDER BY a.applied_at DESC
 				LIMIT 8"
 			);
+			self::query_failed( 'activity_applications' );
 			foreach ( (array) $applied as $row ) {
 				$activity[] = array(
 					'type'      => 'application',
@@ -548,6 +610,19 @@ class Remember_Admin_Dashboard {
 	}
 
 	/**
+	 * Member name from a query joined to wp_users. No row there means the account was deleted.
+	 *
+	 * @param string|null $display_name display_name from the join.
+	 * @return string
+	 */
+	private static function member_name( $display_name ) {
+		if ( null === $display_name ) {
+			return __( 'Deleted member', 'remember' );
+		}
+		return '' !== (string) $display_name ? (string) $display_name : __( 'Unknown Member', 'remember' );
+	}
+
+	/**
 	 * One application activity sentence, with the event name linked.
 	 *
 	 * @param object $row  Application row with display_name and event_name.
@@ -556,7 +631,7 @@ class Remember_Admin_Dashboard {
 	 */
 	private static function application_activity_message( $row, $kind ) {
 		$url   = admin_url( 'admin.php?page=remember-applications&view=' . absint( $row->application_id ) );
-		$name  = $row->display_name ? $row->display_name : __( 'Unknown Member', 'remember' );
+		$name  = self::member_name( $row->display_name );
 		$event = $row->event_name ? $row->event_name : __( 'Unknown Event', 'remember' );
 		$link  = '<a href="' . esc_url( $url ) . '">' . esc_html( $event ) . '</a>';
 

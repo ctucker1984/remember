@@ -30,10 +30,13 @@ class Remember_Database_Updater {
 		// Migrations may create tables via dbDelta outside plugin activation.
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 
-		Remember_Logger::activation_debug(
-			'update_schema: enter',
-			array( 'remember_db_version' => get_option( 'remember_db_version', '0.0.0' ) )
-		);
+		// Runs on every admin request; trace it only during activation or when an update runs.
+		$from_version = (string) get_option( 'remember_db_version', '0.0.0' );
+		$tracing      = Remember_Logger::activation_in_progress();
+		$started      = Remember_Logger::start_timer();
+		if ( $tracing ) {
+			Remember_Logger::activation_debug( 'update_schema: enter', array( 'remember_db_version' => $from_version ) );
+		}
 
 		// Migrations compare fresh DB version each time so only the next pending migration runs per request.
 		// Update to 1.1.0 (unvetted status)
@@ -238,7 +241,7 @@ class Remember_Database_Updater {
 				if ( ! empty( $qb_indexes ) ) {
 					$drop = $wpdb->query( "ALTER TABLE {$products_table} DROP INDEX quickbooks_product_id" );
 					if ( false !== $drop ) {
-						$wpdb->query( "ALTER TABLE {$products_table} ADD KEY idx_quickbooks_product_id (quickbooks_product_id)" );
+						self::checked_write( $wpdb->query( "ALTER TABLE {$products_table} ADD KEY idx_quickbooks_product_id (quickbooks_product_id)" ), 'add idx_quickbooks_product_id to remember_products' );
 						Remember_Logger::info( 'remember_products: replaced UNIQUE(quickbooks_product_id) with non-unique index' );
 					} else {
 						Remember_Logger::error( 'remember_products: failed to drop UNIQUE(quickbooks_product_id)', array( 'error' => $wpdb->last_error ) );
@@ -246,7 +249,7 @@ class Remember_Database_Updater {
 				} else {
 					$idx_rows = $wpdb->get_results( "SHOW INDEX FROM {$products_table} WHERE Key_name = 'idx_quickbooks_product_id'" );
 					if ( empty( $idx_rows ) ) {
-						$wpdb->query( "ALTER TABLE {$products_table} ADD KEY idx_quickbooks_product_id (quickbooks_product_id)" );
+						self::checked_write( $wpdb->query( "ALTER TABLE {$products_table} ADD KEY idx_quickbooks_product_id (quickbooks_product_id)" ), 'add idx_quickbooks_product_id to remember_products' );
 					}
 				}
 			}
@@ -296,7 +299,7 @@ class Remember_Database_Updater {
 			if ( is_array( $product_cols ) && in_array( 'quickbooks_product_id', $product_cols, true ) ) {
 				Remember_Logger::activation_debug( 'migration 1.8.0: INSERT role mappings into qb_item_mappings' );
 				// Role mappings: product rows whose name matched an event role.
-				$wpdb->query(
+				$role_rows = $wpdb->query(
 					"INSERT INTO {$map_table} (entity_type, entity_id, quickbooks_product_id, quickbooks_product_name, last_sync_at, created_at, updated_at)
 					SELECT 'role', r.role_id, p.quickbooks_product_id, p.quickbooks_product_name, p.last_sync_at, p.created_at, p.updated_at
 					FROM {$products_table} p
@@ -308,10 +311,11 @@ class Remember_Database_Updater {
 						last_sync_at = VALUES(last_sync_at),
 						updated_at = VALUES(updated_at)"
 				);
+				self::checked_write( $role_rows, 'copy role QuickBooks mappings into remember_qb_item_mappings' );
 
 				Remember_Logger::activation_debug( 'migration 1.8.0: INSERT product mappings into qb_item_mappings' );
 				// Product (catalog) mappings: remaining product rows with QB ids not consumed as roles.
-				$wpdb->query(
+				$product_rows = $wpdb->query(
 					"INSERT INTO {$map_table} (entity_type, entity_id, quickbooks_product_id, quickbooks_product_name, last_sync_at, created_at, updated_at)
 					SELECT 'product', p.product_id, p.quickbooks_product_id, p.quickbooks_product_name, p.last_sync_at, p.created_at, p.updated_at
 					FROM {$products_table} p
@@ -324,17 +328,21 @@ class Remember_Database_Updater {
 						last_sync_at = VALUES(last_sync_at),
 						updated_at = VALUES(updated_at)"
 				);
+				self::checked_write( $product_rows, 'copy product QuickBooks mappings into remember_qb_item_mappings' );
 
 				Remember_Logger::activation_debug( 'migration 1.8.0: DELETE legacy product role mirrors' );
 				// Remove legacy rows that were only role-name mirrors in the products table.
-				$wpdb->query(
-					"DELETE p FROM {$products_table} p
-					INNER JOIN {$roles_table} r ON r.role_name = p.product_name AND r.is_event_role = 1"
+				self::checked_write(
+					$wpdb->query(
+						"DELETE p FROM {$products_table} p
+						INNER JOIN {$roles_table} r ON r.role_name = p.product_name AND r.is_event_role = 1"
+					),
+					'delete role mirrors from remember_products'
 				);
 
 				Remember_Logger::activation_debug( 'migration 1.8.0: ALTER remember_products DROP QB columns' );
 				// Drop QuickBooks columns from remember_products (indexes on those columns drop with the columns).
-				$wpdb->query( "ALTER TABLE {$products_table} DROP COLUMN quickbooks_product_id, DROP COLUMN quickbooks_product_name, DROP COLUMN last_sync_at" );
+				self::checked_write( $wpdb->query( "ALTER TABLE {$products_table} DROP COLUMN quickbooks_product_id, DROP COLUMN quickbooks_product_name, DROP COLUMN last_sync_at" ), 'drop QuickBooks columns from remember_products' );
 			}
 
 			update_option( 'remember_db_version', '1.8.0' );
@@ -527,20 +535,23 @@ class Remember_Database_Updater {
 			$processors_table = $wpdb->prefix . 'remember_payment_processors';
 			if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $processors_table ) ) === $processors_table ) {
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is plugin-controlled.
-				$wpdb->query( "ALTER TABLE {$processors_table} MODIFY processor_type ENUM('manual','quickbooks','xero') NOT NULL" );
+				self::checked_write( $wpdb->query( "ALTER TABLE {$processors_table} MODIFY processor_type ENUM('manual','quickbooks','xero') NOT NULL" ), 'allow xero in remember_payment_processors.processor_type' );
 
 				$xero_exists = $wpdb->get_var( $wpdb->prepare( "SELECT processor_id FROM {$processors_table} WHERE processor_type = %s", 'xero' ) );
 				if ( ! $xero_exists ) {
-					$wpdb->insert(
-						$processors_table,
-						array(
-							'processor_type' => 'xero',
-							'processor_name' => 'Xero',
-							'is_active'      => 0,
-							'settings'       => '',
-							'created_at'     => current_time( 'mysql' ),
-							'updated_at'     => current_time( 'mysql' ),
-						)
+					self::checked_write(
+						$wpdb->insert(
+							$processors_table,
+							array(
+								'processor_type' => 'xero',
+								'processor_name' => 'Xero',
+								'is_active'      => 0,
+								'settings'       => '',
+								'created_at'     => current_time( 'mysql' ),
+								'updated_at'     => current_time( 'mysql' ),
+							)
+						),
+						'add the Xero payment processor row'
 					);
 				}
 			}
@@ -740,16 +751,19 @@ class Remember_Database_Updater {
 						if ( $exists ) {
 							continue;
 						}
-						$wpdb->insert(
-							$limits_table,
-							array(
-								'merchandise_id' => absint( $merch->merchandise_id ),
-								'event_role_id'  => absint( $er->event_role_id ),
-								'max_qty'        => $max_qty,
-								'created_at'     => current_time( 'mysql' ),
-								'updated_at'     => current_time( 'mysql' ),
+						self::checked_write(
+							$wpdb->insert(
+								$limits_table,
+								array(
+									'merchandise_id' => absint( $merch->merchandise_id ),
+									'event_role_id'  => absint( $er->event_role_id ),
+									'max_qty'        => $max_qty,
+									'created_at'     => current_time( 'mysql' ),
+									'updated_at'     => current_time( 'mysql' ),
+								),
+								array( '%d', '%d', '%d', '%s', '%s' )
 							),
-							array( '%d', '%d', '%d', '%s', '%s' )
+							'add add-on role limit for merchandise ' . absint( $merch->merchandise_id ) . ', event role ' . absint( $er->event_role_id )
 						);
 					}
 				}
@@ -1337,10 +1351,10 @@ class Remember_Database_Updater {
 					}
 				}
 				if ( is_array( $cols ) && in_array( 'issued_size_code', $cols, true ) ) {
-					$wpdb->query( "UPDATE {$sizes_table} SET issued_size_code = size_code WHERE issued_size_code IS NULL OR issued_size_code = ''" );
+					self::checked_write( $wpdb->query( "UPDATE {$sizes_table} SET issued_size_code = size_code WHERE issued_size_code IS NULL OR issued_size_code = ''" ), 'fill issued_size_code in clothing_size_options' );
 				}
 				if ( is_array( $cols ) && in_array( 'is_stocked', $cols, true ) ) {
-					$wpdb->query( "UPDATE {$sizes_table} SET is_stocked = 1 WHERE is_stocked IS NULL" );
+					self::checked_write( $wpdb->query( "UPDATE {$sizes_table} SET is_stocked = 1 WHERE is_stocked IS NULL" ), 'fill is_stocked in clothing_size_options' );
 				}
 			}
 
@@ -1708,7 +1722,7 @@ class Remember_Database_Updater {
 			if ( false === $copied ) {
 				Remember_Logger::error( 'Failed to copy survey roles', array( 'error' => $wpdb->last_error ) );
 			} else {
-				$wpdb->query( "UPDATE {$surveys} SET event_role_id = NULL WHERE event_role_id IS NOT NULL" );
+				self::checked_write( $wpdb->query( "UPDATE {$surveys} SET event_role_id = NULL WHERE event_role_id IS NOT NULL" ), 'clear remember_surveys.event_role_id after copying to remember_survey_roles' );
 				update_option( 'remember_db_version', '2.3.4' );
 				Remember_Logger::info( 'Database schema updated successfully', array( 'version' => '2.3.4' ) );
 			}
@@ -1976,10 +1990,42 @@ class Remember_Database_Updater {
 		$seeder->ensure_clothing_size_options();
 		$seeder->ensure_notification_settings();
 
-		Remember_Logger::activation_debug(
-			'update_schema: exit',
-			array( 'remember_db_version' => get_option( 'remember_db_version', '0.0.0' ) )
-		);
+		$to_version = (string) get_option( 'remember_db_version', '0.0.0' );
+		if ( $tracing || $to_version !== $from_version ) {
+			Remember_Logger::activation_debug( 'update_schema: exit', array( 'remember_db_version' => $to_version ) );
+		}
+		if ( $to_version !== $from_version ) {
+			Remember_Logger::info(
+				'Database updates finished',
+				array(
+					'from'       => $from_version,
+					'to'         => $to_version,
+					'elapsed_ms' => Remember_Logger::elapsed_ms( $started ),
+				)
+			);
+		}
+	}
+
+	/**
+	 * Log a failed write inside a database update.
+	 *
+	 * @param int|bool $result Return value of $wpdb->query(), insert() or update().
+	 * @param string   $what   What the write was for.
+	 * @return int|bool The result, unchanged.
+	 */
+	private static function checked_write( $result, $what ) {
+		global $wpdb;
+		if ( false === $result ) {
+			Remember_Logger::error(
+				'Database update step failed',
+				array(
+					'step'    => $what,
+					'version' => (string) get_option( 'remember_db_version', '0.0.0' ),
+					'error'   => $wpdb->last_error,
+				)
+			);
+		}
+		return $result;
 	}
 
 	/**

@@ -14,6 +14,7 @@ if ( ! defined( 'WPINC' ) ) {
 require_once ABSPATH . 'wp-admin/includes/image.php';
 require_once ABSPATH . 'wp-admin/includes/file.php';
 require_once ABSPATH . 'wp-admin/includes/media.php';
+require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
 
 /**
  * Image uploader utility class.
@@ -62,7 +63,8 @@ class Remember_Image_Uploader {
 			return new WP_Error( 'invalid_type', __( 'Only JPEG, PNG, and GIF images are allowed.', 'remember' ) );
 		}
 
-		$subdir = self::normalize_subdir( $subdir );
+		$started = Remember_Logger::start_timer();
+		$subdir  = self::normalize_subdir( $subdir );
 		self::ensure_upload_subdir( $subdir );
 
 		self::$upload_subdir = $subdir;
@@ -86,7 +88,7 @@ class Remember_Image_Uploader {
 		// Resize and crop image
 		$image_editor = wp_get_image_editor( $file_path );
 		if ( is_wp_error( $image_editor ) ) {
-			return $image_editor;
+			return self::discard_failed_upload( $file_path, $image_editor, 'open', $subdir );
 		}
 
 		// Calculate crop dimensions (square, centered)
@@ -97,21 +99,21 @@ class Remember_Image_Uploader {
 		// Crop to square first (centered)
 		$cropped = $image_editor->crop( $crop_x, $crop_y, $crop_size, $crop_size );
 		if ( is_wp_error( $cropped ) ) {
-			return $cropped;
+			return self::discard_failed_upload( $file_path, $cropped, 'crop', $subdir );
 		}
 
 		// Resize to max_size if needed
 		if ( $crop_size > $max_size ) {
 			$resized = $image_editor->resize( $max_size, $max_size, true );
 			if ( is_wp_error( $resized ) ) {
-				return $resized;
+				return self::discard_failed_upload( $file_path, $resized, 'resize', $subdir );
 			}
 		}
 
 		// Save the image
 		$saved = $image_editor->save( $file_path );
 		if ( is_wp_error( $saved ) ) {
-			return $saved;
+			return self::discard_failed_upload( $file_path, $saved, 'save', $subdir );
 		}
 
 		// Update file path and URL if filename changed
@@ -124,10 +126,44 @@ class Remember_Image_Uploader {
 			$uploaded_file['url'] = str_replace( $upload_dir['basedir'], $upload_dir['baseurl'], $file_path );
 		}
 
+		Remember_Logger::debug(
+			'Image uploaded and resized',
+			array(
+				'subdir'     => $subdir,
+				'width'      => (int) $original_width,
+				'height'     => (int) $original_height,
+				'size'       => (int) min( $crop_size, $max_size ),
+				'elapsed_ms' => Remember_Logger::elapsed_ms( $started ),
+			)
+		);
+
 		return array(
 			'url'  => $uploaded_file['url'],
 			'path' => $file_path,
 		);
+	}
+
+	/**
+	 * Remove an uploaded file that could not be cropped or saved, so no orphan stays in uploads.
+	 *
+	 * @param string   $file_path Uploaded file path.
+	 * @param WP_Error $error     Error from the image editor.
+	 * @param string   $step      open|crop|resize|save.
+	 * @param string   $subdir    Upload subdir.
+	 * @return WP_Error The same error.
+	 */
+	private static function discard_failed_upload( $file_path, $error, $step, $subdir ) {
+		$removed = is_file( $file_path ) && @unlink( $file_path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
+		Remember_Logger::warning(
+			'Uploaded image could not be processed',
+			array(
+				'step'         => $step,
+				'subdir'       => $subdir,
+				'file_removed' => $removed,
+				'error'        => $error->get_error_message(),
+			)
+		);
+		return $error;
 	}
 
 	/**
@@ -202,7 +238,14 @@ class Remember_Image_Uploader {
 			return false;
 		}
 
-		return unlink( $file_path );
+		if ( ! @unlink( $file_path ) ) { // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.unlink_unlink
+			Remember_Logger::warning(
+				'Old image file could not be deleted',
+				array( 'file' => ltrim( substr( $file_path, strlen( $basedir ) ), '/' ) )
+			);
+			return false;
+		}
+		return true;
 	}
 
 	/**
@@ -246,6 +289,7 @@ class Remember_Image_Uploader {
 		foreach ( explode( '/', $subdir ) as $part ) {
 			$walk .= '/' . $part;
 			if ( ! wp_mkdir_p( $walk ) ) {
+				Remember_Logger::warning( 'Upload folder could not be created', array( 'subdir' => $subdir ) );
 				continue;
 			}
 			$index = $walk . '/index.php';

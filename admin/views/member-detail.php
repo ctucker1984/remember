@@ -589,6 +589,100 @@ $remember_print_sensitive = ! empty( Remember_Sensitive_Profile::print_topics() 
 			</div>
 		<?php endif; ?>
 
+		<?php if ( isset( $view_event_history ) && current_user_can( 'remember_read_applications' ) ) : ?>
+			<div class="remember-member-detail-section remember-member-detail-section--full remember-no-print">
+				<div class="remember-section-heading">
+					<h3><?php esc_html_e( 'Event History', 'remember' ); ?></h3>
+				</div>
+				<?php if ( ! empty( $view_event_history ) ) : ?>
+					<div class="remember-table-scroll">
+					<table class="wp-list-table widefat striped remember-responsive-table">
+						<thead>
+							<tr>
+								<th><?php esc_html_e( 'Event', 'remember' ); ?></th>
+								<th style="width: 160px;"><?php esc_html_e( 'Event Dates', 'remember' ); ?></th>
+								<th><?php esc_html_e( 'Role', 'remember' ); ?></th>
+								<th style="width: 110px;"><?php esc_html_e( 'Status', 'remember' ); ?></th>
+								<th style="width: 120px;"><?php esc_html_e( 'Applied', 'remember' ); ?></th>
+								<th style="width: 120px;"><?php esc_html_e( 'Decided', 'remember' ); ?></th>
+								<th style="width: 100px;"><?php esc_html_e( 'Actions', 'remember' ); ?></th>
+							</tr>
+						</thead>
+						<tbody>
+							<?php
+							$event_history_status_labels = array(
+								'pending'    => __( 'Pending', 'remember' ),
+								'accepted'   => __( 'Accepted', 'remember' ),
+								'declined'   => __( 'Declined', 'remember' ),
+								'cancelled'  => __( 'Cancelled', 'remember' ),
+								'waitlisted' => __( 'Waitlisted', 'remember' ),
+							);
+							$event_history_status_tones = array(
+								'pending'    => 'warning',
+								'accepted'   => 'success',
+								'declined'   => 'error',
+								'cancelled'  => 'muted',
+								'waitlisted' => 'info',
+							);
+							$event_history_date_format = get_option( 'date_format' );
+							foreach ( $view_event_history as $history_row ) :
+								$history_status = isset( $history_row->status ) ? $history_row->status : '';
+								$history_label  = isset( $event_history_status_labels[ $history_status ] ) ? $event_history_status_labels[ $history_status ] : $history_status;
+								$history_tone   = isset( $event_history_status_tones[ $history_status ] ) ? $event_history_status_tones[ $history_status ] : 'muted';
+								$history_dates  = '';
+								if ( ! empty( $history_row->start_date ) ) {
+									$history_dates = date_i18n( $event_history_date_format, strtotime( $history_row->start_date ) );
+									if ( ! empty( $history_row->end_date ) && $history_row->end_date !== $history_row->start_date ) {
+										$history_dates .= ' – ' . date_i18n( $event_history_date_format, strtotime( $history_row->end_date ) );
+									}
+								}
+								?>
+								<tr>
+									<td data-label="<?php echo esc_attr__( 'Event', 'remember' ); ?>">
+										<?php if ( ! empty( $history_row->event_id ) && ! empty( $history_row->event_name ) && current_user_can( 'remember_read_events' ) ) : ?>
+											<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-events&view=' . (int) $history_row->event_id ) ); ?>"><?php echo esc_html( $history_row->event_name ); ?></a>
+										<?php elseif ( ! empty( $history_row->event_name ) ) : ?>
+											<?php echo esc_html( $history_row->event_name ); ?>
+										<?php else : ?>
+											<span class="description">—</span>
+										<?php endif; ?>
+									</td>
+									<td data-label="<?php echo esc_attr__( 'Event Dates', 'remember' ); ?>">
+										<?php echo '' !== $history_dates ? esc_html( $history_dates ) : '<span class="description">—</span>'; ?>
+									</td>
+									<td data-label="<?php echo esc_attr__( 'Role', 'remember' ); ?>">
+										<?php echo ! empty( $history_row->role_name ) ? esc_html( $history_row->role_name ) : '<span class="description">—</span>'; ?>
+									</td>
+									<td data-label="<?php echo esc_attr__( 'Status', 'remember' ); ?>">
+										<span class="remember-tone-<?php echo esc_attr( $history_tone ); ?>" style="font-weight: bold;">
+											<?php echo esc_html( $history_label ); ?>
+										</span>
+										<?php if ( ! empty( $history_row->superseded_at ) ) : ?>
+											<br><span class="description"><?php esc_html_e( 'Superseded', 'remember' ); ?></span>
+										<?php endif; ?>
+									</td>
+									<td data-label="<?php echo esc_attr__( 'Applied', 'remember' ); ?>">
+										<?php echo ! empty( $history_row->applied_at ) ? esc_html( date_i18n( $event_history_date_format, strtotime( $history_row->applied_at ) ) ) : '<span class="description">—</span>'; ?>
+									</td>
+									<td data-label="<?php echo esc_attr__( 'Decided', 'remember' ); ?>">
+										<?php echo ! empty( $history_row->processed_at ) ? esc_html( date_i18n( $event_history_date_format, strtotime( $history_row->processed_at ) ) ) : '<span class="description">—</span>'; ?>
+									</td>
+									<td data-label="<?php echo esc_attr__( 'Actions', 'remember' ); ?>">
+										<a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-applications&view=' . (int) $history_row->application_id ) ); ?>" class="button button-small">
+											<?php esc_html_e( 'View', 'remember' ); ?>
+										</a>
+									</td>
+								</tr>
+							<?php endforeach; ?>
+						</tbody>
+					</table>
+					</div>
+				<?php else : ?>
+					<p class="description"><?php esc_html_e( 'No event applications yet.', 'remember' ); ?></p>
+				<?php endif; ?>
+			</div>
+		<?php endif; ?>
+
 		<!-- Billing Register (Full Width) -->
 		<?php if ( current_user_can( 'remember_read_billing' ) ) : ?>
 		<div class="remember-member-detail-section remember-member-detail-section--full remember-no-print">

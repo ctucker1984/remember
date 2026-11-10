@@ -25,28 +25,44 @@ $event_model = new Remember_Event();
 /**
  * Apply a posted location logo (new upload, Media Library pick, or remove).
  *
- * @param string $existing_url Current logo URL.
+ * Files are not deleted here. The caller deletes $changes['discard'] after the
+ * location saves, or $changes['uploaded'] if the save fails.
+ *
+ * @param string $existing_url   Current logo URL.
  * @param int    $max_image_size Max square size for new uploads.
+ * @param array  $changes        Set to discard (old logo URL to delete) and uploaded (new upload URL).
  * @return string|null
  */
-function remember_apply_location_logo( $existing_url, $max_image_size ) {
+function remember_apply_location_logo( $existing_url, $max_image_size, &$changes = array() ) {
 	$existing_url = is_string( $existing_url ) ? $existing_url : '';
+	$changes      = array(
+		'discard'  => '',
+		'uploaded' => '',
+	);
 
 	if ( ! empty( $_FILES['logo_file']['name'] ) ) {
 		$upload_result = Remember_Image_Uploader::upload_square_image( $_FILES['logo_file'], $max_image_size, Remember_Image_Uploader::SUBDIR_LOCATIONS );
 		if ( is_wp_error( $upload_result ) ) {
-			Remember_Logger::error( 'Logo upload failed', array( 'error' => $upload_result->get_error_message() ) );
+			Remember_Logger::warning(
+				'Location logo not uploaded; the location is saved with its current logo',
+				array(
+					'location_id' => isset( $_POST['location_id'] ) ? absint( $_POST['location_id'] ) : 0,
+					'error'       => $upload_result->get_error_message(),
+				)
+			);
 			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html( $upload_result->get_error_message() ) . '</p></div>';
 			return '' === $existing_url ? null : $existing_url;
 		}
-		if ( $existing_url ) {
-			Remember_Image_Uploader::delete_image( $existing_url );
+		if ( empty( $upload_result['url'] ) ) {
+			return '' === $existing_url ? null : $existing_url;
 		}
-		return isset( $upload_result['url'] ) ? $upload_result['url'] : $existing_url;
+		$changes['uploaded'] = $upload_result['url'];
+		$changes['discard']  = $existing_url;
+		return $upload_result['url'];
 	}
 
 	if ( isset( $_POST['delete_logo'] ) && $existing_url ) {
-		Remember_Image_Uploader::delete_image( $existing_url );
+		$changes['discard'] = $existing_url;
 		return null;
 	}
 
@@ -55,13 +71,28 @@ function remember_apply_location_logo( $existing_url, $max_image_size ) {
 		$url = wp_get_attachment_url( $attachment_id );
 		if ( $url ) {
 			if ( $existing_url && $existing_url !== $url ) {
-				Remember_Image_Uploader::delete_image( $existing_url );
+				$changes['discard'] = $existing_url;
 			}
 			return $url;
 		}
 	}
 
 	return '' === $existing_url ? null : $existing_url;
+}
+
+/**
+ * Delete logo files once the location save has succeeded or failed.
+ *
+ * @param array $changes From remember_apply_location_logo().
+ * @param bool  $saved   Whether the location row saved.
+ * @return void
+ */
+function remember_finish_location_logo( $changes, $saved ) {
+	if ( $saved && ! empty( $changes['discard'] ) ) {
+		Remember_Image_Uploader::delete_image( $changes['discard'] );
+	} elseif ( ! $saved && ! empty( $changes['uploaded'] ) ) {
+		Remember_Image_Uploader::delete_image( $changes['uploaded'] );
+	}
 }
 
 /**
@@ -161,17 +192,24 @@ if ( isset( $_POST['remember_location_action'] ) && check_admin_referer( 'rememb
 			'is_active'      => isset( $_POST['is_active'] ) ? 1 : 0,
 		);
 		
-		$logo_url = remember_apply_location_logo( '', $max_image_size );
+		$logo_changes = array();
+		$logo_url     = remember_apply_location_logo( '', $max_image_size, $logo_changes );
 		if ( $logo_url ) {
 			$data['logo_url'] = $logo_url;
 		}
 		
 		$location_id = $location_model->create( $data );
+		remember_finish_location_logo( $logo_changes, (bool) $location_id );
 		if ( $location_id ) {
-			Remember_Logger::info( 'Location created', array( 'location_id' => $location_id ) );
+			Remember_Logger::info(
+				'Location created',
+				array(
+					'location_id' => $location_id,
+					'user_id'     => get_current_user_id(),
+				)
+			);
 			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Location created successfully.', 'remember' ) . '</p></div>';
 		} else {
-			Remember_Logger::error( 'Failed to create location' );
 			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to create location.', 'remember' ) . '</p></div>';
 		}
 	} elseif ( 'edit' === $action && isset( $_POST['location_id'] ) ) {
@@ -194,7 +232,8 @@ if ( isset( $_POST['remember_location_action'] ) && check_admin_referer( 'rememb
 			'is_active'      => isset( $_POST['is_active'] ) ? 1 : 0,
 		);
 		
-		$logo_url = remember_apply_location_logo( $location ? $location->logo_url : '', $max_image_size );
+		$logo_changes = array();
+		$logo_url     = remember_apply_location_logo( $location ? $location->logo_url : '', $max_image_size, $logo_changes );
 		if ( null === $logo_url ) {
 			$data['logo_url'] = null;
 		} elseif ( $logo_url ) {
@@ -202,11 +241,17 @@ if ( isset( $_POST['remember_location_action'] ) && check_admin_referer( 'rememb
 		}
 		
 		$result = $location_model->update( $location_id, $data );
+		remember_finish_location_logo( $logo_changes, false !== $result );
 		if ( $result !== false ) {
-			Remember_Logger::info( 'Location updated', array( 'location_id' => $location_id ) );
+			Remember_Logger::info(
+				'Location updated',
+				array(
+					'location_id' => $location_id,
+					'user_id'     => get_current_user_id(),
+				)
+			);
 			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Location updated successfully.', 'remember' ) . '</p></div>';
 		} else {
-			Remember_Logger::error( 'Failed to update location', array( 'location_id' => $location_id ) );
 			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to update location.', 'remember' ) . '</p></div>';
 		}
 	} elseif ( 'delete' === $action && isset( $_GET['delete'] ) ) {
@@ -218,17 +263,21 @@ if ( isset( $_POST['remember_location_action'] ) && check_admin_referer( 'rememb
 		$location_id = absint( $_GET['delete'] );
 		$location = $location_model->get( $location_id );
 		
-		// Delete logo if exists
-		if ( $location && $location->logo_url ) {
-			Remember_Image_Uploader::delete_image( $location->logo_url );
-		}
-		
 		$result = $location_model->delete( $location_id );
 		if ( $result !== false ) {
-			Remember_Logger::info( 'Location deleted', array( 'location_id' => $location_id ) );
+			// The logo goes only once the location itself is gone.
+			if ( $location && $location->logo_url ) {
+				Remember_Image_Uploader::delete_image( $location->logo_url );
+			}
+			Remember_Logger::info(
+				'Location deleted',
+				array(
+					'location_id' => $location_id,
+					'user_id'     => get_current_user_id(),
+				)
+			);
 			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Location deleted successfully.', 'remember' ) . '</p></div>';
 		} else {
-			Remember_Logger::error( 'Failed to delete location', array( 'location_id' => $location_id ) );
 			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to delete location.', 'remember' ) . '</p></div>';
 		}
 	}
@@ -328,7 +377,7 @@ function remember_format_address( $location ) {
 				
 				<table class="form-table">
 					<tr>
-						<th><label for="location_name"><?php esc_html_e( 'Location Name', 'remember' ); ?> <span class="description">(required)</span></label></th>
+						<th><label for="location_name"><?php esc_html_e( 'Location Name', 'remember' ); ?> <span class="description"><?php esc_html_e( '(required)', 'remember' ); ?></span></label></th>
 						<td><input type="text" id="location_name" name="location_name" class="regular-text" value="<?php echo esc_attr( $editing_location->location_name ); ?>" required></td>
 					</tr>
 					<?php remember_render_location_logo_field( $editing_location->logo_url, $max_image_size ); ?>
@@ -423,7 +472,7 @@ function remember_format_address( $location ) {
 				
 				<table class="form-table">
 					<tr>
-						<th><label for="location_name"><?php esc_html_e( 'Location Name', 'remember' ); ?> <span class="description">(required)</span></label></th>
+						<th><label for="location_name"><?php esc_html_e( 'Location Name', 'remember' ); ?> <span class="description"><?php esc_html_e( '(required)', 'remember' ); ?></span></label></th>
 						<td><input type="text" id="location_name" name="location_name" class="regular-text" required></td>
 					</tr>
 					<?php remember_render_location_logo_field( '', $max_image_size ); ?>
@@ -515,7 +564,7 @@ function remember_format_address( $location ) {
 								| <a href="<?php echo esc_url( admin_url( 'admin.php?page=remember-locations&edit=' . $location->location_id ) ); ?>"><?php esc_html_e( 'Edit', 'remember' ); ?></a>
 							<?php endif; ?>
 							<?php if ( current_user_can( 'remember_delete_locations' ) ) : ?>
-								| <a href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin.php?page=remember-locations&delete=' . $location->location_id ), 'remember_location_action', 'remember_location_nonce' ) ); ?>" onclick="return confirm('<?php echo esc_js( __( 'Are you sure you want to delete this location?', 'remember' ) ); ?>');"><?php esc_html_e( 'Delete', 'remember' ); ?></a>
+								| <a href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin.php?page=remember-locations&delete=' . $location->location_id ), 'remember_location_action', 'remember_location_nonce' ) ); ?>" onclick="return confirm('<?php echo esc_js( __( 'Are you sure you want to delete this location?', 'remember' ) ); ?>');" aria-label="<?php echo esc_attr( sprintf( /* translators: %s: location name */ __( 'Delete %s', 'remember' ), $location->location_name ) ); ?>"><?php esc_html_e( 'Delete', 'remember' ); ?></a>
 							<?php endif; ?>
 						</td>
 					</tr>

@@ -12,6 +12,7 @@ if ( ! defined( 'WPINC' ) ) {
 }
 
 require_once plugin_dir_path( __FILE__ ) . 'class-remember-base-model.php';
+require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-logger.php';
 
 /**
  * Vetting model class.
@@ -312,8 +313,8 @@ class Remember_Vetting extends Remember_Base_Model {
 	public function add_note( $vetting_id, $member_id, $note_content, $is_admin_only = false ) {
 		global $wpdb;
 		$table_name = $wpdb->prefix . 'remember_vetting_notes';
-		
-		return $wpdb->insert(
+
+		$ok = $wpdb->insert(
 			$table_name,
 			array(
 				'vetting_id'    => $vetting_id,
@@ -323,7 +324,19 @@ class Remember_Vetting extends Remember_Base_Model {
 				'created_at'    => current_time( 'mysql' ),
 			),
 			array( '%d', '%d', '%s', '%d', '%s' )
-		) ? $wpdb->insert_id : false;
+		);
+		if ( ! $ok ) {
+			Remember_Logger::error(
+				'Vetting note not saved',
+				array(
+					'vetting_id' => (int) $vetting_id,
+					'author_id'  => (int) $member_id,
+					'error'      => $wpdb->last_error,
+				)
+			);
+			return false;
+		}
+		return $wpdb->insert_id;
 	}
 
 	/**
@@ -385,7 +398,7 @@ class Remember_Vetting extends Remember_Base_Model {
 			return false; // Already exists
 		}
 		
-		return $wpdb->insert(
+		$ok = $wpdb->insert(
 			$table_name,
 			array(
 				'vetting_id'  => $vetting_id,
@@ -395,6 +408,19 @@ class Remember_Vetting extends Remember_Base_Model {
 				'status'      => 'pending',
 			),
 			array( '%d', '%d', '%d', '%s', '%s' )
-		) ? $wpdb->insert_id : false;
+		);
+		if ( ! $ok ) {
+			Remember_Logger::error(
+				'Vetting collaborator not added',
+				array(
+					'vetting_id'      => (int) $vetting_id,
+					'collaborator_id' => (int) $member_id,
+					'invited_by'      => (int) $invited_by,
+					'error'           => $wpdb->last_error,
+				)
+			);
+			return false;
+		}
+		return $wpdb->insert_id;
 	}
 }

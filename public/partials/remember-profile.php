@@ -19,6 +19,7 @@ require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remem
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-fields.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-platform-handles.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-audit.php';
+require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-logger.php';
 
 $user = wp_get_current_user();
 $member_model = new Remember_Member();
@@ -178,19 +179,31 @@ if ( isset( $_POST['remember_profile_action'] ) && check_admin_referer( 'remembe
 			$upload_result = Remember_Image_Uploader::upload_square_image( $_FILES['photo_file'], $photo_max_dimensions );
 			if ( is_wp_error( $upload_result ) ) {
 				$photo_error = $upload_result->get_error_message();
+				Remember_Logger::warning(
+					'Member photo upload rejected',
+					array(
+						'member_id' => (int) $user->ID,
+						'error'     => $photo_error,
+					)
+				);
+			} elseif ( false === $member_model->update_photo( $user->ID, $upload_result['url'] ) ) {
+				Remember_Image_Uploader::delete_image( $upload_result['url'] );
+				$photo_error = __( 'The new photo could not be saved. The current photo was kept.', 'remember' );
 			} else {
-				$member_model->update_photo( $user->ID, $upload_result['url'] );
 				// Delete the old photo only once the new one is saved.
 				if ( $current_member && ! empty( $current_member->photo_url ) && $current_member->photo_url !== $upload_result['url'] ) {
 					Remember_Image_Uploader::delete_image( $current_member->photo_url );
 				}
+				Remember_Logger::info( 'Member photo updated', array( 'member_id' => (int) $user->ID ) );
 			}
 		}
 	} elseif ( isset( $_POST['delete_photo'] ) && '1' === (string) wp_unslash( $_POST['delete_photo'] ) ) {
 		$current_member = $member_model->get( $user->ID );
 		if ( $current_member && ! empty( $current_member->photo_url ) ) {
 			Remember_Image_Uploader::delete_image( $current_member->photo_url );
-			$member_model->update_photo( $user->ID, null );
+			if ( false !== $member_model->update_photo( $user->ID, null ) ) {
+				Remember_Logger::info( 'Member photo deleted', array( 'member_id' => (int) $user->ID ) );
+			}
 		}
 	}
 
@@ -198,7 +211,7 @@ if ( isset( $_POST['remember_profile_action'] ) && check_admin_referer( 'remembe
 	$profile_data['updated_by'] = get_current_user_id();
 
 	if ( $profile ) {
-		$wpdb->update(
+		$remember_profile_written = $wpdb->update(
 			$wpdb->prefix . 'remember_member_profiles',
 			$profile_data,
 			array( 'member_id' => $user->ID )
@@ -206,7 +219,17 @@ if ( isset( $_POST['remember_profile_action'] ) && check_admin_referer( 'remembe
 	} else {
 		$profile_data['member_id'] = $user->ID;
 		$profile_data['created_at'] = current_time( 'mysql' );
-		$wpdb->insert( $wpdb->prefix . 'remember_member_profiles', $profile_data );
+		$remember_profile_written = $wpdb->insert( $wpdb->prefix . 'remember_member_profiles', $profile_data );
+	}
+	if ( false === $remember_profile_written ) {
+		Remember_Logger::error(
+			'Member profile details not saved from the profile page',
+			array(
+				'member_id' => (int) $user->ID,
+				'operation' => $profile ? 'update' : 'insert',
+				'error'     => $wpdb->last_error,
+			)
+		);
 	}
 
 	// Update WordPress name meta (legal names feed the public display-name choices).
@@ -242,8 +265,16 @@ if ( isset( $_POST['remember_profile_action'] ) && check_admin_referer( 'remembe
 		$remember_user_update['user_email'] = $remember_new_email;
 	}
 	$remember_user_result = wp_update_user( $remember_user_update );
-	if ( $remember_email_changed && ! is_wp_error( $remember_user_result ) ) {
-		require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-logger.php';
+	if ( is_wp_error( $remember_user_result ) ) {
+		Remember_Logger::error(
+			'Member display name, nickname or email not saved from the profile page',
+			array(
+				'user_id'       => (int) $user->ID,
+				'email_changed' => $remember_email_changed,
+				'error'         => $remember_user_result->get_error_message(),
+			)
+		);
+	} elseif ( $remember_email_changed ) {
 		Remember_Logger::info( 'Member account email updated', array( 'user_id' => $user->ID ) );
 		Remember_Logger::debug(
 			'Member account email updated',
@@ -255,7 +286,7 @@ if ( isset( $_POST['remember_profile_action'] ) && check_admin_referer( 'remembe
 	}
 	
 	require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-notifications.php';
-	Remember_Notifications::save_staff_email_prefs_from_request( $user->ID );
+	$remember_prefs_saved = Remember_Notifications::save_staff_email_prefs_from_request( $user->ID );
 
 	// Save timezone to WP user meta (not member_profiles)
 	if ( isset( $_POST['timezone_string'] ) ) {
@@ -273,20 +304,25 @@ if ( isset( $_POST['remember_profile_action'] ) && check_admin_referer( 'remembe
 
 	do_action( 'remember_member_profile_saved', $user->ID );
 
-	require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-logger.php';
 	Remember_Logger::info( 'Member profile saved', array( 'member_id' => (int) $user->ID ) );
 
 	if ( $change_password ) {
 		wp_set_password( $new_password, $user->ID );
 		require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-profile-duplicates.php';
 		Remember_Profile_Duplicates::stamp_password( $user->ID );
+		Remember_Logger::info( 'Member changed their password', array( 'user_id' => (int) $user->ID ) );
 		wp_set_current_user( $user->ID );
 		wp_set_auth_cookie( $user->ID, true, is_ssl() );
 	}
 
-	// Redirect: stay on edit if photo failed so the member can retry.
-	if ( ! empty( $photo_error ) ) {
-		set_transient( 'remember_profile_photo_error_' . $user->ID, $photo_error, MINUTE_IN_SECONDS );
+	// Redirect: stay on edit if the photo or staff email choices failed so the member can retry.
+	if ( ! empty( $photo_error ) || ! $remember_prefs_saved ) {
+		if ( ! empty( $photo_error ) ) {
+			set_transient( 'remember_profile_photo_error_' . $user->ID, $photo_error, MINUTE_IN_SECONDS );
+		}
+		if ( ! $remember_prefs_saved ) {
+			set_transient( 'remember_profile_prefs_error_' . $user->ID, 1, MINUTE_IN_SECONDS );
+		}
 		wp_safe_redirect( Remember_Profile_Audit::with_return_args( add_query_arg( 'edit', '1' ) ) );
 		exit;
 	}
@@ -457,6 +493,10 @@ if ( $remember_sticky ) {
 		if ( $photo_error_notice ) {
 			delete_transient( 'remember_profile_photo_error_' . $user->ID );
 		}
+		$prefs_error_notice = get_transient( 'remember_profile_prefs_error_' . $user->ID );
+		if ( $prefs_error_notice ) {
+			delete_transient( 'remember_profile_prefs_error_' . $user->ID );
+		}
 		if ( '' === $profile_error ) {
 			$profile_error = isset( $_GET['remember_profile_error'] ) ? sanitize_text_field( wp_unslash( $_GET['remember_profile_error'] ) ) : '';
 		}
@@ -548,6 +588,11 @@ if ( $remember_sticky ) {
 		<?php if ( $photo_error_notice ) : ?>
 			<div class="remember-notice remember-error" role="alert">
 				<p><?php echo esc_html( $photo_error_notice ); ?></p>
+			</div>
+		<?php endif; ?>
+		<?php if ( $prefs_error_notice ) : ?>
+			<div class="remember-notice remember-error" role="alert">
+				<p><?php esc_html_e( 'Your profile was saved, but your staff email choices could not be. Check them below and save again.', 'remember' ); ?></p>
 			</div>
 		<?php endif; ?>
 		<form method="post" action="" class="remember-profile-form-modern" enctype="multipart/form-data">

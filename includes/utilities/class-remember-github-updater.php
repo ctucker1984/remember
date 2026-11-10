@@ -89,7 +89,7 @@ class Remember_GitHub_Updater {
 		}
 		if ( ! preg_match( '/^[a-f0-9]{64}$/', $expected ) ) {
 			self::log_update(
-				'warning',
+				'error',
 				'Refused reMember update because GitHub returned no SHA-256 digest',
 				array(
 					'version' => $version,
@@ -102,8 +102,18 @@ class Remember_GitHub_Updater {
 			);
 		}
 
-		$tmp = download_url( $package );
+		$started = microtime( true );
+		$tmp     = download_url( $package );
+		self::log_external_call( 'GitHub release download', $started, array( 'version' => $version ) );
 		if ( is_wp_error( $tmp ) ) {
+			self::log_update(
+				'error',
+				'Failed to download reMember update',
+				array(
+					'version' => $version,
+					'error'   => $tmp->get_error_message(),
+				)
+			);
 			return $tmp;
 		}
 
@@ -112,7 +122,7 @@ class Remember_GitHub_Updater {
 		if ( ! $matches ) {
 			wp_delete_file( $tmp );
 			self::log_update(
-				'warning',
+				'error',
 				'Downloaded reMember update did not match GitHub\'s checksum',
 				array(
 					'version'  => $version,
@@ -341,6 +351,7 @@ class Remember_GitHub_Updater {
 			}
 		}
 
+		$started  = microtime( true );
 		$response = wp_remote_get(
 			self::API_URL,
 			array(
@@ -352,8 +363,25 @@ class Remember_GitHub_Updater {
 				'timeout'    => 15,
 			)
 		);
+		$status = is_wp_error( $response ) ? 0 : (int) wp_remote_retrieve_response_code( $response );
+		self::log_external_call(
+			'GitHub latest release check',
+			$started,
+			array(
+				'status' => $status,
+				'forced' => $force,
+			)
+		);
 
-		if ( is_wp_error( $response ) || 200 !== (int) wp_remote_retrieve_response_code( $response ) ) {
+		if ( is_wp_error( $response ) || 200 !== $status ) {
+			self::log_update(
+				'warning',
+				'Could not check GitHub for a reMember update; trying again in 15 minutes',
+				array(
+					'status' => $status,
+					'error'  => is_wp_error( $response ) ? $response->get_error_message() : '',
+				)
+			);
 			// Cache the miss briefly so a GitHub outage cannot slow every admin page load.
 			set_transient( self::TRANSIENT_KEY, array(), 15 * MINUTE_IN_SECONDS );
 			return array();
@@ -361,6 +389,11 @@ class Remember_GitHub_Updater {
 
 		$body = json_decode( wp_remote_retrieve_body( $response ), true );
 		if ( ! is_array( $body ) || empty( $body['tag_name'] ) ) {
+			self::log_update(
+				'warning',
+				'GitHub returned a release reMember could not read; trying again in 15 minutes',
+				array( 'json_error' => json_last_error_msg() )
+			);
 			set_transient( self::TRANSIENT_KEY, array(), 15 * MINUTE_IN_SECONDS );
 			return array();
 		}
@@ -376,6 +409,16 @@ class Remember_GitHub_Updater {
 		);
 
 		set_transient( self::TRANSIENT_KEY, $release, self::CACHE_LIFETIME );
+		self::log_update(
+			'debug',
+			'Fetched latest reMember release from GitHub',
+			array(
+				'version'     => $version,
+				'installed'   => self::installed_version(),
+				'has_package' => '' !== $release['package'],
+				'has_digest'  => '' !== $release['digest'],
+			)
+		);
 
 		return $release;
 	}
@@ -428,27 +471,58 @@ class Remember_GitHub_Updater {
 	}
 
 	/**
-	 * Write an updater log line when the logger is available.
+	 * Whether Remember_Logger is loaded, loading it if needed.
 	 *
-	 * @param string $level   warning|debug.
-	 * @param string $message Log message.
-	 * @param array  $context Context.
-	 * @return void
+	 * @return bool
 	 */
-	private static function log_update( $level, $message, $context = array() ) {
+	private static function logger_ready() {
 		if ( ! class_exists( 'Remember_Logger', false ) && defined( 'REMEMBER_PLUGIN_DIR' ) ) {
 			$logger = REMEMBER_PLUGIN_DIR . 'includes/utilities/class-remember-logger.php';
 			if ( is_readable( $logger ) ) {
 				require_once $logger;
 			}
 		}
-		if ( ! class_exists( 'Remember_Logger', false ) ) {
+		return class_exists( 'Remember_Logger', false );
+	}
+
+	/**
+	 * Write an updater log line when the logger is available.
+	 *
+	 * @param string $level   error|warning|info|debug.
+	 * @param string $message Log message.
+	 * @param array  $context Context.
+	 * @return void
+	 */
+	private static function log_update( $level, $message, $context = array() ) {
+		if ( ! self::logger_ready() ) {
 			return;
 		}
-		if ( 'debug' === $level ) {
-			Remember_Logger::debug( $message, $context );
-			return;
+		switch ( $level ) {
+			case 'error':
+				Remember_Logger::error( $message, $context );
+				break;
+			case 'warning':
+				Remember_Logger::warning( $message, $context );
+				break;
+			case 'info':
+				Remember_Logger::info( $message, $context );
+				break;
+			default:
+				Remember_Logger::debug( $message, $context );
 		}
-		Remember_Logger::warning( $message, $context );
+	}
+
+	/**
+	 * Log how long a GitHub request took, with a Warning when it was slow.
+	 *
+	 * @param string $what    Request name.
+	 * @param float  $started microtime( true ) before the request.
+	 * @param array  $context Context.
+	 * @return void
+	 */
+	private static function log_external_call( $what, $started, $context = array() ) {
+		if ( self::logger_ready() ) {
+			Remember_Logger::external_call_done( $what, $started, $context );
+		}
 	}
 }

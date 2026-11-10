@@ -126,6 +126,7 @@ class Remember {
 		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/utilities/class-remember-sensitive-profile.php';
 		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/utilities/class-remember-privacy.php';
 		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/utilities/class-remember-registration-guard.php';
+		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/utilities/class-remember-registration-verification.php';
 		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/utilities/class-remember-waitlist.php';
 		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/utilities/class-remember-event-invites.php';
 		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/utilities/class-remember-invoice-due.php';
@@ -190,7 +191,7 @@ class Remember {
 		$this->loader->add_action( 'admin_init', $plugin_admin, 'process_setup_wizard' );
 
 		// Clean up member records when WordPress user is deleted
-		$this->loader->add_action( 'delete_user', $this, 'cleanup_member_on_user_delete' );
+		$this->loader->add_action( 'deleted_user', $this, 'cleanup_member_on_user_delete' );
 		
 		// Add timezone field to WordPress user profile
 		$this->loader->add_action( 'show_user_profile', $plugin_admin, 'add_timezone_field_to_profile' );
@@ -242,6 +243,7 @@ class Remember {
 		Remember_Profile_Duplicates::init();
 		Remember_Reports::init();
 		Remember_Access_Log::init();
+		Remember_Registration_Verification::init();
 		Remember_Sensitive_Profile::init();
 		Remember_Privacy::init();
 		Remember_Waitlist::init();
@@ -292,6 +294,7 @@ class Remember {
 		}
 		flush_rewrite_rules();
 		delete_option( 'remember_activation_needs_rewrite_flush' );
+		Remember_Logger::info( 'Permalinks refreshed after activation' );
 	}
 
 	/**
@@ -322,7 +325,23 @@ class Remember {
 		if ( REMEMBER_VERSION === $stored ) {
 			return;
 		}
-		update_option( 'remember_version', REMEMBER_VERSION );
+		if ( ! update_option( 'remember_version', REMEMBER_VERSION ) ) {
+			Remember_Logger::error(
+				'Failed to save the installed plugin version',
+				array(
+					'from' => $stored,
+					'to'   => REMEMBER_VERSION,
+				)
+			);
+			return;
+		}
+		Remember_Logger::info(
+			'Plugin version updated',
+			array(
+				'from' => $stored,
+				'to'   => REMEMBER_VERSION,
+			)
+		);
 	}
 
 	/**
@@ -336,6 +355,7 @@ class Remember {
 		if ( Remember_Billing_Provider::is_xero() ) {
 			require_once plugin_dir_path( __FILE__ ) . 'integrations/class-remember-xero-oauth.php';
 			if ( ! Remember_Xero_OAuth::is_connected() ) {
+				Remember_Logger::debug( 'Vetted member not synced: Xero is not connected', array( 'member_id' => (int) $member_id ) );
 				return;
 			}
 			require_once plugin_dir_path( __FILE__ ) . 'integrations/class-remember-xero-sync.php';
@@ -344,6 +364,7 @@ class Remember {
 		}
 
 		if ( ! Remember_Billing_Provider::is_quickbooks() ) {
+			Remember_Logger::debug( 'Vetted member not synced: no accounting provider selected', array( 'member_id' => (int) $member_id ) );
 			return;
 		}
 
@@ -353,7 +374,9 @@ class Remember {
 		if ( $qb_settings && ! empty( $qb_settings['access_token'] ) && ! empty( $qb_settings['realm_id'] ) ) {
 			require_once plugin_dir_path( __FILE__ ) . 'integrations/class-remember-quickbooks-sync.php';
 			Remember_QuickBooks_Sync::sync_member_to_customer( $member_id );
+			return;
 		}
+		Remember_Logger::debug( 'Vetted member not synced: QuickBooks is not connected', array( 'member_id' => (int) $member_id ) );
 	}
 
 	/**
@@ -372,6 +395,7 @@ class Remember {
 		if ( Remember_Billing_Provider::is_xero() ) {
 			require_once plugin_dir_path( __FILE__ ) . 'integrations/class-remember-xero-oauth.php';
 			if ( ! Remember_Xero_OAuth::is_connected() ) {
+				Remember_Logger::debug( 'Saved profile not synced: Xero is not connected', array( 'member_id' => $member_id ) );
 				return;
 			}
 			require_once plugin_dir_path( __FILE__ ) . 'integrations/class-remember-xero-sync.php';
@@ -380,12 +404,14 @@ class Remember {
 		}
 
 		if ( ! Remember_Billing_Provider::is_quickbooks() ) {
+			Remember_Logger::debug( 'Saved profile not synced: no accounting provider selected', array( 'member_id' => $member_id ) );
 			return;
 		}
 
 		require_once plugin_dir_path( __FILE__ ) . 'integrations/class-remember-quickbooks-oauth.php';
 		$qb_settings = Remember_QuickBooks_OAuth::get_settings();
 		if ( empty( $qb_settings['access_token'] ) || empty( $qb_settings['realm_id'] ) ) {
+			Remember_Logger::debug( 'Saved profile not synced: QuickBooks is not connected', array( 'member_id' => $member_id ) );
 			return;
 		}
 		require_once plugin_dir_path( __FILE__ ) . 'integrations/class-remember-quickbooks-sync.php';
@@ -396,16 +422,16 @@ class Remember {
 	 * Schedule QuickBooks sync cron job if needed.
 	 */
 	public function maybe_schedule_qb_sync() {
-		if ( ! wp_next_scheduled( 'remember_qb_sync' ) ) {
-			$options = get_option( 'remember_options', array() );
-			$interval = isset( $options['qb_sync_interval'] ) ? absint( $options['qb_sync_interval'] ) : 3600; // Default 1 hour
-			
-			// Schedule recurring event
-			wp_schedule_event( time(), 'hourly', 'remember_qb_sync' );
-			
-			// Note: WordPress doesn't support custom intervals easily, so we'll use hourly
-			// and check the interval in the sync function itself
+		if ( wp_next_scheduled( 'remember_qb_sync' ) ) {
+			return;
 		}
+		// Runs hourly; sync_qb_payments() skips runs until the configured interval has passed.
+		$scheduled = wp_schedule_event( time(), 'hourly', 'remember_qb_sync', array(), true );
+		if ( is_wp_error( $scheduled ) ) {
+			Remember_Logger::warning( 'Failed to schedule the payment sync', array( 'error' => $scheduled->get_error_message() ) );
+			return;
+		}
+		Remember_Logger::info( 'Scheduled the hourly payment sync' );
 	}
 
 	/**
@@ -420,6 +446,7 @@ class Remember {
 		if ( Remember_Billing_Provider::is_xero() ) {
 			require_once plugin_dir_path( __FILE__ ) . 'integrations/class-remember-xero-oauth.php';
 			if ( ! Remember_Xero_OAuth::is_connected() ) {
+				Remember_Logger::debug( 'Scheduled payment sync skipped: Xero is not connected' );
 				return;
 			}
 			global $wpdb;
@@ -427,15 +454,25 @@ class Remember {
 			if ( $last_sync ) {
 				$time_since_sync = time() - strtotime( $last_sync );
 				if ( $time_since_sync < $interval ) {
+					Remember_Logger::debug(
+						'Scheduled payment sync skipped: interval not reached',
+						array(
+							'provider'         => 'xero',
+							'seconds_since'    => $time_since_sync,
+							'interval_seconds' => $interval,
+						)
+					);
 					return;
 				}
 			}
 			require_once plugin_dir_path( __FILE__ ) . 'integrations/class-remember-xero-sync.php';
-			Remember_Xero_Sync::sync_all_payments();
+			$started = Remember_Logger::start_timer();
+			$this->log_scheduled_sync_finished( 'xero', Remember_Xero_Sync::sync_all_payments(), $started );
 			return;
 		}
 
 		if ( ! Remember_Billing_Provider::is_quickbooks() ) {
+			Remember_Logger::debug( 'Scheduled payment sync skipped: no accounting provider selected' );
 			return;
 		}
 
@@ -449,34 +486,89 @@ class Remember {
 			if ( $last_sync ) {
 				$time_since_sync = time() - strtotime( $last_sync );
 				if ( $time_since_sync < $interval ) {
-					return; // Not enough time has passed
+					Remember_Logger::debug(
+						'Scheduled payment sync skipped: interval not reached',
+						array(
+							'provider'         => 'quickbooks',
+							'seconds_since'    => $time_since_sync,
+							'interval_seconds' => $interval,
+						)
+					);
+					return;
 				}
 			}
 
 			require_once plugin_dir_path( __FILE__ ) . 'integrations/class-remember-quickbooks-sync.php';
-			Remember_QuickBooks_Sync::sync_all_payments();
+			$started = Remember_Logger::start_timer();
+			$this->log_scheduled_sync_finished( 'quickbooks', Remember_QuickBooks_Sync::sync_all_payments(), $started );
+			return;
 		}
+		Remember_Logger::debug( 'Scheduled payment sync skipped: QuickBooks is not connected' );
 	}
 
 	/**
-	 * Clean up member record when WordPress user is deleted.
+	 * Log the end of a scheduled payment sync with its time and counts.
 	 *
-	 * @param int $user_id The ID of the user being deleted.
-	 * @param int|null $reassign The ID of the user to reassign posts to, or null.
-	 * @param WP_User $user The user object being deleted.
+	 * @param string $provider 'xero' or 'quickbooks'.
+	 * @param mixed  $results  Return value of sync_all_payments().
+	 * @param float  $started  Remember_Logger::start_timer() value.
+	 * @return void
 	 */
-	public function cleanup_member_on_user_delete( $user_id, $reassign = null, $user = null ) {
+	private function log_scheduled_sync_finished( $provider, $results, $started ) {
+		$results = is_array( $results ) ? $results : array();
+		Remember_Logger::info(
+			'Scheduled payment sync finished',
+			array(
+				'provider'   => $provider,
+				'synced'     => (int) ( $results['success'] ?? 0 ),
+				'failed'     => (int) ( $results['error'] ?? 0 ),
+				'elapsed_ms' => Remember_Logger::elapsed_ms( $started ),
+			)
+		);
+	}
+
+	/**
+	 * Remove the member's reMember data once their WordPress account is deleted.
+	 *
+	 * Runs on deleted_user. wp_delete_user() fires it even when its own delete query failed, so the account is checked first.
+	 * On multisite the account is only removed from this site, and reMember's data belongs to this site.
+	 *
+	 * @param int $user_id The ID of the deleted user.
+	 */
+	public function cleanup_member_on_user_delete( $user_id ) {
+		$user_id = absint( $user_id );
 		require_once plugin_dir_path( __FILE__ ) . 'models/class-member.php';
 		$member_model = new Remember_Member();
-		
-		// Delete the member record if it exists
+
 		$member = $member_model->get( $user_id );
-		if ( $member ) {
-			$member_model->delete( $user_id );
-			
-			require_once plugin_dir_path( __FILE__ ) . 'utilities/class-remember-logger.php';
-			Remember_Logger::debug( 'Deleted member record on user deletion', array( 'user_id' => $user_id ) );
+		if ( ! $member ) {
+			Remember_Logger::debug( 'Deleted WordPress account had no reMember member record', array( 'user_id' => $user_id ) );
+			return;
 		}
+		$still_here = is_multisite() ? is_user_member_of_blog( $user_id, get_current_blog_id() ) : (bool) get_user_by( 'id', $user_id );
+		if ( $still_here ) {
+			Remember_Logger::error(
+				'WordPress reported the account deleted, but it is still there; its reMember data was kept',
+				array( 'user_id' => $user_id )
+			);
+			return;
+		}
+
+		require_once plugin_dir_path( __FILE__ ) . 'utilities/class-remember-privacy.php';
+		Remember_Privacy::remove_deleted_member( $user_id );
+
+		if ( false === $member_model->delete( $user_id ) ) {
+			global $wpdb;
+			Remember_Logger::error(
+				'Failed to delete member record when the WordPress user was deleted',
+				array(
+					'user_id' => (int) $user_id,
+					'error'   => $wpdb->last_error,
+				)
+			);
+			return;
+		}
+		Remember_Logger::info( 'Deleted member record with WordPress user', array( 'user_id' => (int) $user_id ) );
 	}
 
 	/**
@@ -518,11 +610,13 @@ class Remember {
 		// Members: always prefer the front-end member dashboard when that page exists.
 		// Avoids sending subscribers to wp-admin with partial reMember caps they cannot use on the main plugin screen.
 		if ( $member && $dashboard_page_id ) {
+			Remember_Logger::debug( 'Login redirect: member sent to the member dashboard', array( 'user_id' => (int) $user->ID, 'page_id' => $dashboard_page_id ) );
 			return get_permalink( $dashboard_page_id );
 		}
 
 		// Staff-only users who can actually open admin.php?page=remember (same caps as display_dashboard_page).
 		if ( $this->user_can_access_remember_admin_main( $user ) ) {
+			Remember_Logger::debug( 'Login redirect: staff user sent to the reMember dashboard', array( 'user_id' => (int) $user->ID ) );
 			return admin_url( 'admin.php?page=remember' );
 		}
 
@@ -604,6 +698,13 @@ class Remember {
 		// Staff: redirect from generic admin screens to reMember dashboard
 		$current_screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
 		if ( $current_screen && $current_screen->id !== 'toplevel_page_remember' ) {
+			Remember_Logger::debug(
+				'Sent staff user from a WordPress admin screen to the reMember dashboard',
+				array(
+					'user_id' => (int) $user->ID,
+					'screen'  => $current_screen->id,
+				)
+			);
 			wp_safe_redirect( admin_url( 'admin.php?page=remember' ) );
 			exit;
 		}

@@ -11,6 +11,8 @@ if ( ! defined( 'WPINC' ) ) {
 	die;
 }
 
+require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
+
 /**
  * Signed ticket codes, check-in, and undo.
  */
@@ -173,6 +175,7 @@ class Remember_Checkin {
 			array(
 				'application_id' => (int) $found['row']->application_id,
 				'event_id'       => absint( $event_id ),
+				'user_id'        => get_current_user_id(),
 			)
 		);
 		return array( 'result' => 'checked_in', 'row' => $row );
@@ -188,6 +191,13 @@ class Remember_Checkin {
 	public static function check_in_application( $application_id, $event_id ) {
 		$row = self::application_row( $application_id );
 		if ( ! $row || (int) $row->event_id !== absint( $event_id ) ) {
+			Remember_Logger::warning(
+				'Check-in refused: the application is not on the selected event',
+				array(
+					'application_id' => absint( $application_id ),
+					'event_id'       => absint( $event_id ),
+				)
+			);
 			return array( 'result' => 'invalid', 'row' => null );
 		}
 		return self::check_in( self::code( $row->application_id, $row->event_id ), $event_id );
@@ -204,10 +214,25 @@ class Remember_Checkin {
 		global $wpdb;
 		$row = self::application_row( $application_id );
 		if ( ! $row || (int) $row->event_id !== absint( $event_id ) ) {
+			Remember_Logger::warning(
+				'Check-in undo refused: the application is not on the selected event',
+				array(
+					'application_id' => absint( $application_id ),
+					'event_id'       => absint( $event_id ),
+				)
+			);
 			return array( 'result' => 'invalid', 'row' => null );
 		}
 		$state = self::attendance_result( $row );
 		if ( 'already' !== $state ) {
+			Remember_Logger::info(
+				'Check-in undo skipped: attendee is not checked in',
+				array(
+					'application_id' => (int) $row->application_id,
+					'event_id'       => absint( $event_id ),
+					'state'          => $state,
+				)
+			);
 			return array( 'result' => $state, 'row' => $row );
 		}
 
@@ -242,6 +267,7 @@ class Remember_Checkin {
 			array(
 				'application_id' => (int) $row->application_id,
 				'event_id'       => absint( $event_id ),
+				'user_id'        => get_current_user_id(),
 			)
 		);
 		return array(
@@ -264,7 +290,8 @@ class Remember_Checkin {
 			return array();
 		}
 
-		$rows = $wpdb->get_results(
+		$start = Remember_Logger::start_timer();
+		$rows  = $wpdb->get_results(
 			$wpdb->prepare(
 				"SELECT a.application_id, a.member_id, a.checked_in_at, r.role_name
 				FROM {$wpdb->prefix}remember_event_applications a
@@ -276,12 +303,21 @@ class Remember_Checkin {
 			)
 		);
 		if ( ! is_array( $rows ) ) {
+			Remember_Logger::error(
+				'Check-in name search failed',
+				array(
+					'event_id' => absint( $event_id ),
+					'error'    => $wpdb->last_error,
+				)
+			);
 			return array();
 		}
 
 		$matches = array();
+		$scanned = 0;
 		$needle  = strtolower( $term );
 		foreach ( $rows as $row ) {
+			++$scanned;
 			$user = get_user_by( 'id', (int) $row->member_id );
 			if ( ! $user ) {
 				continue;
@@ -297,6 +333,16 @@ class Remember_Checkin {
 				break;
 			}
 		}
+		Remember_Logger::debug(
+			'Check-in name search finished',
+			array(
+				'event_id'   => absint( $event_id ),
+				'attendees'  => count( $rows ),
+				'scanned'    => $scanned,
+				'matches'    => count( $matches ),
+				'elapsed_ms' => Remember_Logger::elapsed_ms( $start ),
+			)
+		);
 		return $matches;
 	}
 

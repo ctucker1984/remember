@@ -50,6 +50,15 @@
 		return $.post(cfg.ajaxurl, data);
 	}
 
+	function requestFailed(action, xhr, fallback) {
+		var msg = fallback;
+		if (xhr && xhr.responseJSON && xhr.responseJSON.data && xhr.responseJSON.data.message) {
+			msg = xhr.responseJSON.data.message;
+		}
+		console.error('reMember reports: ' + action + ' failed', xhr ? xhr.status : 0);
+		notice(msg, 'error');
+	}
+
 	function currentSubject() {
 		if (!catalog || !catalog.subjects) {
 			return null;
@@ -219,7 +228,11 @@
 		return post('remember_report_list').done(function (res) {
 			if (res && res.success) {
 				renderSaved(res.data.reports || []);
+				return;
 			}
+			notice((res && res.data && res.data.message) || t('listError', 'Saved reports could not be loaded.'), 'error');
+		}).fail(function (xhr) {
+			requestFailed('remember_report_list', xhr, t('listError', 'Saved reports could not be loaded.'));
 		});
 	}
 
@@ -977,6 +990,8 @@
 			clearResults();
 			loadSavedList();
 			runReport(1);
+		}).fail(function (xhr) {
+			requestFailed('remember_report_get', xhr, t('requestError', 'The request could not be completed.'));
 		});
 	}
 
@@ -1270,6 +1285,8 @@
 				}
 				notice(t('deleted', 'Deleted.'));
 				resetNew();
+			}).fail(function (xhr) {
+				requestFailed('remember_report_delete', xhr, t('requestError', 'The request could not be completed.'));
 			});
 		});
 		$('#remember-report-export').on('click', function () {

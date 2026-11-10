@@ -27,12 +27,21 @@ if ( isset( $_POST['remember_import_export_action'] ) ) {
 
 	if ( in_array( $action, array( 'import_members', 'import_events', 'import_locations', 'import_profile_questions' ), true ) ) {
 		if ( ! isset( $_FILES['import_file'] ) || UPLOAD_ERR_OK !== $_FILES['import_file']['error'] ) {
+			Remember_Logger::warning(
+				'CSV import upload failed',
+				array(
+					'action'       => $action,
+					'user_id'      => get_current_user_id(),
+					'upload_error' => isset( $_FILES['import_file']['error'] ) ? (int) $_FILES['import_file']['error'] : -1,
+				)
+			);
 			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Error uploading file. Please try again.', 'remember' ) . '</p></div>';
 		} else {
 			$file      = $_FILES['import_file'];
 			$file_type = wp_check_filetype( $file['name'] );
 
 			if ( ! in_array( $file_type['ext'], array( 'csv' ), true ) ) {
+				Remember_Logger::debug( 'CSV import refused: not a CSV file', array( 'action' => $action, 'user_id' => get_current_user_id() ) );
 				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Invalid file type. Please upload a CSV file.', 'remember' ) . '</p></div>';
 			} else {
 				$temp_file = $file['tmp_name'];
@@ -94,6 +103,7 @@ if ( isset( $_POST['remember_import_export_action'] ) ) {
 
 					@unlink( $temp_file ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 				} else {
+					Remember_Logger::warning( 'CSV import refused: the upload was not a valid uploaded file', array( 'action' => $action, 'user_id' => get_current_user_id() ) );
 					echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Could not read the uploaded file.', 'remember' ) . '</p></div>';
 				}
 			}
@@ -102,13 +112,22 @@ if ( isset( $_POST['remember_import_export_action'] ) ) {
 		$phrase   = isset( $_POST['remember_restore_phrase'] ) ? sanitize_text_field( wp_unslash( $_POST['remember_restore_phrase'] ) ) : '';
 		$confirm  = ! empty( $_POST['remember_restore_confirm'] );
 		if ( ! $confirm || 'RESTORE' !== $phrase ) {
+			Remember_Logger::debug( 'Backup restore cancelled: not confirmed', array( 'user_id' => get_current_user_id() ) );
 			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Restore cancelled. Check the confirmation box and type RESTORE.', 'remember' ) . '</p></div>';
 		} elseif ( ! isset( $_FILES['backup_file'] ) || UPLOAD_ERR_OK !== $_FILES['backup_file']['error'] ) {
+			Remember_Logger::warning(
+				'Backup restore upload failed',
+				array(
+					'user_id'      => get_current_user_id(),
+					'upload_error' => isset( $_FILES['backup_file']['error'] ) ? (int) $_FILES['backup_file']['error'] : -1,
+				)
+			);
 			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Error uploading file. Please try again.', 'remember' ) . '</p></div>';
 		} else {
 			$file = $_FILES['backup_file'];
 			$ext  = strtolower( pathinfo( $file['name'], PATHINFO_EXTENSION ) );
 			if ( 'json' !== $ext ) {
+				Remember_Logger::debug( 'Backup restore refused: not a .json file', array( 'user_id' => get_current_user_id() ) );
 				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Upload a .json backup file.', 'remember' ) . '</p></div>';
 			} else {
 				$temp_file = $file['tmp_name'];
@@ -130,6 +149,7 @@ if ( isset( $_POST['remember_import_export_action'] ) ) {
 						) . '</p></div>';
 					}
 				} else {
+					Remember_Logger::warning( 'Backup restore refused: the upload was not a valid uploaded file', array( 'user_id' => get_current_user_id() ) );
 					echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Could not read the uploaded file.', 'remember' ) . '</p></div>';
 				}
 			}
