@@ -15,6 +15,8 @@ if ( ! defined( 'WPINC' ) ) {
 	die;
 }
 
+require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
+
 /**
  * Sensitive-data access log.
  */
@@ -41,7 +43,15 @@ class Remember_Access_Log {
 	 */
 	public static function maybe_schedule() {
 		if ( ! wp_next_scheduled( self::CRON_HOOK ) ) {
-			wp_schedule_event( time() + HOUR_IN_SECONDS, 'daily', self::CRON_HOOK );
+			$scheduled = wp_schedule_event( time() + HOUR_IN_SECONDS, 'daily', self::CRON_HOOK, array(), true );
+			if ( is_wp_error( $scheduled ) ) {
+				Remember_Logger::warning(
+					'Sensitive access log prune could not be scheduled; old rows will stay until it is',
+					array( 'error' => $scheduled->get_error_message() )
+				);
+			} else {
+				Remember_Logger::debug( 'Sensitive access log prune scheduled', array( 'hook' => self::CRON_HOOK ) );
+			}
 		}
 	}
 
@@ -95,15 +105,29 @@ class Remember_Access_Log {
 	public static function record( $member_id, $what, $context, $row_count = 0 ) {
 		$what = sanitize_key( (string) $what );
 		if ( ! in_array( $what, array( 'health', 'emergency', 'both', 'backup' ), true ) ) {
+			Remember_Logger::warning(
+				'Sensitive access not recorded: unknown access type',
+				array(
+					'what'      => $what,
+					'member_id' => absint( $member_id ),
+				)
+			);
 			return;
 		}
 		$user_id = get_current_user_id();
 		if ( $user_id < 1 ) {
+			Remember_Logger::debug(
+				'Sensitive access not recorded: no signed-in user',
+				array(
+					'what'      => $what,
+					'member_id' => absint( $member_id ),
+				)
+			);
 			return;
 		}
 
 		global $wpdb;
-		$wpdb->insert(
+		$inserted = $wpdb->insert(
 			self::table(),
 			array(
 				'user_id'     => $user_id,
@@ -115,6 +139,29 @@ class Remember_Access_Log {
 				'created_at'  => current_time( 'mysql' ),
 			),
 			array( '%d', '%d', '%s', '%s', '%d', '%s', '%s' )
+		);
+		if ( false === $inserted ) {
+			Remember_Logger::error(
+				'Sensitive access could not be written to the access log',
+				array(
+					'user_id'   => $user_id,
+					'member_id' => absint( $member_id ),
+					'what'      => $what,
+					'row_count' => absint( $row_count ),
+					'error'     => $wpdb->last_error,
+				)
+			);
+			return;
+		}
+		Remember_Logger::debug(
+			'Sensitive access recorded',
+			array(
+				'log_id'    => (int) $wpdb->insert_id,
+				'user_id'   => $user_id,
+				'member_id' => absint( $member_id ),
+				'what'      => $what,
+				'row_count' => absint( $row_count ),
+			)
 		);
 	}
 
@@ -209,14 +256,36 @@ class Remember_Access_Log {
 	 * Save the retention window.
 	 *
 	 * @param int $months Months, from 1 to 120.
-	 * @return void
+	 * @return bool False when the new value could not be saved.
 	 */
 	public static function set_retention_months( $months ) {
 		$months = absint( $months );
 		if ( $months < 1 ) {
 			$months = 1;
 		}
-		update_option( self::OPTION_MONTHS, min( 120, $months ) );
+		$months = min( 120, $months );
+		if ( self::retention_months() === $months && false !== get_option( self::OPTION_MONTHS, false ) ) {
+			Remember_Logger::debug( 'Sensitive access log retention unchanged', array( 'months' => $months ) );
+			return true;
+		}
+		if ( ! update_option( self::OPTION_MONTHS, $months ) ) {
+			Remember_Logger::error(
+				'Sensitive access log retention could not be saved',
+				array(
+					'user_id' => get_current_user_id(),
+					'months'  => $months,
+				)
+			);
+			return false;
+		}
+		Remember_Logger::info(
+			'Sensitive access log retention saved',
+			array(
+				'user_id' => get_current_user_id(),
+				'months'  => $months,
+			)
+		);
+		return true;
 	}
 
 	/**
@@ -226,11 +295,33 @@ class Remember_Access_Log {
 	 */
 	public static function prune() {
 		global $wpdb;
-		$cutoff = ( new DateTimeImmutable( 'now', wp_timezone() ) )->modify( '-' . self::retention_months() . ' months' )->format( 'Y-m-d H:i:s' );
-		$wpdb->query(
+		$start  = Remember_Logger::start_timer();
+		$months = self::retention_months();
+		$cutoff = ( new DateTimeImmutable( 'now', wp_timezone() ) )->modify( '-' . $months . ' months' )->format( 'Y-m-d H:i:s' );
+		$deleted = $wpdb->query(
 			$wpdb->prepare(
 				'DELETE FROM ' . self::table() . ' WHERE created_at < %s',
 				$cutoff
+			)
+		);
+		if ( false === $deleted ) {
+			Remember_Logger::error(
+				'Sensitive access log prune failed; old rows were kept',
+				array(
+					'cutoff'     => $cutoff,
+					'error'      => $wpdb->last_error,
+					'elapsed_ms' => Remember_Logger::elapsed_ms( $start ),
+				)
+			);
+			return;
+		}
+		Remember_Logger::info(
+			'Sensitive access log pruned',
+			array(
+				'months'     => $months,
+				'cutoff'     => $cutoff,
+				'deleted'    => (int) $deleted,
+				'elapsed_ms' => Remember_Logger::elapsed_ms( $start ),
 			)
 		);
 	}

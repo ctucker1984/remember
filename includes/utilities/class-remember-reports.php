@@ -10,6 +10,8 @@ if ( ! defined( 'WPINC' ) ) {
 	die;
 }
 
+require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
+
 /**
  * Staff reporting endpoints.
  */
@@ -140,6 +142,13 @@ class Remember_Reports {
 		$definition = self::definition_from_request();
 		$logic      = Remember_Report_Engine::validate_filter_logic( $definition );
 		if ( is_wp_error( $logic ) ) {
+			Remember_Logger::debug(
+				'Saved report refused: filter grouping could not be read',
+				array(
+					'user_id'   => get_current_user_id(),
+					'report_id' => isset( $_POST['report_id'] ) ? absint( wp_unslash( $_POST['report_id'] ) ) : 0,
+				)
+			);
 			wp_send_json_error( array( 'message' => $logic->get_error_message() ), 400 );
 		}
 		$name       = isset( $_POST['name'] ) ? sanitize_text_field( wp_unslash( $_POST['name'] ) ) : '';
@@ -274,12 +283,29 @@ class Remember_Reports {
 		$recipient_id = isset( $_POST['user_id'] ) ? absint( wp_unslash( $_POST['user_id'] ) ) : 0;
 		$definition   = self::definition_from_row( $row );
 		if ( ! Remember_Report_Catalog::user_can_receive_report( $recipient_id, $row->subject, $definition ) ) {
+			Remember_Logger::warning(
+				'Saved report not copied: recipient cannot run it',
+				array(
+					'user_id'      => get_current_user_id(),
+					'report_id'    => (int) $row->report_id,
+					'recipient_id' => $recipient_id,
+				)
+			);
 			wp_send_json_error( array( 'message' => __( 'That person cannot run this report.', 'remember' ) ), 403 );
 		}
 		$result = Remember_Saved_Report::copy_to_owner( (int) $row->report_id, get_current_user_id(), $recipient_id );
 		if ( is_wp_error( $result ) ) {
 			wp_send_json_error( array( 'message' => $result->get_error_message() ), 400 );
 		}
+		Remember_Logger::info(
+			'Saved report copied to another staff member',
+			array(
+				'user_id'       => get_current_user_id(),
+				'report_id'     => (int) $row->report_id,
+				'recipient_id'  => $recipient_id,
+				'new_report_id' => (int) $result,
+			)
+		);
 		$user  = get_userdata( $recipient_id );
 		$label = $user && $user->display_name ? $user->display_name : ( $user ? $user->user_login : (string) $recipient_id );
 		wp_send_json_success(
@@ -310,6 +336,7 @@ class Remember_Reports {
 		if ( ! is_array( $definition ) ) {
 			$definition = array();
 		}
+		$start    = Remember_Logger::start_timer();
 		$event_id = isset( $_POST['event_id'] ) ? absint( wp_unslash( $_POST['event_id'] ) ) : 0;
 		$result   = Remember_Report_Engine::run( $definition, 1, Remember_Report_Engine::PAGE_SIZE, true, $event_id );
 		if ( is_wp_error( $result ) ) {
@@ -317,11 +344,21 @@ class Remember_Reports {
 		}
 		self::log_sensitive_report( $definition, __( 'Report CSV', 'remember' ), count( $result['rows'] ) );
 		$filename = 'remember-report-' . gmdate( 'Y-m-d-H-i-s' ) . '.csv';
+		$out      = fopen( 'php://output', 'w' );
+		if ( ! is_resource( $out ) ) {
+			Remember_Logger::error(
+				'Report CSV not exported: the download stream could not be opened',
+				array(
+					'user_id' => get_current_user_id(),
+					'subject' => $result['subject'],
+				)
+			);
+			wp_die( esc_html__( 'The report could not be exported. Try again.', 'remember' ) );
+		}
 		header( 'Content-Type: text/csv; charset=utf-8' );
 		header( 'Content-Disposition: attachment; filename=' . $filename );
 		header( 'Pragma: no-cache' );
 		header( 'Expires: 0' );
-		$out = fopen( 'php://output', 'w' );
 		fprintf( $out, chr( 0xEF ) . chr( 0xBB ) . chr( 0xBF ) );
 		$headers = array();
 		foreach ( $result['columns'] as $col ) {
@@ -337,6 +374,28 @@ class Remember_Reports {
 			fputcsv( $out, $line );
 		}
 		fclose( $out );
+		if ( (int) $result['total'] > count( $result['rows'] ) ) {
+			Remember_Logger::warning(
+				'Report CSV stopped at the export limit; later rows were left out',
+				array(
+					'user_id' => get_current_user_id(),
+					'subject' => $result['subject'],
+					'rows'    => count( $result['rows'] ),
+					'total'   => (int) $result['total'],
+				)
+			);
+		}
+		Remember_Logger::info(
+			'Report CSV exported',
+			array(
+				'user_id'    => get_current_user_id(),
+				'subject'    => $result['subject'],
+				'event_id'   => (int) $result['event_id'],
+				'rows'       => count( $result['rows'] ),
+				'total'      => (int) $result['total'],
+				'elapsed_ms' => Remember_Logger::elapsed_ms( $start ),
+			)
+		);
 		exit;
 	}
 

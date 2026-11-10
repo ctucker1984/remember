@@ -802,8 +802,8 @@ class Remember_Admin {
 		}
 		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-access-log.php';
 		if ( isset( $_POST['remember_access_log_retention'] ) && check_admin_referer( 'remember_access_log_retention', 'remember_access_log_nonce' ) ) {
-			Remember_Access_Log::set_retention_months( isset( $_POST['retention_months'] ) ? absint( wp_unslash( $_POST['retention_months'] ) ) : 12 );
-			wp_safe_redirect( admin_url( 'admin.php?page=remember-access-log&updated=1' ) );
+			$saved = Remember_Access_Log::set_retention_months( isset( $_POST['retention_months'] ) ? absint( wp_unslash( $_POST['retention_months'] ) ) : 12 );
+			wp_safe_redirect( admin_url( 'admin.php?page=remember-access-log&' . ( $saved ? 'updated=1' : 'retention_error=1' ) ) );
 			exit;
 		}
 		include_once 'views/access-log.php';

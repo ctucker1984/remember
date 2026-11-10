@@ -10,6 +10,8 @@ if ( ! defined( 'WPINC' ) ) {
 	die;
 }
 
+require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-logger.php';
+
 /**
  * Saved reports table access.
  */
@@ -102,19 +104,29 @@ class Remember_Saved_Report {
 		$name      = sanitize_text_field( $name );
 		$subject   = sanitize_key( $subject );
 		if ( '' === $name ) {
+			Remember_Logger::debug( 'Saved report refused: no name', array( 'owner_id' => $owner_id, 'report_id' => $report_id ) );
 			return new WP_Error( 'name', __( 'Name this report.', 'remember' ) );
 		}
 		$json = wp_json_encode( $definition );
 		if ( ! is_string( $json ) ) {
+			Remember_Logger::error(
+				'Saved report not saved: its definition could not be encoded',
+				array(
+					'owner_id'  => $owner_id,
+					'report_id' => $report_id,
+					'subject'   => $subject,
+				)
+			);
 			return new WP_Error( 'definition', __( 'Could not save that report.', 'remember' ) );
 		}
 		$now = current_time( 'mysql' );
 		if ( $report_id > 0 ) {
 			$existing = self::get_owned( $report_id, $owner_id );
 			if ( ! $existing ) {
+				Remember_Logger::warning( 'Saved report not updated: not found for this owner', array( 'owner_id' => $owner_id, 'report_id' => $report_id ) );
 				return new WP_Error( 'missing', __( 'That report was not found.', 'remember' ) );
 			}
-			$wpdb->update(
+			$updated = $wpdb->update(
 				self::table_name(),
 				array(
 					'name'       => $name,
@@ -129,9 +141,28 @@ class Remember_Saved_Report {
 				array( '%s', '%s', '%s', '%s' ),
 				array( '%d', '%d' )
 			);
+			if ( false === $updated ) {
+				Remember_Logger::error(
+					'Saved report could not be updated',
+					array(
+						'owner_id'  => $owner_id,
+						'report_id' => $report_id,
+						'error'     => $wpdb->last_error,
+					)
+				);
+				return new WP_Error( 'update', __( 'Could not save that report.', 'remember' ) );
+			}
+			Remember_Logger::info(
+				'Saved report updated',
+				array(
+					'owner_id'  => $owner_id,
+					'report_id' => $report_id,
+					'subject'   => $subject,
+				)
+			);
 			return $report_id;
 		}
-		$wpdb->insert(
+		$inserted = $wpdb->insert(
 			self::table_name(),
 			array(
 				'owner_id'    => $owner_id,
@@ -143,8 +174,27 @@ class Remember_Saved_Report {
 			),
 			array( '%d', '%s', '%s', '%s', '%s', '%s' )
 		);
-		$id = (int) $wpdb->insert_id;
-		return $id > 0 ? $id : new WP_Error( 'insert', __( 'Could not save that report.', 'remember' ) );
+		$id = false === $inserted ? 0 : (int) $wpdb->insert_id;
+		if ( $id < 1 ) {
+			Remember_Logger::error(
+				'Saved report could not be created',
+				array(
+					'owner_id' => $owner_id,
+					'subject'  => $subject,
+					'error'    => $wpdb->last_error,
+				)
+			);
+			return new WP_Error( 'insert', __( 'Could not save that report.', 'remember' ) );
+		}
+		Remember_Logger::info(
+			'Saved report created',
+			array(
+				'owner_id'  => $owner_id,
+				'report_id' => $id,
+				'subject'   => $subject,
+			)
+		);
+		return $id;
 	}
 
 	/**
@@ -158,10 +208,12 @@ class Remember_Saved_Report {
 	public static function copy_to_owner( $report_id, $from_owner_id, $to_owner_id ) {
 		$row = self::get_owned( $report_id, $from_owner_id );
 		if ( ! $row ) {
+			Remember_Logger::warning( 'Saved report not copied: not found for this owner', array( 'owner_id' => absint( $from_owner_id ), 'report_id' => absint( $report_id ) ) );
 			return new WP_Error( 'missing', __( 'That report was not found.', 'remember' ) );
 		}
 		$to_owner_id = absint( $to_owner_id );
 		if ( $to_owner_id < 1 || $to_owner_id === absint( $from_owner_id ) ) {
+			Remember_Logger::debug( 'Saved report not copied: no other recipient chosen', array( 'report_id' => absint( $report_id ), 'to_owner_id' => $to_owner_id ) );
 			return new WP_Error( 'recipient', __( 'Choose someone else to copy this report to.', 'remember' ) );
 		}
 		$definition = json_decode( (string) $row->definition, true );
@@ -181,14 +233,25 @@ class Remember_Saved_Report {
 	 */
 	public static function delete_owned( $report_id, $owner_id ) {
 		global $wpdb;
+		$context = array(
+			'report_id' => absint( $report_id ),
+			'owner_id'  => absint( $owner_id ),
+		);
 		$deleted = $wpdb->delete(
 			self::table_name(),
-			array(
-				'report_id' => absint( $report_id ),
-				'owner_id'  => absint( $owner_id ),
-			),
+			$context,
 			array( '%d', '%d' )
 		);
-		return false !== $deleted && $deleted > 0;
+		if ( false === $deleted ) {
+			$context['error'] = $wpdb->last_error;
+			Remember_Logger::error( 'Saved report could not be deleted', $context );
+			return false;
+		}
+		if ( $deleted < 1 ) {
+			Remember_Logger::warning( 'Saved report not deleted: not found for this owner', $context );
+			return false;
+		}
+		Remember_Logger::info( 'Saved report deleted', $context );
+		return true;
 	}
 }

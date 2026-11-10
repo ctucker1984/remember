@@ -27,6 +27,8 @@ $base_args     = array(
 	<p><?php esc_html_e( 'Who opened or exported health information or emergency contacts. The log does not store those values.', 'remember' ); ?></p>
 	<?php if ( isset( $_GET['updated'] ) ) : // phpcs:ignore WordPress.Security.NonceVerification.Recommended ?>
 		<div class="notice notice-success is-dismissible"><p><?php esc_html_e( 'Retention updated.', 'remember' ); ?></p></div>
+	<?php elseif ( isset( $_GET['retention_error'] ) ) : // phpcs:ignore WordPress.Security.NonceVerification.Recommended ?>
+		<div class="notice notice-error is-dismissible"><p><?php esc_html_e( 'Retention could not be saved. Try again.', 'remember' ); ?></p></div>
 	<?php endif; ?>
 
 	<form method="get" action="<?php echo esc_url( admin_url( 'admin.php' ) ); ?>" style="margin: 1em 0;">
