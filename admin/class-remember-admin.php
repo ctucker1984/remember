@@ -538,6 +538,7 @@ class Remember_Admin {
 
 		if ( current_user_can( 'manage_options' ) && ! current_user_can( 'remember_checkin_attendees' ) ) {
 			wp_get_current_user()->add_cap( 'remember_checkin_attendees' );
+			Remember_Logger::info( 'Check-in access given to an administrator who did not have it', array( 'user_id' => get_current_user_id() ) );
 		}
 		add_submenu_page(
 			'remember',
@@ -745,6 +746,23 @@ class Remember_Admin {
 	}
 
 	/**
+	 * Stop a screen the current user may not open, and note who tried.
+	 *
+	 * @param string $screen Method that renders the screen.
+	 * @return void
+	 */
+	private function deny_page_access( $screen ) {
+		Remember_Logger::debug(
+			'Admin screen refused: the user lacks the access it needs',
+			array(
+				'screen'  => $screen,
+				'user_id' => get_current_user_id(),
+			)
+		);
+		wp_die( esc_html__( 'You do not have sufficient permissions to access this page.', 'remember' ), esc_html__( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+	}
+
+	/**
 	 * Render the dashboard page.
 	 *
 	 * @since    1.0.0
@@ -757,7 +775,7 @@ class Remember_Admin {
 			&& ! current_user_can( 'remember_read_members' )
 			&& ! current_user_can( 'remember_read_applications' )
 		) {
-			wp_die( __( 'You do not have sufficient permissions to access this page.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+			$this->deny_page_access( __FUNCTION__ );
 		}
 		
 		include_once 'views/dashboard.php';
@@ -771,7 +789,7 @@ class Remember_Admin {
 	public function display_members_page() {
 		// Check capability
 		if ( ! current_user_can( 'remember_read_members' ) && ! current_user_can( 'remember_read_attendees' ) ) {
-			wp_die( __( 'You do not have sufficient permissions to access this page.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+			$this->deny_page_access( __FUNCTION__ );
 		}
 		
 		require_once plugin_dir_path( __FILE__ ) . '../includes/models/class-member.php';
@@ -786,7 +804,7 @@ class Remember_Admin {
 	public function display_duplicates_page() {
 		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-profile-duplicates.php';
 		if ( ! current_user_can( Remember_Profile_Duplicates::MERGE_CAP ) ) {
-			wp_die( __( 'You do not have sufficient permissions to access this page.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+			$this->deny_page_access( __FUNCTION__ );
 		}
 		include_once 'views/duplicates.php';
 	}
@@ -798,7 +816,7 @@ class Remember_Admin {
 	 */
 	public function display_access_log_page() {
 		if ( ! current_user_can( 'manage_options' ) ) {
-			wp_die( __( 'You do not have sufficient permissions to access this page.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+			$this->deny_page_access( __FUNCTION__ );
 		}
 		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-access-log.php';
 		if ( isset( $_POST['remember_access_log_retention'] ) && check_admin_referer( 'remember_access_log_retention', 'remember_access_log_nonce' ) ) {
@@ -816,7 +834,7 @@ class Remember_Admin {
 	 */
 	public function display_reports_page() {
 		if ( ! current_user_can( 'remember_view_reports' ) ) {
-			wp_die( __( 'You do not have sufficient permissions to access this page.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+			$this->deny_page_access( __FUNCTION__ );
 		}
 		include_once 'views/reports.php';
 	}
@@ -828,7 +846,7 @@ class Remember_Admin {
 	 */
 	public function display_surveys_page() {
 		if ( ! current_user_can( 'remember_read_events' ) ) {
-			wp_die( __( 'You do not have sufficient permissions to access this page.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+			$this->deny_page_access( __FUNCTION__ );
 		}
 		include_once 'views/surveys.php';
 	}
@@ -841,7 +859,7 @@ class Remember_Admin {
 	public function display_events_page() {
 		// Check capability
 		if ( ! current_user_can( 'remember_read_events' ) ) {
-			wp_die( __( 'You do not have sufficient permissions to access this page.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+			$this->deny_page_access( __FUNCTION__ );
 		}
 		
 		require_once plugin_dir_path( __FILE__ ) . '../includes/models/class-event.php';
@@ -857,7 +875,7 @@ class Remember_Admin {
 	public function display_applications_page() {
 		// Check capability
 		if ( ! current_user_can( 'remember_read_applications' ) ) {
-			wp_die( __( 'You do not have sufficient permissions to access this page.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+			$this->deny_page_access( __FUNCTION__ );
 		}
 		
 		require_once plugin_dir_path( __FILE__ ) . '../includes/models/class-application.php';
@@ -871,7 +889,7 @@ class Remember_Admin {
 	 */
 	public function display_checkin_page() {
 		if ( ! current_user_can( 'remember_checkin_attendees' ) && ! current_user_can( 'manage_options' ) ) {
-			wp_die( __( 'You do not have sufficient permissions to access this page.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+			$this->deny_page_access( __FUNCTION__ );
 		}
 		include_once 'views/checkin.php';
 	}
@@ -884,7 +902,7 @@ class Remember_Admin {
 	public function display_waitlist_page() {
 		// Check capability
 		if ( ! current_user_can( 'remember_read_applications' ) ) {
-			wp_die( __( 'You do not have sufficient permissions to access this page.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+			$this->deny_page_access( __FUNCTION__ );
 		}
 
 		require_once plugin_dir_path( __FILE__ ) . '../includes/models/class-application.php';
@@ -899,7 +917,7 @@ class Remember_Admin {
 	public function display_vetting_page() {
 		// Check capability
 		if ( ! current_user_can( 'remember_read_vetting' ) ) {
-			wp_die( __( 'You do not have sufficient permissions to access this page.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+			$this->deny_page_access( __FUNCTION__ );
 		}
 		
 		require_once plugin_dir_path( __FILE__ ) . '../includes/models/class-vetting.php';
@@ -913,7 +931,7 @@ class Remember_Admin {
 	 */
 	public function display_getting_started_page() {
 		if ( ! current_user_can( 'remember_read_events' ) && ! current_user_can( 'remember_access_settings' ) ) {
-			wp_die( __( 'You do not have sufficient permissions to access this page.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+			$this->deny_page_access( __FUNCTION__ );
 		}
 
 		include_once 'views/getting-started.php';
@@ -927,7 +945,7 @@ class Remember_Admin {
 	public function display_billing_page() {
 		// Check capability
 		if ( ! current_user_can( 'remember_read_billing' ) ) {
-			wp_die( __( 'You do not have sufficient permissions to access this page.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+			$this->deny_page_access( __FUNCTION__ );
 		}
 
 		// Refresh payment rows from the active accounting provider, at most once a minute.
@@ -946,7 +964,7 @@ class Remember_Admin {
 	public function display_locations_page() {
 		// Check capability
 		if ( ! current_user_can( 'remember_read_locations' ) ) {
-			wp_die( __( 'You do not have sufficient permissions to access this page.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+			$this->deny_page_access( __FUNCTION__ );
 		}
 		
 		require_once plugin_dir_path( __FILE__ ) . '../includes/models/class-location.php';
@@ -961,7 +979,7 @@ class Remember_Admin {
 	public function display_roles_page() {
 		// Check capability
 		if ( ! current_user_can( 'remember_read_roles' ) ) {
-			wp_die( __( 'You do not have sufficient permissions to access this page.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+			$this->deny_page_access( __FUNCTION__ );
 		}
 		
 		require_once plugin_dir_path( __FILE__ ) . '../includes/models/class-role.php';
@@ -980,7 +998,7 @@ class Remember_Admin {
 				wp_safe_redirect( $fallback );
 				exit;
 			}
-			wp_die( __( 'You do not have sufficient permissions to access this page.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+			$this->deny_page_access( __FUNCTION__ );
 		}
 
 		include_once 'views/settings.php';
@@ -994,7 +1012,7 @@ class Remember_Admin {
 	public function display_products_page() {
 		// Check capability
 		if ( ! current_user_can( 'remember_access_settings' ) ) {
-			wp_die( __( 'You do not have sufficient permissions to access this page.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+			$this->deny_page_access( __FUNCTION__ );
 		}
 
 		require_once plugin_dir_path( __FILE__ ) . '../includes/models/class-product.php';
@@ -1008,7 +1026,7 @@ class Remember_Admin {
 	 */
 	public function display_profile_questions_page() {
 		if ( ! current_user_can( 'remember_access_settings' ) ) {
-			wp_die( __( 'You do not have sufficient permissions to access this page.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+			$this->deny_page_access( __FUNCTION__ );
 		}
 		include_once 'views/profile-questions.php';
 	}
@@ -1020,7 +1038,7 @@ class Remember_Admin {
 	 */
 	public function display_agreements_page() {
 		if ( ! current_user_can( 'remember_access_settings' ) ) {
-			wp_die( __( 'You do not have sufficient permissions to access this page.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+			$this->deny_page_access( __FUNCTION__ );
 		}
 		include_once 'views/agreements.php';
 	}
@@ -1032,7 +1050,7 @@ class Remember_Admin {
 	 */
 	public function display_import_export_page() {
 		if ( ! current_user_can( 'remember_import_export' ) ) {
-			wp_die( __( 'You do not have sufficient permissions to access this page.', 'remember' ), __( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
+			$this->deny_page_access( __FUNCTION__ );
 		}
 		
 		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-import-export.php';
@@ -1046,6 +1064,13 @@ class Remember_Admin {
 	 */
 	public function display_deactivate_page() {
 		if ( ! current_user_can( 'activate_plugins' ) ) {
+			Remember_Logger::debug(
+				'Admin screen refused: the user lacks the access it needs',
+				array(
+					'screen'  => __FUNCTION__,
+					'user_id' => get_current_user_id(),
+				)
+			);
 			wp_die( esc_html__( 'You do not have sufficient permissions to deactivate plugins.', 'remember' ), esc_html__( 'Access Denied', 'remember' ), array( 'response' => 403 ) );
 		}
 		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-backup.php';
@@ -1065,6 +1090,10 @@ class Remember_Admin {
 			return;
 		}
 		if ( ! current_user_can( 'remember_event_data_export' ) ) {
+			Remember_Logger::warning(
+				'Event participant export refused: the user lacks Event Data Export',
+				array( 'user_id' => get_current_user_id() )
+			);
 			wp_die( esc_html__( 'You do not have permission to export event participant data.', 'remember' ) );
 		}
 
@@ -1202,12 +1231,20 @@ class Remember_Admin {
 
 			$qb = Remember_QuickBooks_OAuth::get_settings();
 			if ( empty( $qb['client_id'] ) || empty( $qb['client_secret'] ) ) {
+				Remember_Logger::debug( 'QuickBooks sign-in not started: Client ID or Client Secret not saved', array( 'user_id' => get_current_user_id() ) );
 				wp_safe_redirect( admin_url( 'admin.php?page=remember-settings&qb_oauth_error=nocreds#quickbooks' ) );
 				exit;
 			}
 
 			$env     = isset( $_POST['qb_environment_oauth'] ) ? sanitize_text_field( wp_unslash( $_POST['qb_environment_oauth'] ) ) : 'sandbox';
 			$pending = Remember_QuickBooks_OAuth::create_pending_oauth( $env );
+			Remember_Logger::debug(
+				'QuickBooks sign-in started; sending the administrator to Intuit',
+				array(
+					'environment' => $pending['environment'],
+					'user_id'     => get_current_user_id(),
+				)
+			);
 
 			$auth_url = Remember_QuickBooks_OAuth::get_authorization_url(
 				$qb['client_id'],
@@ -1290,7 +1327,9 @@ class Remember_Admin {
 		if ( ! $settings || empty( $settings['client_id'] ) || empty( $settings['client_secret'] ) ) {
 			$this->finish_qb_oauth_error(
 				__( 'QuickBooks credentials not configured. Please enter Client ID and Client Secret first.', 'remember' ),
-				$redirect
+				$redirect,
+				'QuickBooks sign-in not finished: Client ID or Client Secret is missing',
+				array( 'user_id' => $uid )
 			);
 		}
 
@@ -1357,13 +1396,19 @@ class Remember_Admin {
 		}
 
 		global $wpdb;
-		$wpdb->update(
+		$activated = $wpdb->update(
 			$wpdb->prefix . 'remember_payment_processors',
 			array( 'is_active' => 1 ),
 			array( 'processor_type' => 'quickbooks' ),
 			array( '%d' ),
 			array( '%s' )
 		);
+		if ( false === $activated ) {
+			Remember_Logger::warning(
+				'QuickBooks connected, but it could not be marked active; the last sync time may not show in Settings',
+				array( 'db_error' => $wpdb->last_error )
+			);
+		}
 
 		Remember_Logger::info(
 			'QuickBooks connected',
@@ -1403,11 +1448,15 @@ class Remember_Admin {
 
 			$xero = Remember_Xero_OAuth::get_settings();
 			if ( empty( $xero['client_id'] ) || empty( $xero['client_secret'] ) ) {
+				require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-logger.php';
+				Remember_Logger::debug( 'Xero sign-in not started: Client ID or Client Secret not saved', array( 'user_id' => get_current_user_id() ) );
 				wp_safe_redirect( admin_url( 'admin.php?page=remember-settings&xero_oauth_error=nocreds#xero' ) );
 				exit;
 			}
 
 			$pending = Remember_Xero_OAuth::create_pending_oauth();
+			require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-logger.php';
+			Remember_Logger::debug( 'Xero sign-in started; sending the administrator to Xero', array( 'user_id' => get_current_user_id() ) );
 			$auth_url = Remember_Xero_OAuth::get_authorization_url(
 				$xero['client_id'],
 				$pending['redirect_uri'],
@@ -1440,19 +1489,19 @@ class Remember_Admin {
 		$redirect = admin_url( 'admin.php?page=remember-settings#xero' );
 		$state    = isset( $_GET['state'] ) ? sanitize_text_field( wp_unslash( $_GET['state'] ) ) : '';
 
+		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-logger.php';
+		$uid = get_current_user_id();
+
 		// Only the administrator who started this sign-in, in the same browser, may finish it or see its error.
 		if ( ! is_array( $pending ) || '' === $state || ! hash_equals( (string) $pending['state'], $state ) ) {
-			require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-logger.php';
-			Remember_Logger::warning(
-				'Xero sign-in state did not match',
-				array(
-					'has_pending' => is_array( $pending ),
-					'user_id'     => get_current_user_id(),
-				)
-			);
 			$this->finish_xero_oauth_error(
 				__( 'This Xero sign-in could not be verified. It may have expired, been started by another administrator or in another tab, or been reloaded. Nothing was changed; click Reconnect Xero again.', 'remember' ),
 				$redirect,
+				'Xero sign-in state did not match',
+				array(
+					'has_pending' => is_array( $pending ),
+					'user_id'     => $uid,
+				),
 				false
 			);
 		}
@@ -1461,6 +1510,7 @@ class Remember_Admin {
 		Remember_Xero_OAuth::clear_pending_oauth();
 
 		if ( ! empty( $_GET['error'] ) ) {
+			$error      = sanitize_key( wp_unslash( $_GET['error'] ) );
 			$error_desc = isset( $_GET['error_description'] ) ? sanitize_text_field( wp_unslash( $_GET['error_description'] ) ) : sanitize_text_field( wp_unslash( $_GET['error'] ) );
 			$this->finish_xero_oauth_error(
 				sprintf(
@@ -1468,14 +1518,21 @@ class Remember_Admin {
 					__( 'Xero authorization failed: %s', 'remember' ),
 					$error_desc
 				),
-				$redirect
+				$redirect,
+				'Xero sign-in returned an error',
+				array(
+					'error'   => $error,
+					'user_id' => $uid,
+				)
 			);
 		}
 
 		if ( empty( $_GET['code'] ) ) {
 			$this->finish_xero_oauth_error(
 				__( 'Xero did not return an authorization code. In Xero, open the organisation → Settings → Connected apps, disconnect reMember, then click Reconnect Xero again.', 'remember' ),
-				$redirect
+				$redirect,
+				'Xero sign-in returned no authorization code',
+				array( 'user_id' => $uid )
 			);
 		}
 
@@ -1485,7 +1542,9 @@ class Remember_Admin {
 		if ( ! $settings || empty( $settings['client_id'] ) || empty( $settings['client_secret'] ) ) {
 			$this->finish_xero_oauth_error(
 				__( 'Xero credentials not configured. Please enter Client ID and Client Secret first.', 'remember' ),
-				$redirect
+				$redirect,
+				'Xero sign-in not finished: Client ID or Client Secret is missing',
+				array( 'user_id' => $uid )
 			);
 		}
 		$previous_tenant = ! empty( $settings['tenant_id'] ) ? (string) $settings['tenant_id'] : '';
@@ -1523,7 +1582,12 @@ class Remember_Admin {
 		if ( empty( $connections[0]['tenantId'] ) ) {
 			$this->finish_xero_oauth_error(
 				__( 'No Xero organisation was available to connect. Authorize at least one organisation.', 'remember' ),
-				$redirect
+				$redirect,
+				'Xero sign-in not finished: no organisation was authorized',
+				array(
+					'connections' => is_array( $connections ) ? count( $connections ) : 0,
+					'user_id'     => $uid,
+				)
 			);
 		}
 
@@ -1543,16 +1607,27 @@ class Remember_Admin {
 			$settings                     = Remember_Xero_OAuth::get_settings();
 			$settings['org_shortcode']    = sanitize_text_field( (string) $org['ShortCode'] );
 			Remember_Xero_OAuth::save_settings( $settings );
+		} else {
+			Remember_Logger::warning(
+				'Xero connected, but the organisation short code could not be read; invoice links will open Xero without going straight to the invoice',
+				array( 'error' => is_wp_error( $org ) ? $org->get_error_message() : 'no ShortCode returned' )
+			);
 		}
 
 		global $wpdb;
-		$wpdb->update(
+		$activated = $wpdb->update(
 			$wpdb->prefix . 'remember_payment_processors',
 			array( 'is_active' => 1 ),
 			array( 'processor_type' => 'xero' ),
 			array( '%d' ),
 			array( '%s' )
 		);
+		if ( false === $activated ) {
+			Remember_Logger::warning(
+				'Xero connected, but it could not be marked active; the last sync time may not show in Settings',
+				array( 'db_error' => $wpdb->last_error )
+			);
+		}
 
 		Remember_Logger::info(
 			'Xero connected',
@@ -1560,7 +1635,7 @@ class Remember_Admin {
 				'tenant_id'   => $settings['tenant_id'],
 				'tenant_name' => $settings['tenant_name'],
 				'reconnect'   => '' !== $previous_tenant,
-				'user_id'     => get_current_user_id(),
+				'user_id'     => $uid,
 			)
 		);
 
@@ -1582,9 +1657,14 @@ class Remember_Admin {
 	 *
 	 * @param string $message       Error message.
 	 * @param string $redirect      Admin URL.
+	 * @param string $log_message   Warning to log, or '' when the caller already logged the failure.
+	 * @param array  $context       Log context.
 	 * @param bool   $clear_pending Whether to drop the user's in-flight sign-in. False when the callback did not prove it belongs to that sign-in.
 	 */
-	private function finish_xero_oauth_error( $message, $redirect, $clear_pending = true ) {
+	private function finish_xero_oauth_error( $message, $redirect, $log_message = '', $context = array(), $clear_pending = true ) {
+		if ( '' !== $log_message ) {
+			Remember_Logger::warning( $log_message, $context );
+		}
 		Remember_Xero_OAuth::set_last_oauth_result( 'error', $message );
 		if ( $clear_pending ) {
 			Remember_Xero_OAuth::clear_pending_oauth();
@@ -1659,6 +1739,7 @@ class Remember_Admin {
 			$pages_created = 0;
 			$pages_linked  = 0;
 			$pages_refused = 0;
+			$pages_failed  = 0;
 			
 			foreach ( $default_pages as $key => $page_data ) {
 				$selection = isset( $_POST[ 'page_' . $key ] ) ? sanitize_text_field( $_POST[ 'page_' . $key ] ) : 'skip';
@@ -1668,6 +1749,8 @@ class Remember_Admin {
 					$created = Remember_Page_Creator::create_pages( array( $key ) );
 					if ( ! empty( $created ) ) {
 						$pages_created++;
+					} else {
+						++$pages_failed;
 					}
 				} elseif ( 'skip' !== $selection && is_numeric( $selection ) ) {
 					// Link to existing page - add shortcode if not already present.
@@ -1675,31 +1758,82 @@ class Remember_Admin {
 					$page    = get_post( $page_id );
 
 					if ( ! $page || 'page' !== $page->post_type ) {
+						Remember_Logger::warning(
+							'Setup wizard did not link a page: it is missing or not a page',
+							array(
+								'page'    => $key,
+								'post_id' => $page_id,
+							)
+						);
 						continue;
 					}
 					if ( ! current_user_can( 'edit_post', $page_id ) ) {
 						++$pages_refused;
+						Remember_Logger::warning(
+							'Setup wizard did not link a page: the user cannot edit it',
+							array(
+								'page'    => $key,
+								'post_id' => $page_id,
+								'user_id' => get_current_user_id(),
+							)
+						);
 						continue;
 					}
 
 					// Store the mapping.
-					$created_pages         = Remember_Page_Creator::get_created_pages();
-					$created_pages[ $key ] = $page_id;
-					update_option( 'remember_created_pages', $created_pages );
+					$created_pages = Remember_Page_Creator::get_created_pages();
+					if ( ! isset( $created_pages[ $key ] ) || (int) $created_pages[ $key ] !== $page_id ) {
+						$created_pages[ $key ] = $page_id;
+						if ( ! update_option( 'remember_created_pages', $created_pages ) ) {
+							++$pages_failed;
+							Remember_Logger::error(
+								'Setup wizard could not record a linked page',
+								array(
+									'page'    => $key,
+									'post_id' => $page_id,
+								)
+							);
+							continue;
+						}
+					}
 
 					// Add shortcode to page if not already present.
 					if ( false === strpos( $page->post_content, $page_data['shortcode'] ) ) {
 						$new_content = $page->post_content . "\n\n" . $page_data['shortcode'];
-						wp_update_post(
+						$updated     = wp_update_post(
 							array(
 								'ID'           => $page_id,
 								'post_content' => $new_content,
-							)
+							),
+							true
 						);
+						if ( is_wp_error( $updated ) ) {
+							++$pages_failed;
+							Remember_Logger::error(
+								'Setup wizard linked a page, but could not add its shortcode',
+								array(
+									'page'    => $key,
+									'post_id' => $page_id,
+									'error'   => $updated->get_error_message(),
+								)
+							);
+							continue;
+						}
 					}
 					++$pages_linked;
 				}
 			}
+
+			Remember_Logger::info(
+				'Setup wizard pages saved',
+				array(
+					'created' => $pages_created,
+					'linked'  => $pages_linked,
+					'refused' => $pages_refused,
+					'failed'  => $pages_failed,
+					'user_id' => get_current_user_id(),
+				)
+			);
 			
 			// Clear the setup wizard transient
 			delete_transient( 'remember_show_setup_wizard' );
@@ -1738,13 +1872,32 @@ class Remember_Admin {
 				$message = '' === $message ? $refused_message : $message . ' ' . $refused_message;
 			}
 
+			if ( $pages_failed > 0 ) {
+				$failed_message = sprintf(
+					/* translators: %d: number of pages */
+					_n(
+						'%d page could not be set up. Try again, or ask an administrator to check the reMember log.',
+						'%d pages could not be set up. Try again, or ask an administrator to check the reMember log.',
+						$pages_failed,
+						'remember'
+					),
+					$pages_failed
+				);
+				$message = '' === $message ? $failed_message : $message . ' ' . $failed_message;
+			}
+
 			if ( $message ) {
-				wp_safe_redirect( add_query_arg( 'pages_setup', urlencode( $message ), admin_url( 'admin.php?page=remember-settings' ) ) );
+				$args = array( 'pages_setup' => urlencode( $message ) );
+				if ( $pages_failed > 0 || $pages_refused > 0 ) {
+					$args['pages_setup_incomplete'] = 1;
+				}
+				wp_safe_redirect( add_query_arg( $args, admin_url( 'admin.php?page=remember-settings' ) ) );
 			} else {
 				wp_safe_redirect( admin_url( 'admin.php?page=remember-settings' ) );
 			}
 			exit;
 		} elseif ( 'skip' === $action ) {
+			Remember_Logger::debug( 'Setup wizard skipped', array( 'user_id' => get_current_user_id() ) );
 			// Clear the setup wizard transient
 			delete_transient( 'remember_show_setup_wizard' );
 			wp_safe_redirect( admin_url( 'admin.php?page=remember-settings' ) );
@@ -1807,6 +1960,7 @@ class Remember_Admin {
 		if ( 'admin' === $context ) {
 			check_ajax_referer( 'remember_get_event_roles_admin', 'nonce' );
 			if ( ! current_user_can( 'remember_create_applications' ) && ! current_user_can( 'remember_update_applications' ) ) {
+				Remember_Logger::warning( 'Staff event role lookup refused: the user cannot create or update applications', array( 'user_id' => get_current_user_id() ) );
 				wp_send_json_error( array( 'message' => __( 'You do not have sufficient permissions.', 'remember' ) ) );
 			}
 			$is_admin_path = true;
@@ -1817,7 +1971,7 @@ class Remember_Admin {
 		$event_id = isset( $_POST['event_id'] ) ? absint( $_POST['event_id'] ) : 0;
 
 		if ( $event_id <= 0 ) {
-			Remember_Logger::error( 'ajax_get_event_roles: Invalid event ID' );
+			Remember_Logger::debug( 'Event role lookup refused: no event ID sent', array( 'context' => $context ) );
 			wp_send_json_error( array( 'message' => __( 'Invalid event ID.', 'remember' ) ) );
 		}
 		
@@ -1915,6 +2069,7 @@ class Remember_Admin {
 		$event_id      = isset( $_POST['event_id'] ) ? absint( $_POST['event_id'] ) : 0;
 		$event_role_id = isset( $_POST['event_role_id'] ) ? absint( $_POST['event_role_id'] ) : 0;
 		if ( $event_id <= 0 ) {
+			Remember_Logger::debug( 'Apply lookup refused: no event ID sent', array( 'lookup' => 'addons' ) );
 			wp_send_json_error( array( 'message' => __( 'Invalid event ID.', 'remember' ) ) );
 		}
 		if ( ! is_user_logged_in() || ! $this->member_can_read_apply_event( $event_id ) ) {
@@ -1959,6 +2114,7 @@ class Remember_Admin {
 
 		$event_id = isset( $_POST['event_id'] ) ? absint( $_POST['event_id'] ) : 0;
 		if ( $event_id <= 0 ) {
+			Remember_Logger::debug( 'Apply lookup refused: no event ID sent', array( 'lookup' => 'agreements' ) );
 			wp_send_json_error( array( 'message' => __( 'Invalid event ID.', 'remember' ) ) );
 		}
 		if ( ! is_user_logged_in() || ! $this->member_can_read_apply_event( $event_id ) ) {
@@ -1985,6 +2141,14 @@ class Remember_Admin {
 		$event_id      = isset( $_POST['event_id'] ) ? absint( $_POST['event_id'] ) : 0;
 		$event_role_id = isset( $_POST['event_role_id'] ) ? absint( $_POST['event_role_id'] ) : 0;
 		if ( $event_id <= 0 || ! is_user_logged_in() ) {
+			Remember_Logger::debug(
+				'Apply lookup refused: no event ID sent, or not logged in',
+				array(
+					'lookup'    => 'survey',
+					'event_id'  => $event_id,
+					'logged_in' => is_user_logged_in(),
+				)
+			);
 			wp_send_json_error( array( 'message' => __( 'Invalid event.', 'remember' ) ) );
 		}
 		if ( ! $this->member_can_read_apply_event( $event_id ) ) {
@@ -2074,9 +2238,19 @@ class Remember_Admin {
 			require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-timezone.php';
 			$timezone_string = sanitize_text_field( wp_unslash( $_POST['timezone_string'] ) );
 			if ( '' === $timezone_string ) {
-				update_user_meta( $user_id, 'timezone_string', 'America/Los_Angeles' );
-			} elseif ( Remember_Timezone::is_valid_timezone( $timezone_string ) ) {
-				update_user_meta( $user_id, 'timezone_string', $timezone_string );
+				$timezone_string = 'America/Los_Angeles';
+			}
+			if ( Remember_Timezone::is_valid_timezone( $timezone_string ) ) {
+				if ( get_user_meta( $user_id, 'timezone_string', true ) !== $timezone_string
+					&& ! update_user_meta( $user_id, 'timezone_string', $timezone_string ) ) {
+					Remember_Logger::error(
+						'Profile timezone could not be saved',
+						array(
+							'user_id'    => absint( $user_id ),
+							'by_user_id' => get_current_user_id(),
+						)
+					);
+				}
 			} else {
 				Remember_Logger::warning(
 					'Profile timezone not saved because it is not a valid time zone',

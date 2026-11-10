@@ -11,6 +11,7 @@ if ( ! defined( 'WPINC' ) ) {
 	die;
 }
 
+require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-logger.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-event.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-application.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-vetting.php';
@@ -65,6 +66,7 @@ if ( isset( $_POST['remember_member_application_action'] ) && check_admin_refere
 				(int) $member_id_for_queries
 			);
 			if ( '' !== $currency_error ) {
+				Remember_Logger::debug( 'Member application update refused: the profile was not confirmed as current', array( 'application_id' => $application_id ) );
 				echo '<div class="remember-notice remember-error" role="alert"><p>' . esc_html( $currency_error ) . '</p></div>';
 			} else {
 			global $wpdb;
@@ -82,19 +84,45 @@ if ( isset( $_POST['remember_member_application_action'] ) && check_admin_refere
 					$role_error = __( 'Please choose a role from the list.', 'remember' );
 				}
 			}
+			$role_changed = $new_event_role_id > 0 && $new_event_role_id !== absint( $application->event_role_id );
+			if ( '' === $role_error && $role_changed && false === $application_model->update( $application_id, array( 'event_role_id' => $new_event_role_id ) ) ) {
+				Remember_Logger::error(
+					'Member application update failed: the new role could not be saved',
+					array(
+						'application_id' => $application_id,
+						'event_role_id'  => $new_event_role_id,
+						'member_id'      => (int) $member_id_for_queries,
+					)
+				);
+				$role_error = __( 'Your application could not be updated. Try again, or contact an administrator.', 'remember' );
+			} elseif ( '' !== $role_error ) {
+				Remember_Logger::debug(
+					'Member application update refused: the role cannot be chosen',
+					array(
+						'application_id' => $application_id,
+						'event_role_id'  => $new_event_role_id,
+						'reason'         => $role_error,
+					)
+				);
+			}
 			if ( '' !== $role_error ) {
 				echo '<div class="remember-notice remember-error" role="alert"><p>' . esc_html( $role_error ) . '</p></div>';
 			} else {
-			if ( $new_event_role_id > 0 && $new_event_role_id !== absint( $application->event_role_id ) ) {
-				$application_model->update( $application_id, array( 'event_role_id' => $new_event_role_id ) );
-			}
+			$addon_failures = array();
 
 			// Replace add-ons with current selection (role-aware max qty).
-			$wpdb->delete(
+			$addons_cleared = $wpdb->delete(
 				$wpdb->prefix . 'remember_application_merchandise',
 				array( 'event_application_id' => $application_id ),
 				array( '%d' )
 			);
+			if ( false === $addons_cleared ) {
+				$addon_failures[] = array(
+					'step'     => 'clear',
+					'db_error' => $wpdb->last_error,
+				);
+			}
+			$addons_saved = 0;
 			$effective_role_id = $new_event_role_id;
 			if ( $effective_role_id < 1 ) {
 				$effective_role_id = absint( $application->event_role_id );
@@ -123,7 +151,7 @@ if ( isset( $_POST['remember_member_application_action'] ) && check_admin_refere
 
 					$unit_cost  = (float) $addon->cost;
 					$total_cost = $unit_cost * $quantity;
-					$wpdb->insert(
+					$addon_inserted = $wpdb->insert(
 						$wpdb->prefix . 'remember_application_merchandise',
 						array(
 							'event_application_id' => $application_id,
@@ -135,8 +163,36 @@ if ( isset( $_POST['remember_member_application_action'] ) && check_admin_refere
 						),
 						array( '%d', '%d', '%d', '%f', '%f', '%s' )
 					);
+					if ( false === $addon_inserted ) {
+						$addon_failures[] = array(
+							'step'           => 'add',
+							'merchandise_id' => $addon_id,
+							'db_error'       => $wpdb->last_error,
+						);
+					} else {
+						++$addons_saved;
+					}
 				}
 			}
+			if ( ! empty( $addon_failures ) ) {
+				Remember_Logger::error(
+					'Member application add-ons could not all be saved; staff should check the add-ons on this application',
+					array(
+						'application_id' => $application_id,
+						'member_id'      => (int) $member_id_for_queries,
+						'failures'       => $addon_failures,
+					)
+				);
+			}
+			Remember_Logger::info(
+				'Member updated their application',
+				array(
+					'application_id' => $application_id,
+					'member_id'      => (int) $member_id_for_queries,
+					'role_changed'   => $role_changed,
+					'addons'         => $addons_saved,
+				)
+			);
 			Remember_Profile_Audit::touch_updated( (int) $member_id_for_queries, get_current_user_id() );
 			echo '<div class="remember-notice remember-success" role="status"><p>' . esc_html__( 'Application updated. Your profile currency confirmation was recorded.', 'remember' ) . '</p></div>';
 			}
@@ -151,9 +207,44 @@ if ( isset( $_POST['remember_member_application_action'] ) && check_admin_refere
 					'leave',
 					sprintf( __( 'Member cancelled application #%d', 'remember' ), $application_id )
 				);
+				Remember_Logger::info(
+					'Member withdrew their application',
+					array(
+						'application_id' => $application_id,
+						'event_id'       => (int) $application->event_id,
+						'member_id'      => (int) $member_id_for_queries,
+					)
+				);
 				echo '<div class="remember-notice remember-success" role="status"><p>' . esc_html__( 'Application cancelled. Your ticket is marked VOID.', 'remember' ) . '</p></div>';
+			} else {
+				Remember_Logger::error(
+					'Member could not withdraw their application: the status could not be saved',
+					array(
+						'application_id' => $application_id,
+						'member_id'      => (int) $member_id_for_queries,
+					)
+				);
+				echo '<div class="remember-notice remember-error" role="alert"><p>' . esc_html__( 'Your application could not be cancelled. Try again, or contact an administrator.', 'remember' ) . '</p></div>';
 			}
+		} else {
+			Remember_Logger::debug(
+				'Application change refused: not allowed while the application has this status',
+				array(
+					'application_id' => $application_id,
+					'status'         => $application->status,
+					'action'         => $member_action,
+				)
+			);
 		}
+	} else {
+		Remember_Logger::warning(
+			'Application change refused: the application was not found or belongs to another member',
+			array(
+				'application_id' => $application_id,
+				'user_id'        => get_current_user_id(),
+				'action'         => $member_action,
+			)
+		);
 	}
 }
 
@@ -165,6 +256,15 @@ $profile = $wpdb->get_row(
 		$member_id_for_queries
 	)
 );
+if ( '' !== $wpdb->last_error ) {
+	Remember_Logger::error(
+		'Member dashboard could not load the member profile',
+		array(
+			'member_id' => (int) $member_id_for_queries,
+			'db_error'  => $wpdb->last_error,
+		)
+	);
+}
 
 // Get applications
 $applications = $application_model->get_by_member( $member_id_for_queries );

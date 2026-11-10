@@ -77,7 +77,15 @@ class Remember_Security_Headers {
 	 * @return void
 	 */
 	public static function send() {
-		if ( headers_sent() ) {
+		if ( headers_sent( $file, $line ) ) {
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
+			Remember_Logger::debug(
+				'Security headers not sent: page output had already started',
+				array(
+					'file' => str_replace( wp_normalize_path( ABSPATH ), '', wp_normalize_path( (string) $file ) ),
+					'line' => (int) $line,
+				)
+			);
 			return;
 		}
 		foreach ( self::headers() as $name => $value ) {

@@ -19,6 +19,9 @@ $more      = count( $dashboard['attention'] ) - count( $attention );
 ?>
 
 <div class="remember-dashboard-widget">
+	<?php if ( ! empty( $dashboard['failed'] ) ) : ?>
+		<p class="remember-widget-error"><?php esc_html_e( 'Some figures could not be loaded and may be incomplete. Reload the page, or ask an administrator to check the reMember log.', 'remember' ); ?></p>
+	<?php endif; ?>
 	<?php if ( ! empty( $dashboard['stats'] ) ) : ?>
 		<div class="remember-widget-stats">
 			<?php foreach ( $dashboard['stats'] as $stat ) : ?>
@@ -136,6 +139,16 @@ $more      = count( $dashboard['attention'] ) - count( $attention );
 	border: 1px solid #b8e6bf;
 	border-radius: 4px;
 	color: #1e4620;
+	font-size: 13px;
+}
+
+.remember-widget-error {
+	margin: 0 0 10px;
+	padding: 8px 10px;
+	background: #fcf0f1;
+	border: 1px solid #f0b8b8;
+	border-radius: 4px;
+	color: #8a2424;
 	font-size: 13px;
 }
 

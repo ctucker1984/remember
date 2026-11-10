@@ -33,7 +33,8 @@ if ( current_user_can( 'remember_access_settings' ) ) {
 if ( isset( $_GET['pages_setup'] ) ) {
 	$message = urldecode( sanitize_text_field( $_GET['pages_setup'] ) );
 	if ( ! empty( $message ) ) {
-		echo '<div class="notice notice-success is-dismissible"><p>' . esc_html( $message ) . '</p></div>';
+		$notice_class = empty( $_GET['pages_setup_incomplete'] ) ? 'notice-success' : 'notice-warning';
+		echo '<div class="notice ' . esc_attr( $notice_class ) . ' is-dismissible"><p>' . esc_html( $message ) . '</p></div>';
 	}
 }
 
@@ -121,22 +122,29 @@ if ( isset( $_POST['remember_settings_action'] ) && 'disconnect_qb' === $_POST['
 			Remember_QuickBooks_OAuth::revoke_token( $revoke, $settings['client_id'], $settings['client_secret'] );
 		}
 	}
-	Remember_Logger::info( 'QuickBooks disconnected', array( 'user_id' => get_current_user_id() ) );
-	
-	// Clear settings
-	Remember_QuickBooks_OAuth::save_settings( array() );
-	
-	// Deactivate processor
-	global $wpdb;
-	$wpdb->update(
-		$wpdb->prefix . 'remember_payment_processors',
-		array( 'is_active' => 0 ),
-		array( 'processor_type' => 'quickbooks' ),
-		array( '%d' ),
-		array( '%s' )
-	);
-	
-	echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'QuickBooks disconnected successfully.', 'remember' ) . '</p></div>';
+	if ( Remember_QuickBooks_OAuth::save_settings( array() ) ) {
+		Remember_Logger::info( 'QuickBooks disconnected', array( 'user_id' => get_current_user_id() ) );
+
+		global $wpdb;
+		$deactivated = $wpdb->update(
+			$wpdb->prefix . 'remember_payment_processors',
+			array( 'is_active' => 0 ),
+			array( 'processor_type' => 'quickbooks' ),
+			array( '%d' ),
+			array( '%s' )
+		);
+		if ( false === $deactivated ) {
+			Remember_Logger::warning(
+				'QuickBooks disconnected, but it could not be marked inactive; Settings may still show its last sync time',
+				array( 'db_error' => $wpdb->last_error )
+			);
+		}
+
+		echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'QuickBooks disconnected successfully.', 'remember' ) . '</p></div>';
+	} else {
+		Remember_Logger::error( 'QuickBooks could not be disconnected: the saved connection could not be cleared', array( 'user_id' => get_current_user_id() ) );
+		echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'QuickBooks could not be fully disconnected because reMember could not clear its saved connection. Try again, or ask an administrator to check the reMember log.', 'remember' ) . '</p></div>';
+	}
 }
 
 // Handle QuickBooks credentials save
@@ -186,26 +194,35 @@ if ( isset( $_POST['remember_settings_action'] ) && 'disconnect_xero' === $_POST
 			$settings['client_secret']
 		);
 	}
-	Remember_Logger::info(
-		'Xero disconnected',
-		array(
-			'tenant_name' => ( $settings && ! empty( $settings['tenant_name'] ) ) ? $settings['tenant_name'] : '',
-			'user_id'     => get_current_user_id(),
-		)
-	);
+	if ( Remember_Xero_OAuth::save_settings( array() ) ) {
+		Remember_Logger::info(
+			'Xero disconnected',
+			array(
+				'tenant_name' => ( $settings && ! empty( $settings['tenant_name'] ) ) ? $settings['tenant_name'] : '',
+				'user_id'     => get_current_user_id(),
+			)
+		);
 
-	Remember_Xero_OAuth::save_settings( array() );
+		global $wpdb;
+		$deactivated = $wpdb->update(
+			$wpdb->prefix . 'remember_payment_processors',
+			array( 'is_active' => 0 ),
+			array( 'processor_type' => 'xero' ),
+			array( '%d' ),
+			array( '%s' )
+		);
+		if ( false === $deactivated ) {
+			Remember_Logger::warning(
+				'Xero disconnected, but it could not be marked inactive; Settings may still show its last sync time',
+				array( 'db_error' => $wpdb->last_error )
+			);
+		}
 
-	global $wpdb;
-	$wpdb->update(
-		$wpdb->prefix . 'remember_payment_processors',
-		array( 'is_active' => 0 ),
-		array( 'processor_type' => 'xero' ),
-		array( '%d' ),
-		array( '%s' )
-	);
-
-	echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Xero disconnected successfully.', 'remember' ) . '</p></div>';
+		echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Xero disconnected successfully.', 'remember' ) . '</p></div>';
+	} else {
+		Remember_Logger::error( 'Xero could not be disconnected: the saved connection could not be cleared', array( 'user_id' => get_current_user_id() ) );
+		echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Xero could not be fully disconnected because reMember could not clear its saved connection. Try again, or ask an administrator to check the reMember log.', 'remember' ) . '</p></div>';
+	}
 }
 
 // Handle Xero credentials save.
@@ -248,6 +265,9 @@ if ( isset( $_POST['remember_settings_action'] ) && 'save_qb_item_mappings' === 
 			}
 		}
 	}
+	global $wpdb;
+	$mapping_saved  = 0;
+	$mapping_failed = array();
 	if ( isset( $_POST['role_qb_mappings'] ) && is_array( $_POST['role_qb_mappings'] ) ) {
 		foreach ( $_POST['role_qb_mappings'] as $role_id => $qb_id ) {
 			$role_id = absint( $role_id );
@@ -255,6 +275,11 @@ if ( isset( $_POST['remember_settings_action'] ) && 'save_qb_item_mappings' === 
 			$qb_name = ( '' !== $qb_id && isset( $qb_names_by_id[ $qb_id ] ) ) ? $qb_names_by_id[ $qb_id ] : null;
 			if ( $role_id > 0 ) {
 				$mapping_model->upsert( 'role', $role_id, $qb_id, $qb_name );
+				if ( '' !== $wpdb->last_error ) {
+					$mapping_failed[] = array( 'role', $role_id, $wpdb->last_error );
+				} else {
+					++$mapping_saved;
+				}
 			}
 		}
 	}
@@ -265,10 +290,51 @@ if ( isset( $_POST['remember_settings_action'] ) && 'save_qb_item_mappings' === 
 			$qb_name    = ( '' !== $qb_id && isset( $qb_names_by_id[ $qb_id ] ) ) ? $qb_names_by_id[ $qb_id ] : null;
 			if ( $product_id > 0 ) {
 				$mapping_model->upsert( 'product', $product_id, $qb_id, $qb_name );
+				if ( '' !== $wpdb->last_error ) {
+					$mapping_failed[] = array( 'product', $product_id, $wpdb->last_error );
+				} else {
+					++$mapping_saved;
+				}
 			}
 		}
 	}
-	echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'QuickBooks mappings saved successfully.', 'remember' ) . '</p></div>';
+	if ( empty( $mapping_failed ) ) {
+		Remember_Logger::info(
+			'QuickBooks item mappings saved',
+			array(
+				'saved'   => $mapping_saved,
+				'user_id' => get_current_user_id(),
+			)
+		);
+		echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'QuickBooks mappings saved successfully.', 'remember' ) . '</p></div>';
+	} else {
+		Remember_Logger::error(
+			'Some QuickBooks item mappings could not be saved; invoices for those roles or add-ons may use the wrong item',
+			array(
+				'saved'    => $mapping_saved,
+				'failed'   => array_map(
+					static function ( $failure ) {
+						return $failure[0] . ' ' . $failure[1];
+					},
+					$mapping_failed
+				),
+				'db_error' => $mapping_failed[0][2],
+				'user_id'  => get_current_user_id(),
+			)
+		);
+		echo '<div class="notice notice-error is-dismissible"><p>' . esc_html(
+			sprintf(
+				/* translators: %d: number of mappings */
+				_n(
+					'%d QuickBooks mapping could not be saved. Check the mappings below and save again.',
+					'%d QuickBooks mappings could not be saved. Check the mappings below and save again.',
+					count( $mapping_failed ),
+					'remember'
+				),
+				count( $mapping_failed )
+			)
+		) . '</p></div>';
+	}
 }
 
 // Handle Xero item mapping save (roles + catalog products; must run outside nested forms).
@@ -285,6 +351,9 @@ if ( isset( $_POST['remember_settings_action'] ) && 'save_xero_item_mappings' ==
 			}
 		}
 	}
+	global $wpdb;
+	$mapping_saved  = 0;
+	$mapping_failed = array();
 	if ( isset( $_POST['role_xero_mappings'] ) && is_array( $_POST['role_xero_mappings'] ) ) {
 		foreach ( $_POST['role_xero_mappings'] as $role_id => $xero_id ) {
 			$role_id = absint( $role_id );
@@ -292,6 +361,11 @@ if ( isset( $_POST['remember_settings_action'] ) && 'save_xero_item_mappings' ==
 			$xero_name = ( '' !== $xero_id && isset( $xero_names_by_id[ $xero_id ] ) ) ? $xero_names_by_id[ $xero_id ] : null;
 			if ( $role_id > 0 ) {
 				$mapping_model->upsert( 'role', $role_id, $xero_id, $xero_name );
+				if ( '' !== $wpdb->last_error ) {
+					$mapping_failed[] = array( 'role', $role_id, $wpdb->last_error );
+				} else {
+					++$mapping_saved;
+				}
 			}
 		}
 	}
@@ -302,10 +376,51 @@ if ( isset( $_POST['remember_settings_action'] ) && 'save_xero_item_mappings' ==
 			$xero_name  = ( '' !== $xero_id && isset( $xero_names_by_id[ $xero_id ] ) ) ? $xero_names_by_id[ $xero_id ] : null;
 			if ( $product_id > 0 ) {
 				$mapping_model->upsert( 'product', $product_id, $xero_id, $xero_name );
+				if ( '' !== $wpdb->last_error ) {
+					$mapping_failed[] = array( 'product', $product_id, $wpdb->last_error );
+				} else {
+					++$mapping_saved;
+				}
 			}
 		}
 	}
-	echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Xero mappings saved successfully.', 'remember' ) . '</p></div>';
+	if ( empty( $mapping_failed ) ) {
+		Remember_Logger::info(
+			'Xero item mappings saved',
+			array(
+				'saved'   => $mapping_saved,
+				'user_id' => get_current_user_id(),
+			)
+		);
+		echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Xero mappings saved successfully.', 'remember' ) . '</p></div>';
+	} else {
+		Remember_Logger::error(
+			'Some Xero item mappings could not be saved; invoices for those roles or add-ons may use the wrong item',
+			array(
+				'saved'    => $mapping_saved,
+				'failed'   => array_map(
+					static function ( $failure ) {
+						return $failure[0] . ' ' . $failure[1];
+					},
+					$mapping_failed
+				),
+				'db_error' => $mapping_failed[0][2],
+				'user_id'  => get_current_user_id(),
+			)
+		);
+		echo '<div class="notice notice-error is-dismissible"><p>' . esc_html(
+			sprintf(
+				/* translators: %d: number of mappings */
+				_n(
+					'%d Xero mapping could not be saved. Check the mappings below and save again.',
+					'%d Xero mappings could not be saved. Check the mappings below and save again.',
+					count( $mapping_failed ),
+					'remember'
+				),
+				count( $mapping_failed )
+			)
+		) . '</p></div>';
+	}
 }
 
 // Handle form submissions
@@ -394,9 +509,13 @@ if ( isset( $_POST['remember_settings_action'] ) && check_admin_referer( 'rememb
 			}
 		}
 		
-		update_option( 'remember_options', $options );
-		Remember_Logger::info( 'Settings updated' );
-		echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Settings saved successfully.', 'remember' ) . '</p></div>';
+		if ( get_option( 'remember_options', array() ) === $options || update_option( 'remember_options', $options ) ) {
+			Remember_Logger::info( 'Settings updated', array( 'user_id' => get_current_user_id() ) );
+			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Settings saved successfully.', 'remember' ) . '</p></div>';
+		} else {
+			Remember_Logger::error( 'Settings could not be saved', array( 'user_id' => get_current_user_id() ) );
+			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Settings could not be saved. Try again, or ask an administrator to check the reMember log.', 'remember' ) . '</p></div>';
+		}
 		if ( ! empty( $registration_guard_error ) ) {
 			$registration_guard_messages = array(
 				'site_key' => __( 'Registration CAPTCHA was not changed. Enter a site key for the selected provider.', 'remember' ),
@@ -450,11 +569,17 @@ if ( isset( $_POST['remember_settings_action'] ) && check_admin_referer( 'rememb
 					$role_map[ $notify_type ] = $clean_roles;
 				}
 				$options['admin_notify_roles'] = $role_map;
-				update_option( 'remember_options', $options );
+				if ( get_option( 'remember_options', array() ) !== $options && ! update_option( 'remember_options', $options ) ) {
+					$notify_roles_failed = true;
+					Remember_Logger::error( 'Staff notification recipients could not be saved', array( 'user_id' => get_current_user_id() ) );
+					echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'The staff roles chosen to receive notification emails could not be saved. Check them and save again.', 'remember' ) . '</p></div>';
+				}
 			}
 			if ( empty( $failed_notification_types ) ) {
-				Remember_Logger::info( 'Notification settings updated', array( 'user_id' => get_current_user_id() ) );
-				echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Notification settings saved successfully.', 'remember' ) . '</p></div>';
+				if ( empty( $notify_roles_failed ) ) {
+					Remember_Logger::info( 'Notification settings updated', array( 'user_id' => get_current_user_id() ) );
+					echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Notification settings saved successfully.', 'remember' ) . '</p></div>';
+				}
 			} else {
 				$failed_notification_labels = array_map( array( 'Remember_Notification_Setting', 'get_type_label' ), $failed_notification_types );
 				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html(
@@ -484,7 +609,7 @@ if ( isset( $_POST['remember_settings_action'] ) && check_admin_referer( 'rememb
 				$platform_name
 			) );
 			if ( ! $existing ) {
-				$wpdb->insert(
+				$inserted = $wpdb->insert(
 					$wpdb->prefix . 'remember_social_media_platforms',
 					array(
 						'platform_name' => $platform_name,
@@ -495,8 +620,28 @@ if ( isset( $_POST['remember_settings_action'] ) && check_admin_referer( 'rememb
 						'created_at'    => current_time( 'mysql' ),
 					)
 				);
-				echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Social media platform added successfully.', 'remember' ) . '</p></div>';
+				if ( false === $inserted ) {
+					Remember_Logger::error(
+						'Social media platform could not be added',
+						array(
+							'platform_name' => $platform_name,
+							'db_error'      => $wpdb->last_error,
+						)
+					);
+					echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'The social media platform could not be added. Try again, or ask an administrator to check the reMember log.', 'remember' ) . '</p></div>';
+				} else {
+					Remember_Logger::info(
+						'Social media platform added',
+						array(
+							'platform_id'   => (int) $wpdb->insert_id,
+							'platform_name' => $platform_name,
+							'user_id'       => get_current_user_id(),
+						)
+					);
+					echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Social media platform added successfully.', 'remember' ) . '</p></div>';
+				}
 			} else {
+				Remember_Logger::debug( 'Social media platform not added: the name already exists', array( 'platform_id' => (int) $existing ) );
 				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Platform already exists.', 'remember' ) . '</p></div>';
 			}
 		}
@@ -581,7 +726,6 @@ if ( isset( $_POST['remember_settings_action'] ) && check_admin_referer( 'rememb
 						'platform_name' => $platform_name,
 						'sort_order' => $sort_order,
 						'db_error' => $wpdb->last_error,
-						'db_query' => $wpdb->last_query,
 					) );
 				} elseif ( $result >= 0 ) {
 					// $result can be 0 if no rows changed, or > 0 if rows were updated
@@ -600,6 +744,15 @@ if ( isset( $_POST['remember_settings_action'] ) && check_admin_referer( 'rememb
 				$message_parts[] = sprintf( esc_html__( '%d platform(s) skipped', 'remember' ), $skipped_count );
 			}
 			
+			Remember_Logger::info(
+				'Social media platforms updated',
+				array(
+					'updated' => $updated_count,
+					'failed'  => $error_count,
+					'skipped' => $skipped_count,
+					'user_id' => get_current_user_id(),
+				)
+			);
 			if ( $error_count > 0 || $skipped_count > 0 ) {
 				echo '<div class="notice notice-warning is-dismissible"><p>' . 
 					implode( ', ', $message_parts ) . 
@@ -616,12 +769,31 @@ if ( isset( $_POST['remember_settings_action'] ) && check_admin_referer( 'rememb
 	if ( 'delete_social_platform' === $action && isset( $_POST['platform_id'] ) ) {
 		global $wpdb;
 		$platform_id = absint( $_POST['platform_id'] );
-		$wpdb->delete(
+		$deleted     = $wpdb->delete(
 			$wpdb->prefix . 'remember_social_media_platforms',
 			array( 'platform_id' => $platform_id ),
 			array( '%d' )
 		);
-		echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Social media platform deleted successfully.', 'remember' ) . '</p></div>';
+		if ( false === $deleted ) {
+			Remember_Logger::error(
+				'Social media platform could not be deleted',
+				array(
+					'platform_id' => $platform_id,
+					'db_error'    => $wpdb->last_error,
+				)
+			);
+			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'The social media platform could not be deleted. Try again, or ask an administrator to check the reMember log.', 'remember' ) . '</p></div>';
+		} else {
+			Remember_Logger::info(
+				'Social media platform deleted',
+				array(
+					'platform_id' => $platform_id,
+					'rows'        => (int) $deleted,
+					'user_id'     => get_current_user_id(),
+				)
+			);
+			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Social media platform deleted successfully.', 'remember' ) . '</p></div>';
+		}
 	}
 
 	if ( 'add_im_platform' === $action ) {
@@ -642,7 +814,7 @@ if ( isset( $_POST['remember_settings_action'] ) && check_admin_referer( 'rememb
 				)
 			);
 			if ( ! $existing ) {
-				$wpdb->insert(
+				$inserted = $wpdb->insert(
 					$wpdb->prefix . 'remember_im_platforms',
 					array(
 						'platform_key'  => $platform_key,
@@ -655,8 +827,28 @@ if ( isset( $_POST['remember_settings_action'] ) && check_admin_referer( 'rememb
 					),
 					array( '%s', '%s', '%s', '%d', '%d', '%d', '%s' )
 				);
-				echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Instant messenger platform added successfully.', 'remember' ) . '</p></div>';
+				if ( false === $inserted ) {
+					Remember_Logger::error(
+						'Instant messenger platform could not be added',
+						array(
+							'platform_key' => $platform_key,
+							'db_error'     => $wpdb->last_error,
+						)
+					);
+					echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'The instant messenger platform could not be added. Try again, or ask an administrator to check the reMember log.', 'remember' ) . '</p></div>';
+				} else {
+					Remember_Logger::info(
+						'Instant messenger platform added',
+						array(
+							'platform_id'  => (int) $wpdb->insert_id,
+							'platform_key' => $platform_key,
+							'user_id'      => get_current_user_id(),
+						)
+					);
+					echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Instant messenger platform added successfully.', 'remember' ) . '</p></div>';
+				}
 			} else {
+				Remember_Logger::debug( 'Instant messenger platform not added: the key already exists', array( 'platform_key' => $platform_key ) );
 				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'That platform key already exists.', 'remember' ) . '</p></div>';
 			}
 		} else {
@@ -667,8 +859,9 @@ if ( isset( $_POST['remember_settings_action'] ) && check_admin_referer( 'rememb
 	if ( 'update_im_platforms' === $action ) {
 		global $wpdb;
 		if ( isset( $_POST['im_platforms'] ) && is_array( $_POST['im_platforms'] ) ) {
-			$updated = 0;
-			$bad_url = 0;
+			$updated   = 0;
+			$bad_url   = 0;
+			$im_failed = array();
 			foreach ( $_POST['im_platforms'] as $platform_id => $row ) {
 				$platform_id = absint( $platform_id );
 				if ( $platform_id <= 0 || ! is_array( $row ) ) {
@@ -701,11 +894,43 @@ if ( isset( $_POST['remember_settings_action'] ) && check_admin_referer( 'rememb
 				);
 				if ( false !== $ok ) {
 					++$updated;
+				} else {
+					$im_failed[] = $platform_id;
+					Remember_Logger::error(
+						'Instant messenger platform could not be updated',
+						array(
+							'platform_id' => $platform_id,
+							'db_error'    => $wpdb->last_error,
+						)
+					);
 				}
+			}
+			Remember_Logger::info(
+				'Instant messenger platforms updated',
+				array(
+					'updated' => $updated,
+					'failed'  => count( $im_failed ),
+					'bad_url' => $bad_url,
+					'user_id' => get_current_user_id(),
+				)
+			);
+			if ( ! empty( $im_failed ) ) {
+				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html(
+					sprintf(
+						/* translators: %d: number of platforms */
+						_n(
+							'%d instant messenger platform could not be updated. Try again, or ask an administrator to check the reMember log.',
+							'%d instant messenger platforms could not be updated. Try again, or ask an administrator to check the reMember log.',
+							count( $im_failed ),
+							'remember'
+						),
+						count( $im_failed )
+					)
+				) . '</p></div>';
 			}
 			if ( $bad_url > 0 ) {
 				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'A profile URL must start with http:// or https:// and contain {handle} once. That row was left unchanged.', 'remember' ) . '</p></div>';
-			} else {
+			} elseif ( empty( $im_failed ) ) {
 				echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Instant messenger platforms updated successfully.', 'remember' ) . '</p></div>';
 			}
 		}
@@ -751,12 +976,31 @@ if ( isset( $_POST['remember_settings_action'] ) && check_admin_referer( 'rememb
 	if ( 'delete_im_platform' === $action && isset( $_POST['platform_id'] ) ) {
 		global $wpdb;
 		$platform_id = absint( $_POST['platform_id'] );
-		$wpdb->delete(
+		$deleted     = $wpdb->delete(
 			$wpdb->prefix . 'remember_im_platforms',
 			array( 'platform_id' => $platform_id ),
 			array( '%d' )
 		);
-		echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Instant messenger platform deleted successfully.', 'remember' ) . '</p></div>';
+		if ( false === $deleted ) {
+			Remember_Logger::error(
+				'Instant messenger platform could not be deleted',
+				array(
+					'platform_id' => $platform_id,
+					'db_error'    => $wpdb->last_error,
+				)
+			);
+			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'The instant messenger platform could not be deleted. Try again, or ask an administrator to check the reMember log.', 'remember' ) . '</p></div>';
+		} else {
+			Remember_Logger::info(
+				'Instant messenger platform deleted',
+				array(
+					'platform_id' => $platform_id,
+					'rows'        => (int) $deleted,
+					'user_id'     => get_current_user_id(),
+				)
+			);
+			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Instant messenger platform deleted successfully.', 'remember' ) . '</p></div>';
+		}
 	}
 }
 
@@ -781,6 +1025,9 @@ global $wpdb;
 $social_platforms = $wpdb->get_results(
 	"SELECT * FROM {$wpdb->prefix}remember_social_media_platforms ORDER BY sort_order ASC, platform_name ASC"
 );
+if ( '' !== $wpdb->last_error ) {
+	Remember_Logger::error( 'Social media platforms could not be loaded for Settings', array( 'db_error' => $wpdb->last_error ) );
+}
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-im-platforms.php';
 $im_platforms = Remember_Im_Platforms::get_all();
 ?>

@@ -11,6 +11,8 @@ if ( ! defined( 'WPINC' ) ) {
 	die;
 }
 
+require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-logger.php';
+
 /**
  * The public-facing functionality of the plugin.
  *
@@ -168,11 +170,25 @@ class Remember_Public {
 
 		$nonce = isset( $_GET['remember_ticket_nonce'] ) ? sanitize_text_field( wp_unslash( $_GET['remember_ticket_nonce'] ) ) : '';
 		if ( ! wp_verify_nonce( $nonce, 'remember_ticket_' . $application_id ) ) {
+			Remember_Logger::debug(
+				'Ticket refused: the link is invalid or expired',
+				array(
+					'application_id' => $application_id,
+					'user_id'        => get_current_user_id(),
+				)
+			);
 			wp_die( esc_html__( 'Invalid or expired ticket link. Open the ticket again from your dashboard or the admin application screen.', 'remember' ), esc_html__( 'Ticket', 'remember' ), array( 'response' => 403 ) );
 		}
 
 		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-ticket.php';
 		if ( ! Remember_Ticket::user_can_view( $application_id ) ) {
+			Remember_Logger::warning(
+				'Ticket refused: the user may not view this application ticket',
+				array(
+					'application_id' => $application_id,
+					'user_id'        => get_current_user_id(),
+				)
+			);
 			wp_die( esc_html__( 'You do not have permission to view this ticket.', 'remember' ), esc_html__( 'Ticket', 'remember' ), array( 'response' => 403 ) );
 		}
 
@@ -192,16 +208,21 @@ class Remember_Public {
 			return;
 		}
 
+		$started = Remember_Logger::start_timer();
+
 		if ( ! isset( $_POST['remember_register_nonce'] ) || ! wp_verify_nonce( wp_unslash( $_POST['remember_register_nonce'] ), 'remember_register_member' ) ) {
+			Remember_Logger::debug( 'Public member registration refused: the form had expired or was not sent from this site' );
 			$this->redirect_member_registration( 'invalid_nonce' );
 		}
 
 		if ( ! self::is_public_registration_allowed() ) {
+			Remember_Logger::debug( 'Public member registration refused: registration is turned off' );
 			$this->redirect_member_registration( 'disabled' );
 		}
 
 		// Honeypot — should stay empty (no visible field; blocks naive bots).
 		if ( ! empty( $_POST['remember_hp'] ) || ! empty( $_POST['remember_company'] ) ) {
+			Remember_Logger::debug( 'Public member registration refused: a hidden anti-bot field was filled in' );
 			$this->redirect_member_registration( 'invalid_nonce' );
 		}
 
@@ -365,6 +386,14 @@ class Remember_Public {
 		$invalid_fields = array_values( array_unique( $invalid_fields ) );
 		$banner_message = Remember_Profile_Fields::banner_message( $banner_labels, $banner_extras );
 		if ( '' !== $banner_message ) {
+			Remember_Logger::debug(
+				'Public member registration refused: the form has fields to fix',
+				array(
+					'fields'            => $invalid_fields,
+					'profile_questions' => $invalid_pq_ids,
+					'guard'             => $blocked,
+				)
+			);
 			$this->register_invalid_fields   = $invalid_fields;
 			$this->register_invalid_pq_ids   = $invalid_pq_ids;
 			$this->register_field_messages   = $field_messages;
@@ -406,17 +435,45 @@ class Remember_Public {
 			return;
 		}
 
-		update_user_meta( $user_id, 'first_name', $first_name );
-		update_user_meta( $user_id, 'last_name', $last_name );
-		update_user_meta( $user_id, 'nickname', $nickname );
-		update_user_meta( $user_id, 'timezone_string', $timezone );
-		wp_update_user(
+		$meta_failed = array();
+		foreach (
+			array(
+				'first_name'      => $first_name,
+				'last_name'       => $last_name,
+				'nickname'        => $nickname,
+				'timezone_string' => $timezone,
+			) as $meta_key => $meta_value
+		) {
+			if ( (string) get_user_meta( $user_id, $meta_key, true ) !== (string) $meta_value
+				&& ! update_user_meta( $user_id, $meta_key, $meta_value ) ) {
+				$meta_failed[] = $meta_key;
+			}
+		}
+		if ( ! empty( $meta_failed ) ) {
+			Remember_Logger::warning(
+				'Public member registration: some account details could not be saved; the member can correct them on their profile',
+				array(
+					'user_id' => $user_id,
+					'fields'  => $meta_failed,
+				)
+			);
+		}
+		$display_updated = wp_update_user(
 			array(
 				'ID'           => $user_id,
 				'display_name' => $nickname,
 				'nickname'     => $nickname,
 			)
 		);
+		if ( is_wp_error( $display_updated ) ) {
+			Remember_Logger::warning(
+				'Public member registration: display name could not be set; the account shows its username until the profile is saved',
+				array(
+					'user_id' => $user_id,
+					'error'   => $display_updated->get_error_message(),
+				)
+			);
+		}
 
 		$vetting_workflow = Remember_Vetting_Workflow::get_workflow();
 		if ( 'first_application' === $vetting_workflow ) {
@@ -478,7 +535,14 @@ class Remember_Public {
 			Remember_Logger::warning( 'Public member registration: vetting case not created', array( 'member_id' => $user_id ) );
 		}
 
-		Remember_Logger::info( 'Public member registration completed', array( 'user_id' => $user_id ) );
+		Remember_Logger::info(
+			'Public member registration completed',
+			array(
+				'user_id'    => $user_id,
+				'status'     => $status,
+				'elapsed_ms' => Remember_Logger::elapsed_ms( $started ),
+			)
+		);
 
 		require_once plugin_dir_path( __FILE__ ) . '../includes/utilities/class-remember-notifications.php';
 		Remember_Notifications::notify_member_registered( $user_id );
@@ -671,6 +735,7 @@ class Remember_Public {
 		$member = $member_model->get( get_current_user_id() );
 
 		if ( ! $member ) {
+			$this->log_not_a_member( 'dashboard' );
 			return '<p class="remember-notice remember-error">' . esc_html__( 'You are not registered as a member. Please contact an administrator.', 'remember' ) . '</p>';
 		}
 
@@ -760,6 +825,7 @@ class Remember_Public {
 		$member = $member_model->get( get_current_user_id() );
 
 		if ( ! $member ) {
+			$this->log_not_a_member( 'apply' );
 			return '<p class="remember-notice remember-error">' . esc_html__( 'You are not registered as a member. Please contact an administrator.', 'remember' ) . '</p>';
 		}
 
@@ -871,6 +937,7 @@ class Remember_Public {
 		$member = $member_model->get( get_current_user_id() );
 
 		if ( ! $member ) {
+			$this->log_not_a_member( 'event_directory' );
 			return '<p class="remember-notice remember-error">' . esc_html__( 'You are not registered as a member.', 'remember' ) . '</p>';
 		}
 
@@ -911,6 +978,7 @@ class Remember_Public {
 		$member = $member_model->get( get_current_user_id() );
 
 		if ( ! $member ) {
+			$this->log_not_a_member( 'event_detail' );
 			return '<p class="remember-notice remember-error">' . esc_html__( 'You are not registered as a member.', 'remember' ) . '</p>';
 		}
 
@@ -926,5 +994,21 @@ class Remember_Public {
 		$event_id = $atts['event_id'];
 		include plugin_dir_path( __FILE__ ) . 'partials/remember-event-detail.php';
 		return ob_get_clean();
+	}
+
+	/**
+	 * Record that a logged-in account without a member record opened a member page.
+	 *
+	 * @param string $page Member page.
+	 * @return void
+	 */
+	private function log_not_a_member( $page ) {
+		Remember_Logger::debug(
+			'Member page refused: the logged-in account has no member record',
+			array(
+				'page'    => $page,
+				'user_id' => get_current_user_id(),
+			)
+		);
 	}
 }

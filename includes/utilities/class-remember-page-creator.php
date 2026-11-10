@@ -11,6 +11,8 @@ if ( ! defined( 'WPINC' ) ) {
 	die;
 }
 
+require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
+
 /**
  * Page creation utility class.
  *
@@ -96,6 +98,7 @@ class Remember_Page_Creator {
 
 		foreach ( $pages_to_create as $page_key ) {
 			if ( ! isset( $default_pages[ $page_key ] ) ) {
+				Remember_Logger::warning( 'Front-end page not created: unknown page', array( 'page' => (string) $page_key ) );
 				continue;
 			}
 
@@ -105,6 +108,13 @@ class Remember_Page_Creator {
 			$existing_page = get_page_by_path( $page_data['slug'] );
 			if ( $existing_page ) {
 				$created_pages[ $page_key ] = $existing_page->ID;
+				Remember_Logger::debug(
+					'Front-end page already exists; linked instead of created',
+					array(
+						'page'    => $page_key,
+						'post_id' => (int) $existing_page->ID,
+					)
+				);
 				continue;
 			}
 
@@ -117,18 +127,39 @@ class Remember_Page_Creator {
 					'post_status'  => 'publish',
 					'post_type'    => 'page',
 					'post_author'  => get_current_user_id(),
-				)
+				),
+				true
 			);
 
-			if ( $page_id && ! is_wp_error( $page_id ) ) {
-				$created_pages[ $page_key ] = $page_id;
+			if ( is_wp_error( $page_id ) || ! $page_id ) {
+				Remember_Logger::error(
+					'Front-end page could not be created',
+					array(
+						'page'  => $page_key,
+						'error' => is_wp_error( $page_id ) ? $page_id->get_error_message() : '',
+					)
+				);
+				continue;
 			}
+			$created_pages[ $page_key ] = $page_id;
+			Remember_Logger::info(
+				'Front-end page created',
+				array(
+					'page'    => $page_key,
+					'post_id' => (int) $page_id,
+				)
+			);
 		}
 
 		// Store created page IDs in options
 		$existing_pages = get_option( 'remember_created_pages', array() );
-		$updated_pages = array_merge( $existing_pages, $created_pages );
-		update_option( 'remember_created_pages', $updated_pages );
+		$updated_pages  = array_merge( $existing_pages, $created_pages );
+		if ( $updated_pages !== $existing_pages && ! update_option( 'remember_created_pages', $updated_pages ) ) {
+			Remember_Logger::error(
+				'Front-end pages were created, but reMember could not record them; links to those pages will not work until they are set up again',
+				array( 'pages' => $created_pages )
+			);
+		}
 
 		return $created_pages;
 	}
@@ -152,14 +183,33 @@ class Remember_Page_Creator {
 		$created_pages = self::get_created_pages();
 		$deleted_count = 0;
 
-		foreach ( $created_pages as $page_id ) {
+		foreach ( $created_pages as $page_key => $page_id ) {
 			if ( wp_delete_post( $page_id, $force ) ) {
 				$deleted_count++;
+			} else {
+				Remember_Logger::warning(
+					'Front-end page could not be deleted',
+					array(
+						'page'    => (string) $page_key,
+						'post_id' => (int) $page_id,
+					)
+				);
 			}
 		}
 
 		// Clear the option
 		delete_option( 'remember_created_pages' );
+
+		$summary = array(
+			'deleted' => $deleted_count,
+			'listed'  => count( $created_pages ),
+			'force'   => (bool) $force,
+		);
+		if ( $deleted_count < count( $created_pages ) ) {
+			Remember_Logger::warning( 'Front-end pages deleted with failures; the pages left over can be deleted under Pages', $summary );
+		} else {
+			Remember_Logger::info( 'Front-end pages deleted', $summary );
+		}
 
 		return $deleted_count;
 	}

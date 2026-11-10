@@ -44,6 +44,9 @@ $remember_dash_row = function ( $item ) {
 
 <div class="wrap remember-dashboard">
 	<h1><?php echo esc_html( get_admin_page_title() ); ?></h1>
+	<?php if ( ! empty( $dashboard['failed'] ) ) : ?>
+		<div class="notice notice-error"><p><?php esc_html_e( 'Some dashboard figures could not be loaded, so counts and lists below may be incomplete. Reload the page, or ask an administrator to check the reMember log.', 'remember' ); ?></p></div>
+	<?php endif; ?>
 	<?php if ( ! empty( $dashboard['summary'] ) ) : ?>
 		<p class="remember-dash-summary"><?php echo esc_html( $dashboard['summary'] ); ?></p>
 	<?php endif; ?>

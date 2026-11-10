@@ -10,6 +10,8 @@ if ( ! defined( 'WPINC' ) ) {
 	die;
 }
 
+require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-logger.php';
+
 /**
  * reMember command.
  */
@@ -44,7 +46,8 @@ class Remember_CLI {
 			__( 'Backing up', 'remember' ),
 			static function () use ( $file ) {
 				return Remember_Backup::write_to_path( $file );
-			}
+			},
+			'backup'
 		);
 		if ( is_wp_error( $result ) ) {
 			WP_CLI::error( $result->get_error_message() );
@@ -89,7 +92,8 @@ class Remember_CLI {
 			__( 'Restoring', 'remember' ),
 			static function () use ( $file ) {
 				return Remember_Backup::restore_from_file( $file );
-			}
+			},
+			'restore'
 		);
 		if ( is_wp_error( $result ) ) {
 			WP_CLI::error( $result->get_error_message() );
@@ -148,7 +152,8 @@ class Remember_CLI {
 			$dry_run ? __( 'Checking', 'remember' ) : __( 'Importing', 'remember' ),
 			static function () use ( $method, $file, $dry_run ) {
 				return Remember_Import_Export::$method( $file, $dry_run );
-			}
+			},
+			'import ' . $type
 		);
 		$this->report_import( $results, $dry_run );
 	}
@@ -198,7 +203,8 @@ class Remember_CLI {
 			__( 'Exporting', 'remember' ),
 			static function () use ( $method, $file ) {
 				return Remember_Import_Export::$method( $file );
-			}
+			},
+			'export ' . $type
 		);
 		if ( ! $ok ) {
 			WP_CLI::error( 'Could not write that file.' );
@@ -239,7 +245,8 @@ class Remember_CLI {
 			__( 'Syncing payments', 'remember' ),
 			static function () {
 				return Remember_Billing_Provider::sync_all_payments( 0 );
-			}
+			},
+			'sync ' . $provider
 		);
 		if ( ! empty( $results['skipped'] ) ) {
 			WP_CLI::error( 'The provider is not connected.' );
@@ -279,7 +286,8 @@ class Remember_CLI {
 			__( 'Scanning', 'remember' ),
 			static function () {
 				return Remember_Profile_Duplicates::scan();
-			}
+			},
+			'duplicates scan'
 		);
 		WP_CLI::success( sprintf( 'Found %d new possible duplicates.', (int) $created ) );
 	}
@@ -291,6 +299,7 @@ class Remember_CLI {
 	 */
 	private function require_user() {
 		if ( get_current_user_id() < 1 ) {
+			Remember_Logger::debug( 'WP-CLI command refused: no --user given' );
 			WP_CLI::error( 'Pass --user=<id> so the command runs with that account\'s access.' );
 		}
 	}
@@ -311,6 +320,14 @@ class Remember_CLI {
 			$ok  = $all ? ( $ok && $has ) : ( $ok || $has );
 		}
 		if ( ! $ok ) {
+			Remember_Logger::warning(
+				'WP-CLI command refused: the user lacks the access it needs',
+				array(
+					'user_id' => get_current_user_id(),
+					'caps'    => $caps,
+					'all'     => $all,
+				)
+			);
 			WP_CLI::error( $message );
 		}
 	}
@@ -320,20 +337,31 @@ class Remember_CLI {
 	 *
 	 * @param string   $label    Bar label.
 	 * @param callable $callback Work.
+	 * @param string   $command  Command name for the log, such as "import members".
 	 * @return mixed
 	 */
-	private function with_progress( $label, $callback ) {
+	private function with_progress( $label, $callback, $command = '' ) {
 		$bar = null;
 		if ( function_exists( '\WP_CLI\Utils\make_progress_bar' ) ) {
 			$bar = \WP_CLI\Utils\make_progress_bar( $label, 1 );
 		} else {
 			WP_CLI::log( $label );
 		}
+		$start  = Remember_Logger::start_timer();
 		$result = call_user_func( $callback );
 		if ( $bar ) {
 			$bar->tick();
 			$bar->finish();
 		}
+		Remember_Logger::debug(
+			'WP-CLI command finished',
+			array(
+				'command'    => $command,
+				'user_id'    => get_current_user_id(),
+				'failed'     => is_wp_error( $result ) || false === $result,
+				'elapsed_ms' => Remember_Logger::elapsed_ms( $start ),
+			)
+		);
 		return $result;
 	}
 

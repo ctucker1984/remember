@@ -17,6 +17,8 @@ if ( ! defined( 'WPINC' ) ) {
 	die;
 }
 
+require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
+
 /**
  * Registration email verification.
  */
@@ -49,7 +51,15 @@ class Remember_Registration_Verification {
 	 */
 	public static function maybe_schedule() {
 		if ( ! wp_next_scheduled( self::CRON_HOOK ) ) {
-			wp_schedule_event( time() + HOUR_IN_SECONDS, 'daily', self::CRON_HOOK );
+			$scheduled = wp_schedule_event( time() + HOUR_IN_SECONDS, 'daily', self::CRON_HOOK, array(), true );
+			if ( is_wp_error( $scheduled ) ) {
+				Remember_Logger::warning(
+					'Unconfirmed registration cleanup could not be scheduled; unconfirmed accounts will stay until it is',
+					array( 'error' => $scheduled->get_error_message() )
+				);
+			} else {
+				Remember_Logger::debug( 'Unconfirmed registration cleanup scheduled', array( 'hook' => self::CRON_HOOK ) );
+			}
 		}
 	}
 
@@ -80,7 +90,13 @@ class Remember_Registration_Verification {
 	 */
 	public static function start( $user_id ) {
 		$user_id = absint( $user_id );
-		update_user_meta( $user_id, self::META_SINCE, time() );
+		$now     = time();
+		if ( (int) get_user_meta( $user_id, self::META_SINCE, true ) !== $now && ! update_user_meta( $user_id, self::META_SINCE, $now ) ) {
+			Remember_Logger::error(
+				'New registration could not be marked as unconfirmed; the account can log in without confirming its email',
+				array( 'user_id' => $user_id )
+			);
+		}
 		return self::send_link( $user_id );
 	}
 
@@ -93,12 +109,25 @@ class Remember_Registration_Verification {
 	private static function send_link( $user_id ) {
 		$user = get_user_by( 'id', $user_id );
 		if ( ! $user instanceof WP_User ) {
+			Remember_Logger::warning( 'Registration confirmation email not sent: account not found', array( 'user_id' => $user_id ) );
 			return false;
 		}
 
 		$token = bin2hex( random_bytes( 16 ) );
-		update_user_meta( $user_id, self::META_HASH, hash( 'sha256', $token ) );
-		update_user_meta( $user_id, self::META_SENT, time() );
+		if ( ! update_user_meta( $user_id, self::META_HASH, hash( 'sha256', $token ) ) ) {
+			Remember_Logger::error(
+				'Registration confirmation email not sent: the confirmation key could not be saved',
+				array( 'user_id' => $user_id )
+			);
+			return false;
+		}
+		$sent_at = time();
+		if ( (int) get_user_meta( $user_id, self::META_SENT, true ) !== $sent_at && ! update_user_meta( $user_id, self::META_SENT, $sent_at ) ) {
+			Remember_Logger::warning(
+				'Registration confirmation send time could not be saved; the resend limit will not apply to this account',
+				array( 'user_id' => $user_id )
+			);
+		}
 
 		$url = add_query_arg(
 			array(
@@ -140,12 +169,26 @@ class Remember_Registration_Verification {
 			$url
 		);
 
-		$sent = wp_mail( $user->user_email, $mail['subject'], $mail['message'] );
+		$start = Remember_Logger::start_timer();
+		$sent  = wp_mail( $user->user_email, $mail['subject'], $mail['message'] );
 		if ( ! $sent ) {
-			require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
-			Remember_Logger::error( 'Registration confirmation email failed to send', array( 'user_id' => $user_id ) );
+			Remember_Logger::error(
+				'Registration confirmation email failed to send',
+				array(
+					'user_id'    => $user_id,
+					'elapsed_ms' => Remember_Logger::elapsed_ms( $start ),
+				)
+			);
+			return false;
 		}
-		return (bool) $sent;
+		Remember_Logger::debug(
+			'Registration confirmation email handed to wp_mail',
+			array(
+				'user_id'    => $user_id,
+				'elapsed_ms' => Remember_Logger::elapsed_ms( $start ),
+			)
+		);
+		return true;
 	}
 
 	/**
@@ -172,12 +215,24 @@ class Remember_Registration_Verification {
 	private static function confirm( $user_id, $key ) {
 		$stored = $user_id > 0 ? (string) get_user_meta( $user_id, self::META_HASH, true ) : '';
 		if ( '' !== $stored && self::is_pending( $user_id ) && hash_equals( $stored, hash( 'sha256', $key ) ) ) {
-			delete_user_meta( $user_id, self::META_SINCE );
+			if ( ! delete_user_meta( $user_id, self::META_SINCE ) ) {
+				Remember_Logger::error(
+					'Registration email confirmed, but the account could not be unlocked; it still cannot log in',
+					array( 'user_id' => $user_id )
+				);
+				wp_safe_redirect( add_query_arg( 'remember_email_verify', 'failed', wp_login_url() ) );
+				exit;
+			}
 			delete_user_meta( $user_id, self::META_HASH );
 			delete_user_meta( $user_id, self::META_SENT );
+			Remember_Logger::info( 'Registration email confirmed', array( 'user_id' => $user_id ) );
 			wp_safe_redirect( add_query_arg( 'remember_email_verify', 'done', wp_login_url() ) );
 			exit;
 		}
+		Remember_Logger::debug(
+			'Registration confirmation link refused: not valid, already used, or the account was removed',
+			array( 'user_id' => $user_id )
+		);
 		wp_safe_redirect( add_query_arg( 'remember_email_verify', 'invalid', wp_login_url() ) );
 		exit;
 	}
@@ -203,8 +258,23 @@ class Remember_Registration_Verification {
 		if ( $user_id > 0 && hash_equals( self::resend_key( $user_id ), $key ) && self::is_pending( $user_id ) ) {
 			$last = (int) get_user_meta( $user_id, self::META_SENT, true );
 			if ( time() - $last >= self::RESEND_WINDOW ) {
-				self::send_link( $user_id );
+				if ( self::send_link( $user_id ) ) {
+					Remember_Logger::info( 'Registration confirmation email sent again', array( 'user_id' => $user_id ) );
+				}
+			} else {
+				Remember_Logger::debug(
+					'Registration confirmation email not sent again: the last one was sent too recently',
+					array(
+						'user_id'         => $user_id,
+						'seconds_waiting' => self::RESEND_WINDOW - ( time() - $last ),
+					)
+				);
 			}
+		} else {
+			Remember_Logger::debug(
+				'Registration confirmation resend refused: link not valid or account already confirmed',
+				array( 'user_id' => $user_id )
+			);
 		}
 		wp_safe_redirect( add_query_arg( 'remember_email_verify', 'resent', wp_login_url() ) );
 		exit;
@@ -223,6 +293,8 @@ class Remember_Registration_Verification {
 		if ( ! $user instanceof WP_User || ! self::is_pending( $user->ID ) ) {
 			return $user;
 		}
+
+		Remember_Logger::debug( 'Login refused: email address not confirmed yet', array( 'user_id' => (int) $user->ID ) );
 
 		$resend = add_query_arg(
 			array(
@@ -257,6 +329,7 @@ class Remember_Registration_Verification {
 			'done'    => __( 'Your email address is confirmed. You can log in now.', 'remember' ),
 			'invalid' => __( 'That confirmation link is not valid or has expired. Log in to have a new one sent.', 'remember' ),
 			'resent'  => __( 'If that account is waiting for confirmation, a new email is on its way. It can take a few minutes.', 'remember' ),
+			'failed'  => __( 'Your email address could not be confirmed. Open the link in the email again in a few minutes.', 'remember' ),
 		);
 		if ( ! isset( $texts[ $state ] ) ) {
 			return $message;
@@ -272,10 +345,10 @@ class Remember_Registration_Verification {
 	public static function prune() {
 		require_once ABSPATH . 'wp-admin/includes/user.php';
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-image-uploader.php';
-		require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
 		global $wpdb;
 
-		$ids = get_users(
+		$start = Remember_Logger::start_timer();
+		$ids   = get_users(
 			array(
 				'meta_key'     => self::META_SINCE,
 				'meta_value'   => time() - ( self::EXPIRY_DAYS * DAY_IN_SECONDS ),
@@ -286,10 +359,17 @@ class Remember_Registration_Verification {
 			)
 		);
 
-		$removed = 0;
+		$removed       = 0;
+		$skipped_admin = 0;
+		$failed        = 0;
 		foreach ( $ids as $user_id ) {
 			$user_id = absint( $user_id );
 			if ( user_can( $user_id, 'manage_options' ) ) {
+				++$skipped_admin;
+				Remember_Logger::warning(
+					'Unconfirmed registration not removed: the account is an administrator',
+					array( 'user_id' => $user_id )
+				);
 				continue;
 			}
 
@@ -298,17 +378,44 @@ class Remember_Registration_Verification {
 				Remember_Image_Uploader::delete_image( $photo );
 			}
 			foreach ( array( 'remember_member_profiles', 'remember_member_dietary_restrictions', 'remember_member_allergies', 'remember_member_medical_accommodations', 'remember_member_social_media', 'remember_profile_question_responses', 'remember_profile_notes', 'remember_vetting_notes', 'remember_vetting' ) as $suffix ) {
-				$wpdb->delete( $wpdb->prefix . $suffix, array( 'member_id' => $user_id ), array( '%d' ) );
+				if ( false === $wpdb->delete( $wpdb->prefix . $suffix, array( 'member_id' => $user_id ), array( '%d' ) ) ) {
+					Remember_Logger::error(
+						'Unconfirmed registration data could not be deleted',
+						array(
+							'user_id'  => $user_id,
+							'table'    => $suffix,
+							'db_error' => $wpdb->last_error,
+						)
+					);
+				}
 			}
 
-			// The delete_user hook removes the reMember member row.
-			if ( wp_delete_user( $user_id ) ) {
+			// The delete_user hook removes the reMember member row. wp_delete_user() reports success even when its delete query fails.
+			if ( wp_delete_user( $user_id ) && ! get_user_by( 'id', $user_id ) ) {
 				++$removed;
+			} else {
+				++$failed;
+				Remember_Logger::error(
+					'Unconfirmed registration account could not be fully deleted; check this account under Users and delete it by hand',
+					array( 'user_id' => $user_id )
+				);
 			}
 		}
 
-		if ( $removed > 0 ) {
-			Remember_Logger::info( 'Removed unconfirmed registrations', array( 'count' => $removed ) );
+		$summary = array(
+			'found'         => count( $ids ),
+			'removed'       => $removed,
+			'skipped_admin' => $skipped_admin,
+			'failed'        => $failed,
+			'more_waiting'  => 200 === count( $ids ),
+			'elapsed_ms'    => Remember_Logger::elapsed_ms( $start ),
+		);
+		if ( empty( $ids ) ) {
+			Remember_Logger::debug( 'Unconfirmed registration cleanup finished: none were due', $summary );
+		} elseif ( $failed > 0 ) {
+			Remember_Logger::warning( 'Unconfirmed registration cleanup finished with failures', $summary );
+		} else {
+			Remember_Logger::info( 'Unconfirmed registration cleanup finished', $summary );
 		}
 		return $removed;
 	}

@@ -286,7 +286,7 @@ if ( isset( $_POST['remember_profile_action'] ) && check_admin_referer( 'remembe
 	}
 	
 	require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-notifications.php';
-	Remember_Notifications::save_staff_email_prefs_from_request( $user->ID );
+	$remember_prefs_saved = Remember_Notifications::save_staff_email_prefs_from_request( $user->ID );
 
 	// Save timezone to WP user meta (not member_profiles)
 	if ( isset( $_POST['timezone_string'] ) ) {
@@ -315,9 +315,14 @@ if ( isset( $_POST['remember_profile_action'] ) && check_admin_referer( 'remembe
 		wp_set_auth_cookie( $user->ID, true, is_ssl() );
 	}
 
-	// Redirect: stay on edit if photo failed so the member can retry.
-	if ( ! empty( $photo_error ) ) {
-		set_transient( 'remember_profile_photo_error_' . $user->ID, $photo_error, MINUTE_IN_SECONDS );
+	// Redirect: stay on edit if the photo or staff email choices failed so the member can retry.
+	if ( ! empty( $photo_error ) || ! $remember_prefs_saved ) {
+		if ( ! empty( $photo_error ) ) {
+			set_transient( 'remember_profile_photo_error_' . $user->ID, $photo_error, MINUTE_IN_SECONDS );
+		}
+		if ( ! $remember_prefs_saved ) {
+			set_transient( 'remember_profile_prefs_error_' . $user->ID, 1, MINUTE_IN_SECONDS );
+		}
 		wp_safe_redirect( Remember_Profile_Audit::with_return_args( add_query_arg( 'edit', '1' ) ) );
 		exit;
 	}
@@ -488,6 +493,10 @@ if ( $remember_sticky ) {
 		if ( $photo_error_notice ) {
 			delete_transient( 'remember_profile_photo_error_' . $user->ID );
 		}
+		$prefs_error_notice = get_transient( 'remember_profile_prefs_error_' . $user->ID );
+		if ( $prefs_error_notice ) {
+			delete_transient( 'remember_profile_prefs_error_' . $user->ID );
+		}
 		if ( '' === $profile_error ) {
 			$profile_error = isset( $_GET['remember_profile_error'] ) ? sanitize_text_field( wp_unslash( $_GET['remember_profile_error'] ) ) : '';
 		}
@@ -579,6 +588,11 @@ if ( $remember_sticky ) {
 		<?php if ( $photo_error_notice ) : ?>
 			<div class="remember-notice remember-error" role="alert">
 				<p><?php echo esc_html( $photo_error_notice ); ?></p>
+			</div>
+		<?php endif; ?>
+		<?php if ( $prefs_error_notice ) : ?>
+			<div class="remember-notice remember-error" role="alert">
+				<p><?php esc_html_e( 'Your profile was saved, but your staff email choices could not be. Check them below and save again.', 'remember' ); ?></p>
 			</div>
 		<?php endif; ?>
 		<form method="post" action="" class="remember-profile-form-modern" enctype="multipart/form-data">

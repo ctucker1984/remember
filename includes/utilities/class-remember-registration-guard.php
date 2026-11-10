@@ -14,6 +14,8 @@ if ( ! defined( 'WPINC' ) ) {
 	die;
 }
 
+require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
+
 /**
  * Public registration checks that run before an account is created.
  */
@@ -43,7 +45,6 @@ class Remember_Registration_Guard {
 		$count = get_transient( $key );
 		$count = false === $count ? 0 : (int) $count;
 		if ( $count >= $limit ) {
-			require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
 			Remember_Logger::warning( 'Public member registration: rate limited' );
 			Remember_Logger::debug( 'Public member registration: rate limited', array( 'ip' => $ip ) );
 			return 'rate_limited';
@@ -68,6 +69,7 @@ class Remember_Registration_Guard {
 		}
 		$blocked = apply_filters( 'remember_registration_disposable_email', false, $email, $domain );
 		if ( $blocked ) {
+			Remember_Logger::debug( 'Public member registration refused: email domain blocked', array( 'domain' => $domain ) );
 			return 'disposable_email';
 		}
 
@@ -87,15 +89,15 @@ class Remember_Registration_Guard {
 		if ( true === $pre || null === $pre ) {
 			return '';
 		}
+		$code = 'rejected';
 		if ( is_wp_error( $pre ) ) {
 			$code = sanitize_key( $pre->get_error_code() );
-			return '' !== $code ? $code : 'rejected';
-		}
-		if ( is_string( $pre ) && '' !== $pre ) {
+		} elseif ( is_string( $pre ) && '' !== $pre ) {
 			$code = sanitize_key( $pre );
-			return '' !== $code ? $code : 'rejected';
 		}
-		return 'rejected';
+		$code = '' !== $code ? $code : 'rejected';
+		Remember_Logger::debug( 'Public member registration refused by the remember_registration_pre_create filter', array( 'code' => $code ) );
+		return $code;
 	}
 
 	/**
@@ -120,11 +122,14 @@ class Remember_Registration_Guard {
 		if ( 'none' === $provider ) {
 			$options['registration_captcha_provider'] = 'none';
 			$options['registration_captcha_site_key'] = '';
-			delete_option( self::SECRET_OPTION );
+			if ( self::has_secret() && ! delete_option( self::SECRET_OPTION ) ) {
+				Remember_Logger::error( 'Registration CAPTCHA turned off, but the stored secret could not be deleted', array( 'user_id' => get_current_user_id() ) );
+			}
 			return '';
 		}
 
 		if ( '' === $site_key ) {
+			Remember_Logger::debug( 'Registration CAPTCHA not changed: no site key entered', array( 'provider' => $provider ) );
 			return 'site_key';
 		}
 
@@ -133,15 +138,27 @@ class Remember_Registration_Guard {
 		$existing      = get_option( self::SECRET_OPTION, '' );
 		$has_secret    = is_string( $existing ) && '' !== $existing;
 		if ( '' === $posted_secret && ! $has_secret ) {
+			Remember_Logger::debug( 'Registration CAPTCHA not changed: no secret key entered', array( 'provider' => $provider ) );
 			return 'secret';
 		}
 		if ( '' !== $posted_secret ) {
 			require_once plugin_dir_path( __FILE__ ) . 'class-remember-billing-crypto.php';
 			$sealed = Remember_Billing_Crypto::seal_site( $posted_secret );
 			if ( ! is_string( $sealed ) || '' === $sealed ) {
+				Remember_Logger::error( 'Registration CAPTCHA not changed: the secret could not be encrypted', array( 'provider' => $provider ) );
 				return 'seal';
 			}
-			update_option( self::SECRET_OPTION, $sealed, false );
+			if ( $sealed !== $existing && ! update_option( self::SECRET_OPTION, $sealed, false ) ) {
+				Remember_Logger::error( 'Registration CAPTCHA not changed: the secret could not be saved', array( 'provider' => $provider ) );
+				return 'seal';
+			}
+			Remember_Logger::info(
+				'Registration CAPTCHA secret replaced',
+				array(
+					'provider' => $provider,
+					'user_id'  => get_current_user_id(),
+				)
+			);
 		}
 
 		$options['registration_captcha_provider'] = $provider;
@@ -257,14 +274,24 @@ class Remember_Registration_Guard {
 		}
 		$secret = self::secret();
 		if ( '' === self::site_key() || '' === $secret ) {
+			Remember_Logger::error(
+				'Public member registration refused: CAPTCHA is turned on but its site key or secret is missing, so no one can register',
+				array(
+					'provider'     => $provider,
+					'has_site_key' => '' !== self::site_key(),
+					'has_secret'   => '' !== $secret,
+				)
+			);
 			return 'captcha_failed';
 		}
 		$field = 'turnstile' === $provider ? 'cf-turnstile-response' : 'h-captcha-response';
 		$token = isset( $_POST[ $field ] ) ? sanitize_text_field( wp_unslash( $_POST[ $field ] ) ) : '';
 		if ( '' === $token ) {
+			Remember_Logger::debug( 'Public member registration refused: CAPTCHA was not completed', array( 'provider' => $provider ) );
 			return 'captcha_failed';
 		}
 		$url      = 'turnstile' === $provider ? 'https://challenges.cloudflare.com/turnstile/v0/siteverify' : 'https://api.hcaptcha.com/siteverify';
+		$start    = Remember_Logger::start_timer();
 		$response = wp_remote_post(
 			$url,
 			array(
@@ -276,15 +303,32 @@ class Remember_Registration_Guard {
 				),
 			)
 		);
+		$call = 'turnstile' === $provider ? 'Turnstile siteverify' : 'hCaptcha siteverify';
 		if ( is_wp_error( $response ) ) {
-			require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
-			Remember_Logger::warning( 'Public member registration: CAPTCHA verify request failed' );
+			Remember_Logger::external_call_done( $call, $start, array( 'ok' => false ) );
+			Remember_Logger::warning(
+				'Public member registration: CAPTCHA verify request failed',
+				array(
+					'provider' => $provider,
+					'error'    => $response->get_error_message(),
+				)
+			);
 			return 'captcha_failed';
 		}
+		$status = (int) wp_remote_retrieve_response_code( $response );
+		Remember_Logger::external_call_done( $call, $start, array( 'status' => $status ) );
 		$body = wp_remote_retrieve_body( $response );
 		if ( ! self::interpret_verify_body( $body ) ) {
-			require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
-			Remember_Logger::warning( 'Public member registration: CAPTCHA rejected' );
+			$data  = json_decode( (string) $body, true );
+			$codes = is_array( $data ) && isset( $data['error-codes'] ) && is_array( $data['error-codes'] ) ? array_map( 'sanitize_key', $data['error-codes'] ) : array();
+			Remember_Logger::warning(
+				'Public member registration: CAPTCHA rejected',
+				array(
+					'provider'    => $provider,
+					'status'      => $status,
+					'error_codes' => $codes,
+				)
+			);
 			return 'captcha_failed';
 		}
 		return '';
@@ -300,7 +344,11 @@ class Remember_Registration_Guard {
 		}
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-billing-crypto.php';
 		$plain = Remember_Billing_Crypto::open_site( $stored );
-		return is_string( $plain ) ? $plain : '';
+		if ( ! is_string( $plain ) || '' === $plain ) {
+			Remember_Logger::error( 'Registration CAPTCHA secret could not be decrypted; enter it again under Settings', array( 'provider' => self::provider() ) );
+			return '';
+		}
+		return $plain;
 	}
 
 	/**
