@@ -19,8 +19,6 @@ require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remem
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-template.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-provider.php';
 
-Remember_Logger::debug( 'Payments page loaded' );
-
 $payment_model = new Remember_Payment();
 $application_model = new Remember_Application();
 $member_model = new Remember_Member();
@@ -36,6 +34,14 @@ if ( ! empty( $filter_status ) ) {
 } else {
 	$payments = $payment_model->get_all();
 }
+
+Remember_Logger::debug(
+	'Payments page loaded',
+	array(
+		'filter_status' => $filter_status,
+		'payments'      => is_array( $payments ) ? count( $payments ) : 0,
+	)
+);
 
 ?>
 

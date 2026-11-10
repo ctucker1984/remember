@@ -12,6 +12,7 @@ if ( ! defined( 'WPINC' ) ) {
 }
 
 require_once plugin_dir_path( __FILE__ ) . 'class-remember-base-model.php';
+require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-logger.php';
 
 /**
  * Payment model class.
@@ -49,8 +50,28 @@ class Remember_Payment extends Remember_Base_Model {
 		if ( ! isset( $data['amount_due'] ) ) {
 			$data['amount_due'] = $data['total_amount'] - ( isset( $data['amount_paid'] ) ? $data['amount_paid'] : 0 );
 		}
-		
-		return $this->insert( $data );
+
+		$payment_id = $this->insert( $data );
+		if ( ! $payment_id ) {
+			Remember_Logger::error(
+				'Failed to create payment row',
+				array(
+					'member_id'            => isset( $data['member_id'] ) ? (int) $data['member_id'] : 0,
+					'event_application_id' => isset( $data['event_application_id'] ) ? (int) $data['event_application_id'] : 0,
+					'error'                => $this->wpdb->last_error,
+				)
+			);
+			return false;
+		}
+		Remember_Logger::debug(
+			'Payment row created',
+			array(
+				'payment_id'           => (int) $payment_id,
+				'event_application_id' => isset( $data['event_application_id'] ) ? (int) $data['event_application_id'] : 0,
+				'total_amount'         => isset( $data['total_amount'] ) ? $data['total_amount'] : null,
+			)
+		);
+		return $payment_id;
 	}
 
 	/**
@@ -84,11 +105,27 @@ class Remember_Payment extends Remember_Base_Model {
 		
 		$result = parent::update( $payment_id, $data );
 		if ( false === $result ) {
+			Remember_Logger::error(
+				'Failed to update payment row',
+				array(
+					'payment_id' => (int) $payment_id,
+					'columns'    => array_keys( $data ),
+					'error'      => $this->wpdb->last_error,
+				)
+			);
 			return $result;
 		}
 
 		$after = $this->get( $payment_id );
 		if ( $before && $after && (string) $before->payment_status !== (string) $after->payment_status ) {
+			Remember_Logger::info(
+				'Payment status changed',
+				array(
+					'payment_id' => (int) $payment_id,
+					'from'       => (string) $before->payment_status,
+					'to'         => (string) $after->payment_status,
+				)
+			);
 			/**
 			 * Fires when a payment row's payment_status changes.
 			 *
@@ -162,6 +199,7 @@ class Remember_Payment extends Remember_Base_Model {
 	public function record_payment( $payment_id, $amount, $extra_data = array() ) {
 		$payment = $this->get( $payment_id );
 		if ( ! $payment ) {
+			Remember_Logger::warning( 'Payment not recorded: payment row not found', array( 'payment_id' => (int) $payment_id ) );
 			return false;
 		}
 

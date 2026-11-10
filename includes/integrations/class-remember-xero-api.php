@@ -211,19 +211,20 @@ class Remember_Xero_API {
 				return $response;
 			}
 
-			$status = (int) wp_remote_retrieve_response_code( $response );
-			Remember_Logger::debug(
-				'Xero API call',
-				array(
-					'method'     => $args['method'],
-					'path'       => $path,
-					'query'      => array_keys( (array) $query ),
-					'status'     => $status,
-					'elapsed_ms' => $elapsed,
-					'call'       => self::$request_count,
-					'retry'      => $retried,
-				)
+			$status       = (int) wp_remote_retrieve_response_code( $response );
+			$call_context = array(
+				'method'     => $args['method'],
+				'path'       => $path,
+				'query'      => array_keys( (array) $query ),
+				'status'     => $status,
+				'elapsed_ms' => $elapsed,
+				'call'       => self::$request_count,
+				'retry'      => $retried,
 			);
+			Remember_Logger::debug( 'Xero API call', $call_context );
+			if ( $elapsed > Remember_Logger::SLOW_EXTERNAL_MS ) {
+				Remember_Logger::warning( 'Slow external call: Xero API', $call_context );
+			}
 			if ( 429 !== $status ) {
 				if ( $retried ) {
 					Remember_Logger::info(
@@ -672,6 +673,7 @@ class Remember_Xero_API {
 		if ( ! empty( $result['Contacts'][0] ) && is_array( $result['Contacts'][0] ) ) {
 			return $result['Contacts'][0];
 		}
+		Remember_Logger::debug( 'Xero returned no contact for this ID', array( 'contact_id' => $contact_id ) );
 		return new WP_Error( 'xero_contact_not_found', __( 'Xero contact not found.', 'remember' ) );
 	}
 
@@ -817,6 +819,13 @@ class Remember_Xero_API {
 		if ( ! empty( $result['Contacts'][0] ) && is_array( $result['Contacts'][0] ) ) {
 			return $result['Contacts'][0];
 		}
+		Remember_Logger::error(
+			'Xero accepted a contact save but returned no contact',
+			array(
+				'contact_id'    => $contact_data['contact_id'] ?? '',
+				'response_keys' => array_keys( (array) $result ),
+			)
+		);
 		return new WP_Error( 'xero_contact_save_failed', __( 'Xero did not return a contact after save.', 'remember' ), $result );
 	}
 
@@ -877,7 +886,11 @@ class Remember_Xero_API {
 		$escaped = str_replace( '"', '""', $name );
 		$where   = 'Name=="' . $escaped . '"';
 		$result  = self::get_items( array( 'where' => $where ) );
-		if ( is_wp_error( $result ) || empty( $result[0] ) || ! is_array( $result[0] ) ) {
+		if ( is_wp_error( $result ) ) {
+			Remember_Logger::warning( 'Xero item search by name failed; treating it as no match', array( 'error' => $result->get_error_message() ) );
+			return null;
+		}
+		if ( empty( $result[0] ) || ! is_array( $result[0] ) ) {
 			return null;
 		}
 		return $result[0];
@@ -984,6 +997,13 @@ class Remember_Xero_API {
 		if ( ! empty( $result['Invoices'][0] ) && is_array( $result['Invoices'][0] ) ) {
 			return $result['Invoices'][0];
 		}
+		Remember_Logger::error(
+			'Xero accepted an invoice save but returned no invoice',
+			array(
+				'contact_id'    => $invoice_data['contact_id'] ?? '',
+				'response_keys' => array_keys( (array) $result ),
+			)
+		);
 		return new WP_Error( 'xero_invoice_save_failed', __( 'Xero did not return an invoice after save.', 'remember' ), $result );
 	}
 
@@ -1015,6 +1035,13 @@ class Remember_Xero_API {
 		// Refuse before touching credit allocations, so a refused void leaves the invoice as it was.
 		$amount_paid = isset( $invoice['AmountPaid'] ) ? floatval( $invoice['AmountPaid'] ) : 0.0;
 		if ( $amount_paid > 0.001 || ! empty( $invoice['Payments'] ) ) {
+			Remember_Logger::warning(
+				'Did not void the Xero invoice because a payment is applied',
+				array(
+					'invoice_id'  => $invoice_id,
+					'amount_paid' => $amount_paid,
+				)
+			);
 			return new WP_Error(
 				'xero_invoice_has_payment',
 				__( 'Xero will not void this invoice because a payment is applied. Remove that payment in Xero, or choose Refund instead of Void.', 'remember' )
@@ -1062,6 +1089,14 @@ class Remember_Xero_API {
 		if ( ! empty( $result['Invoices'][0] ) && is_array( $result['Invoices'][0] ) ) {
 			return $result['Invoices'][0];
 		}
+		Remember_Logger::error(
+			'Xero accepted an invoice status change but returned no invoice',
+			array(
+				'invoice_id'    => $invoice_id,
+				'status'        => $status,
+				'response_keys' => array_keys( (array) $result ),
+			)
+		);
 		return new WP_Error( 'xero_invoice_void_failed', __( 'Xero did not confirm the invoice void.', 'remember' ), $result );
 	}
 
@@ -1143,6 +1178,7 @@ class Remember_Xero_API {
 		if ( ! empty( $result['Invoices'][0] ) && is_array( $result['Invoices'][0] ) ) {
 			return $result['Invoices'][0];
 		}
+		Remember_Logger::debug( 'Xero returned no invoice for this ID', array( 'invoice_id' => $invoice_id ) );
 		return new WP_Error( 'xero_invoice_not_found', __( 'Xero invoice not found.', 'remember' ) );
 	}
 

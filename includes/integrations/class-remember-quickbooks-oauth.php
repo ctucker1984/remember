@@ -145,6 +145,7 @@ class Remember_QuickBooks_OAuth {
 	 * @return array|WP_Error Token data or error.
 	 */
 	public static function exchange_code_for_token( $code, $client_id, $client_secret, $redirect_uri ) {
+		$started  = Remember_Logger::start_timer();
 		$response = wp_remote_post(
 			self::QB_TOKEN_URL,
 			self::token_request_args(
@@ -156,6 +157,11 @@ class Remember_QuickBooks_OAuth {
 					'redirect_uri' => $redirect_uri,
 				)
 			)
+		);
+		Remember_Logger::external_call_done(
+			'QuickBooks authorization code exchange',
+			$started,
+			array( 'status' => is_wp_error( $response ) ? 0 : (int) wp_remote_retrieve_response_code( $response ) )
 		);
 
 		if ( is_wp_error( $response ) ) {
@@ -204,6 +210,7 @@ class Remember_QuickBooks_OAuth {
 	 * @return array|WP_Error Token data or error.
 	 */
 	public static function refresh_token( $refresh_token, $client_id, $client_secret ) {
+		$started  = Remember_Logger::start_timer();
 		$response = wp_remote_post(
 			self::QB_TOKEN_URL,
 			self::token_request_args(
@@ -215,15 +222,24 @@ class Remember_QuickBooks_OAuth {
 				)
 			)
 		);
+		$status_code = is_wp_error( $response ) ? 0 : (int) wp_remote_retrieve_response_code( $response );
+		Remember_Logger::external_call_done( 'QuickBooks token refresh', $started, array( 'status' => $status_code ) );
 
+		// The caller logs the failure as an Error with the message returned here.
 		if ( is_wp_error( $response ) ) {
 			return $response;
 		}
 
 		$body = json_decode( wp_remote_retrieve_body( $response ), true );
-		$status_code = (int) wp_remote_retrieve_response_code( $response );
 
 		if ( 200 !== $status_code ) {
+			Remember_Logger::debug(
+				'QuickBooks token refresh rejected',
+				array(
+					'status' => $status_code,
+					'error'  => is_array( $body ) && ! empty( $body['error'] ) ? (string) $body['error'] : '',
+				)
+			);
 			return new WP_Error(
 				'qb_refresh_error',
 				is_array( $body ) && ! empty( $body['error_description'] ) ? (string) $body['error_description'] : __( 'Failed to refresh access token.', 'remember' ),
@@ -247,9 +263,15 @@ class Remember_QuickBooks_OAuth {
 	 * @return bool|WP_Error True on success, error on failure.
 	 */
 	public static function revoke_token( $token, $client_id, $client_secret ) {
+		$started  = Remember_Logger::start_timer();
 		$response = wp_remote_post(
 			self::QB_REVOKE_URL,
 			self::token_request_args( $client_id, $client_secret, array( 'token' => $token ) )
+		);
+		Remember_Logger::external_call_done(
+			'QuickBooks token revoke',
+			$started,
+			array( 'status' => is_wp_error( $response ) ? 0 : (int) wp_remote_retrieve_response_code( $response ) )
 		);
 
 		if ( is_wp_error( $response ) ) {
@@ -356,7 +378,14 @@ class Remember_QuickBooks_OAuth {
 			array( '%s' )
 		);
 
-		return $result !== false;
+		if ( false === $result ) {
+			Remember_Logger::error(
+				'Failed to save QuickBooks connection settings; a refreshed token may be lost and QuickBooks may need reconnecting',
+				array( 'error' => $wpdb->last_error )
+			);
+			return false;
+		}
+		return true;
 	}
 
 	/**

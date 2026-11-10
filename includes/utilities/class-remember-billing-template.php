@@ -76,6 +76,13 @@ class Remember_Billing_Template {
 
 		$lines = json_decode( (string) $json, true );
 		if ( ! is_array( $lines ) ) {
+			Remember_Logger::warning(
+				'Stored refund lines could not be read; showing no credit for this invoice until the next billing sync',
+				array(
+					'payment_id' => isset( $payment->payment_id ) ? (int) $payment->payment_id : 0,
+					'error'      => json_last_error_msg(),
+				)
+			);
 			return 0.0;
 		}
 

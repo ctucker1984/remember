@@ -200,13 +200,6 @@ if ( isset( $_POST['remember_application_action'] ) && check_admin_referer( 'rem
 							echo Remember_Xero_Sync::credit_apply_admin_notices(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- notices are escaped in the helper.
 							$email_invoice = Remember_Xero_Sync::invoice_email_held() ? null : Remember_Billing_Provider::email_invoice_for_application( $application_id );
 							if ( is_wp_error( $email_invoice ) ) {
-								Remember_Logger::warning(
-									'Xero invoice email failed after accept',
-									array(
-										'application_id' => $application_id,
-										'error'          => $email_invoice->get_error_message(),
-									)
-								);
 								echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html__( 'Invoice created, but Xero could not email it to the customer: ', 'remember' ) . esc_html( $email_invoice->get_error_message() ) . '</p></div>';
 							} elseif ( true === $email_invoice ) {
 								echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Xero invoice emailed to the customer.', 'remember' ) . '</p></div>';
@@ -230,13 +223,6 @@ if ( isset( $_POST['remember_application_action'] ) && check_admin_referer( 'rem
 							echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Application accepted and QuickBooks invoice created successfully.', 'remember' ) . '</p></div>';
 							$email_invoice = Remember_Billing_Provider::email_invoice_for_application( $application_id );
 							if ( is_wp_error( $email_invoice ) ) {
-								Remember_Logger::warning(
-									'QuickBooks invoice email failed after accept',
-									array(
-										'application_id' => $application_id,
-										'error'          => $email_invoice->get_error_message(),
-									)
-								);
 								echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html__( 'Invoice created, but QuickBooks could not email it to the customer: ', 'remember' ) . esc_html( $email_invoice->get_error_message() ) . '</p></div>';
 							} elseif ( true === $email_invoice ) {
 								echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'QuickBooks invoice emailed to the customer.', 'remember' ) . '</p></div>';

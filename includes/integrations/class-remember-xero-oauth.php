@@ -11,6 +11,8 @@ if ( ! defined( 'WPINC' ) ) {
 	die;
 }
 
+require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-logger.php';
+
 /**
  * Xero OAuth 2.0 authentication (parallel to Remember_QuickBooks_OAuth).
  *
@@ -206,6 +208,7 @@ class Remember_Xero_OAuth {
 			$body['code_verifier'] = $code_verifier;
 		}
 
+		$started  = Remember_Logger::start_timer();
 		$response = wp_remote_post(
 			self::TOKEN_URL,
 			array(
@@ -221,14 +224,16 @@ class Remember_Xero_OAuth {
 				'sslverify'   => true,
 			)
 		);
+		$status_code = is_wp_error( $response ) ? 0 : (int) wp_remote_retrieve_response_code( $response );
+		Remember_Logger::external_call_done( 'Xero authorization code exchange', $started, array( 'status' => $status_code ) );
 
 		if ( is_wp_error( $response ) ) {
+			Remember_Logger::error( 'Xero authorization code exchange could not be sent', array( 'error' => $response->get_error_message() ) );
 			return $response;
 		}
 
-		$raw_body    = wp_remote_retrieve_body( $response );
-		$body        = json_decode( $raw_body, true );
-		$status_code = (int) wp_remote_retrieve_response_code( $response );
+		$raw_body = wp_remote_retrieve_body( $response );
+		$body     = json_decode( $raw_body, true );
 
 		if ( 200 !== $status_code ) {
 			$message = sprintf(
@@ -245,7 +250,6 @@ class Remember_Xero_OAuth {
 			} elseif ( 403 === $status_code ) {
 				$message = __( 'Xero blocked the token request (HTTP 403). The identity host often rejects WordPress’s default user-agent.', 'remember' );
 			}
-			require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-logger.php';
 			Remember_Logger::error(
 				'Xero authorization code exchange failed',
 				array(
@@ -256,7 +260,11 @@ class Remember_Xero_OAuth {
 			return new WP_Error( 'xero_oauth_error', $message, $body );
 		}
 
-		return is_array( $body ) ? $body : new WP_Error( 'xero_oauth_error', __( 'Invalid token response from Xero.', 'remember' ) );
+		if ( ! is_array( $body ) ) {
+			Remember_Logger::error( 'Xero authorization code exchange returned an unreadable response', array( 'status' => $status_code ) );
+			return new WP_Error( 'xero_oauth_error', __( 'Invalid token response from Xero.', 'remember' ) );
+		}
+		return $body;
 	}
 
 	/**
@@ -268,6 +276,7 @@ class Remember_Xero_OAuth {
 	 * @return array|WP_Error Token data or error.
 	 */
 	public static function refresh_token( $refresh_token, $client_id, $client_secret ) {
+		$started  = Remember_Logger::start_timer();
 		$response = wp_remote_post(
 			self::TOKEN_URL,
 			array(
@@ -287,12 +296,15 @@ class Remember_Xero_OAuth {
 			)
 		);
 
+		$status_code = is_wp_error( $response ) ? 0 : (int) wp_remote_retrieve_response_code( $response );
+		Remember_Logger::external_call_done( 'Xero token refresh', $started, array( 'status' => $status_code ) );
+
 		if ( is_wp_error( $response ) ) {
+			Remember_Logger::error( 'Xero token refresh could not be sent', array( 'error' => $response->get_error_message() ) );
 			return $response;
 		}
 
-		$body        = json_decode( wp_remote_retrieve_body( $response ), true );
-		$status_code = wp_remote_retrieve_response_code( $response );
+		$body = json_decode( wp_remote_retrieve_body( $response ), true );
 
 		if ( 200 !== $status_code ) {
 			$message = __( 'Failed to refresh Xero access token. Reconnect Xero in Settings.', 'remember' );
@@ -305,18 +317,21 @@ class Remember_Xero_OAuth {
 			} elseif ( 403 === (int) $status_code ) {
 				$message = __( 'Xero blocked the token refresh (HTTP 403). The identity host often rejects WordPress’s default user-agent.', 'remember' );
 			}
-			require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-logger.php';
 			Remember_Logger::error(
 				'Xero token refresh failed',
 				array(
-					'status' => (int) $status_code,
+					'status' => $status_code,
 					'error'  => is_array( $body ) && ! empty( $body['error'] ) ? (string) $body['error'] : '',
 				)
 			);
 			return new WP_Error( 'xero_refresh_error', $message, $body );
 		}
 
-		return is_array( $body ) ? $body : new WP_Error( 'xero_refresh_error', __( 'Invalid refresh response from Xero.', 'remember' ) );
+		if ( ! is_array( $body ) ) {
+			Remember_Logger::error( 'Xero token refresh returned an unreadable response', array( 'status' => $status_code ) );
+			return new WP_Error( 'xero_refresh_error', __( 'Invalid refresh response from Xero.', 'remember' ) );
+		}
+		return $body;
 	}
 
 	/**
@@ -328,6 +343,7 @@ class Remember_Xero_OAuth {
 	 * @return bool|WP_Error True on success, error on failure.
 	 */
 	public static function revoke_token( $token, $client_id, $client_secret ) {
+		$started  = Remember_Logger::start_timer();
 		$response = wp_remote_post(
 			self::REVOKE_URL,
 			array(
@@ -345,13 +361,19 @@ class Remember_Xero_OAuth {
 			)
 		);
 
+		$status_code = is_wp_error( $response ) ? 0 : (int) wp_remote_retrieve_response_code( $response );
+		Remember_Logger::external_call_done( 'Xero token revoke', $started, array( 'status' => $status_code ) );
+
 		if ( is_wp_error( $response ) ) {
+			Remember_Logger::warning( 'Xero token revoke could not be sent', array( 'error' => $response->get_error_message() ) );
 			return $response;
 		}
 
-		$status_code = wp_remote_retrieve_response_code( $response );
-
-		return ( $status_code >= 200 && $status_code < 300 );
+		if ( $status_code < 200 || $status_code >= 300 ) {
+			Remember_Logger::warning( 'Xero token revoke failed', array( 'status' => $status_code ) );
+			return false;
+		}
+		return true;
 	}
 
 	/**
@@ -370,6 +392,7 @@ class Remember_Xero_OAuth {
 		 * Do not overwrite CURLOPT_HTTPHEADER wholesale — that can strip User-Agent and
 		 * trigger Akamai "Access Denied" (HTTP 403 HTML) in front of api.xero.com.
 		 */
+		$started  = Remember_Logger::start_timer();
 		$response = wp_remote_get(
 			self::CONNECTIONS_URL,
 			array(
@@ -384,8 +407,14 @@ class Remember_Xero_OAuth {
 				'sslverify'   => true,
 			)
 		);
+		Remember_Logger::external_call_done(
+			'Xero GET connections',
+			$started,
+			array( 'status' => is_wp_error( $response ) ? 0 : (int) wp_remote_retrieve_response_code( $response ) )
+		);
 
 		if ( is_wp_error( $response ) ) {
+			Remember_Logger::error( 'Xero connections request could not be sent', array( 'error' => $response->get_error_message() ) );
 			return new WP_Error(
 				'xero_connections_error',
 				sprintf(
@@ -423,6 +452,13 @@ class Remember_Xero_OAuth {
 			if ( $detail ) {
 				$message .= ' ' . $detail;
 			}
+			Remember_Logger::error(
+				'Xero connections request failed',
+				array(
+					'status' => $status_code,
+					'detail' => $detail,
+				)
+			);
 
 			return new WP_Error(
 				'xero_connections_error',
@@ -472,6 +508,7 @@ class Remember_Xero_OAuth {
 
 		$settings = ! empty( $processor->settings ) ? json_decode( $processor->settings, true ) : array();
 		if ( ! is_array( $settings ) ) {
+			Remember_Logger::error( 'Xero settings could not be decoded; treating as not configured' );
 			$settings = array();
 		}
 
@@ -536,7 +573,14 @@ class Remember_Xero_OAuth {
 			array( '%s' )
 		);
 
-		return false !== $result;
+		if ( false === $result ) {
+			Remember_Logger::error(
+				'Failed to save Xero connection settings; a refreshed token may be lost and Xero may need reconnecting',
+				array( 'error' => $wpdb->last_error )
+			);
+			return false;
+		}
+		return true;
 	}
 
 	/**

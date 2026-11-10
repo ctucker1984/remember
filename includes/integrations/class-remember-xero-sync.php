@@ -419,6 +419,7 @@ class Remember_Xero_Sync {
 		$product_model = new Remember_Product();
 		$catalog       = $product_model->get_by_name( $merchandise_name );
 		if ( ! $catalog || (int) $catalog->is_active !== 1 ) {
+			Remember_Logger::warning( 'Add-on is not an active catalog product; no Xero item to invoice', array( 'name' => $merchandise_name ) );
 			return new WP_Error(
 				'catalog_product_missing',
 				sprintf(
@@ -452,7 +453,25 @@ class Remember_Xero_Sync {
 		if ( is_array( $matched ) && ! empty( $matched['ItemID'] ) ) {
 			$item_id   = $matched['ItemID'];
 			$item_name = isset( $matched['Name'] ) ? $matched['Name'] : $fallback_name;
-			$mapping_model->upsert( $entity_type, $entity_id, $item_id, $item_name );
+			if ( $mapping_model->upsert( $entity_type, $entity_id, $item_id, $item_name ) ) {
+				Remember_Logger::info(
+					'Mapped to a Xero item with the same name',
+					array(
+						'entity_type'  => $entity_type,
+						'entity_id'    => $entity_id,
+						'xero_item_id' => $item_id,
+					)
+				);
+			} else {
+				Remember_Logger::warning(
+					'Found a Xero item with the same name but could not save the mapping; it will be searched again next time',
+					array(
+						'entity_type'  => $entity_type,
+						'entity_id'    => $entity_id,
+						'xero_item_id' => $item_id,
+					)
+				);
+			}
 			return $item_id;
 		}
 
@@ -891,7 +910,17 @@ class Remember_Xero_Sync {
 			return null;
 		}
 		$notes = Remember_Xero_API::get_open_credit_notes( $contact_id );
-		if ( is_wp_error( $notes ) || empty( $notes ) ) {
+		if ( is_wp_error( $notes ) ) {
+			Remember_Logger::warning(
+				'Could not read open Xero credit; treating the member as having none',
+				array(
+					'member_id' => $member_id,
+					'error'     => $notes->get_error_message(),
+				)
+			);
+			return null;
+		}
+		if ( empty( $notes ) ) {
 			return null;
 		}
 		$total = 0.0;
@@ -1090,6 +1119,7 @@ class Remember_Xero_Sync {
 			return $item;
 		}
 		if ( empty( $item['Code'] ) ) {
+			Remember_Logger::warning( 'Mapped Xero item has no Code, so it cannot be put on an invoice', array( 'xero_item_id' => $item_id ) );
 			return new WP_Error( 'xero_item_no_code', __( 'Xero item is missing a Code.', 'remember' ) );
 		}
 
@@ -1471,6 +1501,7 @@ class Remember_Xero_Sync {
 			return $results;
 		}
 
+		$started      = Remember_Logger::start_timer();
 		$calls_before = Remember_Xero_API::request_count();
 		Remember_Logger::debug( 'Xero payment re-check started', array( 'rows' => count( $payments ) ) );
 
@@ -1479,8 +1510,9 @@ class Remember_Xero_Sync {
 			Remember_Logger::warning(
 				'Xero payment re-check stopped: rate limit reached while fetching invoices',
 				array(
-					'rows'  => count( $payments ),
-					'error' => $invoices->get_error_message(),
+					'rows'       => count( $payments ),
+					'error'      => $invoices->get_error_message(),
+					'elapsed_ms' => Remember_Logger::elapsed_ms( $started ),
 				)
 			);
 			$results['error']    = count( $payments );
@@ -1554,6 +1586,7 @@ class Remember_Xero_Sync {
 			'cancelled'  => $outcomes['cancelled'],
 			'errors'     => $results['error'],
 			'xero_calls' => Remember_Xero_API::request_count() - $calls_before,
+			'elapsed_ms' => Remember_Logger::elapsed_ms( $started ),
 		);
 		if ( $results['error'] > 0 ) {
 			Remember_Logger::warning( 'Xero payment re-check finished with errors', $summary );
@@ -1581,13 +1614,16 @@ class Remember_Xero_Sync {
 
 		$results = self::sync_payment_rows( is_array( $payments ) ? $payments : array() );
 
-		$wpdb->update(
+		$stamped = $wpdb->update(
 			$wpdb->prefix . 'remember_payment_processors',
 			array( 'last_sync_at' => current_time( 'mysql' ) ),
 			array( 'processor_type' => 'xero' ),
 			array( '%s' ),
 			array( '%s' )
 		);
+		if ( false === $stamped ) {
+			Remember_Logger::warning( 'Could not save the Xero last sync time; the next scheduled run will sync again', array( 'error' => $wpdb->last_error ) );
+		}
 
 		return $results;
 	}

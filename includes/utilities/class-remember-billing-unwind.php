@@ -75,6 +75,7 @@ class Remember_Billing_Unwind {
 		Remember_Ticket::set_voided( $application_id, true );
 
 		if ( 'leave' === $billing_action ) {
+			Remember_Logger::debug( 'Billing action: invoice left unaltered', array( 'application_id' => $application_id ) );
 			return true;
 		}
 
@@ -82,14 +83,35 @@ class Remember_Billing_Unwind {
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-billing-provider.php';
 		$payment = ( new Remember_Payment() )->get_by_application( $application_id );
 		if ( ! $payment ) {
+			Remember_Logger::debug( 'Billing action skipped: no payment row for application', array( 'application_id' => $application_id ) );
 			return true;
 		}
 
+		$provider = '';
 		if ( Remember_Billing_Provider::is_xero() && ! empty( $payment->xero_invoice_id ) ) {
-			return self::apply_xero( $payment, $billing_action, $reason );
+			$provider = 'xero';
+			$result   = self::apply_xero( $payment, $billing_action, $reason );
+		} elseif ( Remember_Billing_Provider::is_quickbooks() && ! empty( $payment->quickbooks_invoice_id ) ) {
+			$provider = 'quickbooks';
+			$result   = self::apply_quickbooks( $payment, $billing_action, $reason );
 		}
-		if ( Remember_Billing_Provider::is_quickbooks() && ! empty( $payment->quickbooks_invoice_id ) ) {
-			return self::apply_quickbooks( $payment, $billing_action, $reason );
+		if ( '' !== $provider ) {
+			if ( is_wp_error( $result ) && 'refund_manual' !== $result->get_error_code() ) {
+				$context = array(
+					'payment_id'     => $payment->payment_id,
+					'application_id' => $application_id,
+					'provider'       => $provider,
+					'billing_action' => $billing_action,
+					'code'           => $result->get_error_code(),
+					'error'          => $result->get_error_message(),
+				);
+				if ( in_array( $result->get_error_code(), array( 'qb_invoice_has_payment', 'xero_invoice_has_payment' ), true ) ) {
+					Remember_Logger::warning( 'Billing action refused: a payment is applied to the invoice', $context );
+				} else {
+					Remember_Logger::error( 'Billing action failed; the invoice was not changed', $context );
+				}
+			}
+			return $result;
 		}
 
 		if ( ! empty( $payment->xero_invoice_id ) || ! empty( $payment->quickbooks_invoice_id ) ) {

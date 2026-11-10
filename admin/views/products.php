@@ -12,6 +12,9 @@ if ( ! defined( 'WPINC' ) ) {
 }
 
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-product.php';
+require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-logger.php';
+
+global $wpdb;
 
 $product_model = new Remember_Product();
 
@@ -49,7 +52,7 @@ if ( isset( $_POST['remember_products_action'] ) && check_admin_referer( 'rememb
 			$existing = $product_model->get_by_name( $product_name );
 			if ( $existing ) {
 				if ( 0 === (int) $existing->is_active ) {
-					$product_model->update(
+					$restored = $product_model->update(
 						$existing->product_id,
 						array(
 							'description'    => $product_description,
@@ -59,6 +62,17 @@ if ( isset( $_POST['remember_products_action'] ) && check_admin_referer( 'rememb
 							'updated_at'       => current_time( 'mysql' ),
 						)
 					);
+					if ( false === $restored ) {
+						Remember_Logger::error(
+							'Failed to restore product',
+							array(
+								'product_id' => (int) $existing->product_id,
+								'error'      => $wpdb->last_error,
+							)
+						);
+					} else {
+						Remember_Logger::info( 'Product restored from inactive status', array( 'product_id' => (int) $existing->product_id ) );
+					}
 					echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Product restored from inactive status.', 'remember' ) . '</p></div>';
 				} else {
 					echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html__( 'That product already exists.', 'remember' ) . '</p></div>';
@@ -76,8 +90,10 @@ if ( isset( $_POST['remember_products_action'] ) && check_admin_referer( 'rememb
 					)
 				);
 				if ( $created ) {
+					Remember_Logger::info( 'Product added', array( 'product_id' => (int) $created ) );
 					echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Product added successfully.', 'remember' ) . '</p></div>';
 				} else {
+					Remember_Logger::error( 'Failed to add product', array( 'error' => $product_model->get_last_error() ) );
 					echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to add product.', 'remember' ) . '</p></div>';
 				}
 			}
@@ -101,21 +117,49 @@ if ( isset( $_POST['remember_products_action'] ) && check_admin_referer( 'rememb
 				)
 			);
 			if ( false !== $result ) {
+				Remember_Logger::info( 'Product updated', array( 'product_id' => $product_id ) );
 				echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Product updated.', 'remember' ) . '</p></div>';
 			} else {
+				Remember_Logger::error(
+					'Failed to update product',
+					array(
+						'product_id' => $product_id,
+						'error'      => $wpdb->last_error,
+					)
+				);
 				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to update product.', 'remember' ) . '</p></div>';
 			}
 		}
 	} elseif ( 'deactivate_product' === $action ) {
 		$product_id = isset( $_POST['product_id'] ) ? absint( $_POST['product_id'] ) : 0;
 		if ( $product_id > 0 ) {
-			$product_model->deactivate( $product_id );
+			if ( false === $product_model->deactivate( $product_id ) ) {
+				Remember_Logger::error(
+					'Failed to archive product',
+					array(
+						'product_id' => $product_id,
+						'error'      => $wpdb->last_error,
+					)
+				);
+			} else {
+				Remember_Logger::info( 'Product archived', array( 'product_id' => $product_id ) );
+			}
 			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Product archived (soft-deleted).', 'remember' ) . '</p></div>';
 		}
 	} elseif ( 'reactivate_product' === $action ) {
 		$product_id = isset( $_POST['product_id'] ) ? absint( $_POST['product_id'] ) : 0;
 		if ( $product_id > 0 ) {
-			$product_model->reactivate( $product_id );
+			if ( false === $product_model->reactivate( $product_id ) ) {
+				Remember_Logger::error(
+					'Failed to reactivate product',
+					array(
+						'product_id' => $product_id,
+						'error'      => $wpdb->last_error,
+					)
+				);
+			} else {
+				Remember_Logger::info( 'Product reactivated', array( 'product_id' => $product_id ) );
+			}
 			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Product reactivated.', 'remember' ) . '</p></div>';
 		}
 	}
