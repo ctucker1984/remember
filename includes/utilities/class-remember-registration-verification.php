@@ -344,8 +344,6 @@ class Remember_Registration_Verification {
 	 */
 	public static function prune() {
 		require_once ABSPATH . 'wp-admin/includes/user.php';
-		require_once plugin_dir_path( __FILE__ ) . 'class-remember-image-uploader.php';
-		global $wpdb;
 
 		$start = Remember_Logger::start_timer();
 		$ids   = get_users(
@@ -373,24 +371,7 @@ class Remember_Registration_Verification {
 				continue;
 			}
 
-			$photo = $wpdb->get_var( $wpdb->prepare( "SELECT photo_url FROM {$wpdb->prefix}remember_members WHERE member_id = %d", $user_id ) );
-			if ( is_string( $photo ) && '' !== $photo ) {
-				Remember_Image_Uploader::delete_image( $photo );
-			}
-			foreach ( array( 'remember_member_profiles', 'remember_member_dietary_restrictions', 'remember_member_allergies', 'remember_member_medical_accommodations', 'remember_member_social_media', 'remember_profile_question_responses', 'remember_profile_notes', 'remember_vetting_notes', 'remember_vetting' ) as $suffix ) {
-				if ( false === $wpdb->delete( $wpdb->prefix . $suffix, array( 'member_id' => $user_id ), array( '%d' ) ) ) {
-					Remember_Logger::error(
-						'Unconfirmed registration data could not be deleted',
-						array(
-							'user_id'  => $user_id,
-							'table'    => $suffix,
-							'db_error' => $wpdb->last_error,
-						)
-					);
-				}
-			}
-
-			// The delete_user hook removes the reMember member row. wp_delete_user() reports success even when its delete query fails.
+			// The deleted_user hook removes the photo and the member's reMember data. wp_delete_user() reports success even when its delete query fails.
 			if ( wp_delete_user( $user_id ) && ! get_user_by( 'id', $user_id ) ) {
 				++$removed;
 			} else {

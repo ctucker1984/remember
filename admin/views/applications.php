@@ -163,7 +163,7 @@ if ( isset( $_POST['remember_application_action'] ) && check_admin_referer( 'rem
 						$event = $event_model->get( $application->event_id );
 						$member = $member_model->get( $application->member_id );
 						$user = $member ? get_user_by( 'ID', $member->member_id ) : null;
-						$member_name = $user ? $user->display_name : __( 'Unknown Member', 'remember' );
+						$member_name = $user ? $user->display_name : __( 'Deleted member', 'remember' );
 						$event_name = $event ? $event->event_name : __( 'Unknown Event', 'remember' );
 						$role_name = $event_role && ! empty( $event_role->role_name ) ? $event_role->role_name : __( 'Event Role', 'remember' );
 
@@ -978,7 +978,7 @@ $status_tones = array(
 					$event      = isset( $app_events[ (int) $application->event_id ] ) ? $app_events[ (int) $application->event_id ] : null;
 					$user       = isset( $app_users[ (int) $application->member_id ] ) ? $app_users[ (int) $application->member_id ] : null;
 					$event_role = isset( $app_roles[ (int) $application->event_role_id ] ) ? $app_roles[ (int) $application->event_role_id ] : null;
-					$row_member_name = $user ? $user->display_name : __( 'Unknown Member', 'remember' );
+					$row_member_name = $user ? $user->display_name : __( 'Deleted member', 'remember' );
 					$application_payment = $payment_model->get_by_application( $application->application_id );
 					$billing_label = __( 'Not invoiced', 'remember' );
 					$billing_tone  = 'muted';

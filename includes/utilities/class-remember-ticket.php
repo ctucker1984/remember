@@ -374,7 +374,7 @@ class Remember_Ticket {
 	 */
 	private static function attendee_name( $user ) {
 		if ( ! $user ) {
-			return __( 'Unknown Member', 'remember' );
+			return __( 'Deleted member', 'remember' );
 		}
 
 		global $wpdb;

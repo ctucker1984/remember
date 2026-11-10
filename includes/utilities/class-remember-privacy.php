@@ -207,6 +207,89 @@ class Remember_Privacy {
 			);
 		}
 
+		$result   = self::erase_member( $member_id );
+		$removed  = $result['removed'];
+		$retained = $result['retained'];
+		$messages = $result['messages'];
+
+		$context = array(
+			'member_id'  => $member_id,
+			'removed'    => $removed,
+			'retained'   => $retained,
+			'elapsed_ms' => Remember_Logger::elapsed_ms( $start ),
+		);
+		if ( ! empty( self::$failed ) ) {
+			$retained   = true;
+			$messages[] = sprintf(
+				/* translators: %s: comma-separated list of what could not be erased */
+				__( 'Some reMember data could not be erased (%s). Run the erase request again.', 'remember' ),
+				implode( ', ', array_keys( self::$failed ) )
+			);
+			$context['retained'] = true;
+			$context['failed']   = self::$failed;
+			Remember_Logger::error( 'Personal data erase incomplete: some reMember data could not be erased', $context );
+		} else {
+			Remember_Logger::info( 'Personal data erased', $context );
+		}
+
+		return array(
+			'items_removed'  => $removed,
+			'items_retained' => $retained,
+			'messages'       => $messages,
+			'done'           => true,
+		);
+	}
+
+	/**
+	 * Remove a member's reMember data when their WordPress account is deleted.
+	 *
+	 * Follows erase(): payments, applications and agreement acceptances stay with their personal fields removed.
+	 * The profile, reMember roles, the member's vetting cases and any vetting cases they were invited to help on are deleted as well.
+	 * The member row itself is left to the caller.
+	 *
+	 * @param int $member_id Member ID, the same as the WordPress user ID.
+	 * @return bool Whether everything was removed.
+	 */
+	public static function remove_deleted_member( $member_id ) {
+		global $wpdb;
+		$member_id    = absint( $member_id );
+		$start        = Remember_Logger::start_timer();
+		self::$failed = array();
+
+		$result = self::erase_member( $member_id );
+
+		$collaborators = $wpdb->query(
+			$wpdb->prepare(
+				'DELETE c FROM ' . self::table( 'remember_vetting_collaborators' ) . ' c INNER JOIN ' . self::table( 'remember_vetting' ) . ' v ON v.vetting_id = c.vetting_id WHERE v.member_id = %d',
+				$member_id
+			)
+		);
+		if ( false === $collaborators ) {
+			self::query_failed( 'vetting collaborators' );
+		}
+		self::delete_member_rows( $member_id, array( 'remember_vetting', 'remember_vetting_collaborators', 'remember_member_roles', 'remember_member_profiles' ) );
+
+		$context = array(
+			'member_id'  => $member_id,
+			'retained'   => $result['retained'],
+			'elapsed_ms' => Remember_Logger::elapsed_ms( $start ),
+		);
+		if ( ! empty( self::$failed ) ) {
+			$context['failed'] = self::$failed;
+			Remember_Logger::error( 'reMember data for a deleted WordPress account could not all be removed', $context );
+			return false;
+		}
+		Remember_Logger::info( 'reMember data removed with the WordPress account', $context );
+		return true;
+	}
+
+	/**
+	 * Erase steps shared by a privacy erase request and account deletion. Failures are collected in self::$failed.
+	 *
+	 * @param int $member_id Member ID.
+	 * @return array{removed:bool,retained:bool,messages:string[]}
+	 */
+	private static function erase_member( $member_id ) {
 		$removed  = false;
 		$retained = false;
 		$messages = array();
@@ -217,7 +300,10 @@ class Remember_Privacy {
 		if ( self::blank_profile( $member_id ) ) {
 			$removed = true;
 		}
-		if ( self::delete_member_rows( $member_id, array( 'remember_member_dietary_restrictions', 'remember_member_allergies', 'remember_member_medical_accommodations', 'remember_member_social_media', 'remember_profile_question_responses', 'remember_profile_notes', 'remember_vetting_notes', 'remember_sensitive_access_log', 'remember_event_invites' ) ) ) {
+		if ( self::delete_member_rows( $member_id, array( 'remember_member_dietary_restrictions', 'remember_member_allergies', 'remember_member_medical_accommodations', 'remember_member_social_media', 'remember_profile_question_responses', 'remember_profile_notes', 'remember_sensitive_access_log', 'remember_event_invites' ) ) ) {
+			$removed = true;
+		}
+		if ( self::delete_vetting_notes_about( $member_id ) ) {
 			$removed = true;
 		}
 		if ( self::delete_survey_answers( $member_id ) ) {
@@ -251,31 +337,10 @@ class Remember_Privacy {
 			$messages[] = __( 'Duplicate-profile review records were kept. Stored copies of the profile were removed.', 'remember' );
 		}
 
-		$context = array(
-			'member_id'  => $member_id,
-			'removed'    => $removed,
-			'retained'   => $retained,
-			'elapsed_ms' => Remember_Logger::elapsed_ms( $start ),
-		);
-		if ( ! empty( self::$failed ) ) {
-			$retained   = true;
-			$messages[] = sprintf(
-				/* translators: %s: comma-separated list of what could not be erased */
-				__( 'Some reMember data could not be erased (%s). Run the erase request again.', 'remember' ),
-				implode( ', ', array_keys( self::$failed ) )
-			);
-			$context['retained'] = true;
-			$context['failed']   = self::$failed;
-			Remember_Logger::error( 'Personal data erase incomplete: some reMember data could not be erased', $context );
-		} else {
-			Remember_Logger::info( 'Personal data erased', $context );
-		}
-
 		return array(
-			'items_removed'  => $removed,
-			'items_retained' => $retained,
-			'messages'       => $messages,
-			'done'           => true,
+			'removed'  => $removed,
+			'retained' => $retained,
+			'messages' => $messages,
 		);
 	}
 
@@ -386,7 +451,7 @@ class Remember_Privacy {
 			self::add_value( $vetting_data, __( 'Vetting decision', 'remember' ), $vetting['decision'] );
 			self::add_value( $vetting_data, __( 'Vetting decision date', 'remember' ), $vetting['decision_date'] );
 		}
-		$note_count = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . self::table( 'remember_vetting_notes' ) . ' WHERE member_id = %d', $member_id ) );
+		$note_count = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . self::table( 'remember_vetting_notes' ) . ' n INNER JOIN ' . self::table( 'remember_vetting' ) . ' v ON v.vetting_id = n.vetting_id WHERE v.member_id = %d', $member_id ) );
 		self::query_failed( 'vetting notes' );
 		if ( $note_count > 0 ) {
 			self::add_value( $vetting_data, __( 'Vetting notes', 'remember' ), sprintf( /* translators: %d: number of notes */ _n( '%d staff note. The text is not included.', '%d staff notes. The text is not included.', $note_count, 'remember' ), $note_count ) );
@@ -597,6 +662,27 @@ class Remember_Privacy {
 			}
 		}
 		return $removed;
+	}
+
+	/**
+	 * Staff notes on this member's own vetting cases. Notes the member wrote about others stay.
+	 *
+	 * @param int $member_id Member ID.
+	 * @return bool
+	 */
+	private static function delete_vetting_notes_about( $member_id ) {
+		global $wpdb;
+		$deleted = $wpdb->query(
+			$wpdb->prepare(
+				'DELETE n FROM ' . self::table( 'remember_vetting_notes' ) . ' n INNER JOIN ' . self::table( 'remember_vetting' ) . ' v ON v.vetting_id = n.vetting_id WHERE v.member_id = %d',
+				$member_id
+			)
+		);
+		if ( false === $deleted ) {
+			self::query_failed( 'vetting notes' );
+			return false;
+		}
+		return $deleted > 0;
 	}
 
 	/**

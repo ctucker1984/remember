@@ -134,13 +134,31 @@ class Remember_Waitlist {
 	 */
 	private static function promote_next( $event_role_id, $context ) {
 		global $wpdb;
-		$next_id = (int) $wpdb->get_var(
+		$candidates = $wpdb->get_results(
 			$wpdb->prepare(
-				'SELECT application_id FROM ' . $wpdb->prefix . 'remember_event_applications WHERE event_role_id = %d AND status = %s AND superseded_at IS NULL ORDER BY COALESCE(waitlisted_at, applied_at) ASC, application_id ASC LIMIT 1',
+				'SELECT application_id, member_id FROM ' . $wpdb->prefix . 'remember_event_applications WHERE event_role_id = %d AND status = %s AND superseded_at IS NULL ORDER BY COALESCE(waitlisted_at, applied_at) ASC, application_id ASC LIMIT 25',
 				$event_role_id,
 				'waitlisted'
 			)
 		);
+		$next_id = 0;
+		$skipped = array();
+		foreach ( (array) $candidates as $candidate ) {
+			if ( get_user_by( 'id', (int) $candidate->member_id ) ) {
+				$next_id = (int) $candidate->application_id;
+				break;
+			}
+			$skipped[] = (int) $candidate->application_id;
+		}
+		if ( ! empty( $skipped ) ) {
+			Remember_Logger::debug(
+				'Waitlist auto-promote skipped applications whose member account was deleted',
+				array(
+					'event_role_id'   => (int) $event_role_id,
+					'application_ids' => $skipped,
+				)
+			);
+		}
 		if ( $next_id < 1 ) {
 			return false;
 		}

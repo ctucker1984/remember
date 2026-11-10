@@ -283,7 +283,7 @@ class Remember_Admin_Dashboard {
 			$status    = isset( $statuses[ $row->status ] ) ? $statuses[ $row->status ] : $row->status;
 			$roles     = isset( $roles_by_member[ $member_id ] ) ? $roles_by_member[ $member_id ] : array();
 			$people[]  = array(
-				'title'  => $row->display_name ? $row->display_name : __( 'Unknown Member', 'remember' ),
+				'title'  => self::member_name( $row->display_name ),
 				'detail' => implode( ', ', $roles ),
 				'meta'   => $status,
 				'url'    => admin_url( 'admin.php?page=remember-members&view=' . $member_id ),
@@ -342,7 +342,7 @@ class Remember_Admin_Dashboard {
 
 		foreach ( $vetting_model->get_by_vetter( $user_id ) as $vetting ) {
 			$member_user = get_user_by( 'id', $vetting->member_id );
-			$name        = $member_user ? $member_user->display_name : __( 'Unknown Member', 'remember' );
+			$name        = $member_user ? $member_user->display_name : __( 'Deleted member', 'remember' );
 			$add( $vetting, sprintf( __( 'Review vetting: %s', 'remember' ), $name ) );
 		}
 
@@ -364,7 +364,7 @@ class Remember_Admin_Dashboard {
 				continue;
 			}
 			$member_user = get_user_by( 'id', $vetting->member_id );
-			$name        = $member_user ? $member_user->display_name : __( 'Unknown Member', 'remember' );
+			$name        = $member_user ? $member_user->display_name : __( 'Deleted member', 'remember' );
 			$add( $vetting, sprintf( __( 'Collaborate on vetting: %s', 'remember' ), $name ) );
 		}
 
@@ -534,7 +534,7 @@ class Remember_Admin_Dashboard {
 			self::query_failed( 'activity_vetting_opened' );
 			foreach ( (array) $opened as $row ) {
 				$url        = admin_url( 'admin.php?page=remember-vetting&view=' . absint( $row->vetting_id ) );
-				$name       = $row->display_name ? $row->display_name : __( 'Unknown Member', 'remember' );
+				$name       = self::member_name( $row->display_name );
 				$activity[] = array(
 					'type'      => 'vetting',
 					'timestamp' => $row->created_at,
@@ -558,7 +558,7 @@ class Remember_Admin_Dashboard {
 			self::query_failed( 'activity_vetting_completed' );
 			foreach ( (array) $completed as $row ) {
 				$url        = admin_url( 'admin.php?page=remember-vetting&view=' . absint( $row->vetting_id ) );
-				$name       = $row->display_name ? $row->display_name : __( 'Unknown Member', 'remember' );
+				$name       = self::member_name( $row->display_name );
 				$activity[] = array(
 					'type'      => 'vetting',
 					'timestamp' => $row->completed_at,
@@ -610,6 +610,19 @@ class Remember_Admin_Dashboard {
 	}
 
 	/**
+	 * Member name from a query joined to wp_users. No row there means the account was deleted.
+	 *
+	 * @param string|null $display_name display_name from the join.
+	 * @return string
+	 */
+	private static function member_name( $display_name ) {
+		if ( null === $display_name ) {
+			return __( 'Deleted member', 'remember' );
+		}
+		return '' !== (string) $display_name ? (string) $display_name : __( 'Unknown Member', 'remember' );
+	}
+
+	/**
 	 * One application activity sentence, with the event name linked.
 	 *
 	 * @param object $row  Application row with display_name and event_name.
@@ -618,7 +631,7 @@ class Remember_Admin_Dashboard {
 	 */
 	private static function application_activity_message( $row, $kind ) {
 		$url   = admin_url( 'admin.php?page=remember-applications&view=' . absint( $row->application_id ) );
-		$name  = $row->display_name ? $row->display_name : __( 'Unknown Member', 'remember' );
+		$name  = self::member_name( $row->display_name );
 		$event = $row->event_name ? $row->event_name : __( 'Unknown Event', 'remember' );
 		$link  = '<a href="' . esc_url( $url ) . '">' . esc_html( $event ) . '</a>';
 

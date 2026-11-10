@@ -197,11 +197,15 @@ function remember_waitlist_sort_link( $column_name, $current_orderby, $current_o
 			</thead>
 			<tbody>
 				<?php foreach ( $waitlisted_applications as $application ) :
-					$row_member_name = $application->display_name ? $application->display_name : __( 'Unknown Member', 'remember' );
+					if ( null === $application->display_name ) {
+						$row_member_name = __( 'Deleted member', 'remember' );
+					} else {
+						$row_member_name = '' !== $application->display_name ? $application->display_name : __( 'Unknown Member', 'remember' );
+					}
 				?>
 					<tr>
 						<td>
-							<strong><?php echo esc_html( $application->display_name ? $application->display_name : __( 'Unknown Member', 'remember' ) ); ?></strong><br>
+							<strong><?php echo esc_html( $row_member_name ); ?></strong><br>
 							<span class="description"><?php echo esc_html( $application->user_email ); ?></span>
 						</td>
 						<td><?php echo esc_html( $application->event_name ); ?></td>

@@ -191,7 +191,7 @@ class Remember {
 		$this->loader->add_action( 'admin_init', $plugin_admin, 'process_setup_wizard' );
 
 		// Clean up member records when WordPress user is deleted
-		$this->loader->add_action( 'delete_user', $this, 'cleanup_member_on_user_delete' );
+		$this->loader->add_action( 'deleted_user', $this, 'cleanup_member_on_user_delete' );
 		
 		// Add timezone field to WordPress user profile
 		$this->loader->add_action( 'show_user_profile', $plugin_admin, 'add_timezone_field_to_profile' );
@@ -528,21 +528,35 @@ class Remember {
 	}
 
 	/**
-	 * Clean up member record when WordPress user is deleted.
+	 * Remove the member's reMember data once their WordPress account is deleted.
 	 *
-	 * @param int $user_id The ID of the user being deleted.
-	 * @param int|null $reassign The ID of the user to reassign posts to, or null.
-	 * @param WP_User $user The user object being deleted.
+	 * Runs on deleted_user. wp_delete_user() fires it even when its own delete query failed, so the account is checked first.
+	 * On multisite the account is only removed from this site, and reMember's data belongs to this site.
+	 *
+	 * @param int $user_id The ID of the deleted user.
 	 */
-	public function cleanup_member_on_user_delete( $user_id, $reassign = null, $user = null ) {
+	public function cleanup_member_on_user_delete( $user_id ) {
+		$user_id = absint( $user_id );
 		require_once plugin_dir_path( __FILE__ ) . 'models/class-member.php';
 		$member_model = new Remember_Member();
-		
-		// Delete the member record if it exists
+
 		$member = $member_model->get( $user_id );
 		if ( ! $member ) {
+			Remember_Logger::debug( 'Deleted WordPress account had no reMember member record', array( 'user_id' => $user_id ) );
 			return;
 		}
+		$still_here = is_multisite() ? is_user_member_of_blog( $user_id, get_current_blog_id() ) : (bool) get_user_by( 'id', $user_id );
+		if ( $still_here ) {
+			Remember_Logger::error(
+				'WordPress reported the account deleted, but it is still there; its reMember data was kept',
+				array( 'user_id' => $user_id )
+			);
+			return;
+		}
+
+		require_once plugin_dir_path( __FILE__ ) . 'utilities/class-remember-privacy.php';
+		Remember_Privacy::remove_deleted_member( $user_id );
+
 		if ( false === $member_model->delete( $user_id ) ) {
 			global $wpdb;
 			Remember_Logger::error(
