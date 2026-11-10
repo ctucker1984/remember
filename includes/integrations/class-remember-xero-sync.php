@@ -51,6 +51,7 @@ class Remember_Xero_Sync {
 	public static function sync_member_to_contact( $member_id ) {
 		require_once plugin_dir_path( __FILE__ ) . '../models/class-member.php';
 		require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-import-export.php';
+		require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-billing-contact-name.php';
 
 		$member_model = new Remember_Member();
 		$member       = $member_model->get( $member_id );
@@ -118,6 +119,7 @@ class Remember_Xero_Sync {
 		}
 
 		$existing        = null;
+		$current_name    = '';
 		$xero_contact_id = get_user_meta( $member_id, 'remember_xero_contact_id', true );
 		if ( $xero_contact_id ) {
 			$existing = Remember_Xero_API::get_contact( $xero_contact_id );
@@ -180,6 +182,7 @@ class Remember_Xero_Sync {
 			if ( is_array( $by_email ) && ! empty( $by_email['ContactID'] ) && self::contact_email_matches( $by_email, $user->user_email ) ) {
 				$xero_contact_id = $by_email['ContactID'];
 				update_user_meta( $member_id, 'remember_xero_contact_id', $xero_contact_id );
+				$current_name = isset( $by_email['Name'] ) ? (string) $by_email['Name'] : '';
 			}
 		}
 
@@ -187,13 +190,21 @@ class Remember_Xero_Sync {
 			$contact_data['contact_id'] = $xero_contact_id;
 		}
 
-		$result = Remember_Xero_API::create_or_update_contact( $contact_data );
-
-		// Name collision on create: retry with email disambiguator.
-		if ( is_wp_error( $result ) && empty( $contact_data['contact_id'] ) && self::is_xero_name_conflict_error( $result ) ) {
-			$contact_data['name'] = $full_name . ' (' . $user->user_email . ')';
-			$result               = Remember_Xero_API::create_or_update_contact( $contact_data );
+		if ( '' === $current_name && is_array( $existing ) && isset( $existing['Name'] ) ) {
+			$current_name = (string) $existing['Name'];
 		}
+		$contact_data['name'] = Remember_Billing_Contact_Name::preferred( $full_name, $member_id, $current_name );
+		if ( $contact_data['name'] !== $full_name ) {
+			Remember_Logger::debug(
+				'Keeping the member number on the Xero contact name',
+				array(
+					'member_id'       => $member_id,
+					'xero_contact_id' => $xero_contact_id,
+				)
+			);
+		}
+
+		$result = self::save_contact( $contact_data, $full_name, $member_id );
 
 		// Stale ContactID (definite not-found only): clear and retry once (match-by-email or create).
 		// Any other error keeps the link and falls through to be returned below.
@@ -216,8 +227,20 @@ class Remember_Xero_Sync {
 			if ( is_array( $by_email ) && ! empty( $by_email['ContactID'] ) && self::contact_email_matches( $by_email, $user->user_email ) ) {
 				$contact_data['contact_id'] = $by_email['ContactID'];
 				update_user_meta( $member_id, 'remember_xero_contact_id', $by_email['ContactID'] );
+				$contact_data['name'] = Remember_Billing_Contact_Name::preferred( $full_name, $member_id, isset( $by_email['Name'] ) ? (string) $by_email['Name'] : '' );
+				if ( $contact_data['name'] !== $full_name ) {
+					Remember_Logger::debug(
+						'Keeping the member number on the Xero contact name',
+						array(
+							'member_id'       => $member_id,
+							'xero_contact_id' => $by_email['ContactID'],
+						)
+					);
+				}
+			} else {
+				$contact_data['name'] = $full_name;
 			}
-			$result = Remember_Xero_API::create_or_update_contact( $contact_data );
+			$result = self::save_contact( $contact_data, $full_name, $member_id );
 		}
 
 		if ( is_wp_error( $result ) ) {
@@ -264,8 +287,14 @@ class Remember_Xero_Sync {
 			array(
 				'member_id'       => $member_id,
 				'xero_contact_id' => isset( $result['ContactID'] ) ? $result['ContactID'] : '',
-				'xero_name'       => isset( $result['Name'] ) ? $result['Name'] : '',
-				'expected_name'   => $full_name,
+			)
+		);
+		Remember_Logger::debug(
+			'Member synced to Xero contact',
+			array(
+				'member_id'     => $member_id,
+				'xero_name'     => isset( $result['Name'] ) ? $result['Name'] : '',
+				'expected_name' => $full_name,
 			)
 		);
 
@@ -295,6 +324,63 @@ class Remember_Xero_Sync {
 			}
 		}
 		return false;
+	}
+
+	/**
+	 * Create or update the contact, adding the member number when the name is taken.
+	 *
+	 * Xero contact names must be unique. This applies on updates as well as creates,
+	 * so a contact whose name is taken keeps syncing instead of failing every time.
+	 *
+	 * @param array  $contact_data Data for Remember_Xero_API::create_or_update_contact().
+	 * @param string $full_name    Plain legal name.
+	 * @param int    $member_id    Member ID.
+	 * @return array|WP_Error Contact or error.
+	 */
+	private static function save_contact( $contact_data, $full_name, $member_id ) {
+		$result   = Remember_Xero_API::create_or_update_contact( $contact_data );
+		$numbered = Remember_Billing_Contact_Name::with_member_number( $full_name, $member_id );
+		if ( ! is_wp_error( $result ) || ! self::is_xero_name_conflict_error( $result ) ) {
+			return $result;
+		}
+		if ( $contact_data['name'] === $numbered ) {
+			Remember_Logger::debug(
+				'Xero contact name with the member number is already in use; not retrying',
+				array(
+					'member_id'       => $member_id,
+					'xero_contact_id' => isset( $contact_data['contact_id'] ) ? $contact_data['contact_id'] : '',
+				)
+			);
+			return $result;
+		}
+
+		Remember_Logger::info(
+			'Xero contact name already in use; saving it with the member number',
+			array(
+				'member_id'       => $member_id,
+				'xero_contact_id' => isset( $contact_data['contact_id'] ) ? $contact_data['contact_id'] : '',
+			)
+		);
+		Remember_Logger::debug(
+			'Xero contact name already in use',
+			array(
+				'member_id' => $member_id,
+				'tried'     => $contact_data['name'],
+				'saving_as' => $numbered,
+			)
+		);
+		$contact_data['name'] = $numbered;
+		$result               = Remember_Xero_API::create_or_update_contact( $contact_data );
+		if ( is_wp_error( $result ) ) {
+			Remember_Logger::warning(
+				'Xero contact save with the member number also failed',
+				array(
+					'member_id' => $member_id,
+					'error'     => $result->get_error_message(),
+				)
+			);
+		}
+		return $result;
 	}
 
 	/**

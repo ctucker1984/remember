@@ -111,6 +111,7 @@ class Remember_QuickBooks_Sync {
 		}
 
 		// Prefer stored QuickBooks Customer Id; otherwise match by WordPress email (second best).
+		$linked         = null;
 		$qb_customer_id = (string) get_user_meta( $member_id, 'remember_qb_customer_id', true );
 		if ( '' !== $qb_customer_id ) {
 			// Only a lookup that says the customer is gone (other company, wrong sandbox) drops
@@ -144,13 +145,27 @@ class Remember_QuickBooks_Sync {
 			}
 		}
 		if ( '' === $qb_customer_id ) {
-			$qb_customer_id = self::link_customer_by_email( $member_id, $user->user_email );
+			$linked         = self::link_customer_by_email( $member_id, $user->user_email );
+			$qb_customer_id = is_array( $linked ) ? (string) $linked['Id'] : '';
 		}
 		if ( '' !== $qb_customer_id ) {
 			$customer_data['qb_customer_id'] = $qb_customer_id;
 		}
 
-		$result = self::save_customer( $customer_data, $user->user_email );
+		require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-billing-contact-name.php';
+		$current_name                  = ( is_array( $linked ) && isset( $linked['DisplayName'] ) ) ? (string) $linked['DisplayName'] : '';
+		$customer_data['display_name'] = Remember_Billing_Contact_Name::preferred( $full_name, $member_id, $current_name );
+		if ( $customer_data['display_name'] !== $full_name ) {
+			Remember_Logger::debug(
+				'Keeping the member number on the QuickBooks customer name',
+				array(
+					'member_id'      => $member_id,
+					'qb_customer_id' => $qb_customer_id,
+				)
+			);
+		}
+
+		$result = self::save_customer( $customer_data, $full_name, $member_id );
 
 		if ( is_wp_error( $result ) ) {
 			Remember_Logger::error(
@@ -183,12 +198,12 @@ class Remember_QuickBooks_Sync {
 	 *
 	 * @param int    $member_id Member ID.
 	 * @param string $email     Member email.
-	 * @return string Customer Id, or '' when none matches.
+	 * @return array|null Matched customer, or null when none matches.
 	 */
 	private static function link_customer_by_email( $member_id, $email ) {
 		$match = Remember_QuickBooks_API::find_customer_by_primary_email( $email );
 		if ( ! is_array( $match ) || empty( $match['Id'] ) ) {
-			return '';
+			return null;
 		}
 		update_user_meta( $member_id, 'remember_qb_customer_id', (string) $match['Id'] );
 		update_user_meta( $member_id, 'remember_qb_sync_token', isset( $match['SyncToken'] ) ? $match['SyncToken'] : '' );
@@ -199,30 +214,63 @@ class Remember_QuickBooks_Sync {
 				'qb_customer_id' => (string) $match['Id'],
 			)
 		);
-		return (string) $match['Id'];
+		return $match;
 	}
 
 	/**
-	 * Create or update the customer, retrying with the email appended when the name is taken.
+	 * Create or update the customer, adding the member number when the name is taken.
 	 *
 	 * QBO display names must be unique across customers, vendors and employees, inactive included.
 	 *
 	 * @param array  $customer_data Data for Remember_QuickBooks_API::create_customer().
-	 * @param string $email         Member email, used to make the name unique.
+	 * @param string $full_name     Plain legal name.
+	 * @param int    $member_id     Member ID.
 	 * @return array|WP_Error Customer entity or error.
 	 */
-	private static function save_customer( $customer_data, $email ) {
-		$result = Remember_QuickBooks_API::create_customer( $customer_data );
-		if ( ! is_wp_error( $result ) || ! self::is_qb_duplicate_name_error( $result ) || '' === trim( (string) $email ) ) {
+	private static function save_customer( $customer_data, $full_name, $member_id ) {
+		$result   = Remember_QuickBooks_API::create_customer( $customer_data );
+		$numbered = Remember_Billing_Contact_Name::with_member_number( $full_name, $member_id );
+		if ( ! is_wp_error( $result ) || ! self::is_qb_duplicate_name_error( $result ) ) {
+			return $result;
+		}
+		if ( $customer_data['display_name'] === $numbered ) {
+			Remember_Logger::debug(
+				'QuickBooks customer name with the member number is already in use; not retrying',
+				array(
+					'member_id'      => $member_id,
+					'qb_customer_id' => $customer_data['qb_customer_id'] ?? '',
+				)
+			);
 			return $result;
 		}
 
 		Remember_Logger::info(
-			'QuickBooks customer name already in use; retrying with email added',
-			array( 'qb_customer_id' => $customer_data['qb_customer_id'] ?? '' )
+			'QuickBooks customer name already in use; saving it with the member number',
+			array(
+				'member_id'      => $member_id,
+				'qb_customer_id' => $customer_data['qb_customer_id'] ?? '',
+			)
 		);
-		$customer_data['display_name'] = $customer_data['display_name'] . ' (' . $email . ')';
-		return Remember_QuickBooks_API::create_customer( $customer_data );
+		Remember_Logger::debug(
+			'QuickBooks customer name already in use',
+			array(
+				'member_id' => $member_id,
+				'tried'     => $customer_data['display_name'],
+				'saving_as' => $numbered,
+			)
+		);
+		$customer_data['display_name'] = $numbered;
+		$result                         = Remember_QuickBooks_API::create_customer( $customer_data );
+		if ( is_wp_error( $result ) ) {
+			Remember_Logger::warning(
+				'QuickBooks customer save with the member number also failed',
+				array(
+					'member_id' => $member_id,
+					'error'     => $result->get_error_message(),
+				)
+			);
+		}
+		return $result;
 	}
 
 	/**
