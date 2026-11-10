@@ -211,14 +211,24 @@ class Remember_QuickBooks_API {
 
 		$response = wp_remote_request( $url, $args );
 
+		// A query endpoint carries its search, which can include a member's email.
+		$endpoint_path = explode( '?', (string) $endpoint, 2 )[0];
+
 		if ( is_wp_error( $response ) ) {
 			Remember_Logger::error(
 				'QuickBooks API: HTTP transport error',
 				array(
 					'method'   => $method,
-					'endpoint' => $endpoint,
+					'endpoint' => $endpoint_path,
 					'code'     => $response->get_error_code(),
 					'message'  => $response->get_error_message(),
+				)
+			);
+			Remember_Logger::debug(
+				'QuickBooks API: HTTP transport error',
+				array(
+					'method'   => $method,
+					'endpoint' => $endpoint,
 				)
 			);
 			return $response;
@@ -240,14 +250,22 @@ class Remember_QuickBooks_API {
 			Remember_Logger::error(
 				'QuickBooks API: error response',
 				array(
+					'method'      => $method,
+					'endpoint'    => $endpoint_path,
+					'status'      => $status_code,
+					'qb_message'  => $error_message,
+					'environment' => $qb_env,
+					'api_base'    => self::get_api_base(),
+					'realm_id'    => substr( (string) $company_id, 0, 6 ) . '…',
+				)
+			);
+			Remember_Logger::debug(
+				'QuickBooks API: error response',
+				array(
 					'method'        => $method,
 					'endpoint'      => $endpoint,
 					'status'        => $status_code,
-					'qb_message'    => $error_message,
 					'response_body' => $encoded,
-					'environment'   => $qb_env,
-					'api_base'      => self::get_api_base(),
-					'realm_id'      => substr( (string) $company_id, 0, 6 ) . '…',
 				)
 			);
 

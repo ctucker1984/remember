@@ -293,7 +293,14 @@ class Remember_Xero_API {
 					'status'  => $status,
 					'path'    => $path,
 					'message' => $message,
-					'body'    => $decoded ? $decoded : $raw_body,
+				)
+			);
+			Remember_Logger::debug(
+				'Xero API error response',
+				array(
+					'status' => $status,
+					'path'   => $path,
+					'body'   => $decoded ? $decoded : $raw_body,
 				)
 			);
 			return new WP_Error( 'xero_api_error', $message, array( 'status' => $status, 'body' => $decoded ) );
