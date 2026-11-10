@@ -35,8 +35,12 @@ class Remember_Deactivator {
 		// Clear scheduled cron events
 		$timestamp = wp_next_scheduled( 'remember_qb_sync' );
 		if ( $timestamp ) {
-			wp_unschedule_event( $timestamp, 'remember_qb_sync' );
-			Remember_Logger::debug( 'Cleared scheduled cron events' );
+			$unscheduled = wp_unschedule_event( $timestamp, 'remember_qb_sync', array(), true );
+			if ( is_wp_error( $unscheduled ) ) {
+				Remember_Logger::warning( 'Failed to remove the scheduled payment sync', array( 'error' => $unscheduled->get_error_message() ) );
+			} else {
+				Remember_Logger::debug( 'Removed the scheduled payment sync' );
+			}
 		}
 
 		require_once plugin_dir_path( __FILE__ ) . 'utilities/class-remember-profile-duplicates.php';

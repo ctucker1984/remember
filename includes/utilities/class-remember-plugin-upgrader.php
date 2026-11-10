@@ -501,7 +501,7 @@ class Remember_Plugin_Upgrader {
 	/**
 	 * Write an upgrade log line when the logger is available.
 	 *
-	 * @param string $level   error|warning|debug.
+	 * @param string $level   error|warning|info|debug.
 	 * @param string $message Log message.
 	 * @param array  $context Context.
 	 * @return void
@@ -516,15 +516,19 @@ class Remember_Plugin_Upgrader {
 		if ( ! class_exists( 'Remember_Logger', false ) ) {
 			return;
 		}
-		if ( 'warning' === $level ) {
-			Remember_Logger::warning( $message, $context );
-			return;
+		switch ( $level ) {
+			case 'warning':
+				Remember_Logger::warning( $message, $context );
+				break;
+			case 'info':
+				Remember_Logger::info( $message, $context );
+				break;
+			case 'debug':
+				Remember_Logger::debug( $message, $context );
+				break;
+			default:
+				Remember_Logger::error( $message, $context );
 		}
-		if ( 'debug' === $level ) {
-			Remember_Logger::debug( $message, $context );
-			return;
-		}
-		Remember_Logger::error( $message, $context );
 	}
 
 	/**
@@ -549,23 +553,36 @@ class Remember_Plugin_Upgrader {
 			return $removed;
 		}
 
+		self::log_upgrade(
+			'warning',
+			'WordPress could not remove the old reMember files; clearing them and retrying',
+			array(
+				'path'  => self::display_path( $remote_destination ),
+				'error' => is_wp_error( $removed ) ? $removed->get_error_message() : '',
+			)
+		);
+
 		self::purge_non_release_paths( $remote_destination );
 		self::ensure_tree_writable( $remote_destination );
 
 		global $wp_filesystem;
 		if ( $wp_filesystem instanceof WP_Filesystem_Base ) {
-			if ( ! $wp_filesystem->exists( $remote_destination ) ) {
-				return true;
-			}
-			if ( $wp_filesystem->delete( $remote_destination, true ) ) {
+			if ( ! $wp_filesystem->exists( $remote_destination ) || $wp_filesystem->delete( $remote_destination, true ) ) {
+				self::log_upgrade( 'info', 'Removed the old reMember files on retry', array( 'method' => 'wp_filesystem' ) );
 				return true;
 			}
 		}
 
 		if ( self::force_delete_directory( $remote_destination ) ) {
+			self::log_upgrade( 'info', 'Removed the old reMember files on retry', array( 'method' => 'php' ) );
 			return true;
 		}
 
+		self::log_upgrade(
+			'error',
+			'Could not remove the old reMember files; the update did not install',
+			array( 'path' => self::display_path( $remote_destination ) )
+		);
 		return $removed;
 	}
 
@@ -598,6 +615,14 @@ class Remember_Plugin_Upgrader {
 			),
 			HOUR_IN_SECONDS
 		);
+		self::log_upgrade(
+			'info',
+			'Deactivated reMember while its files are replaced',
+			array(
+				'from_version' => defined( 'REMEMBER_VERSION' ) ? REMEMBER_VERSION : '',
+				'network_wide' => $network_wide,
+			)
+		);
 	}
 
 	/**
@@ -613,15 +638,33 @@ class Remember_Plugin_Upgrader {
 		}
 
 		global $wp_filesystem;
+		$purged = array();
+		$stuck  = array();
 		foreach ( self::non_release_basenames() as $name ) {
-			$path = $destination . '/' . $name;
+			$path    = $destination . '/' . $name;
+			$present = file_exists( $path ) || is_dir( $path );
 			if ( $wp_filesystem instanceof WP_Filesystem_Base && $wp_filesystem->exists( $path ) ) {
+				$present = true;
 				$wp_filesystem->chmod( $path, ( $wp_filesystem->is_dir( $path ) ? FS_CHMOD_DIR : FS_CHMOD_FILE ) );
 				$wp_filesystem->delete( $path, true );
 			}
 			if ( file_exists( $path ) || is_dir( $path ) ) {
 				self::force_delete_directory( $path );
 			}
+			if ( ! $present ) {
+				continue;
+			}
+			if ( file_exists( $path ) || is_dir( $path ) ) {
+				$stuck[] = $name;
+			} else {
+				$purged[] = $name;
+			}
+		}
+		if ( $purged ) {
+			self::log_upgrade( 'debug', 'Removed development files before replacing reMember', array( 'paths' => $purged ) );
+		}
+		if ( $stuck ) {
+			self::log_upgrade( 'warning', 'Could not remove some development files before replacing reMember', array( 'paths' => $stuck ) );
 		}
 	}
 
@@ -739,6 +782,11 @@ class Remember_Plugin_Upgrader {
 		if ( 'plugin' !== $package_type || ! self::is_remember_plugin_data( $plugin_data ) ) {
 			return;
 		}
+		self::log_upgrade(
+			'info',
+			'reMember replaced from an uploaded zip',
+			array( 'version' => isset( $plugin_data['Version'] ) ? (string) $plugin_data['Version'] : '' )
+		);
 		self::reactivate_if_flagged();
 	}
 
@@ -755,13 +803,36 @@ class Remember_Plugin_Upgrader {
 		if ( empty( $hook_extra['type'] ) || 'plugin' !== $hook_extra['type'] ) {
 			return;
 		}
-		if ( ! empty( $hook_extra['plugin'] ) && self::PLUGIN_BASENAME === $hook_extra['plugin'] ) {
-			self::reactivate_if_flagged();
+		if ( ! self::hook_targets_remember( $hook_extra ) ) {
 			return;
 		}
-		if ( ! empty( $hook_extra['plugins'] ) && is_array( $hook_extra['plugins'] ) && in_array( self::PLUGIN_BASENAME, $hook_extra['plugins'], true ) ) {
-			self::reactivate_if_flagged();
+		// Core fires this hook for failed updates too, so record both versions rather than claim success.
+		self::log_upgrade(
+			'info',
+			'reMember update process finished',
+			array(
+				'running_version' => defined( 'REMEMBER_VERSION' ) ? REMEMBER_VERSION : '',
+				'version_on_disk' => self::installed_file_version(),
+			)
+		);
+		self::reactivate_if_flagged();
+	}
+
+	/**
+	 * Version in the remember.php now on disk, which may be newer than the code running this request.
+	 *
+	 * @return string
+	 */
+	private static function installed_file_version() {
+		if ( ! defined( 'WP_PLUGIN_DIR' ) ) {
+			return '';
 		}
+		$file = trailingslashit( WP_PLUGIN_DIR ) . self::PLUGIN_BASENAME;
+		if ( ! is_readable( $file ) ) {
+			return '';
+		}
+		$data = get_file_data( $file, array( 'Version' => 'Version' ) );
+		return isset( $data['Version'] ) ? (string) $data['Version'] : '';
 	}
 
 	/**
@@ -776,6 +847,7 @@ class Remember_Plugin_Upgrader {
 			return;
 		}
 		if ( ! function_exists( 'activate_plugin' ) || ! function_exists( 'is_plugin_active' ) ) {
+			self::log_upgrade( 'warning', 'reMember was not reactivated after the update because WordPress plugin functions were not loaded; activate it from Plugins' );
 			return;
 		}
 
@@ -791,13 +863,16 @@ class Remember_Plugin_Upgrader {
 		}
 
 		$result = activate_plugin( $plugin, '', $network_wide, true );
-		if ( is_wp_error( $result ) && class_exists( 'Remember_Logger', false ) ) {
-			Remember_Logger::warning(
+		if ( is_wp_error( $result ) ) {
+			self::log_upgrade(
+				'error',
 				'reMember could not reactivate after upgrade',
 				array(
 					'error' => $result->get_error_message(),
 				)
 			);
+			return;
 		}
+		self::log_upgrade( 'info', 'Reactivated reMember after the update', array( 'network_wide' => $network_wide ) );
 	}
 }

@@ -25,11 +25,35 @@ class Remember_Logger {
 	const MAX_LOG_BYTES = 5242880;
 
 	/**
+	 * An external call (Xero, QuickBooks, GitHub, email) slower than this logs a Warning.
+	 */
+	const SLOW_EXTERNAL_MS = 5000;
+
+	/**
+	 * A request slower than this logs one Warning at shutdown.
+	 */
+	const SLOW_REQUEST_MS = 3000;
+
+	/**
 	 * Microtime when activation tracing started (for elapsed_ms).
 	 *
 	 * @var float|null
 	 */
 	private static $activation_start_time = null;
+
+	/**
+	 * Log file path for this request, once its directory has been checked.
+	 *
+	 * @var string|null
+	 */
+	private static $log_file_path = null;
+
+	/**
+	 * Whether the slow-request check is registered for this request.
+	 *
+	 * @var bool
+	 */
+	private static $slow_request_hooked = false;
 
 	/**
 	 * Mark the start of plugin activation (call once at the beginning of Remember_Activator::activate).
@@ -38,6 +62,52 @@ class Remember_Logger {
 	 */
 	public static function mark_activation_start() {
 		self::$activation_start_time = microtime( true );
+	}
+
+	/**
+	 * Whether activation tracing is running in this request.
+	 *
+	 * @return bool
+	 */
+	public static function activation_in_progress() {
+		return null !== self::$activation_start_time;
+	}
+
+	/**
+	 * Start timing an operation.
+	 *
+	 * @return float Pass to elapsed_ms().
+	 */
+	public static function start_timer() {
+		return microtime( true );
+	}
+
+	/**
+	 * Milliseconds since start_timer().
+	 *
+	 * @param float $start Value from start_timer().
+	 * @return float
+	 */
+	public static function elapsed_ms( $start ) {
+		return round( ( microtime( true ) - (float) $start ) * 1000, 1 );
+	}
+
+	/**
+	 * Log a finished external call: Debug always, plus a Warning when it was slow.
+	 *
+	 * @param string $what    What was called, e.g. "Xero GET Contacts".
+	 * @param float  $start   Value from start_timer().
+	 * @param array  $context Ids and non-personal details (status, counts).
+	 * @return float Elapsed milliseconds.
+	 */
+	public static function external_call_done( $what, $start, $context = array() ) {
+		$elapsed = self::elapsed_ms( $start );
+		$context = array_merge( array( 'elapsed_ms' => $elapsed ), $context );
+		self::debug( $what . ' finished', $context );
+		if ( $elapsed > self::SLOW_EXTERNAL_MS ) {
+			self::warning( 'Slow external call: ' . $what, $context );
+		}
+		return $elapsed;
 	}
 
 	/**
@@ -50,6 +120,67 @@ class Remember_Logger {
 		self::ensure_protected_log_dir();
 		self::maybe_redirect_php_error_log();
 		self::retire_public_debug_log();
+		if ( ! self::$slow_request_hooked && function_exists( 'add_action' ) ) {
+			self::$slow_request_hooked = true;
+			add_action( 'shutdown', array( __CLASS__, 'maybe_log_slow_request' ), PHP_INT_MAX );
+		}
+	}
+
+	/**
+	 * Log one Warning when this request took longer than SLOW_REQUEST_MS.
+	 *
+	 * WP-CLI commands are skipped; long imports and backups log their own timing.
+	 *
+	 * @return void
+	 */
+	public static function maybe_log_slow_request() {
+		if ( defined( 'WP_CLI' ) && WP_CLI ) {
+			return;
+		}
+		$started = isset( $_SERVER['REQUEST_TIME_FLOAT'] ) ? (float) $_SERVER['REQUEST_TIME_FLOAT'] : 0.0;
+		if ( $started <= 0 ) {
+			return;
+		}
+		$elapsed = self::elapsed_ms( $started );
+		if ( $elapsed < self::SLOW_REQUEST_MS || ! self::should_log( 'WARNING' ) ) {
+			return;
+		}
+
+		global $wpdb;
+		$uri  = isset( $_SERVER['REQUEST_URI'] ) ? wp_unslash( (string) $_SERVER['REQUEST_URI'] ) : '';
+		$path = (string) wp_parse_url( $uri, PHP_URL_PATH );
+
+		if ( function_exists( 'wp_doing_cron' ) && wp_doing_cron() ) {
+			$type = 'cron';
+		} elseif ( function_exists( 'wp_doing_ajax' ) && wp_doing_ajax() ) {
+			$type = 'ajax';
+		} elseif ( defined( 'REST_REQUEST' ) && REST_REQUEST ) {
+			$type = 'rest';
+		} elseif ( is_admin() ) {
+			$type = 'admin';
+		} else {
+			$type = 'front';
+		}
+
+		$context = array(
+			'type'           => $type,
+			'method'         => isset( $_SERVER['REQUEST_METHOD'] ) ? strtoupper( sanitize_key( wp_unslash( $_SERVER['REQUEST_METHOD'] ) ) ) : '',
+			'path'           => $path,
+			'elapsed_ms'     => $elapsed,
+			'queries'        => ( $wpdb instanceof wpdb ) ? (int) $wpdb->num_queries : 0,
+			'peak_memory_mb' => round( memory_get_peak_usage( true ) / 1048576, 1 ),
+			'user_id'        => function_exists( 'get_current_user_id' ) ? get_current_user_id() : 0,
+		);
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended -- read-only labels for the log.
+		if ( isset( $_GET['page'] ) ) {
+			$context['page'] = sanitize_key( wp_unslash( $_GET['page'] ) );
+		}
+		if ( 'ajax' === $type && isset( $_REQUEST['action'] ) ) {
+			$context['action'] = sanitize_key( wp_unslash( $_REQUEST['action'] ) );
+		}
+		// phpcs:enable WordPress.Security.NonceVerification.Recommended
+
+		self::warning( 'Slow request', $context );
 	}
 
 	/**
@@ -298,8 +429,11 @@ class Remember_Logger {
 	 * @return string
 	 */
 	public static function get_log_file_path() {
-		self::ensure_protected_log_dir();
-		return trailingslashit( self::protected_log_dir() ) . 'remember.log';
+		if ( null === self::$log_file_path || ! is_dir( dirname( self::$log_file_path ) ) ) {
+			self::ensure_protected_log_dir();
+			self::$log_file_path = trailingslashit( self::protected_log_dir() ) . 'remember.log';
+		}
+		return self::$log_file_path;
 	}
 
 	/**
