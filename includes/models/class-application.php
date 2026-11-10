@@ -56,6 +56,14 @@ class Remember_Application extends Remember_Base_Model {
 					__( 'Invalid event_role_id: %d. The event role does not exist.', 'remember' ),
 					$data['event_role_id']
 				);
+				Remember_Logger::warning(
+					'Application not created: the event role no longer exists',
+					array(
+						'event_id'      => isset( $data['event_id'] ) ? (int) $data['event_id'] : 0,
+						'member_id'     => isset( $data['member_id'] ) ? (int) $data['member_id'] : 0,
+						'event_role_id' => (int) $data['event_role_id'],
+					)
+				);
 				return false;
 			}
 			
@@ -73,6 +81,14 @@ class Remember_Application extends Remember_Base_Model {
 						__( 'Event role %d does not belong to event %d.', 'remember' ),
 						$data['event_role_id'],
 						$data['event_id']
+					);
+					Remember_Logger::warning(
+						'Application not created: the role belongs to a different event',
+						array(
+							'event_id'      => (int) $data['event_id'],
+							'member_id'     => isset( $data['member_id'] ) ? (int) $data['member_id'] : 0,
+							'event_role_id' => (int) $data['event_role_id'],
+						)
 					);
 					return false;
 				}
@@ -98,15 +114,7 @@ class Remember_Application extends Remember_Base_Model {
 				'billing_error_at' => current_time( 'mysql' ),
 			)
 		);
-		if ( false === $result ) {
-			Remember_Logger::error(
-				'Failed to record the invoicing failure on the application',
-				array(
-					'application_id' => $application_id,
-					'error'          => $this->wpdb->last_error,
-				)
-			);
-		} else {
+		if ( false !== $result ) {
 			Remember_Logger::info( 'Recorded invoicing failure on the application', array( 'application_id' => $application_id ) );
 		}
 		return $result;
@@ -152,15 +160,7 @@ class Remember_Application extends Remember_Base_Model {
 				'billing_error_at' => null,
 			)
 		);
-		if ( false === $result ) {
-			Remember_Logger::error(
-				'Failed to clear the invoicing failure on the application',
-				array(
-					'application_id' => $application_id,
-					'error'          => $this->wpdb->last_error,
-				)
-			);
-		} else {
+		if ( false !== $result ) {
 			Remember_Logger::info( 'Cleared invoicing failure on the application', array( 'application_id' => $application_id ) );
 		}
 		return $result;
@@ -178,6 +178,13 @@ class Remember_Application extends Remember_Base_Model {
 		global $wpdb;
 		$application = $this->get( $application_id );
 		if ( ! $application ) {
+			Remember_Logger::warning(
+				'Application status not changed: application not found',
+				array(
+					'application_id' => (int) $application_id,
+					'status'         => (string) $status,
+				)
+			);
 			return false;
 		}
 
@@ -200,21 +207,45 @@ class Remember_Application extends Remember_Base_Model {
 		}
 
 		$event_roles_table = $wpdb->prefix . 'remember_event_roles';
+		$count_written     = null;
 		if ( 'accepted' !== $previous_status && 'accepted' === $status ) {
-			$wpdb->query(
+			$count_written = $wpdb->query(
 				$wpdb->prepare(
 					"UPDATE {$event_roles_table} SET current_count = current_count + 1 WHERE event_role_id = %d",
 					$application->event_role_id
 				)
 			);
 		} elseif ( 'accepted' === $previous_status && 'accepted' !== $status ) {
-			$wpdb->query(
+			$count_written = $wpdb->query(
 				$wpdb->prepare(
 					"UPDATE {$event_roles_table} SET current_count = GREATEST(current_count - 1, 0) WHERE event_role_id = %d",
 					$application->event_role_id
 				)
 			);
 		}
+		if ( false === $count_written ) {
+			Remember_Logger::warning(
+				'Application status changed, but the role\'s accepted count was not updated',
+				array(
+					'application_id' => (int) $application_id,
+					'event_role_id'  => (int) $application->event_role_id,
+					'from'           => (string) $previous_status,
+					'to'             => (string) $status,
+					'error'          => $wpdb->last_error,
+				)
+			);
+		}
+
+		Remember_Logger::debug(
+			'Application status changed',
+			array(
+				'application_id' => (int) $application_id,
+				'event_id'       => (int) $application->event_id,
+				'from'           => (string) $previous_status,
+				'to'             => (string) $status,
+				'processed_by'   => $processed_by ? (int) $processed_by : null,
+			)
+		);
 
 		if ( 'accepted' === $previous_status && in_array( $status, array( 'cancelled', 'declined' ), true ) ) {
 			do_action( 'remember_application_spot_freed', (int) $application_id, (int) $application->event_id, (int) $application->event_role_id );
@@ -447,6 +478,11 @@ class Remember_Application extends Remember_Base_Model {
 			LEFT JOIN {$wpdb->prefix}remember_event_roles er ON a.event_role_id = er.event_role_id
 			WHERE er.event_role_id IS NULL"
 		);
+		if ( false === $deleted ) {
+			Remember_Logger::error( 'Orphaned applications not cleaned up', array( 'error' => $wpdb->last_error ) );
+			return 0;
+		}
+		Remember_Logger::info( 'Orphaned applications cleaned up', array( 'deleted' => (int) $deleted ) );
 		return $deleted;
 	}
 

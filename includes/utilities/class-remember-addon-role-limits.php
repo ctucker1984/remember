@@ -166,14 +166,14 @@ class Remember_Addon_Role_Limits {
 	 * @param int                $event_id       Event ID.
 	 * @param int                $merchandise_id Merchandise ID.
 	 * @param array<int,int|string> $role_limits  role_id => max_qty.
-	 * @return void
+	 * @return bool False when some limits were not saved.
 	 */
 	public static function sync_for_merchandise( $event_id, $merchandise_id, array $role_limits ) {
 		global $wpdb;
 		$event_id       = absint( $event_id );
 		$merchandise_id = absint( $merchandise_id );
 		if ( $event_id < 1 || $merchandise_id < 1 ) {
-			return;
+			return true;
 		}
 
 		$roles_table = $wpdb->prefix . 'remember_event_roles';
@@ -230,7 +230,9 @@ class Remember_Addon_Role_Limits {
 					'error'          => $error,
 				)
 			);
+			return false;
 		}
+		return true;
 	}
 
 	/**

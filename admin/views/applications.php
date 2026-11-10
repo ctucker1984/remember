@@ -39,16 +39,7 @@ $subtotal_disclaimer = Remember_Billing_Messaging::get_subtotal_disclaimer();
  */
 function remember_notify_event_admins( $event_id, $subject, $message ) {
 	require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-waitlist.php';
-	$emails = Remember_Waitlist::accepted_event_administrator_emails( $event_id );
-
-	if ( empty( $emails ) ) {
-		Remember_Logger::debug( 'No accepted event administrators to notify', array( 'event_id' => absint( $event_id ) ) );
-		return;
-	}
-
-	foreach ( $emails as $email ) {
-		wp_mail( $email, $subject, $message );
-	}
+	Remember_Waitlist::email_event_admins( $event_id, $subject, $message );
 }
 
 // Handle form submissions
@@ -90,12 +81,20 @@ if ( isset( $_POST['remember_application_action'] ) && check_admin_referer( 'rem
 					// A member who already has a vetting case is left alone. A first application opens a case only when they have none.
 					Remember_Vetting_Workflow::open_automatic_case( $member_id, 'first_application', $is_first );
 					
-					Remember_Logger::info( 'Application created', array( 'application_id' => $new_application_id ) );
+					Remember_Logger::info(
+						'Application created by staff',
+						array(
+							'application_id' => $new_application_id,
+							'event_id'       => $event_id,
+							'member_id'      => $member_id,
+							'status'         => $status,
+							'user_id'        => get_current_user_id(),
+						)
+					);
 					require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-notifications.php';
 					Remember_Notifications::notify_application_submitted( $new_application_id );
 					echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Application created successfully.', 'remember' ) . '</p></div>';
 				} else {
-					Remember_Logger::error( 'Failed to create application' );
 					echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to create application.', 'remember' ) . '</p></div>';
 				}
 			}
@@ -150,6 +149,17 @@ if ( isset( $_POST['remember_application_action'] ) && check_admin_referer( 'rem
 				if ( $is_full ) {
 					$result = $application_model->update_status( $application_id, 'waitlisted', get_current_user_id() );
 					if ( false !== $result ) {
+						Remember_Logger::info(
+							'Application waitlisted instead of accepted: the role is full',
+							array(
+								'application_id'   => $application_id,
+								'event_id'         => (int) $application->event_id,
+								'event_role_id'    => (int) $application->event_role_id,
+								'accepted'         => (int) $accepted_count,
+								'max_participants' => (int) $event_role->max_participants,
+								'user_id'          => get_current_user_id(),
+							)
+						);
 						$event = $event_model->get( $application->event_id );
 						$member = $member_model->get( $application->member_id );
 						$user = $member ? get_user_by( 'ID', $member->member_id ) : null;
@@ -175,7 +185,16 @@ if ( isset( $_POST['remember_application_action'] ) && check_admin_referer( 'rem
 				} else {
 					$result = $application_model->update_status( $application_id, 'accepted', get_current_user_id() );
 					if ( $result !== false ) {
-				Remember_Logger::info( 'Application accepted', array( 'application_id' => $application_id ) );
+				Remember_Logger::info(
+					'Application accepted',
+					array(
+						'application_id' => $application_id,
+						'event_id'       => (int) $application->event_id,
+						'member_id'      => (int) $application->member_id,
+						'previous'       => (string) $application->status,
+						'user_id'        => get_current_user_id(),
+					)
+				);
 
 				require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-billing-provider.php';
 				$invoice_notice_shown = false;
@@ -265,7 +284,6 @@ if ( isset( $_POST['remember_application_action'] ) && check_admin_referer( 'rem
 					echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Ticket email sent to the member.', 'remember' ) . '</p></div>';
 				}
 					} else {
-						Remember_Logger::error( 'Failed to accept application', array( 'application_id' => $application_id ) );
 						echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to accept application.', 'remember' ) . '</p></div>';
 					}
 				}
@@ -294,6 +312,8 @@ if ( isset( $_POST['remember_application_action'] ) && check_admin_referer( 'rem
 							'application_id' => $application_id,
 							'billing_action' => $billing_action,
 							'previous'       => $previous_status,
+							'event_id'       => (int) $application->event_id,
+							'user_id'        => get_current_user_id(),
 						)
 					);
 
@@ -340,14 +360,19 @@ if ( isset( $_POST['remember_application_action'] ) && check_admin_referer( 'rem
 							$member_user->user_email
 						);
 						if ( is_wp_error( $notify ) ) {
-							Remember_Logger::warning( 'Decline email failed', array( 'error' => $notify->get_error_message() ) );
+							Remember_Logger::warning(
+								'Decline email failed',
+								array(
+									'application_id' => $application_id,
+									'error'          => $notify->get_error_message(),
+								)
+							);
 						}
 					}
 
 					echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Application declined (admin). Ticket marked VOID.', 'remember' ) . '</p></div>';
 					echo Remember_Billing_Unwind::admin_notice_html( $unwind, $billing_action ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in helper.
 				} else {
-					Remember_Logger::error( 'Failed to decline application', array( 'application_id' => $application_id ) );
 					echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to decline application.', 'remember' ) . '</p></div>';
 				}
 			}
@@ -361,7 +386,14 @@ if ( isset( $_POST['remember_application_action'] ) && check_admin_referer( 'rem
 			$previous_status = $application ? $application->status : '';
 			$result = $application_model->update_status( $application_id, 'waitlisted', get_current_user_id() );
 			if ( $result !== false ) {
-				Remember_Logger::info( 'Application waitlisted', array( 'application_id' => $application_id ) );
+				Remember_Logger::info(
+					'Application waitlisted',
+					array(
+						'application_id' => $application_id,
+						'previous'       => $previous_status,
+						'user_id'        => get_current_user_id(),
+					)
+				);
 				if ( $application ) {
 					$event = $event_model->get( $application->event_id );
 					$event_name = $event ? $event->event_name : __( 'Unknown Event', 'remember' );
@@ -376,7 +408,6 @@ if ( isset( $_POST['remember_application_action'] ) && check_admin_referer( 'rem
 				}
 				echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Application moved to waitlist.', 'remember' ) . '</p></div>';
 			} else {
-				Remember_Logger::error( 'Failed to waitlist application', array( 'application_id' => $application_id ) );
 				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to waitlist application.', 'remember' ) . '</p></div>';
 			}
 		} elseif ( 'reopen_pending' === $action ) {
@@ -387,6 +418,13 @@ if ( isset( $_POST['remember_application_action'] ) && check_admin_referer( 'rem
 
 			$result = $application_model->update_status( $application_id, 'pending', get_current_user_id() );
 			if ( false !== $result ) {
+				Remember_Logger::info(
+					'Application moved back to pending',
+					array(
+						'application_id' => $application_id,
+						'user_id'        => get_current_user_id(),
+					)
+				);
 				echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Application moved back to pending.', 'remember' ) . '</p></div>';
 			} else {
 				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to move application back to pending.', 'remember' ) . '</p></div>';
@@ -397,7 +435,13 @@ if ( isset( $_POST['remember_application_action'] ) && check_admin_referer( 'rem
 			}
 			$result = $application_model->allow_reapply( $application_id );
 			if ( true === $result ) {
-				Remember_Logger::info( 'Application superseded for reapply', array( 'application_id' => $application_id ) );
+				Remember_Logger::info(
+					'Application superseded for reapply',
+					array(
+						'application_id' => $application_id,
+						'user_id'        => get_current_user_id(),
+					)
+				);
 				echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Reapply allowed. The member can submit a new application for this event and role (including agreements). This record is kept for history.', 'remember' ) . '</p></div>';
 			} else {
 				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html( $result ) . '</p></div>';

@@ -206,6 +206,7 @@ function remember_render_event_agreements_field( $event_id = 0 ) {
 }
 
 function remember_sync_event_addons( $merchandise_model, $event_id, $addons ) {
+	$ok       = true;
 	$existing = $merchandise_model->get_all_by_event( $event_id );
 	$existing_ids = array_map(
 		function( $item ) {
@@ -229,27 +230,38 @@ function remember_sync_event_addons( $merchandise_model, $event_id, $addons ) {
 		if ( ! empty( $addon['merchandise_id'] ) ) {
 			$merchandise_id = absint( $addon['merchandise_id'] );
 			$incoming_ids[] = $merchandise_id;
-			$merchandise_model->update( $merchandise_id, $data );
+			if ( false === $merchandise_model->update( $merchandise_id, $data ) ) {
+				$ok = false;
+			}
 		} else {
 			$new_id = $merchandise_model->create( $data );
 			if ( $new_id ) {
 				$merchandise_id = absint( $new_id );
 				$incoming_ids[] = $merchandise_id;
+			} else {
+				$ok = false;
 			}
 		}
 
 		if ( $merchandise_id > 0 ) {
 			$role_limits = isset( $addon['role_limits'] ) && is_array( $addon['role_limits'] ) ? $addon['role_limits'] : array();
-			Remember_Addon_Role_Limits::sync_for_merchandise( $event_id, $merchandise_id, $role_limits );
+			if ( ! Remember_Addon_Role_Limits::sync_for_merchandise( $event_id, $merchandise_id, $role_limits ) ) {
+				$ok = false;
+			}
 		}
 	}
 
 	foreach ( $existing_ids as $existing_id ) {
 		if ( ! in_array( $existing_id, $incoming_ids, true ) ) {
-			Remember_Addon_Role_Limits::delete_for_merchandise( $existing_id );
-			$merchandise_model->delete( $existing_id );
+			// Limits go only after the add-on itself is gone, so a failed delete leaves it as it was.
+			if ( false === $merchandise_model->delete( $existing_id ) ) {
+				$ok = false;
+			} else {
+				Remember_Addon_Role_Limits::delete_for_merchandise( $existing_id );
+			}
 		}
 	}
+	return $ok;
 }
 
 /**
@@ -504,15 +516,15 @@ function remember_event_checkin_enabled() {
  * Save invitees and send due invitation emails.
  *
  * @param int $event_id Event ID.
- * @return void
+ * @return bool False when some invitees were not saved.
  */
 function remember_save_event_invites( $event_id ) {
 	$event_id = absint( $event_id );
 	if ( $event_id < 1 ) {
-		return;
+		return true;
 	}
-	Remember_Event_Invites::sync_from_request( $event_id );
-	$sent = Remember_Event_Invites::send_due_for_event( $event_id );
+	$saved = Remember_Event_Invites::sync_from_request( $event_id );
+	$sent  = Remember_Event_Invites::send_due_for_event( $event_id );
 	if ( $sent > 0 ) {
 		echo '<div class="notice notice-success is-dismissible"><p>';
 		echo esc_html(
@@ -524,6 +536,7 @@ function remember_save_event_invites( $event_id ) {
 		);
 		echo '</p></div>';
 	}
+	return $saved;
 }
 
 /**
@@ -667,17 +680,27 @@ if ( isset( $_POST['remember_event_action'] ) && check_admin_referer( 'remember_
 			// The validation notice above is the failure. Do not also report a database error.
 		} elseif ( $event_id ) {
 			$role_configs = remember_build_role_configs_from_post();
-			$event_model->sync_event_role_configs( $event_id, $role_configs );
+			$roles_saved  = $event_model->sync_event_role_configs( $event_id, $role_configs );
 
-			$addons = remember_build_addons_from_post( $product_model );
-			remember_sync_event_addons( $merchandise_model, $event_id, $addons );
+			$addons       = remember_build_addons_from_post( $product_model );
+			$addons_saved = remember_sync_event_addons( $merchandise_model, $event_id, $addons );
 			Remember_Agreements::sync_event_pins( $event_id, Remember_Agreements::pins_from_request() );
-			remember_save_event_invites( $event_id );
+			$invites_saved = remember_save_event_invites( $event_id );
 
-			Remember_Logger::info( 'Event created', array( 'event_id' => $event_id ) );
+			Remember_Logger::info(
+				'Event created',
+				array(
+					'event_id' => $event_id,
+					'roles'    => count( array_filter( wp_list_pluck( $role_configs, 'enabled' ) ) ),
+					'add_ons'  => count( $addons ),
+					'user_id'  => get_current_user_id(),
+				)
+			);
 			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Event created successfully.', 'remember' ) . '</p></div>';
+			if ( ! $roles_saved || ! $addons_saved || ! $invites_saved ) {
+				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Some of this event\'s roles, add-ons or invitees could not be saved. Open the event, check its roles, prices, add-ons and invitees, and save again.', 'remember' ) . '</p></div>';
+			}
 		} else {
-			Remember_Logger::error( 'Failed to create event' );
 			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to create event.', 'remember' ) . '</p></div>';
 		}
 	} elseif ( 'edit' === $action && isset( $_POST['event_id'] ) ) {
@@ -716,15 +739,26 @@ if ( isset( $_POST['remember_event_action'] ) && check_admin_referer( 'remember_
 			// The validation notice above is the failure. Do not also report a database error.
 		} elseif ( $result !== false ) {
 			$role_configs = remember_build_role_configs_from_post();
-			$event_model->sync_event_role_configs( $event_id, $role_configs );
+			$roles_saved  = $event_model->sync_event_role_configs( $event_id, $role_configs );
 
-			$addons = remember_build_addons_from_post( $product_model );
-			remember_sync_event_addons( $merchandise_model, $event_id, $addons );
+			$addons       = remember_build_addons_from_post( $product_model );
+			$addons_saved = remember_sync_event_addons( $merchandise_model, $event_id, $addons );
 			Remember_Agreements::sync_event_pins( $event_id, Remember_Agreements::pins_from_request() );
-			remember_save_event_invites( $event_id );
+			$invites_saved = remember_save_event_invites( $event_id );
 
-			Remember_Logger::info( 'Event updated', array( 'event_id' => $event_id, 'role_configs' => $role_configs ) );
+			Remember_Logger::info(
+				'Event updated',
+				array(
+					'event_id'     => $event_id,
+					'role_configs' => $role_configs,
+					'add_ons'      => count( $addons ),
+					'user_id'      => get_current_user_id(),
+				)
+			);
 			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Event updated successfully.', 'remember' ) . '</p></div>';
+			if ( ! $roles_saved || ! $addons_saved || ! $invites_saved ) {
+				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Some of this event\'s roles, add-ons or invitees could not be saved. Check its roles, prices, add-ons and invitees below and save again.', 'remember' ) . '</p></div>';
+			}
 			remember_event_invoice_due_after_save( $event_before, $event_model->get( $event_id ) );
 			// Reload the event data to reflect changes
 			$editing_event = $event_model->get( $event_id );
@@ -740,7 +774,6 @@ if ( isset( $_POST['remember_event_action'] ) && check_admin_referer( 'remember_
 				$editing_addons = $merchandise_model->get_all_by_event( $event_id );
 			}
 		} else {
-			Remember_Logger::error( 'Failed to update event', array( 'event_id' => $event_id ) );
 			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to update event.', 'remember' ) . '</p></div>';
 		}
 	} elseif ( 'delete' === $action && isset( $_GET['delete'] ) ) {
@@ -753,10 +786,15 @@ if ( isset( $_POST['remember_event_action'] ) && check_admin_referer( 'remember_
 		$result = $event_model->delete( $event_id );
 		if ( $result !== false ) {
 			Remember_Event_Invites::delete_for_event( $event_id );
-			Remember_Logger::info( 'Event deleted', array( 'event_id' => $event_id ) );
+			Remember_Logger::info(
+				'Event deleted',
+				array(
+					'event_id' => $event_id,
+					'user_id'  => get_current_user_id(),
+				)
+			);
 			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Event deleted successfully.', 'remember' ) . '</p></div>';
 		} else {
-			Remember_Logger::error( 'Failed to delete event', array( 'event_id' => $event_id ) );
 			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to delete event.', 'remember' ) . '</p></div>';
 		}
 	}

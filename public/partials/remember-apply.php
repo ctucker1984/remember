@@ -11,6 +11,7 @@ if ( ! defined( 'WPINC' ) ) {
 	die;
 }
 
+require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-logger.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-event.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-member.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-application.php';
@@ -57,7 +58,6 @@ if ( isset( $_POST['remember_apply_action'] ) && check_admin_referer( 'remember_
 		if ( $registration_block ) {
 			$submission_error = $registration_block;
 		} elseif ( ! $event_model->member_offered_event_role( $event_id, $member_id, $event_role_id ) ) {
-			require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-logger.php';
 			Remember_Logger::warning(
 				'Public application rejected for a role the member was not offered',
 				array(
@@ -109,6 +109,9 @@ if ( isset( $_POST['remember_apply_action'] ) && check_admin_referer( 'remember_
 				Remember_Profile_Audit::touch_updated( $member_id, $member_id );
 
 				// Save selected add-ons for this application (role-aware max qty; 0 = not offered).
+				$addons_saved  = 0;
+				$addons_failed = array();
+				$addon_error   = '';
 				if ( isset( $_POST['event_addons'] ) && is_array( $_POST['event_addons'] ) ) {
 					global $wpdb;
 					require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-addon-role-limits.php';
@@ -139,7 +142,7 @@ if ( isset( $_POST['remember_apply_action'] ) && check_admin_referer( 'remember_
 						$unit_cost  = floatval( $addon->cost );
 						$total_cost = $unit_cost * $quantity;
 
-						$wpdb->insert(
+						$addon_inserted = $wpdb->insert(
 							$wpdb->prefix . 'remember_application_merchandise',
 							array(
 								'event_application_id' => $new_application_id,
@@ -151,7 +154,25 @@ if ( isset( $_POST['remember_apply_action'] ) && check_admin_referer( 'remember_
 							),
 							array( '%d', '%d', '%d', '%f', '%f', '%s' )
 						);
+						if ( false === $addon_inserted ) {
+							$addons_failed[] = $merchandise_id;
+							$addon_error     = $wpdb->last_error;
+						} else {
+							++$addons_saved;
+						}
 					}
+				}
+				if ( $addons_failed ) {
+					Remember_Logger::error(
+						'Application submitted, but some chosen add-ons were not saved; add them to the application before invoicing',
+						array(
+							'application_id'  => (int) $new_application_id,
+							'event_id'        => $event_id,
+							'member_id'       => $member_id,
+							'merchandise_ids' => $addons_failed,
+							'error'           => $addon_error,
+						)
+					);
 				}
 
 				// A member who already has a vetting case is left alone. A first application opens a case only when they have none.
@@ -160,27 +181,19 @@ if ( isset( $_POST['remember_apply_action'] ) && check_admin_referer( 'remember_
 				require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-notifications.php';
 				Remember_Notifications::notify_application_submitted( $new_application_id );
 
-				require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-logger.php';
 				Remember_Logger::info(
 					'Public application submitted',
 					array(
 						'application_id' => (int) $new_application_id,
 						'event_id'       => $event_id,
 						'member_id'      => $member_id,
+						'event_role_id'  => $event_role_id,
+						'add_ons'        => $addons_saved,
 					)
 				);
 
 				$submission_success = true;
 			} else {
-				require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-logger.php';
-				Remember_Logger::error(
-					'Public application submission failed to save',
-					array(
-						'event_id'      => $event_id,
-						'member_id'     => $member_id,
-						'event_role_id' => $event_role_id,
-					)
-				);
 				$submission_error = __( 'Failed to submit application. Please try again.', 'remember' );
 				$keep_form        = true;
 			}

@@ -17,6 +17,8 @@ if ( ! defined( 'WPINC' ) ) {
 	die;
 }
 
+require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
+
 /**
  * Builds a one- or two-page admission ticket PDF from ticket data.
  */
@@ -166,8 +168,20 @@ class Remember_Ticket_Pdf {
 	 * @return string
 	 */
 	public static function render( $data ) {
+		$start   = Remember_Logger::start_timer();
 		$builder = new self();
-		return $builder->build( $data );
+		$pdf     = $builder->build( $data );
+		Remember_Logger::debug(
+			'Ticket PDF built',
+			array(
+				'application_id' => isset( $data['application_id'] ) ? (int) $data['application_id'] : 0,
+				'pages'          => count( $builder->pages ),
+				'bytes'          => strlen( $pdf ),
+				'logo'           => $builder->has_logo,
+				'elapsed_ms'     => Remember_Logger::elapsed_ms( $start ),
+			)
+		);
+		return $pdf;
 	}
 
 	/**
@@ -319,6 +333,7 @@ class Remember_Ticket_Pdf {
 		$qr    = QRCode::getMinimumQRCode( $code, QR_ERROR_CORRECT_LEVEL_M );
 		$count = (int) $qr->getModuleCount();
 		if ( $count <= 0 ) {
+			Remember_Logger::warning( 'Ticket PDF check-in mark not drawn; only the typed code is printed', array( 'ticket_id' => $this->ticket_id ) );
 			$this->text_line( $code, 11, 5, $this->ink );
 			return;
 		}
@@ -666,9 +681,28 @@ class Remember_Ticket_Pdf {
 		}
 		$path = get_attached_file( $id );
 		if ( ! is_string( $path ) || '' === $path || ! is_readable( $path ) ) {
+			Remember_Logger::warning(
+				'Ticket PDF logo skipped: the logo file is missing or unreadable',
+				array( 'attachment_id' => $id )
+			);
 			return '';
 		}
 		return $path;
+	}
+
+	/**
+	 * Log why a chosen logo was left off the PDF.
+	 *
+	 * @param string $path   Logo file.
+	 * @param string $reason What went wrong.
+	 * @return false
+	 */
+	private function skip_logo( $path, $reason ) {
+		Remember_Logger::warning(
+			'Ticket PDF logo skipped: ' . $reason,
+			array( 'file' => wp_basename( $path ) )
+		);
+		return false;
 	}
 
 	/**
@@ -683,7 +717,7 @@ class Remember_Ticket_Pdf {
 		}
 		$info = @getimagesize( $path ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- a bad upload should skip the logo, not fail the download.
 		if ( ! is_array( $info ) || empty( $info[0] ) || empty( $info[1] ) ) {
-			return false;
+			return $this->skip_logo( $path, 'the file is not a readable image' );
 		}
 		$mime  = isset( $info['mime'] ) ? $info['mime'] : '';
 		$bytes = '';
@@ -692,24 +726,24 @@ class Remember_Ticket_Pdf {
 		if ( 'image/jpeg' === $mime ) {
 			$raw = file_get_contents( $path );
 			if ( ! is_string( $raw ) || '' === $raw ) {
-				return false;
+				return $this->skip_logo( $path, 'the file could not be read' );
 			}
 			$bytes = $raw;
 		} elseif ( function_exists( 'imagecreatefromstring' ) ) {
 			$raw = file_get_contents( $path );
 			if ( ! is_string( $raw ) || '' === $raw ) {
-				return false;
+				return $this->skip_logo( $path, 'the file could not be read' );
 			}
 			$image = @imagecreatefromstring( $raw ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- skip an unreadable logo.
 			if ( ! $image ) {
-				return false;
+				return $this->skip_logo( $path, 'the image could not be decoded' );
 			}
 			$px_w = imagesx( $image );
 			$px_h = imagesy( $image );
 			$flat = imagecreatetruecolor( $px_w, $px_h );
 			if ( ! $flat ) {
 				imagedestroy( $image );
-				return false;
+				return $this->skip_logo( $path, 'the image could not be converted' );
 			}
 			$white = imagecolorallocate( $flat, 255, 255, 255 );
 			imagefilledrectangle( $flat, 0, 0, $px_w, $px_h, $white );
@@ -720,10 +754,10 @@ class Remember_Ticket_Pdf {
 			imagedestroy( $image );
 			imagedestroy( $flat );
 			if ( ! is_string( $bytes ) || '' === $bytes ) {
-				return false;
+				return $this->skip_logo( $path, 'the image could not be converted' );
 			}
 		} else {
-			return false;
+			return $this->skip_logo( $path, 'the server has no image library to convert a non-JPEG logo' );
 		}
 
 		$scale         = min( 110 / $px_w, 56 / $px_h, 1 );

@@ -10,6 +10,8 @@ if ( ! defined( 'WPINC' ) ) {
 	die;
 }
 
+require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
+
 /**
  * Invite-only private events.
  *
@@ -329,10 +331,10 @@ class Remember_Event_Invites {
 	 * Existing emailed_at stamps stay when the member is still invited.
 	 *
 	 * @param int $event_id Event ID.
-	 * @return void
+	 * @return bool False when some invitees were not saved.
 	 */
 	public static function sync_from_request( $event_id ) {
-		self::replace_invitees( $event_id, self::member_ids_from_request(), get_current_user_id() );
+		return self::replace_invitees( $event_id, self::member_ids_from_request(), get_current_user_id() );
 	}
 
 	/**
@@ -341,14 +343,14 @@ class Remember_Event_Invites {
 	 * @param int   $event_id   Event ID.
 	 * @param int[] $member_ids Member IDs.
 	 * @param int   $invited_by Staff user ID.
-	 * @return void
+	 * @return bool False when some invitees were not saved.
 	 */
 	public static function replace_invitees( $event_id, $member_ids, $invited_by ) {
 		global $wpdb;
 		$event_id   = absint( $event_id );
 		$invited_by = absint( $invited_by );
 		if ( $event_id < 1 || ! self::table_exists() ) {
-			return;
+			return true;
 		}
 
 		$wanted = array();
@@ -360,9 +362,13 @@ class Remember_Event_Invites {
 		}
 
 		$existing = self::member_ids_for_event( $event_id );
+		$failed   = array();
+		$errors   = array();
+		$removed  = 0;
+		$added    = 0;
 		foreach ( $existing as $member_id ) {
 			if ( ! isset( $wanted[ $member_id ] ) ) {
-				$wpdb->delete(
+				$deleted = $wpdb->delete(
 					self::table_name(),
 					array(
 						'event_id'  => $event_id,
@@ -370,6 +376,12 @@ class Remember_Event_Invites {
 					),
 					array( '%d', '%d' )
 				);
+				if ( false === $deleted ) {
+					$failed[] = $member_id;
+					$errors[] = $wpdb->last_error;
+				} else {
+					++$removed;
+				}
 			}
 		}
 
@@ -378,7 +390,7 @@ class Remember_Event_Invites {
 			if ( in_array( $member_id, $existing, true ) ) {
 				continue;
 			}
-			$wpdb->insert(
+			$inserted = $wpdb->insert(
 				self::table_name(),
 				array(
 					'event_id'   => $event_id,
@@ -388,7 +400,37 @@ class Remember_Event_Invites {
 				),
 				array( '%d', '%d', '%d', '%s' )
 			);
+			if ( false === $inserted ) {
+				$failed[] = $member_id;
+				$errors[] = $wpdb->last_error;
+			} else {
+				++$added;
+			}
 		}
+
+		if ( $failed ) {
+			Remember_Logger::error(
+				'Event invite list only partly saved; check the invitees on this event',
+				array(
+					'event_id'   => $event_id,
+					'member_ids' => $failed,
+					'error'      => implode( ' | ', array_unique( $errors ) ),
+				)
+			);
+		}
+		if ( $added > 0 || $removed > 0 ) {
+			Remember_Logger::info(
+				'Event invite list changed',
+				array(
+					'event_id' => $event_id,
+					'added'    => $added,
+					'removed'  => $removed,
+					'invited'  => count( $wanted ) - count( $failed ),
+					'user_id'  => $invited_by,
+				)
+			);
+		}
+		return empty( $failed );
 	}
 
 	/**
@@ -403,7 +445,15 @@ class Remember_Event_Invites {
 		if ( $event_id < 1 || ! self::table_exists() ) {
 			return;
 		}
-		$wpdb->delete( self::table_name(), array( 'event_id' => $event_id ), array( '%d' ) );
+		if ( false === $wpdb->delete( self::table_name(), array( 'event_id' => $event_id ), array( '%d' ) ) ) {
+			Remember_Logger::warning(
+				'Event deleted, but its invite list was not cleared',
+				array(
+					'event_id' => $event_id,
+					'error'    => $wpdb->last_error,
+				)
+			);
+		}
 	}
 
 	/**
@@ -416,6 +466,7 @@ class Remember_Event_Invites {
 		if ( ! self::table_exists() ) {
 			return 0;
 		}
+		$start        = Remember_Logger::start_timer();
 		$events_table = $wpdb->prefix . 'remember_events';
 		$event_ids    = $wpdb->get_col(
 			$wpdb->prepare(
@@ -429,7 +480,17 @@ class Remember_Event_Invites {
 			foreach ( $event_ids as $event_id ) {
 				$sent += self::send_due_for_event( (int) $event_id );
 			}
+		} else {
+			Remember_Logger::error( 'Scheduled private event invites not checked: event lookup failed', array( 'error' => $wpdb->last_error ) );
 		}
+		Remember_Logger::info(
+			'Scheduled private event invite check finished',
+			array(
+				'events'     => is_array( $event_ids ) ? count( $event_ids ) : 0,
+				'sent'       => $sent,
+				'elapsed_ms' => Remember_Logger::elapsed_ms( $start ),
+			)
+		);
 		return $sent;
 	}
 
@@ -449,6 +510,9 @@ class Remember_Event_Invites {
 		require_once plugin_dir_path( __FILE__ ) . '../models/class-event.php';
 		$event = ( new Remember_Event() )->get( $event_id );
 		if ( ! self::registration_is_live( $event ) ) {
+			if ( self::is_private( $event ) ) {
+				Remember_Logger::debug( 'Private event invites held: registration is not open yet', array( 'event_id' => $event_id ) );
+			}
 			return 0;
 		}
 
@@ -458,19 +522,36 @@ class Remember_Event_Invites {
 				$event_id
 			)
 		);
-		if ( ! is_array( $rows ) || empty( $rows ) ) {
+		if ( ! is_array( $rows ) ) {
+			Remember_Logger::error(
+				'Private event invites not sent: invite lookup failed',
+				array(
+					'event_id' => $event_id,
+					'error'    => $wpdb->last_error,
+				)
+			);
+			return 0;
+		}
+		if ( empty( $rows ) ) {
 			return 0;
 		}
 
 		$context_base = self::event_context( $event );
 		require_once plugin_dir_path( __FILE__ ) . 'class-remember-notifications.php';
-		require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
 
-		$sent = 0;
-		$now  = current_time( 'mysql' );
+		$start = Remember_Logger::start_timer();
+		$sent  = 0;
+		$now   = current_time( 'mysql' );
 		foreach ( $rows as $row ) {
 			$user = get_user_by( 'id', (int) $row->member_id );
 			if ( ! $user || ! is_email( $user->user_email ) ) {
+				Remember_Logger::warning(
+					'Private event invite skipped: member has no account or no valid email address',
+					array(
+						'event_id'  => $event_id,
+						'member_id' => (int) $row->member_id,
+					)
+				);
 				continue;
 			}
 			$context = $context_base;
@@ -487,13 +568,23 @@ class Remember_Event_Invites {
 				);
 				continue;
 			}
-			$wpdb->update(
+			$marked = $wpdb->update(
 				self::table_name(),
 				array( 'invited_emailed_at' => $now ),
 				array( 'invite_id' => (int) $row->invite_id ),
 				array( '%s' ),
 				array( '%d' )
 			);
+			if ( false === $marked ) {
+				Remember_Logger::warning(
+					'Private event invite emailed, but not marked as sent; the member may be emailed again next hour',
+					array(
+						'event_id'  => $event_id,
+						'member_id' => (int) $row->member_id,
+						'error'     => $wpdb->last_error,
+					)
+				);
+			}
 			if ( true === $result ) {
 				++$sent;
 			}
@@ -507,6 +598,15 @@ class Remember_Event_Invites {
 				)
 			);
 		}
+		Remember_Logger::debug(
+			'Private event invite emails finished',
+			array(
+				'event_id'   => $event_id,
+				'pending'    => count( $rows ),
+				'sent'       => $sent,
+				'elapsed_ms' => Remember_Logger::elapsed_ms( $start ),
+			)
+		);
 		return $sent;
 	}
 

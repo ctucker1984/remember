@@ -11,8 +11,11 @@ if ( ! defined( 'WPINC' ) ) {
 	die;
 }
 
+require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-logger.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-application.php';
 require_once plugin_dir_path( __FILE__ ) . '../../includes/models/class-event.php';
+
+Remember_Logger::debug( 'Waitlist page loaded' );
 
 $application_model = new Remember_Application();
 $event_model       = new Remember_Event();
@@ -28,16 +31,7 @@ if ( ! function_exists( 'remember_notify_event_admins' ) ) {
 	 */
 	function remember_notify_event_admins( $event_id, $subject, $message ) {
 		require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-waitlist.php';
-		$emails = Remember_Waitlist::accepted_event_administrator_emails( $event_id );
-
-		if ( empty( $emails ) ) {
-			Remember_Logger::debug( 'No accepted event administrators to notify', array( 'event_id' => absint( $event_id ) ) );
-			return;
-		}
-
-		foreach ( $emails as $email ) {
-			wp_mail( $email, $subject, $message );
-		}
+		Remember_Waitlist::email_event_admins( $event_id, $subject, $message );
 	}
 }
 
@@ -72,6 +66,14 @@ if ( isset( $_POST['remember_waitlist_action'] ) && check_admin_referer( 'rememb
 		} elseif ( 'promote_to_pending' === $action ) {
 			$result = $application_model->update_status( $application_id, 'pending', get_current_user_id() );
 			if ( false !== $result && $application ) {
+				Remember_Logger::info(
+					'Waitlisted application moved to pending by staff',
+					array(
+						'application_id' => $application_id,
+						'event_id'       => (int) $application->event_id,
+						'user_id'        => get_current_user_id(),
+					)
+				);
 				remember_notify_event_admins(
 					$application->event_id,
 					sprintf( __( 'Waitlist promotion for %s', 'remember' ), $event_name ),
@@ -84,6 +86,14 @@ if ( isset( $_POST['remember_waitlist_action'] ) && check_admin_referer( 'rememb
 		} elseif ( 'decline_waitlisted' === $action ) {
 			$result = $application_model->update_status( $application_id, 'declined', get_current_user_id() );
 			if ( false !== $result && $application ) {
+				Remember_Logger::info(
+					'Waitlisted application declined by staff',
+					array(
+						'application_id' => $application_id,
+						'event_id'       => (int) $application->event_id,
+						'user_id'        => get_current_user_id(),
+					)
+				);
 				remember_notify_event_admins(
 					$application->event_id,
 					sprintf( __( 'Waitlist update for %s', 'remember' ), $event_name ),

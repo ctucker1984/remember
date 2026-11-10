@@ -11,6 +11,8 @@ if ( ! defined( 'WPINC' ) ) {
 	die;
 }
 
+require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
+
 /**
  * Builds ticket DTOs and access helpers for printable admission tickets.
  */
@@ -93,7 +95,6 @@ class Remember_Ticket {
 			require_once plugin_dir_path( __FILE__ ) . '../models/class-event.php';
 			$event = ( new Remember_Event() )->get( absint( $application->event_id ) );
 			if ( ! Remember_Event::has_ended( $event ) ) {
-				require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
 				Remember_Logger::info(
 					'Ticket withheld: member barred by rejection and the event has not ended',
 					array(
@@ -173,9 +174,17 @@ class Remember_Ticket {
 		$application_model = new Remember_Application();
 		$application       = $application_model->get( $application_id );
 		if ( ! $application ) {
+			Remember_Logger::warning( 'Ticket not built: application not found', array( 'application_id' => $application_id ) );
 			return new WP_Error( 'remember_ticket_not_found', __( 'Application not found.', 'remember' ) );
 		}
 		if ( ! self::is_eligible( $application ) ) {
+			Remember_Logger::warning(
+				'Ticket not built: application is not accepted',
+				array(
+					'application_id' => $application_id,
+					'status'         => (string) $application->status,
+				)
+			);
 			return new WP_Error( 'remember_ticket_not_eligible', __( 'A ticket is only available for accepted applications.', 'remember' ) );
 		}
 
@@ -401,11 +410,21 @@ class Remember_Ticket {
 	public static function set_voided( $application_id, $voided = true ) {
 		require_once plugin_dir_path( __FILE__ ) . '../models/class-application.php';
 		$application_model = new Remember_Application();
-		return $application_model->update(
+		$result            = $application_model->update(
 			absint( $application_id ),
 			array(
 				'ticket_voided' => $voided ? 1 : 0,
 			)
 		);
+		if ( false !== $result ) {
+			Remember_Logger::info(
+				$voided ? 'Ticket marked void' : 'Ticket void cleared',
+				array(
+					'application_id' => absint( $application_id ),
+					'user_id'        => get_current_user_id(),
+				)
+			);
+		}
+		return $result;
 	}
 }
