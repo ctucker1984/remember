@@ -645,8 +645,8 @@ class Remember_Vetting_Workflow {
 		}
 
 		if ( ! $vetting_id ) {
-			Remember_Logger::error(
-				'Vetting case not created',
+			Remember_Logger::warning(
+				'Member left without an automatic vetting case; the vetting team is being emailed to open one by hand',
 				array(
 					'member_id'  => $member_id,
 					'assignment' => $assignment,

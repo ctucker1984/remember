@@ -11,6 +11,8 @@ if ( ! defined( 'WPINC' ) ) {
 	die;
 }
 
+require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
+
 /**
  * Capabilities management class.
  *
@@ -174,14 +176,31 @@ class Remember_Capabilities {
 		if ( ! is_array( $user_ids ) ) {
 			return 0;
 		}
+		$started = Remember_Logger::start_timer();
+		$missing = array();
 		foreach ( array_unique( array_map( 'absint', $user_ids ) ) as $user_id ) {
 			if ( $user_id < 1 ) {
 				continue;
 			}
 			if ( self::sync_user_capabilities_from_roles( $user_id ) ) {
 				$count++;
+			} else {
+				$missing[] = $user_id;
 			}
 		}
+		if ( ! empty( $missing ) ) {
+			Remember_Logger::warning(
+				'Member permissions not refreshed: no WordPress account for these members',
+				array( 'member_ids' => $missing )
+			);
+		}
+		Remember_Logger::debug(
+			'Member permissions refreshed from their roles',
+			array(
+				'members'    => $count,
+				'elapsed_ms' => Remember_Logger::elapsed_ms( $started ),
+			)
+		);
 		return $count;
 	}
 
@@ -544,6 +563,7 @@ class Remember_Capabilities {
 			Remember_Logger::activation_debug( 'setup_capabilities: caps added to administrator', array( 'count' => count( $capabilities ) ) );
 		} else {
 			Remember_Logger::activation_debug( 'setup_capabilities: administrator role missing' );
+			Remember_Logger::warning( 'WordPress Administrator role is missing, so reMember permissions were not given to administrators' );
 		}
 
 		Remember_Logger::activation_debug( 'setup_capabilities: end' );

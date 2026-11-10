@@ -38,14 +38,30 @@ if ( isset( $_GET['delete'] ) && isset( $_GET['remember_role_nonce'] ) && check_
 				$role_id
 			)
 		);
-		$wpdb->delete( $wpdb->prefix . 'remember_role_capabilities', array( 'role_id' => $role_id ), array( '%d' ) );
+		// Permissions go only after the role itself is gone, so a failed delete leaves its holders' access intact.
 		$result = $role_model->delete( $role_id );
 		if ( $result !== false ) {
+			if ( false === $wpdb->delete( $wpdb->prefix . 'remember_role_capabilities', array( 'role_id' => $role_id ), array( '%d' ) ) ) {
+				Remember_Logger::warning(
+					'Role deleted, but its permission rows were not removed',
+					array(
+						'role_id' => $role_id,
+						'error'   => $wpdb->last_error,
+					)
+				);
+			}
 			Remember_Capabilities::sync_users( is_array( $member_ids ) ? $member_ids : array() );
-			Remember_Logger::info( 'Role deleted', array( 'role_id' => $role_id ) );
+			Remember_Logger::info(
+				'Role deleted',
+				array(
+					'role_id'   => $role_id,
+					'role_name' => $role_to_delete ? $role_to_delete->role_name : '',
+					'members'   => is_array( $member_ids ) ? count( $member_ids ) : 0,
+					'user_id'   => get_current_user_id(),
+				)
+			);
 			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Role deleted successfully.', 'remember' ) . '</p></div>';
 		} else {
-			Remember_Logger::error( 'Failed to delete role', array( 'role_id' => $role_id ) );
 			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to delete role.', 'remember' ) . '</p></div>';
 		}
 	}
@@ -85,15 +101,24 @@ if ( isset( $_POST['remember_role_action'] ) && check_admin_referer( 'remember_r
 			if ( isset( $_POST['capabilities'] ) && is_array( $_POST['capabilities'] ) ) {
 				$capabilities = Remember_Capabilities::filter_grantable_capabilities( $_POST['capabilities'] );
 				$restricted   = Remember_Capabilities::restrict_capabilities_for_role( $capabilities, (bool) $data['is_event_role'], ! empty( $data['is_event_admin'] ) );
-				$role_model->set_capabilities( $role_id, $restricted );
+				if ( ! $role_model->set_capabilities( $role_id, $restricted ) ) {
+					echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'The role was created, but some of its capabilities could not be saved. Check them below and save again.', 'remember' ) . '</p></div>';
+				}
 				if ( count( $restricted ) < count( $capabilities ) ) {
 					echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html( $remember_restricted_notice ) . '</p></div>';
 				}
 			}
-			Remember_Logger::info( 'Role created', array( 'role_id' => $role_id ) );
+			Remember_Logger::info(
+				'Role created',
+				array(
+					'role_id'   => $role_id,
+					'role_name' => $data['role_name'],
+					'role_type' => $data['role_type'],
+					'user_id'   => get_current_user_id(),
+				)
+			);
 			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Role created successfully.', 'remember' ) . '</p></div>';
 		} else {
-			Remember_Logger::error( 'Failed to create role' );
 			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to create role.', 'remember' ) . '</p></div>';
 		}
 	} elseif ( 'update_role' === $action && isset( $_POST['role_id'] ) ) {
@@ -169,12 +194,18 @@ if ( isset( $_POST['remember_role_action'] ) && check_admin_referer( 'remember_r
 			}
 			
 			if ( $update_result !== false && $capabilities_result ) {
-				Remember_Logger::info( 'Role updated', array( 'role_id' => $role_id ) );
+				Remember_Logger::info(
+					'Role updated',
+					array(
+						'role_id'      => $role_id,
+						'capabilities' => count( $restricted ),
+						'user_id'      => get_current_user_id(),
+					)
+				);
 				echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Role updated successfully.', 'remember' ) . '</p></div>';
 				// Refresh the role data
 				$editing_role = $role_model->get( $role_id );
 			} else {
-				Remember_Logger::error( 'Failed to update role', array( 'role_id' => $role_id ) );
 				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to update role.', 'remember' ) . '</p></div>';
 			}
 		}
@@ -206,10 +237,16 @@ if ( isset( $_POST['remember_role_action'] ) && check_admin_referer( 'remember_r
 				echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html( $remember_restricted_notice ) . '</p></div>';
 			}
 			if ( $result ) {
-				Remember_Logger::info( 'Role capabilities updated', array( 'role_id' => $role_id ) );
+				Remember_Logger::info(
+					'Role capabilities updated',
+					array(
+						'role_id'      => $role_id,
+						'capabilities' => count( $restricted ),
+						'user_id'      => get_current_user_id(),
+					)
+				);
 				echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Capabilities updated successfully.', 'remember' ) . '</p></div>';
 			} else {
-				Remember_Logger::error( 'Failed to update capabilities', array( 'role_id' => $role_id ) );
 				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to update capabilities.', 'remember' ) . '</p></div>';
 			}
 		}

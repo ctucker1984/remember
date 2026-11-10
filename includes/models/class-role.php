@@ -12,6 +12,7 @@ if ( ! defined( 'WPINC' ) ) {
 }
 
 require_once plugin_dir_path( __FILE__ ) . 'class-remember-base-model.php';
+require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-logger.php';
 
 /**
  * Role model class.
@@ -98,27 +99,48 @@ class Remember_Role extends Remember_Base_Model {
 	public function set_capabilities( $role_id, $capabilities ) {
 		global $wpdb;
 		$table_name = $wpdb->prefix . 'remember_role_capabilities';
-		
+		$failed     = array();
+		$error      = '';
+
 		// Delete existing capabilities
-		$wpdb->delete( $table_name, array( 'role_id' => $role_id ), array( '%d' ) );
-		
+		if ( false === $wpdb->delete( $table_name, array( 'role_id' => $role_id ), array( '%d' ) ) ) {
+			$failed[] = 'clear existing';
+			$error    = $wpdb->last_error;
+		}
+
 		// Insert new capabilities
 		if ( ! empty( $capabilities ) ) {
 			foreach ( $capabilities as $capability ) {
-				$wpdb->insert(
+				$capability = sanitize_text_field( $capability );
+				$inserted   = $wpdb->insert(
 					$table_name,
 					array(
 						'role_id'    => $role_id,
-						'capability' => sanitize_text_field( $capability ),
+						'capability' => $capability,
 						'created_at' => current_time( 'mysql' ),
 					),
 					array( '%d', '%s', '%s' )
 				);
+				if ( false === $inserted ) {
+					$failed[] = $capability;
+					$error    = $wpdb->last_error;
+				}
 			}
 		}
 
 		self::sync_assigned_members( $role_id );
-		
+
+		if ( ! empty( $failed ) ) {
+			Remember_Logger::error(
+				'Role permissions only partly saved',
+				array(
+					'role_id' => (int) $role_id,
+					'failed'  => $failed,
+					'error'   => $error,
+				)
+			);
+			return false;
+		}
 		return true;
 	}
 
@@ -157,6 +179,15 @@ class Remember_Role extends Remember_Base_Model {
 		) !== false;
 		if ( $inserted ) {
 			self::sync_assigned_members( $role_id );
+		} else {
+			Remember_Logger::error(
+				'Role permission not added',
+				array(
+					'role_id'    => (int) $role_id,
+					'capability' => (string) $capability,
+					'error'      => $wpdb->last_error,
+				)
+			);
 		}
 		return $inserted;
 	}
@@ -182,6 +213,15 @@ class Remember_Role extends Remember_Base_Model {
 		) !== false;
 		if ( $deleted ) {
 			self::sync_assigned_members( $role_id );
+		} else {
+			Remember_Logger::error(
+				'Role permission not removed',
+				array(
+					'role_id'    => (int) $role_id,
+					'capability' => (string) $capability,
+					'error'      => $wpdb->last_error,
+				)
+			);
 		}
 		return $deleted;
 	}
