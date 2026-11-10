@@ -708,7 +708,14 @@ class Remember_Profile_Fields {
 			return;
 		}
 
-		$wpdb->delete( $wpdb->prefix . 'remember_member_social_media', array( 'member_id' => $member_id ), array( '%d' ) );
+		$failed = array();
+		$check  = static function ( $written, $list ) use ( &$failed, $wpdb ) {
+			if ( false === $written ) {
+				$failed[ $list ] = $wpdb->last_error;
+			}
+		};
+
+		$check( $wpdb->delete( $wpdb->prefix . 'remember_member_social_media', array( 'member_id' => $member_id ), array( '%d' ) ), 'social_media' );
 		if ( isset( $_POST['social_media'] ) && is_array( $_POST['social_media'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
 			require_once plugin_dir_path( __FILE__ ) . 'class-remember-platform-handles.php';
 			$social_count = 0;
@@ -724,70 +731,94 @@ class Remember_Profile_Fields {
 					continue;
 				}
 				if ( $platform_id > 0 && '' !== $handle ) {
-					$wpdb->insert(
-						$wpdb->prefix . 'remember_member_social_media',
-						array(
-							'member_id'   => $member_id,
-							'platform_id' => $platform_id,
-							'handle'      => $handle,
-							'created_at'  => current_time( 'mysql' ),
+					$check(
+						$wpdb->insert(
+							$wpdb->prefix . 'remember_member_social_media',
+							array(
+								'member_id'   => $member_id,
+								'platform_id' => $platform_id,
+								'handle'      => $handle,
+								'created_at'  => current_time( 'mysql' ),
+							),
+							array( '%d', '%d', '%s', '%s' )
 						),
-						array( '%d', '%d', '%s', '%s' )
+						'social_media'
 					);
 					$social_count++;
 				}
 			}
 		}
 
-		$wpdb->delete( $wpdb->prefix . 'remember_member_dietary_restrictions', array( 'member_id' => $member_id ), array( '%d' ) );
+		$check( $wpdb->delete( $wpdb->prefix . 'remember_member_dietary_restrictions', array( 'member_id' => $member_id ), array( '%d' ) ), 'dietary_restrictions' );
 		if ( isset( $_POST['dietary_restrictions'] ) && is_array( $_POST['dietary_restrictions'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
 			foreach ( $_POST['dietary_restrictions'] as $restriction_id ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
 				$restriction_id = absint( $restriction_id );
 				if ( $restriction_id > 0 ) {
-					$wpdb->insert(
-						$wpdb->prefix . 'remember_member_dietary_restrictions',
-						array(
-							'member_id'      => $member_id,
-							'restriction_id' => $restriction_id,
+					$check(
+						$wpdb->insert(
+							$wpdb->prefix . 'remember_member_dietary_restrictions',
+							array(
+								'member_id'      => $member_id,
+								'restriction_id' => $restriction_id,
+							),
+							array( '%d', '%d' )
 						),
-						array( '%d', '%d' )
+						'dietary_restrictions'
 					);
 				}
 			}
 		}
 
-		$wpdb->delete( $wpdb->prefix . 'remember_member_medical_accommodations', array( 'member_id' => $member_id ), array( '%d' ) );
+		$check( $wpdb->delete( $wpdb->prefix . 'remember_member_medical_accommodations', array( 'member_id' => $member_id ), array( '%d' ) ), 'medical_accommodations' );
 		if ( isset( $_POST['medical_accommodations'] ) && is_array( $_POST['medical_accommodations'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
 			foreach ( $_POST['medical_accommodations'] as $accommodation_id ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
 				$accommodation_id = absint( $accommodation_id );
 				if ( $accommodation_id > 0 ) {
-					$wpdb->insert(
-						$wpdb->prefix . 'remember_member_medical_accommodations',
-						array(
-							'member_id'        => $member_id,
-							'accommodation_id' => $accommodation_id,
+					$check(
+						$wpdb->insert(
+							$wpdb->prefix . 'remember_member_medical_accommodations',
+							array(
+								'member_id'        => $member_id,
+								'accommodation_id' => $accommodation_id,
+							),
+							array( '%d', '%d' )
 						),
-						array( '%d', '%d' )
+						'medical_accommodations'
 					);
 				}
 			}
 		}
 
-		$wpdb->delete( $wpdb->prefix . 'remember_member_allergies', array( 'member_id' => $member_id ), array( '%d' ) );
+		$check( $wpdb->delete( $wpdb->prefix . 'remember_member_allergies', array( 'member_id' => $member_id ), array( '%d' ) ), 'allergies' );
 		if ( isset( $_POST['allergies'] ) && is_array( $_POST['allergies'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
 			foreach ( $_POST['allergies'] as $allergy_id ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
 				$allergy_id = absint( $allergy_id );
 				if ( $allergy_id > 0 ) {
-					$wpdb->insert(
-						$wpdb->prefix . 'remember_member_allergies',
-						array(
-							'member_id'  => $member_id,
-							'allergy_id' => $allergy_id,
+					$check(
+						$wpdb->insert(
+							$wpdb->prefix . 'remember_member_allergies',
+							array(
+								'member_id'  => $member_id,
+								'allergy_id' => $allergy_id,
+							),
+							array( '%d', '%d' )
 						),
-						array( '%d', '%d' )
+						'allergies'
 					);
 				}
 			}
+		}
+
+		if ( ! empty( $failed ) ) {
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
+			Remember_Logger::error(
+				'Member profile saved, but some of its lists were not saved',
+				array(
+					'member_id' => $member_id,
+					'lists'     => array_keys( $failed ),
+					'error'     => implode( ' | ', array_unique( array_values( $failed ) ) ),
+				)
+			);
 		}
 	}
 

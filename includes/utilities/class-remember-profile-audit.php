@@ -314,7 +314,19 @@ class Remember_Profile_Audit {
 			array( '%d' )
 		);
 
-		return false !== $result;
+		if ( false === $result ) {
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
+			Remember_Logger::error(
+				'Profile last-updated date not saved',
+				array(
+					'member_id' => $member_id,
+					'user_id'   => $user_id,
+					'error'     => $wpdb->last_error,
+				)
+			);
+			return false;
+		}
+		return true;
 	}
 
 	/**

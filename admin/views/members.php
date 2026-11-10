@@ -113,13 +113,22 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 						update_user_meta( $user_id, 'last_name', $last_name );
 					}
 					// Public display name defaults to username — never auto-set from legal name.
-					wp_update_user(
+					$display_set = wp_update_user(
 						array(
 							'ID'           => $user_id,
 							'display_name' => $username,
 							'nickname'     => $username,
 						)
 					);
+					if ( is_wp_error( $display_set ) ) {
+						Remember_Logger::warning(
+							'New member display name was not set to the username',
+							array(
+								'user_id' => $user_id,
+								'error'   => $display_set->get_error_message(),
+							)
+						);
+					}
 					
 					// Determine initial status based on vetting workflow
 					$vetting_workflow = Remember_Vetting_Workflow::get_workflow();
@@ -368,15 +377,24 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 
 			$upload_result = Remember_Image_Uploader::upload_square_image( $_FILES['photo_file'], $max_image_size );
 			if ( ! is_wp_error( $upload_result ) ) {
-				// Update member photo_url
-				$member_model->update_photo( $member_id, $upload_result['url'] );
 				// Delete the old photo only once the new one is saved.
-				if ( $current_member && $current_member->photo_url && $current_member->photo_url !== $upload_result['url'] ) {
-					Remember_Image_Uploader::delete_image( $current_member->photo_url );
+				if ( false === $member_model->update_photo( $member_id, $upload_result['url'] ) ) {
+					Remember_Image_Uploader::delete_image( $upload_result['url'] );
+					echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'The new photo could not be saved. The current photo was kept.', 'remember' ) . '</p></div>';
+				} else {
+					if ( $current_member && $current_member->photo_url && $current_member->photo_url !== $upload_result['url'] ) {
+						Remember_Image_Uploader::delete_image( $current_member->photo_url );
+					}
+					Remember_Logger::info( 'Member photo updated', array( 'member_id' => $member_id ) );
 				}
-				Remember_Logger::info( 'Member photo updated', array( 'member_id' => $member_id ) );
 			} else {
-				Remember_Logger::error( 'Photo upload failed', array( 'error' => $upload_result->get_error_message() ) );
+				Remember_Logger::error(
+					'Photo upload failed',
+					array(
+						'member_id' => $member_id,
+						'error'     => $upload_result->get_error_message(),
+					)
+				);
 				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html( $upload_result->get_error_message() ) . '</p></div>';
 			}
 		}
@@ -386,8 +404,9 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 			$current_member = $member_model->get( $member_id );
 			if ( $current_member && $current_member->photo_url ) {
 				Remember_Image_Uploader::delete_image( $current_member->photo_url );
-				$member_model->update_photo( $member_id, null );
-				Remember_Logger::info( 'Member photo deleted', array( 'member_id' => $member_id ) );
+				if ( false !== $member_model->update_photo( $member_id, null ) ) {
+					Remember_Logger::info( 'Member photo deleted', array( 'member_id' => $member_id ) );
+				}
 			}
 		}
 		
@@ -465,8 +484,15 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 		}
 		
 		if ( $result !== false ) {
+			$remember_failed_writes = array();
+			$remember_check_write   = static function ( $written, $list ) use ( &$remember_failed_writes, $wpdb ) {
+				if ( false === $written ) {
+					$remember_failed_writes[ $list ] = $wpdb->last_error;
+				}
+			};
+
 			// Update social media
-			$wpdb->delete( $wpdb->prefix . 'remember_member_social_media', array( 'member_id' => $member_id ) );
+			$remember_check_write( $wpdb->delete( $wpdb->prefix . 'remember_member_social_media', array( 'member_id' => $member_id ) ), 'social_media' );
 			if ( isset( $_POST['social_media'] ) && is_array( $_POST['social_media'] ) ) {
 				foreach ( $_POST['social_media'] as $platform_id => $handle ) {
 					$platform_id = absint( $platform_id );
@@ -476,14 +502,17 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 						continue;
 					}
 					if ( ! empty( $handle ) ) {
-						$wpdb->insert(
-							$wpdb->prefix . 'remember_member_social_media',
-							array(
-								'member_id' => $member_id,
-								'platform_id' => absint( $platform_id ),
-								'handle' => $handle,
-								'created_at' => current_time( 'mysql' ),
-							)
+						$remember_check_write(
+							$wpdb->insert(
+								$wpdb->prefix . 'remember_member_social_media',
+								array(
+									'member_id' => $member_id,
+									'platform_id' => absint( $platform_id ),
+									'handle' => $handle,
+									'created_at' => current_time( 'mysql' ),
+								)
+							),
+							'social_media'
 						);
 					}
 				}
@@ -492,41 +521,50 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 			// Update dietary / medical / allergies only when the health section was opened and the editor may see it.
 			// Otherwise skip these writes so a closed section or a forged POST cannot wipe or change them.
 			if ( $remember_save_health ) {
-				$wpdb->delete( $wpdb->prefix . 'remember_member_dietary_restrictions', array( 'member_id' => $member_id ) );
+				$remember_check_write( $wpdb->delete( $wpdb->prefix . 'remember_member_dietary_restrictions', array( 'member_id' => $member_id ) ), 'dietary_restrictions' );
 				if ( isset( $_POST['dietary_restrictions'] ) && is_array( $_POST['dietary_restrictions'] ) ) {
 					foreach ( $_POST['dietary_restrictions'] as $restriction_id ) {
-						$wpdb->insert(
-							$wpdb->prefix . 'remember_member_dietary_restrictions',
-							array(
-								'member_id' => $member_id,
-								'restriction_id' => absint( $restriction_id ),
-							)
+						$remember_check_write(
+							$wpdb->insert(
+								$wpdb->prefix . 'remember_member_dietary_restrictions',
+								array(
+									'member_id' => $member_id,
+									'restriction_id' => absint( $restriction_id ),
+								)
+							),
+							'dietary_restrictions'
 						);
 					}
 				}
 
-				$wpdb->delete( $wpdb->prefix . 'remember_member_medical_accommodations', array( 'member_id' => $member_id ) );
+				$remember_check_write( $wpdb->delete( $wpdb->prefix . 'remember_member_medical_accommodations', array( 'member_id' => $member_id ) ), 'medical_accommodations' );
 				if ( isset( $_POST['medical_accommodations'] ) && is_array( $_POST['medical_accommodations'] ) ) {
 					foreach ( $_POST['medical_accommodations'] as $accommodation_id ) {
-						$wpdb->insert(
-							$wpdb->prefix . 'remember_member_medical_accommodations',
-							array(
-								'member_id' => $member_id,
-								'accommodation_id' => absint( $accommodation_id ),
-							)
+						$remember_check_write(
+							$wpdb->insert(
+								$wpdb->prefix . 'remember_member_medical_accommodations',
+								array(
+									'member_id' => $member_id,
+									'accommodation_id' => absint( $accommodation_id ),
+								)
+							),
+							'medical_accommodations'
 						);
 					}
 				}
 
-				$wpdb->delete( $wpdb->prefix . 'remember_member_allergies', array( 'member_id' => $member_id ) );
+				$remember_check_write( $wpdb->delete( $wpdb->prefix . 'remember_member_allergies', array( 'member_id' => $member_id ) ), 'allergies' );
 				if ( isset( $_POST['allergies'] ) && is_array( $_POST['allergies'] ) ) {
 					foreach ( $_POST['allergies'] as $allergy_id ) {
-						$wpdb->insert(
-							$wpdb->prefix . 'remember_member_allergies',
-							array(
-								'member_id' => $member_id,
-								'allergy_id' => absint( $allergy_id ),
-							)
+						$remember_check_write(
+							$wpdb->insert(
+								$wpdb->prefix . 'remember_member_allergies',
+								array(
+									'member_id' => $member_id,
+									'allergy_id' => absint( $allergy_id ),
+								)
+							),
+							'allergies'
 						);
 					}
 				}
@@ -558,11 +596,14 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 				$roles_to_remove = array_diff( $current_role_ids, $selected_role_ids );
 				if ( ! empty( $roles_to_remove ) ) {
 					$placeholders = implode( ',', array_fill( 0, count( $roles_to_remove ), '%d' ) );
-					$wpdb->query( $wpdb->prepare(
-						"DELETE FROM {$wpdb->prefix}remember_member_roles 
-						WHERE member_id = %d AND role_id IN ($placeholders)",
-						array_merge( array( $member_id ), $roles_to_remove )
-					) );
+					$remember_check_write(
+						$wpdb->query( $wpdb->prepare(
+							"DELETE FROM {$wpdb->prefix}remember_member_roles 
+							WHERE member_id = %d AND role_id IN ($placeholders)",
+							array_merge( array( $member_id ), $roles_to_remove )
+						) ),
+						'roles'
+					);
 					// Sync capabilities after role removal
 					Remember_Capabilities::sync_user_capabilities_from_roles( $member_id );
 				}
@@ -571,16 +612,19 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 				$roles_to_add = array_diff( $selected_role_ids, $current_role_ids );
 				if ( ! empty( $roles_to_add ) ) {
 					foreach ( $roles_to_add as $role_id ) {
-						$wpdb->insert(
-							$wpdb->prefix . 'remember_member_roles',
-							array(
-								'member_id'   => $member_id,
-								'role_id'     => $role_id,
-								'approved_at' => current_time( 'mysql' ),
-								'approved_by' => get_current_user_id(),
-								'created_at'  => current_time( 'mysql' ),
+						$remember_check_write(
+							$wpdb->insert(
+								$wpdb->prefix . 'remember_member_roles',
+								array(
+									'member_id'   => $member_id,
+									'role_id'     => $role_id,
+									'approved_at' => current_time( 'mysql' ),
+									'approved_by' => get_current_user_id(),
+									'created_at'  => current_time( 'mysql' ),
+								),
+								array( '%d', '%d', '%s', '%d', '%s' )
 							),
-							array( '%d', '%d', '%s', '%d', '%s' )
+							'roles'
 						);
 					}
 				}
@@ -596,6 +640,16 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 				require_once plugin_dir_path( __FILE__ ) . '../../includes/utilities/class-remember-access-log.php';
 				Remember_Access_Log::record( $member_id, Remember_Access_Log::what_from_topics( $remember_saved_topics ), __( 'Member edit saved', 'remember' ) );
 			}
+			if ( ! empty( $remember_failed_writes ) ) {
+				Remember_Logger::error(
+					'Member profile saved, but some of its lists were not saved',
+					array(
+						'member_id' => $member_id,
+						'lists'     => array_keys( $remember_failed_writes ),
+						'error'     => implode( ' | ', array_unique( array_values( $remember_failed_writes ) ) ),
+					)
+				);
+			}
 			Remember_Logger::info( 'Member profile updated', array( 'member_id' => $member_id, 'sensitive_topics' => $remember_saved_topics ) );
 			do_action( 'remember_member_profile_saved', $member_id );
 			// Set success flag and clear edit mode (no redirect to avoid headers already sent)
@@ -603,7 +657,13 @@ if ( isset( $_POST['remember_member_action'] ) && check_admin_referer( 'remember
 			$view_member_id = $member_id; // Ensure we're viewing this member
 			unset( $_GET['edit'] ); // Clear edit flag to show view mode
 		} else {
-			Remember_Logger::error( 'Failed to update member profile', array( 'member_id' => $member_id ) );
+			Remember_Logger::error(
+				'Failed to update member profile',
+				array(
+					'member_id' => $member_id,
+					'error'     => $wpdb->last_error,
+				)
+			);
 			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to update member profile.', 'remember' ) . '</p></div>';
 		}
 		} // end required-field checks

@@ -31,8 +31,26 @@ if ( isset( $_GET['delete'] ) && isset( $_GET['_wpnonce'] ) && wp_verify_nonce( 
 	}
 	$del_id = absint( $_GET['delete'] );
 	global $wpdb;
-	$wpdb->delete( $wpdb->prefix . 'remember_profile_question_responses', array( 'question_id' => $del_id ), array( '%d' ) );
+	// Answers go only after the field itself is gone, so a failed delete keeps them.
 	if ( false !== $model->delete( $del_id ) ) {
+		$removed_answers = $wpdb->delete( $wpdb->prefix . 'remember_profile_question_responses', array( 'question_id' => $del_id ), array( '%d' ) );
+		if ( false === $removed_answers ) {
+			Remember_Logger::warning(
+				'Custom profile field deleted, but its stored answers were not removed',
+				array(
+					'question_id' => $del_id,
+					'error'       => $wpdb->last_error,
+				)
+			);
+		}
+		Remember_Logger::info(
+			'Custom profile field deleted',
+			array(
+				'question_id' => $del_id,
+				'answers'     => (int) $removed_answers,
+				'user_id'     => get_current_user_id(),
+			)
+		);
 		echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Custom field deleted.', 'remember' ) . '</p></div>';
 	} else {
 		echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to delete custom field.', 'remember' ) . '</p></div>';
@@ -157,6 +175,15 @@ if ( isset( $_POST['remember_pq_action'] ) && check_admin_referer( 'remember_pq_
 			)
 		);
 		if ( $new_id ) {
+			Remember_Logger::info(
+				'Custom profile field added',
+				array(
+					'question_id' => (int) $new_id,
+					'field_key'   => $field_key,
+					'field_type'  => $field_type,
+					'user_id'     => get_current_user_id(),
+				)
+			);
 			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Custom field added.', 'remember' ) . '</p></div>';
 		} else {
 			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__( 'Failed to add custom field.', 'remember' ) . '</p></div>';
@@ -178,6 +205,15 @@ if ( isset( $_POST['remember_pq_action'] ) && check_admin_referer( 'remember_pq_
 			)
 		);
 		if ( false !== $ok ) {
+			Remember_Logger::info(
+				'Custom profile field updated',
+				array(
+					'question_id' => $exclude_id,
+					'field_key'   => $field_key,
+					'is_active'   => $is_active,
+					'user_id'     => get_current_user_id(),
+				)
+			);
 			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Custom field updated.', 'remember' ) . '</p></div>';
 			$editing = $model->get( $exclude_id );
 		} else {

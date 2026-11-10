@@ -53,14 +53,6 @@ class Remember_Payment extends Remember_Base_Model {
 
 		$payment_id = $this->insert( $data );
 		if ( ! $payment_id ) {
-			Remember_Logger::error(
-				'Failed to create payment row',
-				array(
-					'member_id'            => isset( $data['member_id'] ) ? (int) $data['member_id'] : 0,
-					'event_application_id' => isset( $data['event_application_id'] ) ? (int) $data['event_application_id'] : 0,
-					'error'                => $this->wpdb->last_error,
-				)
-			);
 			return false;
 		}
 		Remember_Logger::debug(
@@ -105,14 +97,6 @@ class Remember_Payment extends Remember_Base_Model {
 		
 		$result = parent::update( $payment_id, $data );
 		if ( false === $result ) {
-			Remember_Logger::error(
-				'Failed to update payment row',
-				array(
-					'payment_id' => (int) $payment_id,
-					'columns'    => array_keys( $data ),
-					'error'      => $this->wpdb->last_error,
-				)
-			);
 			return $result;
 		}
 

@@ -614,6 +614,8 @@ class Remember_Profile_Questions {
 		$answers = self::sanitize_answers( $answers );
 		$table   = self::responses_table();
 		$now     = current_time( 'mysql' );
+		$failed  = array();
+		$error   = '';
 
 		foreach ( $answers as $question_id => $value ) {
 			$question_id = absint( $question_id );
@@ -625,7 +627,7 @@ class Remember_Profile_Questions {
 				)
 			);
 			if ( $existing ) {
-				$wpdb->update(
+				$written = $wpdb->update(
 					$table,
 					array(
 						'value_text' => $value,
@@ -636,7 +638,7 @@ class Remember_Profile_Questions {
 					array( '%d' )
 				);
 			} else {
-				$wpdb->insert(
+				$written = $wpdb->insert(
 					$table,
 					array(
 						'question_id' => $question_id,
@@ -648,6 +650,22 @@ class Remember_Profile_Questions {
 					array( '%d', '%d', '%s', '%s', '%s' )
 				);
 			}
+			if ( false === $written ) {
+				$failed[] = $question_id;
+				$error    = $wpdb->last_error;
+			}
+		}
+
+		if ( ! empty( $failed ) ) {
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
+			Remember_Logger::error(
+				'Profile question answers not saved',
+				array(
+					'member_id'    => $member_id,
+					'question_ids' => $failed,
+					'error'        => $error,
+				)
+			);
 		}
 	}
 
@@ -1070,7 +1088,7 @@ class Remember_Profile_Questions {
 			)
 		);
 		if ( $existing ) {
-			$wpdb->update(
+			$written = $wpdb->update(
 				$table,
 				array(
 					'value_text' => $value,
@@ -1081,7 +1099,7 @@ class Remember_Profile_Questions {
 				array( '%d' )
 			);
 		} else {
-			$wpdb->insert(
+			$written = $wpdb->insert(
 				$table,
 				array(
 					'question_id' => $question_id,
@@ -1092,6 +1110,19 @@ class Remember_Profile_Questions {
 				),
 				array( '%d', '%d', '%s', '%s', '%s' )
 			);
+		}
+		if ( false === $written ) {
+			require_once plugin_dir_path( __FILE__ ) . 'class-remember-logger.php';
+			Remember_Logger::error(
+				'Imported profile question answer not saved',
+				array(
+					'member_id'   => $member_id,
+					'question_id' => $question_id,
+					'field_key'   => $field_key,
+					'error'       => $wpdb->last_error,
+				)
+			);
+			return false;
 		}
 		return true;
 	}

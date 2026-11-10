@@ -12,6 +12,7 @@ if ( ! defined( 'WPINC' ) ) {
 }
 
 require_once plugin_dir_path( __FILE__ ) . 'class-remember-base-model.php';
+require_once plugin_dir_path( __FILE__ ) . '../utilities/class-remember-logger.php';
 
 /**
  * Member model class.
@@ -100,6 +101,13 @@ class Remember_Member extends Remember_Base_Model {
 			$status = 'pending_vetting';
 		}
 		if ( ! in_array( $status, self::statuses(), true ) ) {
+			Remember_Logger::warning(
+				'Member not created: unknown status',
+				array(
+					'member_id' => (int) $user_id,
+					'status'    => $status,
+				)
+			);
 			return false;
 		}
 
@@ -151,7 +159,7 @@ class Remember_Member extends Remember_Base_Model {
 			$first_name = trim( (string) get_user_meta( $user_id, 'first_name', true ) );
 			$last_name  = trim( (string) get_user_meta( $user_id, 'last_name', true ) );
 
-			$wpdb->insert(
+			$profile_saved = $wpdb->insert(
 				$profiles_table,
 				array(
 					'member_id'                      => $user_id,
@@ -167,6 +175,15 @@ class Remember_Member extends Remember_Base_Model {
 				),
 				array( '%d', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%d' )
 			);
+			if ( false === $profile_saved ) {
+				Remember_Logger::error(
+					'Member created but the starter profile was not saved; the profile will be empty until it is edited',
+					array(
+						'member_id' => $user_id,
+						'error'     => $wpdb->last_error,
+					)
+				);
+			}
 		}
 
 		return $user_id;
@@ -198,13 +215,26 @@ class Remember_Member extends Remember_Base_Model {
 	 * @return int|false
 	 */
 	public function update_status( $member_id, $status ) {
-		return $this->update(
+		$before = $this->get( $member_id );
+		$result = $this->update(
 			$member_id,
 			array(
 				'status'     => $status,
 				'updated_at' => current_time( 'mysql' ),
 			)
 		);
+		if ( false !== $result && $before && (string) $before->status !== (string) $status ) {
+			Remember_Logger::info(
+				'Member status changed',
+				array(
+					'member_id' => (int) $member_id,
+					'from'      => (string) $before->status,
+					'to'        => (string) $status,
+					'user_id'   => get_current_user_id(),
+				)
+			);
+		}
+		return $result;
 	}
 
 	/**
